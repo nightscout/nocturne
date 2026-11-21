@@ -65,6 +65,9 @@ public class EversenseConnectorService
     protected override bool NeedsSignIn(SyncRequest request, EversenseConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
 
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, EversenseConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     /// <summary>
     ///     Performs sync, publishing at most one SensorGlucose record from the latest reading.
     /// </summary>
@@ -230,7 +233,8 @@ public class EversenseConnectorService
 
         var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
         var records = new List<SensorGlucose>();
-        foreach (var (start, end) in HistoryWindows(request.From, request.To, now))
+        var from = WindowStart(request, ResumeFamily.Glucose);
+        foreach (var (start, end) in HistoryWindows(from, request.To, now))
         {
             var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingUserSensorGlucose}" +
                       $"?UserID={patient.UserId}" +

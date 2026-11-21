@@ -50,27 +50,6 @@ public class MyFitnessPalConnectorService
 
     public override string ServiceName => "MyFitnessPal";
 
-    /// <summary>
-    /// Entry point for the scheduled sync.
-    /// </summary>
-    /// <remarks>
-    /// The base implementation derives the window from the tenant's most recent glucose reading,
-    /// which says nothing about how far back the food diary needs reading — with a live CGM it
-    /// resolves to roughly now, and nothing would ever be imported. The food diary's own window is
-    /// <see cref="MyFitnessPalConnectorConfiguration.LookbackDays"/>.
-    /// </remarks>
-    public override Task<SyncResult> SyncDataAsync(
-        MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null
-    ) =>
-        base.SyncDataAsync(
-            config,
-            cancellationToken,
-            since ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays),
-            progressReporter);
-
     /// <inheritdoc />
     protected override bool NeedsSignIn(SyncRequest request, MyFitnessPalConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Food);
@@ -96,7 +75,9 @@ public class MyFitnessPalConnectorService
         if (!await ApplySessionAsync(config, session, cancellationToken))
             return AuthenticationFailedResult();
 
-        // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
+        // The food diary has no stored record to resume from, so a run with no lower bound, the
+        // scheduled one included, reads the diary's own window. The request carries UTC instants;
+        // pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays));
 
         // A background sync leaves the end open on purpose: clamping to "now" would discard

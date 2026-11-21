@@ -48,6 +48,23 @@ public class MyFitnessPalConnectorServiceTests
         (session == null).Should().Be(expectTokenDropped);
     }
 
+    /// <summary>
+    /// A scheduled run with food switched off has nothing to fetch, so it succeeds and makes no call,
+    /// not even a sign-in.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_FoodOff_SucceedsWithoutAVendorCall()
+    {
+        var handler = new MfpStubHandler(DateOnly.FromDateTime(DateTime.UtcNow), HttpStatusCode.OK);
+        var fixture = new ServiceFixture(handler);
+        fixture.Config.SyncFood = false;
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        handler.Requests.Should().Be(0);
+    }
+
     private sealed class ServiceFixture
     {
         internal MyFitnessPalConnectorService Service { get; }
@@ -98,11 +115,14 @@ public class MyFitnessPalConnectorServiceTests
     /// </summary>
     private sealed class MfpStubHandler(DateOnly entryDate, HttpStatusCode diaryStatus) : HttpMessageHandler
     {
+        internal int Requests { get; private set; }
+
         internal int DiaryRequests { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            Requests++;
             var url = request.RequestUri!.ToString();
 
             if (url.Contains(MyFitnessPalConstants.Endpoints.Token, StringComparison.Ordinal))

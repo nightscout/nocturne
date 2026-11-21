@@ -38,23 +38,10 @@ public sealed class GoogleHealthConnectorService(
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
     protected override DateTime? InitialSyncFloor => null;
 
-    // The base watermark (CalculateSinceTimestampAsync) only tracks the glucose/treatment
-    // families via IConnectorPublisher, which Google Health never publishes through — so its
-    // own resume point is persisted here instead of relying on (and bypassing) the base one.
+    // The base's resume points read records published through IConnectorPublisher, which Google
+    // Health never publishes through, so its own resume point is persisted here instead.
     private const string LastSyncedToKey = "lastSyncedTo";
     public const string RuntimeStateResource = "health";
-
-    public override Task<SyncResult> SyncDataAsync(
-        GoogleHealthConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null) =>
-        since is { } requestedFrom
-            ? base.SyncDataAsync(new SyncRequest { From = requestedFrom }, config, cancellationToken, progressReporter)
-            : base.SyncDataAsync(config, cancellationToken, Clock.GetUtcNow().UtcDateTime, progressReporter);
-
-    // Google Health owns its health cursors; a base glucose watermark must not become a repair bound.
-    protected override SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new();
 
     // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);

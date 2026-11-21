@@ -75,12 +75,12 @@ public abstract partial class BaseConnectorService<TConfig> : IBackfillBudgeted
         Later(stored, TryCalculateCatchUpSince(await GetBackfillLowWaterMarkAsync(ThroughKey(collection)), collection));
 
     /// <summary>
-    ///     The glucose family's lower bound: <see cref="ResumePointAsync"/> over a background run's
-    ///     derived glucose resume point, else the caller's <see cref="SyncRequest.From"/>.
+    ///     The glucose family's lower bound: <see cref="ResumePointAsync"/> over its resume point on a
+    ///     scheduled run, else the caller's <see cref="SyncRequest.From"/> as given.
     /// </summary>
     protected async Task<DateTime?> GlucoseFromAsync(SyncRequest request, string collection) =>
-        request.FromIsGlucoseResumePoint && request.To is null
-            ? await ResumePointAsync(collection, request.From)
+        request.Resume.Scheduled
+            ? await ResumePointAsync(collection, request.Resume.Point(ResumeFamily.Glucose))
             : request.From;
 
     /// <summary>

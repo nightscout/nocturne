@@ -71,6 +71,13 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
+    ///     The run starts at the earlier of the glucose and treatment points, which only an
+    ///     open-ended request reads.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, MyLifeConnectorConfiguration config) =>
+        request.To is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments] : [];
+
+    /// <summary>
     /// Performs sync by streaming one calendar month at a time, mapping and publishing
     /// each batch before moving on. A configurable overlap tail preserves cross-month
     /// carb-bolus and temp-basal consolidation context.
@@ -122,9 +129,9 @@ public class MyLifeConnectorService(
             // a range naming no lower bound; whether the source itself holds more is unverified.
             var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
             var glucoseSince = ResumeFrom(
-                request, await CalculateSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Glucose) ?? floor, floor);
             var treatmentSince = ResumeFrom(
-                request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Treatments) ?? floor, floor);
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var now = Clock.GetUtcNow().UtcDateTime;

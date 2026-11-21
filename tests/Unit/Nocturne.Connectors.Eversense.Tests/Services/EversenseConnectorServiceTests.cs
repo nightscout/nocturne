@@ -105,23 +105,6 @@ public class EversenseConnectorServiceTests
 
     #endregion
 
-    #region AuthenticateAsync Tests
-
-    [Fact]
-    public async Task AuthenticateAsync_ReturnsTrue()
-    {
-        // Arrange — AuthenticateAsync is a legacy no-op; actual auth happens per-tenant in sync flow
-        var fixture = new ServiceFixture(tokenToReturn: "valid-token");
-
-        // Act
-        var result = await fixture.Service.AuthenticateAsync();
-
-        // Assert
-        result.Should().BeTrue();
-    }
-
-    #endregion
-
     #region SyncDataAsync (PerformSyncInternalAsync) Tests
 
     [Fact]
@@ -569,6 +552,43 @@ public class EversenseConnectorServiceTests
             .And.Contain("endDate=2026-10-16T12%3A05%3A00");
     }
 
+    /// <summary>
+    /// A second scheduled run asks for history only from the first run's newest reading, less the
+    /// catch-up overlap. Each run has its own service, as each scheduled run does.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero));
+        DateTime? newest = null;
+        var publisher = CreatePublisher(records =>
+            newest = DateTimeOffset.FromUnixTimeMilliseconds(records.Max(r => r.Mills)).UtcDateTime);
+        publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => newest);
+        ServiceFixture Run() => new(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] =
+                    CreateJsonResponse(new List<EversensePatientDatum>
+                    {
+                        CreateFollowedPatient(userId: 42, glucose: 125, cgTime: "2026-10-16T11:58:00Z")
+                    }),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    CreateJsonResponse(new List<EversenseUserEvent>())
+            },
+            publisher: publisher.Object,
+            clock: clock);
+
+        var first = Run();
+        await first.Service.SyncDataAsync(first.Config, CancellationToken.None);
+        var second = Run();
+        await second.Service.SyncDataAsync(second.Config, CancellationToken.None);
+
+        newest.Should().Be(new DateTime(2026, 10, 16, 11, 58, 0, DateTimeKind.Utc));
+        second.RequestedUris.Where(u => u.AbsolutePath == EversenseConstants.Endpoints.GetFollowingUserSensorGlucose)
+            .Should().ContainSingle().Which.Query.Should().Contain("startDate=2026-10-16T11%3A53%3A00");
+    }
+
     [Fact]
     public async Task SyncDataAsync_StampsTheLatestReadingWithTheClock()
     {
@@ -700,6 +720,29 @@ public class EversenseConnectorServiceTests
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
+    }
+
+    /// <summary>
+    /// A scheduled run with glucose switched off has nothing to fetch, so it succeeds, calls nothing at
+    /// Eversense and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_GlucoseOff_SucceedsWithoutAVendorCallOrAResumePoint()
+    {
+        var glucose = new Mock<IGlucosePublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        var fixture = new ServiceFixture(publisher: publisher.Object);
+        fixture.Config.SyncGlucose = false;
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        fixture.RequestedUris.Should().BeEmpty();
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     /// <summary>

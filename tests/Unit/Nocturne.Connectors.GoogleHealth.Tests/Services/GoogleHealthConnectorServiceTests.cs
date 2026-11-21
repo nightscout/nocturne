@@ -388,9 +388,12 @@ public class GoogleHealthConnectorServiceTests
             ? await fixture.Service.SyncDataAsync(config, default, from.UtcDateTime)
             : await fixture.Service.SyncDataAsync(new SyncRequest { From = from.UtcDateTime }, config, default);
 
+        // The clock moves a second per read, and the scheduled entry point reads it once more than
+        // the requested one before the window is resolved.
         Assert.True(result.Success);
         fixture.Writer.Verify(writer => writer.BeginReconciliationAsync(
-            It.IsAny<IReadOnlyCollection<string>>(), from, now, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<IReadOnlyCollection<string>>(), from,
+            It.Is<DateTimeOffset>(to => to >= now && to <= now.AddSeconds(2)), It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(fixture.ImportFromWasConsumed);
         using var state = JsonDocument.Parse(fixture.StoredConfiguration);
         Assert.False(state.RootElement.TryGetProperty("backfillCursorDate", out _));

@@ -59,6 +59,9 @@ public class DexcomConnectorService
     protected override bool NeedsSignIn(SyncRequest request, DexcomConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
 
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, DexcomConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     /// <summary>
     ///     Performs sync, publishing SensorGlucose records directly to the V4 data store.
     /// </summary>
@@ -78,7 +81,8 @@ public class DexcomConnectorService
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, session, request.From, cancellationToken);
+            var sensorGlucose = await FetchSensorGlucoseAsync(
+                config, session, WindowStart(request, ResumeFamily.Glucose), cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose.ToList(), config, cancellationToken);

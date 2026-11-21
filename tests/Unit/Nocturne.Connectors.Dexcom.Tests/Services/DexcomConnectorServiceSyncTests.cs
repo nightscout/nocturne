@@ -138,6 +138,75 @@ public class DexcomConnectorServiceSyncTests
             sg.CreatedAt == Instant.UtcDateTime && sg.ModifiedAt == Instant.UtcDateTime);
     }
 
+    /// <summary>
+    /// A second scheduled run asks Share only for what came after the first run's newest reading,
+    /// less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(Instant);
+        var publisher = new Mock<IConnectorPublisher>();
+        var glucose = new Mock<IGlucosePublisher>();
+        DateTime? newest = null;
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => newest);
+        glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => newest = DateTimeOffset.FromUnixTimeMilliseconds(records.Max(r => r.Mills)).UtcDateTime)
+            .ReturnsAsync(true);
+        var readingAt = Instant.AddMinutes(-10).ToUnixTimeMilliseconds();
+        var queries = new List<string>();
+        var service = Service((request, _) =>
+        {
+            queries.Add(request.RequestUri!.Query);
+            return Task.FromResult(Json(
+                $$"""[{"WT":"Date({{readingAt}})","ST":"Date({{readingAt}})","DT":"Date({{readingAt}}+0000)","Value":120,"Trend":"Flat"}]"""));
+        }, publisher.Object, clock);
+
+        await service.SyncDataAsync(Config(), CancellationToken.None);
+        await service.SyncDataAsync(Config(), CancellationToken.None);
+
+        queries.Should().HaveCount(2);
+        queries[1].Should().Contain("minutes=15").And.Contain("maxCount=3");
+    }
+
+    /// <summary>
+    /// A scheduled run with glucose switched off has nothing to fetch, so it succeeds, calls nothing at
+    /// Share and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_GlucoseOff_SucceedsWithoutAVendorCallOrAResumePoint()
+    {
+        var glucose = new Mock<IGlucosePublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        var calls = 0;
+        var service = Service(
+            (_, _) =>
+            {
+                calls++;
+                return Task.FromResult(Json("[]"));
+            },
+            publisher.Object);
+        var config = Config();
+        config.SyncGlucose = false;
+
+        var result = await service.SyncDataAsync(config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        calls.Should().Be(0);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static readonly DateTimeOffset Instant = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static SyncRequest Request() => new() { DataTypes = [SyncDataType.Glucose] };

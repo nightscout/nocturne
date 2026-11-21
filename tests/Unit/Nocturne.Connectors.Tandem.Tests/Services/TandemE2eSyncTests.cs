@@ -280,6 +280,55 @@ public class TandemE2eSyncTests
         fixture.Publisher.PublishedAnything.Should().BeFalse();
     }
 
+    /// <summary>
+    /// The pump's range starts days before the stored watermarks here, so the first run starts at
+    /// the watermarks rather than at the pump's first event, and the second run's start can only
+    /// come from what the first run published.
+    /// </summary>
+    [Fact]
+    public async Task Scheduled_sync_twice_asks_the_second_time_only_from_the_first_runs_newest_record()
+    {
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("\"start\": \"2026-05-14T00:01:00\"", "\"start\": \"2026-05-10T00:00:00\""),
+            watermarksFollowPublishes: true);
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+        var firstRun = fixture.Requests.Count(r => r.Path.Contains("/pump-logs/"));
+        var newest = new[] { fixture.Publisher.SensorGlucoses.Max(r => r.Timestamp), fixture.Publisher.NewestTreatment!.Value }.Min();
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        firstRun.Should().BePositive();
+        var pumpLogs = fixture.Requests.Where(r => r.Path.Contains("/pump-logs/")).ToList();
+        pumpLogs[0].Path.Should().Contain("startDate=2026-05-12T00%3A00%3A00Z",
+            "the first run resumes from the stored watermarks, which sit before the newest published record");
+        var expected = newest.AddMinutes(-5).Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        expected.Should().Be("2026-05-14");
+        pumpLogs[firstRun].Path.Should().Contain($"startDate={expected}T00%3A00%3A00Z");
+    }
+
+    /// <summary>
+    /// The clamp notice tells a caller that the pump could not serve the bound it chose. A scheduled
+    /// run chose none: its resume point falling before the pump's first event is no news.
+    /// </summary>
+    [Fact]
+    public async Task Clamp_notice_is_given_for_a_callers_bound_and_not_for_a_scheduled_resume_point()
+    {
+        var scheduled = new Fixture(
+            latestEntry: Utc(2026, 1, 1, 0, 0, 0),
+            latestTreatment: Utc(2026, 1, 1, 0, 0, 0));
+        var requested = new Fixture();
+
+        var scheduledResult = await scheduled.RunScheduledAsync();
+        var requestedResult = await requested.RunAsync(new SyncRequest { From = Utc(2026, 1, 1, 0, 0, 0) });
+
+        scheduled.Requests.Should().ContainSingle(r => r.Path.Contains("/pump-logs/"))
+            .Which.Path.Should().Contain("startDate=2026-05-14T00%3A00%3A00Z", "the resume point was clamped");
+        scheduledResult.Success.Should().BeTrue();
+        scheduledResult.Message.Should().BeEmpty();
+        requestedResult.Success.Should().BeTrue();
+        requestedResult.Message.Should().Contain("The pump holds no data before 2026-05-14 04:01 UTC");
+    }
+
     [Fact]
     public async Task Windows_over_28_days_are_paged_and_deduplicated()
     {
@@ -533,8 +582,8 @@ public class TandemE2eSyncTests
     }
 
     /// <summary>
-    /// On a background cycle the caller's bound is the glucose watermark, and it must not narrow
-    /// the window past a data type that fell behind: the pump is crawled once for every type, so
+    /// An open-ended caller's bound above a data type that fell behind must not narrow the window
+    /// past it: the pump is crawled once for every type, so
     /// the earliest resume point across them is what the run owes.
     /// </summary>
     [Fact]
@@ -570,6 +619,28 @@ public class TandemE2eSyncTests
 
         fixture.Publisher.Profiles.Should().ContainSingle();
         result.ItemsSynced[SyncDataType.Profiles].Should().Be(0);
+    }
+
+    /// <summary>
+    /// A scheduled run's window starts at the glucose watermark, so one that cannot be read stops the
+    /// run before it asks the pump for anything. A requested run reads it only where it sets its own
+    /// window, after the pump's settings are published.
+    /// </summary>
+    [Fact]
+    public async Task Glucose_watermark_that_cannot_be_read_fails_where_the_window_needs_it()
+    {
+        var scheduled = new Fixture(PumperWithSettings(basalRate: 1000), glucoseWatermarkFails: true);
+        var requested = new Fixture(PumperWithSettings(basalRate: 1000), glucoseWatermarkFails: true);
+
+        var scheduledResult = await scheduled.RunScheduledAsync();
+        var requestedResult = await requested.RunAsync(new SyncRequest { From = Utc(2026, 5, 15, 0, 0, 0) });
+
+        scheduledResult.Success.Should().BeFalse();
+        scheduled.Requests.Should().BeEmpty();
+        scheduled.Publisher.Profiles.Should().BeEmpty();
+        requestedResult.Success.Should().BeFalse();
+        requested.Publisher.Profiles.Should().ContainSingle();
+        requested.Requests.Should().NotContain(r => r.Path.Contains("/pump-logs/"));
     }
 
     [Fact]
@@ -829,6 +900,16 @@ public class TandemE2eSyncTests
         public List<Profile> Profiles { get; } = [];
         public bool FailProfiles { get; set; }
 
+        /// <summary>Whether the stored watermarks move to the newest record published, as the store's do.</summary>
+        public bool FollowsPublishes { get; init; }
+        public bool GlucoseWatermarkFails { get; init; }
+
+        public DateTime? NewestTreatment =>
+            Boluses.Select(r => r.Timestamp)
+                .Concat(CarbIntakes.Select(r => r.Timestamp))
+                .Concat(BolusCalculations.Select(r => r.Timestamp))
+                .Select(t => (DateTime?)t).Max();
+
         public bool PublishedAnything =>
             SensorGlucoses.Count + Boluses.Count + CarbIntakes.Count + BolusCalculations.Count +
             TempBasals.Count + DeviceEvents.Count + DeviceStatuses.Count + StateSpans.Count +
@@ -856,7 +937,10 @@ public class TandemE2eSyncTests
         public Task<bool> PublishSensorGlucoseAsync(IEnumerable<SensorGlucose> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(SensorGlucoses, records);
         public Task<DateTime?> GetLatestEntryTimestampAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult(latestEntry);
+            GlucoseWatermarkFails ? Task.FromException<DateTime?>(new HttpRequestException("watermark store down")) :
+            Task.FromResult(FollowsPublishes && SensorGlucoses.Count > 0
+                ? SensorGlucoses.Max(r => r.Timestamp)
+                : latestEntry);
         public Task<DateTime?> GetLatestSensorGlucoseTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult(latestEntry);
 
@@ -875,7 +959,7 @@ public class TandemE2eSyncTests
         public Task<bool> PublishBasalInjectionsAsync(IEnumerable<BasalInjection> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult(latestTreatment);
+            Task.FromResult(FollowsPublishes && NewestTreatment is { } newest ? newest : latestTreatment);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
 
@@ -953,7 +1037,9 @@ public class TandemE2eSyncTests
             TimeProvider? clock = null,
             string? timesOutOn = null,
             CancellationTokenSource? cancellation = null,
-            Action<CancellationToken>? cursorStoreOnGet = null)
+            Action<CancellationToken>? cursorStoreOnGet = null,
+            bool watermarksFollowPublishes = false,
+            bool glucoseWatermarkFails = false)
         {
             _cancellation = cancellation;
             // Default watermarks put the catch-up start just before the pump's available range so
@@ -970,7 +1056,11 @@ public class TandemE2eSyncTests
                 TimezoneOffset = TimezoneOffsetHours,
             };
 
-            Publisher = new RecordingPublisher(latestEntry, latestTreatment);
+            Publisher = new RecordingPublisher(latestEntry, latestTreatment)
+            {
+                FollowsPublishes = watermarksFollowPublishes,
+                GlucoseWatermarkFails = glucoseWatermarkFails,
+            };
             _responses = new Dictionary<string, string>
             {
                 ["/api/reports/bff/pumper/"] = pumperJson,
@@ -990,6 +1080,9 @@ public class TandemE2eSyncTests
         }
 
         public void ServePumper(string pumperJson) => _responses["/api/reports/bff/pumper/"] = pumperJson;
+
+        public Task<SyncResult> RunScheduledAsync() =>
+            _service.SyncDataAsync(_config, _cancellation?.Token ?? CancellationToken.None);
 
         public Task<SyncResult> RunAsync(SyncRequest? request = null) =>
             _service.SyncDataAsync(request ?? new SyncRequest(), _config, _cancellation?.Token ?? CancellationToken.None);

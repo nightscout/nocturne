@@ -44,6 +44,13 @@ public class TandemConnectorService
     public override string ServiceName => "Tandem Source";
 
 
+    /// <summary>
+    ///     The run starts at the earlier of the glucose and treatment points, which only an
+    ///     open-ended request reads.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TandemConnectorConfiguration config) =>
+        request.To is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments] : [];
+
     protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TandemConnectorConfiguration config,
@@ -194,7 +201,7 @@ public class TandemConnectorService
         var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? now;
         var end = request.To is { } until && until < ceiling ? until : ceiling;
 
-        var start = await ResolveStartAsync(request, config, device, time);
+        var start = ResolveStart(request, device, time);
         if (start >= end)
         {
             _logger.LogInformation(
@@ -376,30 +383,29 @@ public class TandemConnectorService
     /// Resolves the start of the sync window from the caller's bound and the pump's own resume
     /// point — the earliest catch-up point across glucose and treatments, so no active data type is
     /// missed — never earlier than the pump's first event, which is where <see cref="ClampNotice"/>
-    /// reports a bound below.
+    /// reports a caller's bound below.
     /// </summary>
-    private async Task<DateTime> ResolveStartAsync(
-        SyncRequest request, TandemConnectorConfiguration config, TandemBffPump device,
-        TandemTimeResolver time)
+    private DateTime ResolveStart(SyncRequest request, TandemBffPump device, TandemTimeResolver time)
     {
-        var glucoseSince = await CalculateSinceTimestampAsync(config);
-        var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config);
-
-        var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
-        var resume = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+        DateTime ResumePoint()
+        {
+            var candidates = new[] { request.Resume.Point(ResumeFamily.Glucose), request.Resume.Point(ResumeFamily.Treatments) }
+                .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+            return candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+        }
 
         // The pump's own range is how far back this source goes, and the floor a range naming no
         // lower bound resolves to — named, rather than left to the clamp below to arrive at.
         var first = FirstEvent(device, time);
-        var start = ResumeFrom(request, resume, first ?? DefaultInitialSyncFloor());
+        var start = ResumeFrom(request, ResumePoint, first ?? DefaultInitialSyncFloor());
 
         return Later(start, first);
     }
 
     /// <summary>
-    /// What the run says when it covered less than it was asked for: the pump serves nothing before
-    /// its available range begins, and a success over a range that was silently narrowed reads the
-    /// same as one that covered it.
+    /// What the run says when it covered less than its caller asked for: the pump serves nothing
+    /// before its available range begins, and a success over a range that was silently narrowed reads
+    /// the same as one that covered it. A scheduled run names no bound, so it is never told.
     /// </summary>
     private static string? ClampNotice(
         SyncRequest request, TandemBffPump device, TandemTimeResolver time) =>

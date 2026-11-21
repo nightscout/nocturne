@@ -80,8 +80,6 @@ public class PublishRecordTypePathTests
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
 
-        public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-
         protected override async Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,
             TestConfig config,

@@ -348,7 +348,7 @@ public class GlookoConnectorService
             // the overlap). A range naming no lower bound reaches back the full history floor.
             var now = Clock.GetUtcNow().UtcDateTime;
             var from = context.TimeMapper.ToGlookoTime(
-                request.From ?? now.AddMonths(-GlookoConstants.FullWalkMonths)).AddDays(-1);
+                WindowStart(request, ResumeFamily.Glucose) ?? now.AddMonths(-GlookoConstants.FullWalkMonths)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
@@ -417,10 +417,21 @@ public class GlookoConnectorService
     }
 
     /// <summary>
-    ///     Entry point for the scheduled sync.
+    ///     What the scheduled run's window reads: SSV2's glucose point, or, without a cursor store,
+    ///     the glucose and treatment points <see cref="RunScheduledAsync"/> starts from. A tiered
+    ///     window and a caller's bound read none.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, GlookoConnectorConfiguration config) =>
+        !request.Resume.Scheduled ? []
+        : config.UseSsv2Sync ? WindowResumesFrom(request, ResumeFamily.Glucose)
+        : _cursorStore is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments]
+        : [];
+
+    /// <summary>
+    ///     The scheduled sync's window policy.
     /// </summary>
     /// <remarks>
-    ///     The base derives the window from the tenant's newest glucose reading. Most Glooko accounts
+    ///     The base resumes each family from its own newest stored record. Most Glooko accounts
     ///     never store one (CGM backfill is off by default), so that resolves to the six-month
     ///     <see cref="BaseConnectorService{TConfig}.InitialSyncFloor"/> on every run; and where one
     ///     exists it says nothing about what is still to come, because Glooko posts pump data in
@@ -434,29 +445,25 @@ public class GlookoConnectorService
     ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
     ///     <para>
     ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
-    ///     and a caller naming its own <paramref name="since"/> has already chosen; both take the base
-    ///     window. A service without a cursor store has nowhere to remember a walk, so it resumes
-    ///     instead, from the oldest of the glucose and treatment resume points: every family is
-    ///     fetched inside the one window, and the base's glucose watermark alone would leave
+    ///     so it takes the base's points. A service without a cursor store has nowhere to remember a
+    ///     walk, so it resumes instead, from the oldest of the glucose and treatment resume points:
+    ///     every family is fetched inside the one window, and the glucose point alone would leave
     ///     treatments that a failed chunk never published below every later run's bound.
     ///     </para>
     /// </remarks>
-    public override async Task<SyncResult> SyncDataAsync(
+    protected override async Task<SyncResult> RunScheduledAsync(
+        ResumePoints resume,
+        Func<ResumePoints, Task<SyncResult>> run,
         GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
-        if (since.HasValue || config.UseSsv2Sync)
-            return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
+        if (config.UseSsv2Sync)
+            return await run(resume);
 
         if (_cursorStore is null)
-        {
-            var resumeFrom = ResumeFrom(
-                await CalculateSinceTimestampAsync(config),
-                await CalculateTreatmentSinceTimestampAsync(config));
-            return await base.SyncDataAsync(config, cancellationToken, resumeFrom, progressReporter);
-        }
+            return await run(resume.StartingAt(ResumeFrom(
+                resume.Point(ResumeFamily.Glucose),
+                resume.Point(ResumeFamily.Treatments))));
 
         var now = Clock.GetUtcNow().UtcDateTime;
         var tier = await ResolveWindowTierAsync(now, cancellationToken);
@@ -474,7 +481,7 @@ public class GlookoConnectorService
         if (tier == WindowTier.FullWalk)
             await RecordStampAsync(GlookoConstants.FullWalkAttemptCursorResource, now, cancellationToken);
 
-        var result = await base.SyncDataAsync(config, cancellationToken, from, progressReporter);
+        var result = await run(resume.StartingAt(from));
 
         if (result.Success)
         {

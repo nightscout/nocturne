@@ -573,6 +573,24 @@ public class NocturneRemoteConnectorServiceCrawlTests
             .Contain($"find[created_at][$gte]={latestStatus.AddMinutes(-5):o}");
     }
 
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunCrawlsGlucoseOnlyFromTheFirstRunsNewestReading()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.GlucosePage(total: 2, "2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
+        var fixture = new ServiceFixture(handler, glucoseWatermarkFollowsPublishes: true);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should().NotContain("from=",
+            "nothing was stored, so the first run reads the whole history");
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        var newest = new DateTime(2026, 1, 3, 8, 5, 0, DateTimeKind.Utc);
+        fixture.PublishedGlucose.Max(g => g.Timestamp).Should().Be(newest);
+        handler.LastCrawlOf(NocturneRemoteConstants.SensorGlucose).Should().Contain($"from={newest.AddMinutes(-5):o}");
+    }
+
     /// <summary>
     /// A run cut off mid-crawl — the per-tenant timeout — keeps the pages it published, and the next
     /// run crawls only the range it still owes: between the catch-up's floor and those pages.
@@ -1558,7 +1576,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
             DateTime? latestDeviceStatus = null,
             DateTime? latestActivity = null,
             Action? onDeviceStatusPublished = null,
-            TimeProvider? time = null)
+            TimeProvider? time = null,
+            bool glucoseWatermarkFollowsPublishes = false)
         {
             Config = config ?? NewConfig();
 
@@ -1572,7 +1591,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 .ReturnsAsync(true);
             glucose
                 .Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(latestGlucose);
+                .ReturnsAsync(() => glucoseWatermarkFollowsPublishes && PublishedGlucose.Count > 0
+                    ? PublishedGlucose.Max(g => g.Timestamp)
+                    : latestGlucose);
 
             var device = new Mock<IDevicePublisher>();
             device
