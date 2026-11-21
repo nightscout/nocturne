@@ -8,7 +8,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
 /// Platform administrator rights of a user account. Grant or remove the right for one account. The
-/// last platform administrator cannot be removed.
+/// last active platform administrator cannot be removed.
 /// </summary>
 /// <remarks>
 /// Grants and removes the platform admin role of a subject.
@@ -29,31 +29,21 @@ public class SubjectAdminController : ControllerBase
 
     /// <summary>
     /// Grant or revoke platform admin for a subject.
-    /// Blocks self-demotion if the caller is the last platform admin.
+    /// Revoking is refused while the subject is the last active platform admin.
     /// </summary>
     [HttpPut("{id:guid}/platform-admin")]
     public async Task<IActionResult> SetPlatformAdmin(Guid id, [FromBody] SetPlatformAdminRequest request)
     {
-        var subject = await _subjects.GetAsync(id, HttpContext.RequestAborted);
-        if (subject is null) return NotFound();
-
-        if (!request.IsPlatformAdmin)
+        return await _subjects.UpdateAsync(id, new SubjectEdit(IsPlatformAdmin: request.IsPlatformAdmin), HttpContext.RequestAborted) switch
         {
-            // Block demotion if this is the last platform admin
-            var adminCount = await _subjects.CountPlatformAdminsAsync(HttpContext.RequestAborted);
-            if (adminCount <= 1 && subject.IsPlatformAdmin)
+            SubjectChange.NotFound => NotFound(),
+            SubjectChange.LastActivePlatformAdmin => Conflict(new
             {
-                return Conflict(new
-                {
-                    error = "last_platform_admin",
-                    message = "Cannot demote the last platform admin. Promote another user first."
-                });
-            }
-        }
-
-        await _subjects.UpdateAsync(id, new SubjectEdit(IsPlatformAdmin: request.IsPlatformAdmin), HttpContext.RequestAborted);
-
-        return NoContent();
+                error = "last_platform_admin",
+                message = "Cannot demote the last active platform admin. Promote or activate another user first."
+            }),
+            _ => NoContent(),
+        };
     }
 }
 

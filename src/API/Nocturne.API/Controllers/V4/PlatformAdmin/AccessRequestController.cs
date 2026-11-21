@@ -120,6 +120,7 @@ public class AccessRequestController(
                 $"The subject is the only owner, or the last owner who can sign in, of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
             SubjectChange.LastManagerOf lastManagerOf =>
                 $"The subject is the only manager, or the last manager who can sign in, of the team: {string.Join(", ", lastManagerOf.ManagedTeams.Select(t => t.Name))}.",
+            SubjectChange.LastActivePlatformAdmin => "The subject is the last active platform admin.",
             _ => null,
         };
         if (refusal is not null)

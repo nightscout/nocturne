@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -147,5 +148,77 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
         (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, true));
         (await subjects.GetSignInStateAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeNull();
         factory.PinnedTo.Should().HaveCount(2).And.StartWith(a.Credentialed);
+    }
+
+    [Fact]
+    public async Task TheLastActivePlatformAdminIsKeptUnderThePlatformAdminLock()
+    {
+        await ClearPlatformAdminsAsync();
+
+        var subjects = new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off);
+        var demoted = await subjects.CreateAsync(new NewSubject("lock-demoted"), CancellationToken.None);
+        var last = await subjects.CreateAsync(new NewSubject("lock-last"), CancellationToken.None);
+        await subjects.GrantPlatformAdminAsync([demoted, last], CancellationToken.None);
+
+        (await subjects.UpdateAsync(demoted, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.Changed>();
+        (await subjects.UpdateAsync(last, new SubjectEdit(IsActive: false), CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await subjects.DeleteAsync(last, CancellationToken.None))
+            .Should().BeOfType<SubjectChange.LastActivePlatformAdmin>();
+        (await subjects.IsPlatformAdminAsync(last, CancellationToken.None)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Two demotions of the instance's last two active admins, both started while another
+    /// transaction holds the platform-admin lock, so each reaches its read only once the lock is
+    /// free. Without the lock both read two admins and both commit.
+    /// </summary>
+    [Fact]
+    public async Task TwoConcurrentDemotionsOfTheLastTwoActiveAdminsLeaveOne()
+    {
+        await ClearPlatformAdminsAsync();
+        var subjects = new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off);
+        var a = await subjects.CreateAsync(new NewSubject("race-a"), CancellationToken.None);
+        var b = await subjects.CreateAsync(new NewSubject("race-b"), CancellationToken.None);
+        await subjects.GrantPlatformAdminAsync([a, b], CancellationToken.None);
+
+        await using var holder = new NpgsqlConnection(database.AppConnectionString);
+        await holder.OpenAsync();
+        await using var held = await holder.BeginTransactionAsync();
+        await using (var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@class, 0)", holder, held))
+        {
+            lockCmd.Parameters.AddWithValue("class", PlatformAdminFilter.LockClass);
+            await lockCmd.ExecuteNonQueryAsync();
+        }
+
+        var demoteA = Task.Run(() => subjects.UpdateAsync(a, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None));
+        var demoteB = Task.Run(() => subjects.UpdateAsync(b, new SubjectEdit(IsPlatformAdmin: false), CancellationToken.None));
+        var both = Task.WhenAll(demoteA, demoteB);
+
+        (await Task.WhenAny(both, Task.Delay(TimeSpan.FromSeconds(1)))).Should().NotBeSameAs(both,
+            "each demotion waits on the platform-admin lock before it reads the admins");
+
+        await held.CommitAsync();
+        var results = await both.WaitAsync(TimeSpan.FromSeconds(30));
+
+        results.Should().ContainSingle(r => r is SubjectChange.Changed)
+            .And.ContainSingle(r => r is SubjectChange.LastActivePlatformAdmin);
+        var remaining = new[]
+        {
+            await subjects.IsPlatformAdminAsync(a, CancellationToken.None),
+            await subjects.IsPlatformAdminAsync(b, CancellationToken.None),
+        };
+        remaining.Should().ContainSingle(isAdmin => isAdmin);
+    }
+
+    /// <summary>Clears every subject's flag, so this class's earlier admins do not count.</summary>
+    private async Task ClearPlatformAdminsAsync()
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE subjects SET is_platform_admin = false";
+        await cmd.ExecuteNonQueryAsync();
     }
 }

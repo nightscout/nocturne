@@ -334,7 +334,7 @@ public class SubjectRepository : ISubjectRepository
     /// <inheritdoc/>
     public virtual async Task<SubjectChange> UpdateAsync(Guid subjectId, SubjectEdit edit, CancellationToken ct)
     {
-        if (edit.IsActive is not false)
+        if (edit.IsActive is not false && edit.IsPlatformAdmin is not false)
         {
             await using var lease = await OpenAsync(ct);
             var change = await ApplyEditAsync(lease.Context, subjectId, edit, ct);
@@ -360,7 +360,8 @@ public class SubjectRepository : ISubjectRepository
 
     /// <summary>
     /// Stages <paramref name="edit"/> on the subject. Deactivating an active subject takes the owner
-    /// lock of each tenant it belongs to first (<see cref="TenantOwnerLock"/>), so it runs inside a
+    /// lock of each tenant it belongs to first (<see cref="TenantOwnerLock"/>), and deactivating or
+    /// demoting takes the platform-admin lock (<see cref="PlatformAdminFilter"/>), so it runs inside a
     /// transaction.
     /// </summary>
     private async Task<SubjectChange> ApplyEditAsync(
@@ -376,6 +377,10 @@ public class SubjectRepository : ISubjectRepository
             if (lastOwnerOf.Count > 0)
                 return new SubjectChange.LastOwnerOf(lastOwnerOf);
         }
+
+        if ((edit.IsActive is false || edit.IsPlatformAdmin is false)
+            && await db.IsLastActivePlatformAdminAsync(subjectId, ct))
+            return new SubjectChange.LastActivePlatformAdmin();
 
         if (edit.Name is not null)
             entity.Name = edit.Name;
@@ -518,6 +523,9 @@ public class SubjectRepository : ISubjectRepository
             if (lastManagerOf.Count > 0)
                 return new SubjectChange.LastManagerOf(lastManagerOf);
 
+            if (await db.IsLastActivePlatformAdminAsync(subjectId, ct))
+                return new SubjectChange.LastActivePlatformAdmin();
+
             // Removed here rather than by the subject's cascade so each membership leaves its removed
             // row; saved before the scrub below, which then clears that row's details like the rest.
             // The teams are staged after that save, so their rows keep their details.
@@ -606,10 +614,11 @@ public class SubjectRepository : ISubjectRepository
     public virtual async Task<bool> IsPlatformAdminAsync(Guid subjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
-        return await lease.Context.Subjects.AsNoTracking()
+        var state = await lease.Context.Subjects.AsNoTracking()
             .Where(s => s.Id == subjectId)
-            .Select(s => s.IsPlatformAdmin && s.IsActive)
+            .Select(s => new SubjectSignInState(s.IsActive, s.IsPlatformAdmin))
             .FirstOrDefaultAsync(ct);
+        return state?.IsActivePlatformAdmin ?? false;
     }
 
     /// <inheritdoc/>
@@ -617,13 +626,6 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var db = await Pinnable.CreatePlatformAsync(ct);
         return await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<int> CountPlatformAdminsAsync(CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return await lease.Context.Subjects.CountAsync(s => s.IsPlatformAdmin, ct);
     }
 
     /// <inheritdoc/>

@@ -303,6 +303,22 @@ public class TenantMembershipRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task TheRequestReadAnswersPlatformAdminOnlyForAnActiveSubject()
+    {
+        var active = await SubjectAsync("Active");
+        var deactivated = await SubjectAsync("Deactivated");
+        var member = await JoinAsync(deactivated, _caretakerRole);
+        await Subjects().GrantPlatformAdminAsync([active, deactivated], CancellationToken.None);
+        await Subjects().UpdateAsync(deactivated, new SubjectEdit(IsActive: false), CancellationToken.None);
+
+        (await Members().ReadSubjectMembershipAsync(active, _tenant, Now, CancellationToken.None))!.IsPlatformAdmin.Should().BeTrue();
+        var read = await Members().ReadSubjectMembershipAsync(deactivated, _tenant, Now, CancellationToken.None);
+        read!.IsPlatformAdmin.Should().BeFalse();
+        read.IsActive.Should().BeFalse();
+        read.Membership!.Id.Should().Be(member.Id, "the read reports the membership; the request refuses an inactive subject's");
+    }
+
+    [Fact]
     public async Task ASubjectsMembershipsSpanTenantsOwnedFirst()
     {
         var subject = await SubjectAsync("Carer");
