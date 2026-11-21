@@ -2,7 +2,9 @@
 //! glucose_bucket, staleness.
 
 use super::Env;
+use super::elapsed::{ClockLeaf, decimal};
 use crate::compare::Unit;
+use crate::context::SensorContext;
 use crate::enums::{CmpOp, RateDirection, ThresholdDirection, holds};
 use crate::model::{
     GlucoseBucketPayload, PredictedPayload, RateOfChangePayload, StalenessPayload,
@@ -55,12 +57,12 @@ pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> bool {
 /// `last_reading_at` and `latest_timestamp` null) is false, taking precedence
 /// over the infinity convention; `last_reading_at` alone null means elapsed is
 /// +infinity (`>`/`>=` true, others false).
-pub(super) fn staleness(p: &StalenessPayload, env: &Env) -> bool {
-    if env.ctx.last_reading_at.is_none() && env.ctx.latest_timestamp.is_none() {
-        return false;
+pub(super) fn staleness(p: &StalenessPayload, ctx: &SensorContext) -> ClockLeaf {
+    if ctx.last_reading_at.is_none() && ctx.latest_timestamp.is_none() {
+        return ClockLeaf::Fixed(false);
     }
-    let Some(last_reading_at) = env.ctx.last_reading_at else {
-        return matches!(p.operator, CmpOp::Gt | CmpOp::Ge);
+    let Some(last_reading_at) = ctx.last_reading_at else {
+        return ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge));
     };
-    env.compare_elapsed(last_reading_at, Unit::Minutes, p.operator, p.value.get())
+    decimal(last_reading_at, Unit::Minutes, p.operator, p.value.get())
 }

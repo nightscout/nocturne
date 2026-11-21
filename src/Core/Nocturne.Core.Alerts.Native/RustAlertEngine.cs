@@ -56,6 +56,44 @@ public static partial class RustAlertEngine
     /// <inheritdoc cref="AlertsInterop.GetTzdbVersion"/>
     public static string TzdbVersion() => AlertsInterop.GetTzdbVersion();
 
+    private static readonly Lazy<bool> NextChangeReported = new(() => ReportsNextChange(AlertsInterop.Evaluate));
+
+    /// <summary>
+    /// Whether the loaded library reports <c>next_change_at</c> (docs/alerts/engine-semantics.md
+    /// §5.3). The field is omitted when there is none, so from a library that predates it every
+    /// result would read as "nothing changes"; a host records a next change only when this holds.
+    /// </summary>
+    public static bool ReportsNextChange() => NextChangeReported.Value;
+
+    /// <summary>
+    /// Whether <paramref name="evaluate"/> reports a next change for a signal loss due in ten
+    /// minutes, which has one.
+    /// </summary>
+    internal static bool ReportsNextChange(Func<string, string> evaluate)
+    {
+        var now = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+        var request = Serialize(new RustEvaluateRequest
+        {
+            Rule = new RustAlertRule
+            {
+                Id = Guid.Empty,
+                ConditionType = "signal_loss",
+                ConditionParams = JsonSerializer.SerializeToElement(new { timeout_minutes = 15 }),
+            },
+            Context = JsonSerializer.SerializeToElement(new { last_reading_at = now.AddMinutes(-5) }),
+            Now = now,
+            IncludeLeaves = false,
+        });
+        try
+        {
+            return GetRuleResult(ParseEvaluateResponse(evaluate(request)), leavesRequested: false).NextChangeAt is not null;
+        }
+        catch (RustAlertEngineException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Evaluates one rule for one tick through the Rust engine.
     /// </summary>
@@ -236,6 +274,24 @@ public static partial class RustAlertEngine
             AlertsInterop.ReferencesWallClock(Serialize(request)), "references_wall_clock");
         Require(response.ReferencesWallClock is not null, "references_wall_clock", "references_wall_clock");
         return response.ReferencesWallClock!.Value;
+    }
+
+    /// <summary>
+    /// The context facts a stored rule reads, by wire name (docs/alerts/engine-semantics.md §5.2).
+    /// An unknown type or unevaluable body reads none, not an error.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
+    /// unparseable response.
+    /// </exception>
+    public static IReadOnlyList<string> RuleReads(RustRuleConditionsRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = ParseResponse<RustRuleReadsResponse>(
+            AlertsInterop.RuleReads(Serialize(request)), "rule_reads");
+        Require(response.Reads is not null, "rule_reads", "reads");
+        return response.Reads!;
     }
 
     /// <summary>

@@ -309,9 +309,12 @@ A rule is wall-clock when its root kind, any node of its condition tree, or, whi
 auto-resolve is enabled, any node of its auto-resolve tree is a wall-clock kind. Every
 host must evaluate enabled wall-clock rules periodically as well as per reading, through
 the normal driver sequence (§7). Otherwise such a rule stays unfired for as long as no
-reading arrives. The backend does this from `AlertSweepJob` every 30 s per tenant; Prelude needs
-an equivalent periodic evaluation. The crate's `wall_clock::references_wall_clock` reads
-a rule's kinds as §5.2 does, and the backend's sweep asks it which rules to evaluate.
+reading arrives. A host may instead evaluate such a rule at its last evaluation's
+`next_change_at` (§5.3), but only while every fact the rule reads (§5.2) is one that
+moves only through writes that evaluate the rule. The backend does this from
+`AlertSweepJob` every 30 s per tenant; Prelude needs an equivalent evaluation. The
+crate's `wall_clock::references_wall_clock` reads a rule's kinds as §5.2 does, and the
+backend's sweep asks it which rules to evaluate.
 
 A periodic evaluation uses the context the per-reading path builds for the newest
 reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
@@ -363,12 +366,14 @@ reads a rule's kinds the same way.
 | `sleep` | `SleepSessionActive` | `sleep_session_active` |
 | `active_alerts` | `ActiveAlerts` | `alert_state` |
 | `do_not_disturb` | `ActiveDoNotDisturb` | `do_not_disturb` |
-| `time_zone` | `TenantTimeZoneId` | `time_of_day`, `day_of_week` |
+| `time_zone` | `TenantTimeZoneId` | `time_of_day`, `day_of_week`, `glucose_bucket` |
 
 The containers `composite`, `not` and `sustained` read no fact; a `sustained` timer is
 evaluation state, not context. `pump_suspended` reads two facts: its guard is the pump
 snapshot and its anchor the suspension span. No field carries a therapy profile or
-schedule as such; the target range reaches the context only through `GlucoseBucket`.
+schedule as such; the target range reaches the context only through `GlucoseBucket`, which a
+host derives from the reading and the schedule at the tenant's local time, so
+`glucose_bucket` reads `time_zone` as well as `glucose`.
 `now` is not a fact: it is an argument to evaluation.
 
 A host uses facts to evaluate rules on writes other than glucose: a write evaluates the
@@ -379,6 +384,68 @@ spans and windows end, the target range and calendar gates follow the clock), an
 bound on a calendar gate holds only if every reading evaluates such a rule. Which writes
 move which facts, derived ones included, is the host's record-to-fact map, not the
 crate's.
+
+### 5.3 Next change
+
+Every evaluation (§7) reports `next_change_at`: the earliest instant strictly after `now`
+at which an evaluation from the state this one left (sustained timers and tracker) can do
+anything other than repeat this one's root truth and leaf log with no transition but
+`continues` and no auto-resolve, if every context fact stays as it was and only `now`
+advances. It is absent when no such instant exists.
+
+It is a **lower bound**: nothing observable changes at a tick before it, and nothing need
+change at it. Reporting earlier than necessary is allowed; later is a bug. It is on the
+engine's time resolution, the 100 ns tick: a change that falls between two ticks is
+reported at the earlier tick when that is after `now`, and at the first tick after `now`
+otherwise, which is also the report when the only change due is already due (a
+hysteresis window that has closed, below). So it is always strictly after `now`. An
+instant past 9999-12-31T23:59:59.9999999Z, the last a .NET host can hold, is reported as
+absent.
+
+It is the minimum of the contributions of every node of the body and, while auto-resolve
+is enabled and the tree is present and evaluable, every node of the auto-resolve tree
+(the trees §5.2 reads), whether or not an excursion is open, plus the tracker's. A node
+contributes whatever its siblings hold: a child's change moves the leaf log and timers
+even when the root does not. Containers contribute only through their children, except
+`sustained`.
+
+| Node | Contribution |
+|---|---|
+| `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
+| `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`. |
+| `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set; without one, only what its child contributes. |
+| `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
+| `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
+| Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. |
+| Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. |
+| Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the reading, not to `now`. |
+
+A leaf without an anchor, or whose guard holds it constant (a `has_ever_*` flag false, a
+`tracker_age` threshold held back at recording), contributes nothing, as does a
+comparison that has already flipped for good (an elapsed time grows only). Each flip is
+found by searching the comparison evaluation makes, so the decimal rounding of §1.3 moves
+it with the truth it changes: a fractional bound can hold before the exact instant it
+names. A negative elapsed time (before a scheduled `tracker_age` event) truncates toward
+zero, so it flips within the tick before the bound and is reported at that tick.
+Confirmation (§6) counts evaluations, not time, so a rule whose tracker is `confirming`
+cannot wait: its next evaluation changes it, and it reports the first tick after `now`.
+
+A host may schedule its next evaluation of a rule at `next_change_at`, or pre-arm what that
+evaluation would deliver, instead of evaluating on a timer, as long as no fact the rule
+reads moves without an evaluation of the rule (§5.1). Any evaluation of the rule, by any
+path, replaces the value; a rule edit drops it. The replay driver (§8) does not report it.
+
+The backend's sweep waits for it only for a wall-clock rule that reads nothing but
+`glucose` (§5.2), whose tracker is not `confirming`, and only while its context measures a
+usable canonical reading and carries the glucose facts the recorded value was computed from.
+A reading deleted, edited or recomputed moves those facts without an evaluation, as does an
+evaluation that failed or was dropped, so the sweep then evaluates. `predictions` does not qualify: the backend
+fetches them live, and they move with treatments and the clock. Nor does `time_zone`: the
+backend reads it from the profile, and a profile write moves it and evaluates nothing, so a
+`time_of_day`, `day_of_week` or `glucose_bucket` rule keeps the 30 s cadence. A
+`glucose_bucket` also moves with the clock: the bucket comes from the target-range schedule
+entry at the tenant's local time, and a schedule boundary or a profile edit changes it with no
+reading. Every other wall-clock rule keeps the 30 s cadence.
 
 ---
 
@@ -426,7 +493,8 @@ engines adopt that state's `UpdatedAt` as the start, once, and persist it.
 A host must also expire windows when no evaluation arrives. The backend sweep
 (`CloseHysteresisWindowsAsync`, every 30 s) asks the tracker to close each excursion in
 hysteresis whose window has elapsed (`CloseElapsedHysteresisAsync`), without evaluating
-the condition. A window is therefore at most ~30 s late.
+the condition. A window is therefore at most ~30 s late. The window's end is the
+tracker's contribution to `next_change_at` (§5.3).
 
 ### 6.2 Force-close
 
@@ -497,9 +565,12 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
    resolve predicate is already true when its body opens produces an open + close pair on
    the same tick, then opens nothing while both trees hold (§6.3).
 
+6. `next_change_at` (§5.3) is read from the trees, the context, and the timers and
+   tracker as steps 2 to 5 left them.
+
 Evaluation errors in one rule are caught and logged; remaining rules still evaluate. A
 rule whose tree cannot be evaluated (§1.4) is skipped before step 2, so it writes no
-timers.
+timers and reports no next change.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the

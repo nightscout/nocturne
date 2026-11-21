@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "name": "next-change-time-of-day-dst-gap",
+  "description": "Sydney skips 02:00-03:00 on 2026-10-04: an edge at 02:30 is the instant the gap ends",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "02:30",
+        "to": "05:00",
+        "timezone": "Australia/Sydney"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-10-03T15:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

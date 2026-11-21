@@ -61,6 +61,25 @@ public class AlertTrackerStateEntity : ITenantScoped
     [Column("awaiting_rearm")]
     public bool AwaitingRearm { get; set; }
 
+    /// <summary>
+    /// The last full evaluation's next change, null when it reported none.
+    /// </summary>
+    [Column("next_change_at")]
+    public DateTime? NextChangeAt { get; set; }
+
+    /// <summary>
+    /// Whether <see cref="NextChangeAt"/> holds for the rule as it now stands; false until a full
+    /// evaluation records it.
+    /// </summary>
+    [Column("next_change_known")]
+    public bool NextChangeKnown { get; set; }
+
+    /// <summary>
+    /// The glucose facts of the context <see cref="NextChangeAt"/> was computed from.
+    /// </summary>
+    [Column("next_change_glucose")]
+    public string? NextChangeGlucose { get; set; }
+
     // Navigation
 
     /// <summary>

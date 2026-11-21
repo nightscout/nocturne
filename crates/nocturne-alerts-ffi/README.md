@@ -120,7 +120,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
                  rule_id, skipped?, root, leaves[], transition, close_reason?,
                  tracker {state, confirmation_count, excursion?,
                           hysteresis_started_at?, awaiting_rearm?},
-                 auto_resolved?, timer_ops[] */ },
+                 auto_resolved?, timer_ops[], next_change_at? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
     "state": "active",
@@ -145,6 +145,22 @@ tree that cannot be evaluated never resolves and is not an error.
 
 `result.skipped` belongs to the corpus shape; since a body that cannot be
 evaluated is an error envelope, this envelope never sets it.
+
+### Next change
+
+`result.next_change_at` (RFC 3339, on the 100 ns tick grid) is the earliest
+instant strictly after `now` at which an evaluation from the returned `timers`
+and `tracker` can do anything other than repeat this result's `root` and
+`leaves` with no transition but `continues` and no auto-resolve, if the context
+stays as sent and only `now` advances (`docs/alerts/engine-semantics.md` §5.3).
+It is absent when no such instant exists, or when it would fall after
+9999-12-31T23:59:59.9999999Z. It is a lower bound: re-evaluating at
+it may find nothing changed, and a host then reads the next one from that
+evaluation. A host may evaluate a wall-clock rule at this instant in place of a
+periodic timer only while nothing but `now` moves the facts the rule reads
+(§5.1); a write that moves one must evaluate the rule. Additive, so
+`schema_version` stays 1. The tracker entry points do not report it: a rule's
+next change needs its full evaluation.
 
 ### State threading
 

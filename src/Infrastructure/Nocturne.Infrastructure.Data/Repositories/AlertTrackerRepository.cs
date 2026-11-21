@@ -79,6 +79,9 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 UpdatedAt = state.UpdatedAt,
                 HysteresisStartedAt = state.HysteresisStartedAt,
                 AwaitingRearm = state.AwaitingRearm,
+                NextChangeAt = state.NextChangeAt,
+                NextChangeKnown = state.NextChangeKnown,
+                NextChangeGlucose = state.NextChangeGlucose,
             });
         }
         else
@@ -89,6 +92,9 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.UpdatedAt = state.UpdatedAt;
             existing.HysteresisStartedAt = state.HysteresisStartedAt;
             existing.AwaitingRearm = state.AwaitingRearm;
+            existing.NextChangeAt = state.NextChangeAt;
+            existing.NextChangeKnown = state.NextChangeKnown;
+            existing.NextChangeGlucose = state.NextChangeGlucose;
         }
 
         await db.SaveChangesAsync(ct);
@@ -265,6 +271,9 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         UpdatedAt = entity.UpdatedAt,
         HysteresisStartedAt = entity.HysteresisStartedAt,
         AwaitingRearm = entity.AwaitingRearm,
+        NextChangeAt = entity.NextChangeAt,
+        NextChangeKnown = entity.NextChangeKnown,
+        NextChangeGlucose = entity.NextChangeGlucose,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

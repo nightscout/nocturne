@@ -95,6 +95,40 @@ fn include_leaves_false_omits_only_the_leaf_log() {
 }
 
 #[test]
+fn evaluate_reports_the_next_change_and_omits_none() {
+    let request = |condition_type: &str, params: Value| {
+        json!({
+            "schema_version": 1,
+            "rule": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "condition_type": condition_type,
+                "condition_params": params
+            },
+            "context": {
+                "latest_value": 120,
+                "latest_timestamp": "2026-01-05T11:55:00Z",
+                "last_reading_at": "2026-01-05T11:55:00Z"
+            },
+            "now": "2026-01-05T12:00:00Z"
+        })
+    };
+
+    let wall_clock = evaluate(&request("signal_loss", json!({ "timeout_minutes": 15 })));
+    assert_eq!(wall_clock["ok"], json!(true), "{wall_clock}");
+    assert_eq!(
+        wall_clock["result"]["next_change_at"],
+        json!("2026-01-05T12:10:00Z")
+    );
+
+    let reading_driven = evaluate(&request(
+        "threshold",
+        json!({ "direction": "below", "value": 70 }),
+    ));
+    assert_eq!(reading_driven["ok"], json!(true), "{reading_driven}");
+    assert!(reading_driven["result"].get("next_change_at").is_none());
+}
+
+#[test]
 fn tzdb_version_is_the_compiled_release() {
     unsafe {
         let ptr = nocturne_alerts_tzdb_version();
@@ -240,6 +274,30 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
     })
 }
 
+/// `actual` without the `next_change_at` of each result whose snapshot does
+/// not carry one: a snapshot pins it by carrying it, and the corpus is frozen.
+pub(crate) fn as_pinned(mut actual: Value, expected: &Value) -> Value {
+    let expected_ticks = expected["ticks"].as_array().cloned().unwrap_or_default();
+    if let Some(ticks) = actual["ticks"].as_array_mut() {
+        for (tick, expected_tick) in ticks.iter_mut().zip(&expected_ticks) {
+            let expected_rules = expected_tick["rules"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if let Some(rules) = tick["rules"].as_array_mut() {
+                for (rule, expected_rule) in rules.iter_mut().zip(&expected_rules) {
+                    if expected_rule.get("next_change_at").is_none()
+                        && let Some(result) = rule.as_object_mut()
+                    {
+                        result.remove("next_change_at");
+                    }
+                }
+            }
+        }
+    }
+    actual
+}
+
 /// Runs the full corpus through an evaluate-envelope function and pins every
 /// scenario against its committed `.expected.json` snapshot.
 fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
@@ -253,7 +311,7 @@ fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
     let mut failed: Vec<String> = Vec::new();
     for path in &scenario_paths {
         let (scenario, expected) = load_scenario(path);
-        let actual = run_scenario(&scenario, &evaluate);
+        let actual = as_pinned(run_scenario(&scenario, &evaluate), &expected);
         if actual != expected {
             failed.push(format!(
                 "scenario {}: FFI output differs from expected snapshot",
@@ -1489,7 +1547,7 @@ fn describe_alert_state_carries_uuid_and_null_for_minutes() {
 
 #[cfg(feature = "uniffi")]
 mod uniffi_surface {
-    use super::{assert_error, load_scenario, run_scenario, scenario_paths};
+    use super::{as_pinned, assert_error, load_scenario, run_scenario, scenario_paths};
     use crate::uniffi_api;
     use serde_json::{Value, json};
 
@@ -1553,7 +1611,7 @@ mod uniffi_surface {
         // ABI in this build; both paths share one envelope implementation.)
         let paths = scenario_paths();
         let (scenario, expected) = load_scenario(paths.first().expect("corpus is non-empty"));
-        let actual = run_scenario(&scenario, evaluate);
+        let actual = as_pinned(run_scenario(&scenario, evaluate), &expected);
         assert_eq!(
             actual, expected,
             "scenario {}: uniffi output differs from expected snapshot",

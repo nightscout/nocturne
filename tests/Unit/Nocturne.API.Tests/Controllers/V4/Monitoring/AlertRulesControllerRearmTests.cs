@@ -19,8 +19,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 
 /// <summary>
-/// A rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) is dropped by an edit of its
-/// conditions or enablement, and kept by any other edit.
+/// A rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) and its recorded next change
+/// (§5.3) are dropped by an edit of its conditions or enablement, and kept by any other edit.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRulesControllerRearmTests
@@ -30,6 +30,8 @@ public class AlertRulesControllerRearmTests
 
     private const string Body = """{"direction":"below","value":70}""";
     private const string Resolve = """{"type":"threshold","threshold":{"direction":"above","value":80}}""";
+
+    private static readonly DateTime NextChange = new(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc);
 
     private static async Task<(AlertRulesController Controller, NocturneDbContext Db)> CreateAsync(
         AlertRuleEvaluationGate? gate = null)
@@ -55,6 +57,8 @@ public class AlertRulesControllerRearmTests
             TenantId = Tenant,
             State = "idle",
             AwaitingRearm = true,
+            NextChangeAt = NextChange,
+            NextChangeKnown = true,
         });
         await db.SaveChangesAsync();
 
@@ -113,6 +117,19 @@ public class AlertRulesControllerRearmTests
         (await AwaitingRearm(db)).Should().BeFalse(edit);
     }
 
+    [Theory]
+    [MemberData(nameof(ConditionEdits))]
+    public async Task An_edit_of_the_conditions_or_enablement_drops_the_next_change(
+        string edit, Func<UpdateAlertRuleRequest, UpdateAlertRuleRequest> change)
+    {
+        var (controller, db) = await CreateAsync();
+
+        await controller.UpdateRule(RuleId, change(Unchanged()), CancellationToken.None);
+
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { NextChangeKnown = false, NextChangeAt = (DateTime?)null }, edit);
+    }
+
     [Fact]
     public async Task Another_edit_keeps_the_hold()
     {
@@ -121,6 +138,8 @@ public class AlertRulesControllerRearmTests
         await controller.UpdateRule(RuleId, Unchanged(name: "Low glucose"), CancellationToken.None);
 
         (await AwaitingRearm(db)).Should().BeTrue();
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { NextChangeKnown = true, NextChangeAt = (DateTime?)NextChange });
     }
 
     [Fact]

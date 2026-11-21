@@ -87,6 +87,10 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
 // Deep comparison with contextual diff messages
 // ---------------------------------------------------------------------------
 
+/// A result field a snapshot pins by carrying it: snapshots written before the
+/// engine reported it omit it, and the corpus is frozen.
+const PINNED_ONLY_WHEN_PRESENT: &str = "next_change_at";
+
 fn diff(actual: &Value, expected: &Value, path: &str, failures: &mut Vec<String>) {
     match (actual, expected) {
         (Value::Object(a), Value::Object(e)) => {
@@ -95,6 +99,7 @@ fn diff(actual: &Value, expected: &Value, path: &str, failures: &mut Vec<String>
                 let p = format!("{path}.{key}");
                 match (a.get(key.as_str()), e.get(key.as_str())) {
                     (Some(av), Some(ev)) => diff(av, ev, &p, failures),
+                    (Some(_), None) if key.as_str() == PINNED_ONLY_WHEN_PRESENT => {}
                     (Some(av), None) => {
                         failures.push(format!("{p}: unexpected field (actual = {av})"));
                     }

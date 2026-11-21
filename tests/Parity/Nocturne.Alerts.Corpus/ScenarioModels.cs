@@ -51,6 +51,19 @@ public static class CorpusJson
             writer.WriteStringValue(value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
         }
     }
+
+    /// <summary>
+    /// Writes a UTC instant the engine reports on its 100 ns tick grid, such as a next change,
+    /// with as many fractional digits as it needs.
+    /// </summary>
+    public sealed class TickInstantConverter : JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+            reader.GetDateTime().ToUniversalTime();
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
+            writer.WriteStringValue(value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +274,13 @@ public sealed record ExpectedRuleResult
     /// </summary>
     [JsonPropertyName("timer_ops")]
     public List<ExpectedTimerOp>? TimerOps { get; init; }
+
+    /// <summary>
+    /// When an evaluation from the state this one left can next differ with only the clock
+    /// moving; pinned only by a snapshot that carries it (see the corpus README).
+    /// </summary>
+    [JsonPropertyName("next_change_at"), JsonConverter(typeof(CorpusJson.TickInstantConverter))]
+    public DateTime? NextChangeAt { get; init; }
 }
 
 public sealed record ExpectedLeaf(

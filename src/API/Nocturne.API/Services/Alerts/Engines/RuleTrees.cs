@@ -59,6 +59,18 @@ internal static class RuleTrees
 
     private static readonly ConcurrentDictionary<DescriptionKey, Description> Descriptions = new();
 
+    private static readonly ConcurrentDictionary<DescriptionKey, bool> NextChangeVerdicts = new();
+
+    /// <summary>
+    /// The facts (docs/alerts/engine-semantics.md §5.2) that move only through a glucose write,
+    /// which evaluates every enabled rule. <c>predictions</c> is not one: the enricher fetches
+    /// them live, and they move with treatments and the clock. Nor is <c>time_zone</c>: it is
+    /// read from the profile, and a profile write moves it and evaluates nothing. A
+    /// <c>glucose_bucket</c> reads it too, since the bucket is the reading placed in the
+    /// schedule at the tenant's local time, so such a rule never waits.
+    /// </summary>
+    private static readonly string[] FactsOnlyReadingsMove = ["glucose"];
+
     /// <summary>
     /// The leaves of the rule's body in pre-order, then those of its auto-resolve tree when
     /// <paramref name="includeAutoResolve"/> and auto-resolve is enabled.
@@ -87,13 +99,38 @@ internal static class RuleTrees
     /// </summary>
     /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
     public static bool ReferencesWallClock(AlertRuleSnapshot rule) =>
-        RustAlertEngine.ReferencesWallClock(new RustRuleConditionsRequest
-        {
-            ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-            ConditionParams = Body(rule.ConditionType, rule.ConditionParams),
-            AutoResolveEnabled = rule.AutoResolveEnabled,
-            AutoResolveParams = rule.AutoResolveEnabled ? AutoResolve(rule.AutoResolveParams) : null,
-        });
+        RustAlertEngine.ReferencesWallClock(ConditionsRequest(rule));
+
+    /// <summary>
+    /// Whether the rule references the wall clock and reads only <see cref="FactsOnlyReadingsMove"/>,
+    /// so between its evaluations only the clock moves it, and its last evaluation's next change
+    /// (docs/alerts/engine-semantics.md §5.3) is the earliest instant one can differ. Kept per
+    /// condition, as descriptions are.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
+    public static bool WaitsForNextChange(AlertRuleSnapshot rule)
+    {
+        var key = new DescriptionKey(
+            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null);
+        if (NextChangeVerdicts.TryGetValue(key, out var kept))
+            return kept;
+
+        var request = ConditionsRequest(rule);
+        var waits = RustAlertEngine.ReferencesWallClock(request)
+                    && RustAlertEngine.RuleReads(request).All(FactsOnlyReadingsMove.Contains);
+        if (NextChangeVerdicts.Count >= CacheLimit)
+            NextChangeVerdicts.Clear();
+        NextChangeVerdicts[key] = waits;
+        return waits;
+    }
+
+    private static RustRuleConditionsRequest ConditionsRequest(AlertRuleSnapshot rule) => new()
+    {
+        ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
+        ConditionParams = Body(rule.ConditionType, rule.ConditionParams),
+        AutoResolveEnabled = rule.AutoResolveEnabled,
+        AutoResolveParams = rule.AutoResolveEnabled ? AutoResolve(rule.AutoResolveParams) : null,
+    };
 
     /// <summary>
     /// The body as replay sends it: a body that is not JSON goes as a JSON string, which the engine
@@ -126,8 +163,12 @@ internal static class RuleTrees
         }
     }
 
-    /// <summary>Drops every kept description.</summary>
-    internal static void ClearCache() => Descriptions.Clear();
+    /// <summary>Drops every kept description and next-change verdict.</summary>
+    internal static void ClearCache()
+    {
+        Descriptions.Clear();
+        NextChangeVerdicts.Clear();
+    }
 
     /// <param name="type">The condition type <paramref name="conditionParams"/> is stored for.</param>
     /// <param name="conditionParams">The rule's body as stored.</param>

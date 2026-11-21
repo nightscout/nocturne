@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::eval::elapsed::Elapsed;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
 use crate::paths::node_child_path;
@@ -127,6 +128,6 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
             env.timers.set_first_true(env.rule_id, path, now);
             false
         }
-        Some(first) => env.held_for(first, p.minutes.get()),
+        Some(first) => Elapsed::held_for(first, p.minutes.get()).holds(now),
     }
 }

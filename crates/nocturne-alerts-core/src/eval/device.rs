@@ -5,8 +5,9 @@
 use chrono::{DateTime, TimeDelta, Utc};
 
 use super::Env;
+use super::elapsed::{ClockLeaf, active_for, decimal};
 use crate::compare::Unit;
-use crate::context::TrackerReference;
+use crate::context::{SensorContext, TrackerReference};
 use crate::enums::{CmpOp, TransmitterBatteryMetric, holds};
 use crate::model::{
     ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
@@ -14,17 +15,19 @@ use crate::model::{
 };
 
 /// Site age in hours; no site change is false.
-pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx
-        .last_site_change_at
-        .is_some_and(|at| env.compare_elapsed(at, Unit::Hours, p.operator, p.value))
+pub(super) fn site_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
+    ctx.last_site_change_at
+        .map_or(ClockLeaf::Fixed(false), |at| {
+            decimal(at, Unit::Hours, p.operator, p.value)
+        })
 }
 
 /// Sensor age in days; no sensor start is false.
-pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx
-        .last_sensor_start_at
-        .is_some_and(|at| env.compare_elapsed(at, Unit::Days, p.operator, p.value))
+pub(super) fn sensor_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
+    ctx.last_sensor_start_at
+        .map_or(ClockLeaf::Fixed(false), |at| {
+            decimal(at, Unit::Days, p.operator, p.value)
+        })
 }
 
 /// Minutes since the active tracker instance's reference timestamp (negative
@@ -33,14 +36,13 @@ pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
 /// For a duration run, a threshold that already held when the run was recorded
 /// is false for that run, so a run entered after the fact does not alert at
 /// once for what it has already passed.
-pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
-    env.ctx
-        .active_trackers
-        .get(&p.tracker_definition_id)
-        .is_some_and(|t| {
-            !held_when_recorded(p, t)
-                && env.compare_elapsed(t.reference_at, Unit::Minutes, p.operator, p.minutes)
-        })
+pub(super) fn tracker_age(p: &TrackerAgePayload, ctx: &SensorContext) -> ClockLeaf {
+    match ctx.active_trackers.get(&p.tracker_definition_id) {
+        Some(t) if !held_when_recorded(p, t) => {
+            decimal(t.reference_at, Unit::Minutes, p.operator, p.minutes)
+        }
+        _ => ClockLeaf::Fixed(false),
+    }
 }
 
 /// Whether the threshold held at the recorded time: `>=` from its due time,
@@ -73,21 +75,26 @@ fn held_when_recorded(p: &TrackerAgePayload, t: &TrackerReference) -> bool {
 pub(super) fn loop_stale(
     p: &MinutesComparePayload,
     anchor: Option<DateTime<Utc>>,
-    env: &Env,
-) -> bool {
-    env.ctx.has_ever_aps_cycled
-        && anchor
-            .is_some_and(|at| env.compare_elapsed(at, Unit::Minutes, p.operator, p.minutes.get()))
+    ctx: &SensorContext,
+) -> ClockLeaf {
+    match anchor {
+        Some(at) if ctx.has_ever_aps_cycled => {
+            decimal(at, Unit::Minutes, p.operator, p.minutes.get())
+        }
+        _ => ClockLeaf::Fixed(false),
+    }
 }
 
 /// Guarded by `has_ever_pump_snapshot`.
-pub(super) fn pump_suspended(p: &ActiveForPayload, env: &Env) -> bool {
-    env.ctx.has_ever_pump_snapshot
-        && env.active_for(
-            p.is_active,
-            p.for_minutes,
-            env.ctx.active_pump_suspension.map(|s| s.started_at),
-        )
+pub(super) fn pump_suspended(p: &ActiveForPayload, ctx: &SensorContext) -> ClockLeaf {
+    if !ctx.has_ever_pump_snapshot {
+        return ClockLeaf::Fixed(false);
+    }
+    active_for(
+        p.is_active,
+        p.for_minutes,
+        ctx.active_pump_suspension.map(|s| s.started_at),
+    )
 }
 
 pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {

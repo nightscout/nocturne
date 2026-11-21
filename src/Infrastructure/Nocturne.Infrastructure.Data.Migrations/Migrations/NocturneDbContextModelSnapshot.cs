@@ -672,6 +672,18 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("hysteresis_started_at");
 
+                    b.Property<DateTime?>("NextChangeAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_change_at");
+
+                    b.Property<string>("NextChangeGlucose")
+                        .HasColumnType("text")
+                        .HasColumnName("next_change_glucose");
+
+                    b.Property<bool>("NextChangeKnown")
+                        .HasColumnType("boolean")
+                        .HasColumnName("next_change_known");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

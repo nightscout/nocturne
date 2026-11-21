@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "name": "next-change-time-of-day-wrap",
+  "description": "a window that wraps midnight changes at its next edge, inside and, once the excursion has closed, outside",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "22:00",
+        "to": "06:00",
+        "timezone": "Etc/UTC"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T23:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-03T07:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-03T07:05:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}
