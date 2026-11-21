@@ -2529,6 +2529,7 @@ msgstr ""
 #: src/lib/components/members/RequestMembershipDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/notifications/ReleaseNotesDialog.svelte
+#: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
@@ -3368,12 +3369,14 @@ msgstr ""
 #: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/people/PersonPanel.svelte
 msgid "Last 24 hours"
 msgstr ""
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/people/PersonEntries.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
@@ -3392,6 +3395,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/meals/MealsTable.svelte
+#: src/lib/components/people/PersonEntries.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
@@ -5465,6 +5469,7 @@ msgstr ""
 #. 0: cob.toFixed(0)
 #. 0: bolusCalc.carbInput
 #. 0: carbs.toFixed(0)
+#. 0: formatCarbDisplay(entry.grams)
 #. 0: Math.round(therapy.cob ?? 0)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.carbs)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
@@ -5475,7 +5480,8 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
-#: src/lib/components/people/PersonSummary.svelte
+#: src/lib/components/people/PersonEntries.svelte
+#: src/lib/components/people/PersonStatusLine.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -5552,6 +5558,7 @@ msgstr ""
 #. 0: auto.toFixed(1)
 #. 0: bolus.toFixed(1)
 #. 0: basal.toFixed(1)
+#. 0: formatInsulinDisplay(entry.units)
 #. 0: Math.round(reservoirUnits)
 #. 0: d.totalDailyDose.toFixed(1)
 #. 0: insulinStats?.avgBolus?.toFixed(1) ?? "--"
@@ -5565,6 +5572,7 @@ msgstr ""
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/people/PersonEntries.svelte
 #: src/lib/components/people/PersonRow.svelte
 #: src/lib/components/reports/GlycemicRiskIndexChart.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
@@ -5732,6 +5740,7 @@ msgstr ""
 #: src/lib/components/alerts/HistoryCheck.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -7001,7 +7010,7 @@ msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
-#: src/lib/components/people/PersonSummary.svelte
+#: src/lib/components/people/PersonStatusLine.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
@@ -14024,6 +14033,7 @@ msgstr ""
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/+page.svelte
 msgid "Loading…"
@@ -45232,6 +45242,7 @@ msgid "3 h ago"
 msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/people/PersonSummary.svelte
 msgid "Now"
 msgstr ""
@@ -45475,4 +45486,33 @@ msgstr ""
 
 #: src/lib/components/people/ReviewSummary.svelte
 msgid "Sensor wear"
+msgstr ""
+
+#: src/lib/components/people/PersonDayTrace.svelte
+msgid "Glucose over the last 24 hours"
+msgstr ""
+
+#: src/lib/components/people/PersonDayTrace.svelte
+msgid "No readings in the last 24 hours."
+msgstr ""
+
+#: src/lib/components/people/PersonEntries.svelte
+msgid "<0/> You do not have access to this person's treatments."
+msgstr ""
+
+#: src/lib/components/people/PersonEntries.svelte
+msgid "No boluses or carbs in the last 24 hours."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/people/PersonPanel.svelte
+msgid "Open {0}'s site <0/>"
+msgstr ""
+
+#: src/lib/components/people/PersonPanel.svelte
+msgid "This person's data did not load."
+msgstr ""
+
+#: src/lib/components/people/PersonPanel.svelte
+msgid "Recent entries"
 msgstr ""
