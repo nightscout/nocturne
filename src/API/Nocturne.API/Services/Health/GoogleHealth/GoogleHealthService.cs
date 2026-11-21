@@ -442,8 +442,8 @@ public sealed class GoogleHealthService(
             throw new GoogleHealthException("already_running", stage: "preview");
         try
         {
-            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            previewCancellation.CancelAfter(PreviewTimeout);
+            using var deadline = new CancellationTokenSource(PreviewTimeout, time);
+            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
             var previewCt = previewCancellation.Token;
             GoogleHealthConnectorConfiguration configuration;
             try

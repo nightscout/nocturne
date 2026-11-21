@@ -162,8 +162,8 @@ public class NightscoutConnectorBackgroundService
 
         try
         {
-            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            connectCts.CancelAfter(ConnectTimeout);
+            using var deadline = new CancellationTokenSource(ConnectTimeout, Clock);
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
             await client.ConnectAsync(connectCts.Token);
         }

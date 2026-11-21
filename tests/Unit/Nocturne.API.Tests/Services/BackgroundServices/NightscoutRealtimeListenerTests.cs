@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
@@ -348,6 +349,43 @@ public class NightscoutRealtimeListenerTests
         logger.Entries.Should().NotContain(e =>
             e.Message.Contains("Unexpected error starting real-time listener"));
         logger.Entries.Should().NotContain(e => e.Message.Contains("Failed to connect Socket.IO"));
+    }
+
+    /// <summary>
+    /// The connect cap runs on the injected clock: an instance that accepts the connection and never
+    /// answers is given up on when fake time passes the cap, however little real time has gone by.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UnresponsiveInstance_GivesUpWhenTheClockPassesTheCap()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+        using var silent = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        silent.Start();
+        var port = ((System.Net.IPEndPoint)silent.LocalEndpoint).Port;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = $"http://127.0.0.1:{port}",
+        };
+
+        var clock = new FakeTimeProvider();
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), Mock.Of<IJobLedger>(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, clock)
+        {
+            ConnectTimeout = TimeSpan.FromHours(1),
+        };
+
+        var start = InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+        using var accepted = await silent.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(start.IsCompleted);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await start.WaitAsync(TimeSpan.FromSeconds(10));
+
+        logger.Entries.Should().Contain(e => e.Message.Contains("Failed to connect Socket.IO"));
+        Assert.Empty(SocketClients(sut));
     }
 
     #region Helpers
