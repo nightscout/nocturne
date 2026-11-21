@@ -54,14 +54,14 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         return context;
     }
 
-    private async Task<Guid> SeedAsync()
+    private async Task<Guid> SeedAsync(string name = "SweepMe")
     {
         await using var context = CreateContext();
         var entity = new TestAuditableEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
-            Name = "SweepMe",
+            Name = name,
             Value = 1
         };
         context.TestAuditables.Add(entity);
@@ -118,7 +118,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         deleted.Should().Be(1);
 
         await using var verify = CreateContext();
-        var row = await verify.TestAuditables.SingleAsync(e => e.Id == id);
+        var row = await verify.TestAuditables.IncludingDeleted().SingleAsync(e => e.Id == id);
         row.DeletedAt.Should().NotBeNull();
         verify.Entry(row).Property("DeletedByUser").CurrentValue.Should().Be(false);
         (await verify.Set<MutationAuditLogEntity>().CountAsync()).Should().Be(0);
@@ -154,7 +154,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         deleted.Should().Be(1);
 
         await using var verify = CreateContext();
-        var row = await verify.TestAuditables.SingleAsync(e => e.Id == id);
+        var row = await verify.TestAuditables.IncludingDeleted().SingleAsync(e => e.Id == id);
         row.DeletedAt.Should().NotBeNull();
         (await verify.Set<MutationAuditLogEntity>().CountAsync()).Should().Be(0);
     }
@@ -173,7 +173,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         deleted.Should().Be(3);
 
         await using var verify = CreateContext();
-        foreach (var row in await verify.TestAuditables.ToListAsync())
+        foreach (var row in await verify.TestAuditables.IncludingDeleted().ToListAsync())
             verify.Entry(row).Property("DeletedByUser").CurrentValue.Should().Be(true);
 
         var log = await verify.Set<MutationAuditLogEntity>().SingleAsync();
@@ -240,7 +240,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         log.Action.Should().Be("bulk_delete");
         log.EntityId.Should().BeNull();
         ReadSummary(log.ChangesJson).Should().Be((total, Scope));
-        (await verify.TestAuditables.CountAsync(e => e.DeletedAt != null)).Should().Be(total);
+        (await verify.TestAuditables.IncludingDeleted().CountAsync(e => e.DeletedAt != null)).Should().Be(total);
     }
 
     [Fact]
@@ -298,6 +298,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
     {
         const int total = 1500;
         await SeedManyAsync(total);
+        var keptId = await SeedAsync("Keep");
         var recorder = new StatementRecorder();
 
         await using var context = CreateContext(recorder);
@@ -307,9 +308,32 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
 
         deleted.Should().Be(total);
         recorder.Count("DELETE").Should().Be(2);
+        recorder.Count("DELETE", s => s.Contains("Name", StringComparison.OrdinalIgnoreCase)).Should().Be(0);
 
         await using var verify = CreateContext();
-        (await verify.TestAuditables.CountAsync()).Should().Be(0);
-        (await verify.Set<MutationAuditLogEntity>().CountAsync(l => l.Action == "delete")).Should().Be(total);
+        (await verify.TestAuditables.Select(e => e.Id).ToListAsync()).Should().Equal(keptId);
+        var audited = await verify.Set<MutationAuditLogEntity>().Where(l => l.Action == "delete")
+            .Select(l => l.EntityId).ToListAsync();
+        audited.Should().HaveCount(total).And.NotContain(keptId);
+    }
+
+    [Fact]
+    public async Task AuditedExecuteDelete_QueryIncludingSoftDeletedRows_DeletesThem()
+    {
+        var id = await SeedAsync();
+        await using (var seed = CreateContext())
+        {
+            await seed.AuditedSoftDeleteAsync(seed.TestAuditables.Where(e => e.Id == id), new UserAuditContext(), Scope);
+        }
+
+        await using var context = CreateContext();
+        var deleted = await context.AuditedExecuteDeleteAsync(
+            context.TestAuditables.IncludingDeleted().Where(e => e.Id == id),
+            new UserAuditContext());
+
+        deleted.Should().Be(1);
+
+        await using var verify = CreateContext();
+        (await verify.TestAuditables.IncludingDeleted().AnyAsync(e => e.Id == id)).Should().BeFalse();
     }
 }

@@ -116,7 +116,7 @@ public static class AuditedBulkDeleteExtensions
                 context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
                 await context.SaveChangesAsync(token);
 
-                var deleted = await query
+                var deleted = await context.Set<T>().IncludingDeleted()
                     .Where(e => ids.Contains(EF.Property<Guid>(e, "Id")))
                     .ExecuteDeleteAsync(token);
                 return (Count: deleted, FirstId: ids[0]);
