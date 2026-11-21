@@ -138,9 +138,7 @@ public class OidcTokenFailureTests
         var issuer = $"https://subject-state-{isActive}.idp.test";
         var subjectId = Guid.CreateVersion7();
         var subjects = new Mock<ISubjectService>();
-        subjects.Setup(s => s.FindOrCreateFromOidcAsync(
-                It.IsAny<Guid>(), "external-subject", issuer, It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
+        subjects.Setup(s => s.FindFromOidcAsync("external-subject", issuer))
             .ReturnsAsync(new Nocturne.Core.Models.Authorization.Subject { Id = subjectId, Name = "External", IsActive = isActive });
         subjects.Setup(s => s.GetSubjectPermissionsAsync(subjectId)).ReturnsAsync(new List<string>());
         subjects.Setup(s => s.GetSubjectRolesAsync(subjectId)).ReturnsAsync(new List<string>());
