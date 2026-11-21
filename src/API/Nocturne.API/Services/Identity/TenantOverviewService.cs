@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -70,31 +72,133 @@ public class TenantOverviewService : ITenantOverviewService
             var historyClamped = MemberScopeResolver.IsHistoryClamped(
                 credentialLimitTo24Hours, membershipLimitTo24Hours, effectivePermissions);
 
-            try
-            {
-                items.Add(await BuildItemAsync(tenant, includeAlerts, includeTherapy, includeDevices, historyClamped, ct));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Failed to build overview for tenant {TenantId}", tenant.Id);
-                var nowUtc = _time.GetUtcNow().UtcDateTime;
-                var fallbackLastReadingAt = historyClamped ? null : tenant.LastReadingAt;
-                var fallbackStatus = _classifier.Classify(
-                    null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
-                items.Add(new TenantOverviewItem(
-                    tenant.Id, tenant.Slug, tenant.DisplayName,
-                    fallbackLastReadingAt, Latest: null, fallbackStatus,
-                    _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
-                    RecentReadings: [], Therapy: null, Devices: null, Trackers: null,
-                    Attention: BuildAttention(
-                        fallbackStatus, latest: null, fallbackLastReadingAt,
-                        activeAlertCount: null, highestSeverity: null, trackers: null,
-                        nowUtc)));
-            }
+            items.Add(await TryBuildAsync(
+                tenant,
+                () => BuildItemAsync(tenant, includeAlerts, includeTherapy, includeDevices, historyClamped, ct),
+                () =>
+                {
+                    var nowUtc = _time.GetUtcNow().UtcDateTime;
+                    var fallbackLastReadingAt = historyClamped ? null : tenant.LastReadingAt;
+                    var fallbackStatus = _classifier.Classify(
+                        null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
+                    return new TenantOverviewItem(
+                        tenant.Id, tenant.Slug, tenant.DisplayName,
+                        fallbackLastReadingAt, Latest: null, fallbackStatus,
+                        _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
+                        RecentReadings: [], Therapy: null, Devices: null, Trackers: null,
+                        Attention: BuildAttention(
+                            fallbackStatus, latest: null, fallbackLastReadingAt,
+                            activeAlertCount: null, highestSeverity: null, trackers: null,
+                            nowUtc));
+                }));
         }
 
         items.Sort(CompareForDisplay);
         return new TenantOverviewResponse(items);
+    }
+
+    public async Task<TenantReviewResponse> GetReviewAsync(
+        Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default)
+    {
+        var glucoseReadTenants = subjectId is { } subject
+            ? await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct)
+            : [];
+
+        var to = _time.GetUtcNow().UtcDateTime;
+        var from = to.AddDays(-days);
+        var previousFrom = from.AddDays(-days);
+
+        var people = new List<TenantReviewPerson>();
+        foreach (var (tenant, allowed, membershipLimitTo24Hours, effectivePermissions) in glucoseReadTenants)
+        {
+            TenantReviewPerson Person(TenantReviewUnavailable? unavailable, TenantReviewStatistics? statistics) =>
+                new(tenant.Id, tenant.Slug, tenant.DisplayName, unavailable, statistics);
+
+            if (!Scope.Satisfies(allowed, Scope.ReportsRead))
+            {
+                people.Add(Person(TenantReviewUnavailable.NoReportAccess, null));
+            }
+            else if (MemberScopeResolver.IsHistoryClamped(
+                         credentialLimitTo24Hours, membershipLimitTo24Hours, effectivePermissions))
+            {
+                people.Add(Person(TenantReviewUnavailable.HistoryLimited, null));
+            }
+            else
+            {
+                people.Add(await TryBuildAsync(
+                    tenant,
+                    async () => Person(null, await BuildReviewStatisticsAsync(tenant, days, from, to, previousFrom, ct)),
+                    () => Person(TenantReviewUnavailable.Failed, null)));
+            }
+        }
+
+        return new TenantReviewResponse(from, to, previousFrom, from, people);
+    }
+
+    private async Task<T> TryBuildAsync<T>(TenantRecord tenant, Func<Task<T>> build, Func<T> fallback)
+    {
+        try
+        {
+            return await build();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to build the read of tenant {TenantId}", tenant.Id);
+            return fallback();
+        }
+    }
+
+    private async Task<TenantReviewStatistics> BuildReviewStatisticsAsync(
+        TenantRecord tenant, int days, DateTime from, DateTime to, DateTime previousFrom, CancellationToken ct)
+    {
+        await using var scope = OpenTenantScope(tenant, historyClamped: false);
+        var services = scope.ServiceProvider;
+
+        return await services.GetRequiredService<ITenantCache>().GetOrSetAsync(
+            $"{TenantCacheFamily.Statistics}:review:{days}",
+            () => ReadReviewStatisticsAsync(services, from, to, previousFrom, ct),
+            TimeSpan.FromMinutes(5),
+            ct);
+    }
+
+    private static async Task<TenantReviewStatistics> ReadReviewStatisticsAsync(
+        IServiceProvider services, DateTime from, DateTime to, DateTime previousFrom, CancellationToken ct)
+    {
+        var reader = services.GetRequiredService<RangeAnalyticsReader>();
+        var current = await reader.ReadAsync(from, to, DiabetesPopulation.Type1Adult, patientDeviceId: null, ct);
+        var previous = await reader.ReadAsync(previousFrom, from, DiabetesPopulation.Type1Adult, patientDeviceId: null, ct);
+
+        // The review states no insulin figure, so an empty delivery stands in for the read.
+        var noInsulin = new InsulinDeliveryStatistics();
+        var comparison = PeriodComparisonCalculator.Build(
+            new(previous, noInsulin), new(current, noInsulin), GlucoseUnit.MgDl);
+
+        double? Figure(PeriodComparisonMetric metric) =>
+            comparison.Metrics.Single(m => m.Metric == metric).ValueB;
+
+        var timeInRange = comparison.Metrics.Single(m => m.Metric == PeriodComparisonMetric.TirTarget);
+        var previousIsReliable = previous.Analysis.Reliability?.MeetsReliabilityCriteria == true;
+
+        return new TenantReviewStatistics(
+            comparison.PeriodB.TimeInRange,
+            Figure(PeriodComparisonMetric.Gmi),
+            Figure(PeriodComparisonMetric.Cv),
+            Figure(PeriodComparisonMetric.CgmActivePercent),
+            current.Analysis.Reliability,
+            previousIsReliable ? timeInRange.Delta : null);
+    }
+
+    private AsyncServiceScope OpenTenantScope(TenantRecord tenant, bool historyClamped)
+    {
+        // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
+        // this tenant, so its clamp here is the one this membership decides, and every read
+        // goes through the scope.
+        var reader = TenantReader.Of(_scope)
+            .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
+            .ClampedToDay(historyClamped);
+        return TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
     }
 
     /// <summary>
@@ -148,13 +252,7 @@ public class TenantOverviewService : ITenantOverviewService
         CancellationToken ct)
     {
         var nowUtc = _time.GetUtcNow().UtcDateTime;
-        // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
-        // this tenant, so its clamp here is the one this membership decides, and every read below
-        // goes through the scope.
-        var reader = TenantReader.Of(_scope)
-            .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
-            .ClampedToDay(historyClamped);
-        await using var scope = TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
+        await using var scope = OpenTenantScope(tenant, historyClamped);
         var canonical = scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>();
         var latest = await canonical.GetLatestAsync(ct);
         var recent = await canonical.GetRecentAsync(nowUtc - TraceWindow, ct);
