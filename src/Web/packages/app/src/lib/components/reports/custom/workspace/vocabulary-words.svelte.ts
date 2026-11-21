@@ -375,19 +375,33 @@ export function anchorLabel(id: string): string {
 /** Each kind of event inside a sentence: "around meals". */
 export function anchorPhrases(): Record<string, string> {
   return {
+    // @wc-include
     [EventAnchorKind.Meal]: "meals",
+    // @wc-include
     [EventAnchorKind.CorrectionBolus]: "correction boluses",
+    // @wc-include
     [EventAnchorKind.AnyBolus]: "boluses",
+    // @wc-include
     [EventAnchorKind.UnannouncedRise]: "rises with no carbs",
+    // @wc-include
     [EventAnchorKind.LowStart]: "lows",
+    // @wc-include
     [EventAnchorKind.HighStart]: "highs",
+    // @wc-include
     [EventAnchorKind.LowTreatment]: "carbs taken in a low",
+    // @wc-include
     [EventAnchorKind.ExerciseStart]: "exercise",
+    // @wc-include
     [EventAnchorKind.SleepStart]: "sleep starts",
+    // @wc-include
     [EventAnchorKind.Wake]: "wake-ups",
+    // @wc-include
     [EventAnchorKind.SensorStart]: "sensor starts",
+    // @wc-include
     [EventAnchorKind.SiteChange]: "site changes",
+    // @wc-include
     [EventAnchorKind.OverrideStart]: "overrides",
+    // @wc-include
     [EventAnchorKind.TemporaryTargetStart]: "temporary targets",
   };
 }
@@ -413,11 +427,17 @@ export function anchorGroupLabel(id: string): string {
 /** Each range preset. */
 export function rangeLabels(): Record<string, string> {
   return {
+    // @wc-include
     "6h": "6 hours",
+    // @wc-include
     "24h": "24 hours",
+    // @wc-include
     "7d": "7 days",
+    // @wc-include
     "14d": "14 days",
+    // @wc-include
     "28d": "28 days",
+    // @wc-include
     "90d": "90 days",
   };
 }
@@ -429,7 +449,11 @@ export function rangeLabel(id: string): string {
 /** The whole days in `hours`: "1 day", or "N days". */
 export function daysText(hours: number): string {
   const days = Math.floor(hours / 24);
-  return days === 1 ? "1 day" : `${days} days`;
+  if (days === 1) {
+    // @wc-include
+    return "1 day";
+  }
+  return `${days} days`;
 }
 
 /** Each preset of groups of days. */
@@ -699,14 +723,23 @@ export function weekdayName(day: Weekday, weekdays: readonly Weekday[], width: "
 /** The access scopes a part of a report reads, in words. */
 export function scopeWords(): Record<string, string> {
   return {
+    // @wc-include
     "glucose.read": "glucose",
+    // @wc-include
     "treatments.read": "treatments",
+    // @wc-include
     "food.read": "food",
+    // @wc-include
     "therapy.read": "therapy settings",
+    // @wc-include
     "devices.read": "devices",
+    // @wc-include
     "heartrate.read": "heart rate",
+    // @wc-include
     "sleep.read": "sleep",
+    // @wc-include
     "stepcount.read": "steps",
+    // @wc-include
     "alerts.read": "alerts",
   };
 }
@@ -752,7 +785,12 @@ export function whenPhrase(anchors: readonly string[], phrase: string): string {
 
 /** What a "When" chart counts the events by. */
 export function whenAxisLabels(): Record<string, string> {
-  return { hour: "by hour of day", weekday: "by weekday" };
+  return {
+    // @wc-include
+    hour: "by hour of day",
+    // @wc-include
+    weekday: "by weekday",
+  };
 }
 
 export function whenAxisLabel(id: string): string {
