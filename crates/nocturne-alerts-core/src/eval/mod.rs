@@ -6,12 +6,12 @@
 pub(crate) mod clock;
 mod device;
 pub(crate) mod elapsed;
-mod glucose;
+pub(crate) mod glucose;
 mod insulin;
 mod signal;
 mod spans;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
@@ -21,16 +21,21 @@ use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
 
+pub use glucose::{DEFAULT_GLUCOSE_FRESHNESS, MAX_GLUCOSE_FRESHNESS_MINUTES};
+
 /// Per-evaluation environment: the clock instant, the rule whose timers are
-/// keyed, the sensor context, and the mutable timer store.
+/// keyed and its glucose freshness bound, the sensor context, and the mutable
+/// timer store.
 pub struct Env<'a> {
     pub(crate) now: DateTime<Utc>,
     pub(crate) rule_id: Uuid,
+    pub(crate) glucose_freshness: TimeDelta,
     pub(crate) ctx: &'a SensorContext,
     pub(crate) timers: &'a mut TimerStore,
 }
 
 impl<'a> Env<'a> {
+    /// With the default glucose freshness bound, [`DEFAULT_GLUCOSE_FRESHNESS`].
     pub fn new(
         now: DateTime<Utc>,
         rule_id: Uuid,
@@ -40,8 +45,17 @@ impl<'a> Env<'a> {
         Self {
             now,
             rule_id,
+            glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
             ctx,
             timers,
+        }
+    }
+
+    #[must_use]
+    pub fn with_glucose_freshness(self, glucose_freshness: TimeDelta) -> Self {
+        Self {
+            glucose_freshness,
+            ..self
         }
     }
 }

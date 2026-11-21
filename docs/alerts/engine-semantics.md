@@ -211,11 +211,11 @@ as false or true.
 
 | Kind | Payload | Inputs | Semantics | Unknown, and absence that is an answer |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ **unknown** |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ **unknown** |
+| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null, or the reading stale ⇒ **unknown** |
+| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null, or the reading stale ⇒ **unknown** |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ **unknown**; with points present but none within the horizon or satisfying ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null, or a name the engine has no member for (§4) ⇒ **unknown** |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ **unknown** |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ **unknown** |
@@ -233,7 +233,7 @@ as false or true.
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate): never unknown |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ **unknown**; ratio null ⇒ **unknown** |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off: never unknown |
-| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null, or a name the engine has no member for (§4) ⇒ **unknown** |
+| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
@@ -261,6 +261,45 @@ then on (§5.3 reports that instant).
 | in another known mode | false | true | true | true |
 | in an unrecognised mode | true | unknown | false | unknown |
 | in an unrecognised mode | false | unknown | unknown | unknown |
+
+**Glucose freshness.** `threshold`, `rate_of_change`, `trend` and `glucose_bucket` read their
+glucose fact only while the reading it came from is fresh. A reading's age runs from its
+**arrival**, `LatestReceivedAt` (§4), or from `LatestTimestamp` when the context has no
+arrival. The reading is **stale** at `now` when `now - arrival > bound`, compared as exact
+durations: a reading exactly `bound` old is fresh, and one a tick older is stale. So a reading
+that arrives late, from a connector that delivers readings 20 minutes after they were taken, is
+fresh when it arrives and goes stale one bound later, and a real outage reads unknown one bound
+after the last arrival. A stale reading's facts are unknown to these four leaves, as an absent
+one is. `bound` is the rule's `glucose_freshness_minutes`, a whole number of minutes from 1 to
+1440, or **11 minutes** when the rule has none; any other value is an error in the `evaluate`
+and `replay` envelopes. An evaluation with no rule (`evaluate_node`, the snooze) uses 11
+minutes. With neither time the reading has no age and is not judged: the leaves read the facts
+as they are, which a host sends only with a reading time. An arrival after `now` is fresh.
+
+The default suits a source that sends a reading every 5 minutes: a reading is fresh until the
+next is due, with room for one late arrival. On a slower source the default runs out between two
+readings that arrive on time, so every reading interval has an instant where the glucose
+leaves read unknown. Under `hold` that changes nothing (§5.1), but a rule whose `on_unknown` is
+`met` or `not_met` reads it as a known value: `not_met` moves an open excursion into hysteresis,
+and closes it, once per reading interval, and `met` opens one on data with no fault. Such a rule
+on a source slower than 5 minutes needs its own `glucose_freshness_minutes`, at least the
+interval between readings plus the delay a reading can arrive with.
+
+`staleness` and `signal_loss` are not judged: they say that data stopped, so they read an old
+reading as they always have. So `or(signal_loss, threshold below 70)` stays true through an
+outage once the signal is lost (Kleene `or`, §2.4), and opens.
+
+`predicted` is not judged either. Its points are not facts of the reading: the host fetches
+them when it evaluates and gives each an offset from the forecast's own start, and the context
+carries no anchor for them, so the reading's age says nothing about theirs. How old a forecast
+the host sends is the host's choice: the backend's device-status source sends none older than
+its recency limit, and its own forecast runs from the newest readings it has.
+
+Under `hold` (§6.4) a rule with a stale fact opens nothing, an excursion open when the reading
+went stale stays open and does not enter hysteresis, a `sustained` timer over a stale leaf is
+neither set nor cleared, and the first fresh reading decides. Under `not_met` a stale fact is a
+known false: an open excursion goes through hysteresis during the outage and closes as on a false
+reading. Under `met` it is a known true.
 
 A **lower-bound** `reservoir` reading `b` (`ReservoirIsLowerBound`, "50+") is read exactly:
 the reservoir holds at least `b`.
@@ -296,6 +335,14 @@ The context is assembled host-side (enricher in the backend; local assembler in
 Prelude). For the crate it is pure input data. Fields and their consumers are the table
 in §3 plus:
 
+- `LatestReceivedAt` is when the host received the newest reading, the instant its glucose
+  facts' age runs from (§3). The backend sends the instant it stored the reading's row: a
+  re-upload under the reading's sync key, or an edit, updates that row and keeps the instant; a
+  copy that deduplication links into the reading's group is a duplicate, which canonical reads
+  do not return; and an older reading that arrives later is not the newest (the newest is the
+  latest by `LatestTimestamp`). A copy that becomes the newest some other way (a new primary after
+  the reading is deleted, a reading deduplication does not match) carries its own instant.
+  Absent, the age runs from `LatestTimestamp`.
 - `TrendRate` is the reading's stored (vendor) rate, used unchanged. Without one, it is
   derived as `(mgdl - previous.mgdl) / minutes between them` from the nearest earlier
   reading of the same stream and the same uploader with a glucose value. A stream is the
@@ -409,11 +456,27 @@ crate's `wall_clock::references_wall_clock` reads a rule's kinds as §5.2 does, 
 backend's sweep asks it which rules to evaluate.
 
 A periodic evaluation uses the context the per-reading path builds for the newest
-reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
-reading's (null when there has never been one), and its glucose facts are that reading's
-however old. Reading-driven leaves therefore repeat the verdict of the last per-reading
-evaluation. A context without the glucose facts would read them unknown, and a rule whose
-`on_unknown` is `not_met` (§6.4) would move an excursion they hold open into hysteresis.
+reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` /
+`LatestReceivedAt` are that reading's (null when there has never been one), and its glucose
+facts are that reading's however old. Up to the rule's freshness bound after the reading's
+arrival (§3) the reading-driven leaves repeat the verdict of the last per-reading evaluation;
+past it they read unknown, as they would on any evaluation then.
+
+A rule whose `on_unknown` is `met` or `not_met` (§6.4) is wall-clock as well when its root kind,
+a node of its condition tree or, while auto-resolve is enabled, a node of its auto-resolve tree
+is `threshold`, `rate_of_change`, `trend` or `glucose_bucket`: such a leaf turns unknown when
+its reading goes stale, with only `now` advancing, and the rule reads that as a known value that
+moves the tracker. `references_wall_clock` reads the rule's `on_unknown` for this.
+
+Under `hold` a rule needs no evaluation at that instant, unless another of its nodes changes
+there (§5.3). Going from known to unknown, a leaf
+cannot turn a known root into the other known value (Kleene's connectives are monotone in what
+is known, and `sustained` returns unknown on an unknown child), so an evaluation there either
+reads the root an evaluation a tick earlier reads, or holds. A held evaluation sets and clears no
+timer over the stale leaf, makes no tracker call (§6.4), resolves nothing and keeps a re-arm hold
+(§6.3); the one thing it does, closing an elapsed hysteresis window, the sweep does for every rule
+whatever it evaluates (§6.1). So the evaluation is the same as no evaluation, and the next one,
+per reading or periodic, decides.
 
 The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
@@ -444,7 +507,7 @@ reads a rule's kinds the same way.
 
 | Fact | `SensorContext` fields | Kinds that read it |
 |---|---|---|
-| `glucose` | `LatestValue`, `LatestTimestamp`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
+| `glucose` | `LatestValue`, `LatestTimestamp`, `LatestReceivedAt`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
 | `predictions` | `Predictions` | `predicted` |
 | `insulin` | `IobUnits`, `LastBolusAt`, `ActiveTempBasal` | `iob`, `temp_basal`, `time_since_last_bolus` |
 | `carbs` | `CobGrams`, `LastCarbAt` | `cob`, `time_since_last_carb` |
@@ -506,18 +569,21 @@ even when the root does not. Containers contribute only through their children, 
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
 | `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
 | `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set, whatever its child returned; without one, only what its child contributes. |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket` with their fact present and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
 | Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
 | Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. Nothing after an evaluation the rule held: the next one, with the same facts, holds too until another node's contribution changes the root. |
-| Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the reading, not to `now`. |
+| Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
 A leaf without an anchor, or whose guard holds it constant (a `has_ever_*` flag false, a
 `tracker_age` threshold held back at recording), contributes nothing, so an unknown leaf
 contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
 known contributes as a known one: `pump_state` with `is_active` and `for_minutes` over an
 unrecognised mode, §3, moves from false to unknown there), as does a
-comparison that has already flipped for good (an elapsed time grows only). Each flip is
+comparison that has already flipped for good (an elapsed time grows only). A stale reading
+does not become fresh, so a leaf already unknown by staleness, or by an absent fact,
+contributes nothing. Each flip is
 found by searching the comparison evaluation makes, so the decimal rounding of §1.3 moves
 it with the truth it changes: a fractional bound can hold before the exact instant it
 names. A negative elapsed time (before a scheduled `tracker_age` event) truncates toward
@@ -639,10 +705,11 @@ An auto-resolve close from `hysteresis` (the last evaluation found the condition
 false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
 the condition holds re-opens on the next evaluation, once.
 
-The host clears `AwaitingRearm` when a rule's condition, auto-resolve configuration or
-enablement changes: the hold was taken against the rule as it was when the auto-resolve
-closed it. For the same reason a host drops a tracker decision made against a rule whose
-condition, auto-resolve configuration or enablement changed after the evaluation read it:
+The host clears `AwaitingRearm` when a rule's condition, glucose freshness bound (§3),
+auto-resolve configuration or enablement changes: the hold was taken against the rule as it
+was when the auto-resolve closed it. For the same reason a host drops a tracker decision made
+against a rule whose condition, glucose freshness bound, auto-resolve configuration or
+enablement changed after the evaluation read it:
 checked under the rule's transition lock, which the edit also takes, so an evaluation that
 loaded the rule before an edit cannot set a hold the edit cleared.
 
@@ -670,9 +737,9 @@ hysteresis-start adoption of §6, reads it only in hysteresis without a start, w
 evaluation never makes; so a state restored from what a held evaluation left evaluates as the
 continuous one does.
 
-So an open excursion whose fact disappears stays open under `hold`, neither continuing nor
-entering hysteresis, and a rule whose fact has never arrived opens nothing; under `not_met`
-the first closes through hysteresis as it would on a false reading. Leaf timers follow the
+So an open excursion whose fact disappears or goes stale (§3) stays open under `hold`,
+neither continuing nor entering hysteresis, and a rule whose fact has never arrived opens
+nothing; under `not_met` the first closes through hysteresis as it would on a false reading. Leaf timers follow the
 `sustained` rule of §3 whatever `OnUnknown` says. Auto-resolve (§7 step 5) still runs on a
 held evaluation: a known true auto-resolve tree closes the excursion, and an unknown one does
 not.
@@ -730,12 +797,17 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 
 - Window resolution, the canonical reading stream, and per-tick enrichment as of the tick.
   Glucose is the most recent reading at or before the tick, and `LastReadingAt` is that
-  reading's time, so a gap after a reading reads as stale.
+  reading's time, so a gap after a reading reads as stale. `LatestReceivedAt` is the instant the
+  backend stored that reading, as live sends it, so past the rule's freshness bound after it
+  (§3) the reading-driven leaves read unknown on the ticks live would have read them unknown. A
+  reading stored after the tick it is picked for (a backfill) is fresh there, where live had not
+  received it yet.
 - Do Not Disturb: for each tick, the rules a fire opening on it is recorded for as
   suppressed (the gate live delivery applies on open, receipt-gated to the tick).
 - Fact timelines, and mapping the driver's output to the API's events and leaf log.
-- A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown`; without one it takes
-  the stored rule's when it names one, else `hold`, so it replays as the live engine evaluates.
+- A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown` and
+  `glucose_freshness_minutes`; without one it takes the stored rule's when it names one, else
+  `hold` and the 11-minute default, so it replays as the live engine evaluates.
 
 **Driver**, given the rules in any order and the ticks in time order:
 
@@ -793,7 +865,7 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   - The snooze context's glucose facts (`LatestValue`, `LatestTimestamp`, `TrendRate`) come
     from the newest canonical reading only when it is at most 11 minutes old; otherwise they
     are null, so `threshold`, `trend` and `glucose_bucket` leaves read unknown and the snooze
-    clears. `evaluate_node` flags an unknown value; the host's snooze treats it as false, so
+    clears. The engine's own default freshness bound (§3) is the same 11 minutes. `evaluate_node` flags an unknown value; the host's snooze treats it as false, so
     an unknown snooze condition clears the snooze.
   - The trend fallback (smart snooze on, no conditions) applies to `threshold` rules only
     and compares the newest reading (at most 11 minutes old) with the readings closest to

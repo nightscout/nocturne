@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "scenario": "glucose-freshness-outage-pauses-sustained",
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "timer_ops": [
+            {
+              "op": "set",
+              "path": "sustained",
+              "at": "2026-03-02T12:00:00Z"
+            }
+          ],
+          "next_change_at": "2026-03-02T12:11:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-02T12:10:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "next_change_at": "2026-03-02T12:21:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-02T13:01:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-03-02T13:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-03-02T13:16:00Z"
+        }
+      ]
+    }
+  ]
+}

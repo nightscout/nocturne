@@ -8,15 +8,19 @@ namespace Nocturne.API.Services.Alerts;
 /// <summary>
 /// The fields of a rule a tracker decision is made against and whose change clears the rule's
 /// re-arm hold (docs/alerts/engine-semantics.md §6.3, <see cref="AlertRuleRearm"/>): its
-/// enablement, condition and auto-resolve configuration. <see cref="ExcursionTransitionWriter"/>
-/// drops a decision made against fields the rule no longer holds.
+/// enablement, condition, glucose freshness bound (§3), what an unknown root means (§6.4) and
+/// auto-resolve configuration.
+/// <see cref="ExcursionTransitionWriter"/> drops a decision made against fields the rule no longer
+/// holds.
 /// </summary>
 internal readonly record struct AlertRuleConditions(
     bool IsEnabled,
     AlertConditionType ConditionType,
     string ConditionParams,
     bool AutoResolveEnabled,
-    string? AutoResolveParams)
+    string? AutoResolveParams,
+    int? GlucoseFreshnessMinutes,
+    string OnUnknown)
 {
     /// <summary>The fields of an evaluated snapshot.</summary>
     /// <remarks>
@@ -25,11 +29,13 @@ internal readonly record struct AlertRuleConditions(
     /// <see cref="AlertRepository.GetAutoResolveExcursionsAsync"/>), so it reads as enabled.
     /// </remarks>
     public static AlertRuleConditions Of(AlertRuleSnapshot rule) =>
-        new(true, rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams);
+        new(true, rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams,
+            rule.GlucoseFreshnessMinutes, rule.OnUnknown);
 
     /// <summary>The fields of a stored rule, for a decision made on the row itself.</summary>
     public static AlertRuleConditions Of(AlertRule rule) =>
-        new(rule.IsEnabled, rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams);
+        new(rule.IsEnabled, rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled, rule.AutoResolveParams,
+            rule.GlucoseFreshnessMinutes, rule.OnUnknown);
 
     /// <summary>
     /// Whether <paramref name="rule"/> still holds these fields, its trees compared as JSON as a
@@ -41,6 +47,8 @@ internal readonly record struct AlertRuleConditions(
         && IsEnabled
         && rule.ConditionType == ConditionType
         && rule.AutoResolveEnabled == AutoResolveEnabled
+        && rule.GlucoseFreshnessMinutes == GlucoseFreshnessMinutes
+        && string.Equals(rule.OnUnknown, OnUnknown, StringComparison.Ordinal)
         && ConditionTreeEquality.Same(rule.ConditionParams, ConditionParams)
         && ConditionTreeEquality.Same(rule.AutoResolveParams, AutoResolveParams);
 }

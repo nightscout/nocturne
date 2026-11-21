@@ -34,7 +34,7 @@ public class AlertRulesControllerRearmTests
     private static readonly DateTime NextChange = new(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc);
 
     private static async Task<(AlertRulesController Controller, NocturneDbContext Db)> CreateAsync(
-        AlertRuleEvaluationGate? gate = null)
+        AlertRuleEvaluationGate? gate = null, int? glucoseFreshnessMinutes = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -50,6 +50,7 @@ public class AlertRulesControllerRearmTests
             IsEnabled = true,
             AutoResolveEnabled = true,
             AutoResolveParams = Resolve,
+            GlucoseFreshnessMinutes = glucoseFreshnessMinutes,
         });
         db.AlertTrackerState.Add(new AlertTrackerStateEntity
         {
@@ -103,6 +104,8 @@ public class AlertRulesControllerRearmTests
         { "auto-resolve tree", r => { r.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>("""{"type":"threshold","threshold":{"direction":"above","value":90}}"""); return r; } },
         { "auto-resolve off", r => { r.AutoResolveEnabled = false; return r; } },
         { "disabled", r => { r.IsEnabled = false; return r; } },
+        { "on_unknown", r => { r.OnUnknown = AlertRuleOnUnknown.Met; return r; } },
+        { "glucose freshness", r => { r.GlucoseFreshnessMinutes = 30; return r; } },
     };
 
     [Theory]
@@ -128,6 +131,36 @@ public class AlertRulesControllerRearmTests
 
         var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
         state.Should().BeEquivalentTo(new { NextChangeKnown = false, NextChangeAt = (DateTime?)null }, edit);
+    }
+
+    /// <summary>
+    /// A client that does not know the bound (the rule editor) sends none: the stored bound, the
+    /// hold and the recorded next change all stand.
+    /// </summary>
+    [Fact]
+    public async Task An_update_that_omits_the_glucose_freshness_bound_keeps_it_and_the_hold()
+    {
+        var (controller, db) = await CreateAsync(glucoseFreshnessMinutes: 30);
+
+        await controller.UpdateRule(RuleId, Unchanged(), CancellationToken.None);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).GlucoseFreshnessMinutes.Should().Be(30);
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { AwaitingRearm = true, NextChangeKnown = true, NextChangeAt = (DateTime?)NextChange });
+    }
+
+    [Fact]
+    public async Task Clearing_the_glucose_freshness_bound_removes_it_and_rearms_the_rule()
+    {
+        var (controller, db) = await CreateAsync(glucoseFreshnessMinutes: 30);
+        var request = Unchanged();
+        request.ClearGlucoseFreshness = true;
+
+        await controller.UpdateRule(RuleId, request, CancellationToken.None);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).GlucoseFreshnessMinutes.Should().BeNull();
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { AwaitingRearm = false, NextChangeKnown = false, NextChangeAt = (DateTime?)null });
     }
 
     [Fact]

@@ -234,6 +234,7 @@ internal sealed class AlertReplayService(
             {
                 LatestValue = hasReadingForTick ? current!.Mgdl.ToDecimal() : null,
                 LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
+                LatestReceivedAt = hasReadingForTick ? current!.CreatedAt : null,
                 TrendRate = trend.Rate,
                 TrendBucket = trend.Bucket,
                 // A tick before the window's first reading reads as fresh rather than as never
@@ -581,12 +582,17 @@ internal sealed class AlertReplayService(
     /// <summary>
     /// The override as a snapshot, with a synthesised id when it has none so any
     /// <c>alert_state</c> references the editor seeded resolve against it. Without its own
-    /// <c>on_unknown</c> it takes the stored rule's, disabled or not, so a replay reads an unknown
-    /// root as the live engine does.
+    /// <c>on_unknown</c> or glucose freshness bound it takes the stored rule's, disabled or not, so
+    /// a replay reads an unknown root and a stale reading as the live engine does.
     /// </summary>
     private async Task<AlertRuleSnapshot> OverrideSnapshotAsync(
-        ReplayRuleOverride ruleOverride, Guid tenantId, CancellationToken ct) =>
-        new(
+        ReplayRuleOverride ruleOverride, Guid tenantId, CancellationToken ct)
+    {
+        var stored = ruleOverride.Id is { } id
+                     && (ruleOverride.OnUnknown is null || ruleOverride.GlucoseFreshnessMinutes is null)
+            ? (await alertRepository.GetRuleAsync(id, ct))?.Rule
+            : null;
+        return new(
             Id: ruleOverride.Id ?? Guid.CreateVersion7(),
             TenantId: tenantId,
             Name: ruleOverride.Name,
@@ -598,9 +604,9 @@ internal sealed class AlertReplayService(
             AutoResolveEnabled: ruleOverride.AutoResolveEnabled,
             AutoResolveParams: ruleOverride.AutoResolveParams,
             AllowThroughDnd: ruleOverride.AllowThroughDnd,
-            OnUnknown: ruleOverride.OnUnknown
-                ?? (ruleOverride.Id is { } id ? (await alertRepository.GetRuleAsync(id, ct))?.Rule.OnUnknown : null)
-                ?? AlertRuleOnUnknown.Hold);
+            OnUnknown: ruleOverride.OnUnknown ?? stored?.OnUnknown ?? AlertRuleOnUnknown.Hold,
+            GlucoseFreshnessMinutes: ruleOverride.GlucoseFreshnessMinutes ?? stored?.GlucoseFreshnessMinutes);
+    }
 
     /// <summary>
     /// Layers <paramref name="candidate"/> onto <paramref name="stored"/>: when its Id matches an

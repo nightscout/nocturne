@@ -7,8 +7,8 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// Drops a rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) and its recorded next change
-/// (§5.3) once a write changes what they were taken against. That is the rule's condition,
-/// auto-resolve configuration or enablement. Every writer of alert rules goes through here.
+/// (§5.3) once a write changes what they were taken against, the fields of
+/// <see cref="AlertRuleConditions"/>. Every writer of alert rules goes through here.
 /// </summary>
 /// <remarks>
 /// Under the lease, no evaluation can read the hold and then find it cleared when it writes, and

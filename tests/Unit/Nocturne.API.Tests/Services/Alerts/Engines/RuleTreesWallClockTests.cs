@@ -72,6 +72,25 @@ public class RuleTreesWallClockTests
         RuleTrees.ReferencesWallClock(rule).Should().Be(expected);
     }
 
+    /// <summary>
+    /// A rule that reads an unknown root as known moves when its reading goes stale
+    /// (docs/alerts/engine-semantics.md §5.1); under <c>hold</c> it need not be swept.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(AlertRuleOnUnknown.Hold, false)]
+    [InlineData(AlertRuleOnUnknown.Met, true)]
+    [InlineData(AlertRuleOnUnknown.NotMet, true)]
+    public void A_glucose_leaf_is_selected_when_the_rule_reads_unknown_as_known(string onUnknown, bool expected)
+    {
+        var rule = Rule(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""") with
+        {
+            OnUnknown = onUnknown,
+        };
+
+        RuleTrees.ReferencesWallClock(rule).Should().Be(expected);
+        RuleTrees.WaitsForNextChange(rule).Should().Be(expected, "it reads only glucose");
+    }
+
     private static AlertRuleSnapshot Rule(AlertConditionType type, string conditionParams) =>
         new(Guid.NewGuid(), Guid.NewGuid(), "rule", type, conditionParams,
             AlertRuleSeverity.Warning, "{}", 0, false, null);

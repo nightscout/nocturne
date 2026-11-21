@@ -59,7 +59,7 @@ internal static class RuleTrees
 
     private static readonly ConcurrentDictionary<DescriptionKey, Description> Descriptions = new();
 
-    private static readonly ConcurrentDictionary<DescriptionKey, bool> NextChangeVerdicts = new();
+    private static readonly ConcurrentDictionary<NextChangeKey, bool> NextChangeVerdicts = new();
 
     /// <summary>
     /// The facts (docs/alerts/engine-semantics.md §5.2) that move only through a glucose write,
@@ -110,8 +110,10 @@ internal static class RuleTrees
     /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
     public static bool WaitsForNextChange(AlertRuleSnapshot rule)
     {
-        var key = new DescriptionKey(
-            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null);
+        var key = new NextChangeKey(
+            new DescriptionKey(
+                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null),
+            rule.OnUnknown);
         if (NextChangeVerdicts.TryGetValue(key, out var kept))
             return kept;
 
@@ -130,6 +132,7 @@ internal static class RuleTrees
         ConditionParams = Body(rule.ConditionType, rule.ConditionParams),
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? AutoResolve(rule.AutoResolveParams) : null,
+        OnUnknown = rule.OnUnknown,
     };
 
     /// <summary>
@@ -225,6 +228,9 @@ internal static class RuleTrees
 
     private readonly record struct DescriptionKey(
         AlertConditionType Type, string ConditionParams, string? AutoResolveParams);
+
+    /// <summary>A rule's <c>on_unknown</c> decides whether it is wall-clock, so it keys the verdict.</summary>
+    private readonly record struct NextChangeKey(DescriptionKey Conditions, string OnUnknown);
 
     /// <param name="Body">The body's leaves.</param>
     /// <param name="All">The body's leaves, then the auto-resolve tree's.</param>

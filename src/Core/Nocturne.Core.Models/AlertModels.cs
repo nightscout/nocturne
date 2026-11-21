@@ -23,6 +23,12 @@ public record SensorContext
     public required DateTime? LatestTimestamp { get; init; }
 
     /// <summary>
+    /// When the host stored the most recent reading. Its glucose facts' age runs from here
+    /// (docs/alerts/engine-semantics.md §3); null runs it from <see cref="LatestTimestamp"/>.
+    /// </summary>
+    public DateTime? LatestReceivedAt { get; init; }
+
+    /// <summary>
     /// Rate of glucose change in mg/dL per minute. Positive = rising, negative = falling.
     /// </summary>
     [ReplayFact("trend_rate", Scope.GlucoseRead, decimals: 2)]
@@ -706,6 +712,12 @@ public class AlertRule
 
     /// <summary>What an unknown root means to the tracker: one of <see cref="AlertRuleOnUnknown"/>.</summary>
     public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+
+    /// <summary>
+    /// How many minutes old a reading may be before the rule's reading-driven leaves read it
+    /// unknown; null is the engine's default (docs/alerts/engine-semantics.md §3).
+    /// </summary>
+    public int? GlucoseFreshnessMinutes { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

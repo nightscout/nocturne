@@ -616,3 +616,89 @@ fn every_part_of_a_tree_counts_whatever_its_siblings_hold() {
     assert_eq!(case.next_change(), Some(now() + min(15) + RESOLUTION));
     assert_quiet_until_next_change(&case, "composite");
 }
+
+fn reading_driven_leaves() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "threshold",
+            json!({ "direction": "below", "value": 70 }),
+            json!({ "latest_value": 60 }),
+        ),
+        (
+            "rate_of_change",
+            json!({ "direction": "falling", "rate": 2 }),
+            json!({ "trend_rate": -3 }),
+        ),
+        (
+            "trend",
+            json!({ "bucket": "falling_fast" }),
+            json!({ "trend_bucket": "falling_fast" }),
+        ),
+        (
+            "glucose_bucket",
+            json!({ "buckets": ["low"] }),
+            json!({ "glucose_bucket": "low" }),
+        ),
+    ]
+}
+
+fn with_reading(mut fact: Value, age: TimeDelta) -> SensorContext {
+    fact["latest_timestamp"] = ago(age).into();
+    fact["last_reading_at"] = ago(age).into();
+    ctx(fact)
+}
+
+fn fresh_for(kind: &str, params: Value, minutes: i64) -> Rule {
+    let wire: WireRule = serde_json::from_value(json!({
+        "id": RULE,
+        "condition_type": kind,
+        "condition_params": params,
+        "glucose_freshness_minutes": minutes,
+    }))
+    .unwrap();
+    Rule::try_from(wire).unwrap()
+}
+
+#[test]
+fn a_reading_driven_leaf_changes_when_its_reading_goes_stale() {
+    for (kind, params, fact) in reading_driven_leaves() {
+        let case = Case::new(rule(kind, params), with_reading(fact, min(5)));
+        assert_next_change(&case, now() + min(6));
+    }
+}
+
+#[test]
+fn a_rule_s_own_freshness_bound_moves_the_change() {
+    for (kind, params, fact) in reading_driven_leaves() {
+        let case = Case::new(fresh_for(kind, params, 30), with_reading(fact, min(5)));
+        assert_next_change(&case, now() + min(25));
+    }
+}
+
+#[test]
+fn a_late_reading_changes_one_bound_after_it_arrived() {
+    for (kind, params, fact) in reading_driven_leaves() {
+        let mut late = fact;
+        late["latest_received_at"] = ago(min(2)).into();
+        let case = Case::new(rule(kind, params), with_reading(late, min(20)));
+        assert_next_change(&case, now() + min(9));
+    }
+}
+
+#[test]
+fn a_reading_exactly_the_bound_old_changes_at_the_next_tick() {
+    for (kind, params, fact) in reading_driven_leaves() {
+        let case = Case::new(rule(kind, params), with_reading(fact, min(11)));
+        assert_next_change(&case, now() + RESOLUTION);
+    }
+}
+
+#[test]
+fn a_stale_or_absent_glucose_fact_contributes_nothing() {
+    for (kind, params, fact) in reading_driven_leaves() {
+        let stale = Case::new(rule(kind, params.clone()), with_reading(fact, min(12)));
+        assert_eq!(stale.next_change(), None, "{kind} stale");
+        let absent = Case::new(rule(kind, params), with_reading(json!({}), min(5)));
+        assert_eq!(absent.next_change(), None, "{kind} absent");
+    }
+}

@@ -65,7 +65,7 @@ public static class ReplayScenarioRunner
         return new AlertRuleSnapshot(
             alertRule.Id, Guid.Empty, alertRule.Name, alertRule.ConditionType, alertRule.ConditionParams,
             AlertRuleSeverity.Warning, "{}", 0, alertRule.AutoResolveEnabled, alertRule.AutoResolveParams,
-            OnUnknown: alertRule.OnUnknown);
+            OnUnknown: alertRule.OnUnknown, GlucoseFreshnessMinutes: alertRule.GlucoseFreshnessMinutes);
     }
 
     private static string KindWire(AlertReplayTransition kind) => kind switch

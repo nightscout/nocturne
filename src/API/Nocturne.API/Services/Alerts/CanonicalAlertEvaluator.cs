@@ -43,13 +43,19 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 
     /// <summary>
     /// The base context an evaluation pass starts from for <paramref name="latest"/>, the
-    /// tenant's newest canonical reading, and its <paramref name="trend"/>; the orchestrator's
-    /// enricher fills in the rest.
+    /// tenant's newest canonical reading by timestamp, and its <paramref name="trend"/>; the
+    /// orchestrator's enricher fills in the rest. The reading's age runs from when it was stored
+    /// (<see cref="SensorGlucose.CreatedAt"/>), so one that arrives late is fresh on arrival.
     /// </summary>
+    /// <remarks>
+    /// An older reading that arrives later does not displace it, so it does not refresh the age.
+    /// A re-upload or edit of the reading updates its row and keeps its stored time.
+    /// </remarks>
     internal static SensorContext ContextFor(SensorGlucose latest, ReadingTrend trend) => new()
     {
         LatestValue = latest.Mgdl.ToDecimal(),
         LatestTimestamp = latest.Timestamp,
+        LatestReceivedAt = latest.CreatedAt,
         TrendRate = trend.Rate,
         TrendBucket = trend.Bucket,
         LastReadingAt = latest.Timestamp,

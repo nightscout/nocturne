@@ -79,6 +79,33 @@ public class RustEnvelopeMapperTests
         wire.GetProperty("mode").GetString().Should().Be(mode);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(30)]
+    public void BuildRule_sends_the_rules_glucose_freshness_bound(int? minutes)
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.GlucoseFreshnessMinutes = minutes;
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule));
+
+        int? sent = wire.TryGetProperty("glucose_freshness_minutes", out var value)
+                    && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt32()
+            : null;
+        sent.Should().Be(minutes);
+    }
+
+    [Fact]
+    public void BuildContext_sends_when_the_reading_was_received()
+    {
+        var received = new DateTime(2026, 1, 5, 12, 20, 0, DateTimeKind.Utc);
+        var context = BuildContext() with { LatestReceivedAt = received };
+
+        RustEnvelopeMapper.BuildContext(context).GetProperty("latest_received_at").GetDateTime()
+            .Should().Be(received);
+    }
+
     [Fact]
     public void BuildContext_sends_a_windows_tenant_zone_as_iana()
     {

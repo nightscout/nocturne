@@ -53,6 +53,53 @@ public class SnoozeRequestValidatorTests
     }
 }
 
+public class AlertRuleGlucoseFreshnessValidatorTests
+{
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(30)]
+    [InlineData(1440)]
+    public void Accepts_absent_or_a_bound_up_to_a_day(int? minutes)
+    {
+        new CreateAlertRuleRequestValidator()
+            .TestValidate(new CreateAlertRuleRequest { Name = "Low", GlucoseFreshnessMinutes = minutes })
+            .ShouldNotHaveValidationErrorFor(x => x.GlucoseFreshnessMinutes);
+        new UpdateAlertRuleRequestValidator()
+            .TestValidate(new UpdateAlertRuleRequest { Name = "Low", GlucoseFreshnessMinutes = minutes })
+            .ShouldNotHaveValidationErrorFor(x => x.GlucoseFreshnessMinutes);
+    }
+
+    [Fact]
+    public void An_update_may_clear_the_bound_or_set_it_but_not_both()
+    {
+        var validator = new UpdateAlertRuleRequestValidator();
+
+        validator.TestValidate(new UpdateAlertRuleRequest { Name = "Low", ClearGlucoseFreshness = true })
+            .ShouldNotHaveValidationErrorFor(x => x.ClearGlucoseFreshness);
+        validator.TestValidate(new UpdateAlertRuleRequest
+            {
+                Name = "Low", GlucoseFreshnessMinutes = 30, ClearGlucoseFreshness = true,
+            })
+            .ShouldHaveValidationErrorFor(x => x.ClearGlucoseFreshness);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(1441)]
+    [InlineData(int.MaxValue)]
+    public void Rejects_a_bound_outside_one_minute_to_a_day(int minutes)
+    {
+        new CreateAlertRuleRequestValidator()
+            .TestValidate(new CreateAlertRuleRequest { Name = "Low", GlucoseFreshnessMinutes = minutes })
+            .ShouldHaveValidationErrorFor(x => x.GlucoseFreshnessMinutes);
+        new UpdateAlertRuleRequestValidator()
+            .TestValidate(new UpdateAlertRuleRequest { Name = "Low", GlucoseFreshnessMinutes = minutes })
+            .ShouldHaveValidationErrorFor(x => x.GlucoseFreshnessMinutes);
+    }
+}
+
 public class AlertRuleOnUnknownValidatorTests
 {
     [Theory]

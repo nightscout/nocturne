@@ -1,14 +1,16 @@
 //! The per-rule, per-tick driver (engine-semantics.md §7): root evaluation,
 //! the leaf log, the excursion tracker, then auto-resolve.
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
 use crate::enums::{WireEnum, wire_enum};
-use crate::eval::{Env, eval_node, eval_payload};
+use crate::eval::{
+    DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, eval_node, eval_payload,
+};
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, Transition, TransitionType,
 };
@@ -54,6 +56,9 @@ pub struct Rule {
     /// A full condition node, or `None`.
     pub auto_resolve_params: Option<Value>,
     pub on_unknown: OnUnknown,
+    /// How old a reading may be before the leaves that judge its freshness
+    /// read it unknown (engine-semantics.md §3).
+    pub glucose_freshness: TimeDelta,
 }
 
 impl Rule {
@@ -100,13 +105,18 @@ pub struct WireRule {
     /// Exactly a word of [`OnUnknown`]; absent is `hold`.
     #[serde(default)]
     pub on_unknown: Option<String>,
+    /// A whole number of minutes up to [`MAX_GLUCOSE_FRESHNESS_MINUTES`];
+    /// absent is [`DEFAULT_GLUCOSE_FRESHNESS`].
+    #[serde(default)]
+    pub glucose_freshness_minutes: Option<i64>,
 }
 
 fn one() -> i32 {
     1
 }
 
-/// Only the `condition_type` and `on_unknown` are checked, not the body.
+/// Only the `condition_type`, `on_unknown` and `glucose_freshness_minutes`
+/// are checked, not the body.
 impl TryFrom<WireRule> for Rule {
     type Error = String;
 
@@ -122,6 +132,18 @@ impl TryFrom<WireRule> for Rule {
             Some(word) => OnUnknown::from_name(word)
                 .ok_or_else(|| format!("unknown on_unknown '{}'", word.escape_default()))?,
         };
+        let glucose_freshness = match w.glucose_freshness_minutes {
+            None => DEFAULT_GLUCOSE_FRESHNESS,
+            Some(minutes) if (1..=MAX_GLUCOSE_FRESHNESS_MINUTES).contains(&minutes) => {
+                TimeDelta::minutes(minutes)
+            }
+            Some(_) => {
+                return Err(
+                    "glucose_freshness_minutes must be a whole number of minutes from 1 to 1440"
+                        .into(),
+                );
+            }
+        };
         Ok(Rule {
             id: w.id,
             condition_type,
@@ -131,6 +153,7 @@ impl TryFrom<WireRule> for Rule {
             auto_resolve_enabled: w.auto_resolve_enabled,
             auto_resolve_params: w.auto_resolve_params,
             on_unknown,
+            glucose_freshness,
         })
     }
 }
@@ -309,7 +332,7 @@ pub fn evaluate_parsed_rule(
     let auto_resolve_met = awaiting
         && rule.auto_resolve_enabled
         && !auto_resolve_truth(
-            rule.id,
+            rule,
             rule.parse_auto_resolve().as_ref(),
             ctx,
             now,
@@ -358,7 +381,8 @@ pub(crate) fn evaluate_body(
     log_leaves: bool,
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
-    let mut env = Env::new(now, rule.id, ctx, timers);
+    let mut env =
+        Env::new(now, rule.id, ctx, timers).with_glucose_freshness(rule.glucose_freshness);
     let root = eval_payload(body.payload(), wire, &mut env);
 
     // Leaves evaluate alone, at the rule's root path;
@@ -383,7 +407,7 @@ fn try_auto_resolve(
 ) -> bool {
     if state.tracker.active_excursion_id(rule.id).is_none()
         || !auto_resolve_truth(
-            rule.id,
+            rule,
             rule.parse_auto_resolve().as_ref(),
             ctx,
             now,
@@ -402,7 +426,7 @@ fn try_auto_resolve(
 /// An auto-resolve tree read by [`Rule::parse_auto_resolve`] evaluated at
 /// the `auto_resolve` root; no tree is false.
 pub(crate) fn auto_resolve_truth(
-    rule_id: Uuid,
+    rule: &Rule,
     tree: Option<&Node>,
     ctx: &SensorContext,
     now: DateTime<Utc>,
@@ -411,6 +435,7 @@ pub(crate) fn auto_resolve_truth(
     let Some(tree) = tree else {
         return Truth::False;
     };
-    let mut env = Env::new(now, rule_id, ctx, timers);
+    let mut env =
+        Env::new(now, rule.id, ctx, timers).with_glucose_freshness(rule.glucose_freshness);
     eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)
 }

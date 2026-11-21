@@ -97,6 +97,14 @@ public sealed record RustAlertRule
     /// </summary>
     [JsonPropertyName("on_unknown")]
     public string OnUnknown { get; init; } = "hold";
+
+    /// <summary>
+    /// How many minutes old a reading may be before the rule's reading-driven leaves read it
+    /// unknown (docs/alerts/engine-semantics.md §3); null is the engine's default. A value outside
+    /// 1 to 1440 is an envelope error.
+    /// </summary>
+    [JsonPropertyName("glucose_freshness_minutes")]
+    public int? GlucoseFreshnessMinutes { get; init; }
 }
 
 /// <summary>
@@ -543,7 +551,8 @@ public sealed record RustReplayRuleTick
 
 /// <summary>
 /// Request envelope for <c>nocturne_alerts_references_wall_clock</c> and
-/// <c>nocturne_alerts_rule_reads</c>: a stored rule's body and auto-resolve configuration.
+/// <c>nocturne_alerts_rule_reads</c>: a stored rule's body, auto-resolve configuration and
+/// <c>on_unknown</c>.
 /// </summary>
 public sealed record RustRuleConditionsRequest
 {
@@ -564,6 +573,13 @@ public sealed record RustRuleConditionsRequest
     /// <summary>The auto-resolve tree, a full condition node.</summary>
     [JsonPropertyName("auto_resolve_params")]
     public JsonElement? AutoResolveParams { get; init; }
+
+    /// <summary>
+    /// <c>hold</c>, <c>met</c> or <c>not_met</c>: a rule that reads an unknown root as known is
+    /// wall-clock when its glucose conditions go stale (docs/alerts/engine-semantics.md §5.1).
+    /// </summary>
+    [JsonPropertyName("on_unknown")]
+    public string OnUnknown { get; init; } = "hold";
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_references_wall_clock</c>.</summary>

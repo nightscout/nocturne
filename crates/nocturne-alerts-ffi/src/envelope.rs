@@ -13,7 +13,8 @@ use uuid::Uuid;
 use nocturne_alerts_core::classify::classify;
 use nocturne_alerts_core::context::{SensorContext, check_timestamp};
 use nocturne_alerts_core::engine::{
-    EngineState, Rule, WireRule, evaluate_parsed_rule, format_instant, parse_auto_resolve,
+    EngineState, OnUnknown, Rule, WireRule, evaluate_parsed_rule, format_instant,
+    parse_auto_resolve,
 };
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
@@ -298,6 +299,9 @@ struct RuleConditionsRequest {
     auto_resolve_enabled: bool,
     #[serde(default)]
     auto_resolve_params: Option<Value>,
+    /// Exactly a word of [`OnUnknown`]; absent is `hold`.
+    #[serde(default)]
+    on_unknown: Option<String>,
 }
 
 impl RuleConditionsRequest {
@@ -305,13 +309,21 @@ impl RuleConditionsRequest {
         read_request(request_json, |r: &Self| r.schema_version)
     }
 
-    fn rule(&self) -> RuleConditions<'_> {
-        RuleConditions {
+    /// # Errors
+    /// `on_unknown` names no word.
+    fn rule(&self) -> Result<RuleConditions<'_>, String> {
+        let on_unknown = match self.on_unknown.as_deref() {
+            None => OnUnknown::Hold,
+            Some(word) => OnUnknown::from_name(word)
+                .ok_or_else(|| format!("unknown on_unknown '{}'", word.escape_default()))?,
+        };
+        Ok(RuleConditions {
             condition_type: &self.condition_type,
             condition_params: &self.condition_params,
             auto_resolve_enabled: self.auto_resolve_enabled,
             auto_resolve_params: self.auto_resolve_params.as_ref(),
-        }
+            on_unknown,
+        })
     }
 }
 
@@ -320,7 +332,7 @@ impl RuleConditionsRequest {
 /// `false`, not an error.
 pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
     let req = RuleConditionsRequest::read(request_json)?;
-    let wall_clock = references_wall_clock(&req.rule());
+    let wall_clock = references_wall_clock(&req.rule()?);
     Ok(ok(json!({ "references_wall_clock": wall_clock })))
 }
 
@@ -328,7 +340,7 @@ pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
 /// An unknown type or unevaluable body reads none, not an error.
 pub(crate) fn rule_reads(request_json: &str) -> Result<Value, String> {
     let req = RuleConditionsRequest::read(request_json)?;
-    let names: Vec<&str> = facts::rule_reads(&req.rule())
+    let names: Vec<&str> = facts::rule_reads(&req.rule()?)
         .into_iter()
         .map(ContextFact::name)
         .collect();
@@ -358,7 +370,7 @@ pub(crate) fn references_any(request_json: &str) -> Result<Value, String> {
                 .ok_or_else(|| format!("unknown fact '{}'", name.escape_default()))
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let matched = facts::references_any(&req.rule.rule(), &facts);
+    let matched = facts::references_any(&req.rule.rule()?, &facts);
     Ok(ok(json!({ "references_any": matched })))
 }
 

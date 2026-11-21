@@ -117,6 +117,10 @@ public sealed record ScenarioRule
     /// <summary><c>hold</c>, <c>met</c> or <c>not_met</c>; absent is <c>hold</c>.</summary>
     [JsonPropertyName("on_unknown")]
     public string? OnUnknown { get; init; }
+
+    /// <summary>A whole number of minutes from 1 to 1440; absent is the engine's default.</summary>
+    [JsonPropertyName("glucose_freshness_minutes")]
+    public int? GlucoseFreshnessMinutes { get; init; }
 }
 
 public sealed record ScenarioTick
@@ -136,6 +140,7 @@ public sealed record ScenarioContext
 {
     [JsonPropertyName("latest_value")] public decimal? LatestValue { get; init; }
     [JsonPropertyName("latest_timestamp")] public DateTime? LatestTimestamp { get; init; }
+    [JsonPropertyName("latest_received_at")] public DateTime? LatestReceivedAt { get; init; }
     [JsonPropertyName("trend_rate")] public decimal? TrendRate { get; init; }
     [JsonPropertyName("last_reading_at")] public DateTime? LastReadingAt { get; init; }
     /// <summary>Wire form of TrendBucket (<c>rising_fast</c> … <c>unknown</c>).</summary>

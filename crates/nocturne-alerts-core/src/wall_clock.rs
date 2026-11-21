@@ -3,6 +3,8 @@
 //! still. A host must evaluate a rule that contains one on a timer as well as
 //! per reading, or it can stay unfired for as long as no reading arrives.
 
+use crate::engine::OnUnknown;
+use crate::eval::glucose::judges_freshness;
 use crate::facts::RuleConditions;
 use crate::model::ConditionKind;
 
@@ -50,16 +52,22 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
     }
 }
 
-/// Whether any kind of `rule` ([`RuleConditions`]) is wall-clock sensitive.
-/// A wall-clock root is true whatever its body.
+/// Whether any kind of `rule` ([`RuleConditions`]) is wall-clock sensitive,
+/// or the rule reads an unknown root as known and has a kind whose glucose
+/// fact goes stale with the clock (engine-semantics.md §5.1). A wall-clock
+/// root is true whatever its body.
 #[must_use]
 pub fn references_wall_clock(rule: &RuleConditions<'_>) -> bool {
-    rule.kinds().into_iter().any(is_wall_clock)
+    let reads_unknown = rule.on_unknown != OnUnknown::Hold;
+    rule.kinds()
+        .into_iter()
+        .any(|kind| is_wall_clock(kind) || (reads_unknown && judges_freshness(kind)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enums::WireEnum;
     use serde_json::{Value, json};
 
     fn body_references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
@@ -70,7 +78,6 @@ mod tests {
     /// reading, which during a CGM outage may never come.
     #[test]
     fn the_wall_clock_kinds_are_the_spec_table() {
-        use crate::enums::WireEnum;
         let mut ours: Vec<&str> = ConditionKind::ALL
             .iter()
             .copied()
@@ -152,6 +159,50 @@ mod tests {
             ]
         });
         assert!(body_references_wall_clock("composite", &tree));
+    }
+
+    /// A rule that reads an unknown root as known moves when its reading goes
+    /// stale, so the staleness instant must be evaluated; under `hold` a
+    /// missed evaluation there changes nothing (§5.1).
+    #[test]
+    fn a_freshness_leaf_is_selected_only_when_unknown_is_read_as_known() {
+        let low = json!({"direction": "below", "value": 70});
+        let iob = json!({"operator": ">", "value": 2});
+        for (kind, params) in [
+            ("threshold", &low),
+            (
+                "rate_of_change",
+                &json!({"direction": "falling", "rate": 2}),
+            ),
+            ("trend", &json!({"bucket": "falling_fast"})),
+            ("glucose_bucket", &json!({"buckets": ["low"]})),
+        ] {
+            for on_unknown in OnUnknown::ALL {
+                let rule = RuleConditions {
+                    on_unknown: *on_unknown,
+                    ..RuleConditions::body(kind, params)
+                };
+                assert_eq!(
+                    references_wall_clock(&rule),
+                    *on_unknown != OnUnknown::Hold,
+                    "{kind} {on_unknown:?}"
+                );
+            }
+        }
+        let not_glucose = RuleConditions {
+            on_unknown: OnUnknown::NotMet,
+            ..RuleConditions::body("iob", &iob)
+        };
+        assert!(!references_wall_clock(&not_glucose));
+        let resolve = json!({"type": "threshold", "threshold": low});
+        let in_resolve = RuleConditions {
+            condition_type: "iob",
+            condition_params: &iob,
+            auto_resolve_enabled: true,
+            auto_resolve_params: Some(&resolve),
+            on_unknown: OnUnknown::Met,
+        };
+        assert!(references_wall_clock(&in_resolve));
     }
 
     #[test]

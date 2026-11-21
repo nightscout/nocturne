@@ -122,6 +122,7 @@ public class AlertReplayServiceTests
     {
         Id = Guid.NewGuid(),
         Timestamp = at,
+        CreatedAt = at,
         Mgdl = mgdl,
     };
 
@@ -616,6 +617,79 @@ public class AlertReplayServiceTests
 
         result.Events.Any(e => e.RuleId == ruleId && e.Kind == AlertReplayEventKind.Fired)
             .Should().Be(firesOnTheGap);
+    }
+
+    /// <summary>
+    /// Under <c>met</c> a stale reading fires (docs/alerts/engine-semantics.md §3), so the tick the
+    /// rule fires again after a false reading is the first past its freshness bound: the
+    /// override's own, else the stored rule's, else 11 minutes.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(null, null, 15)]
+    [InlineData(null, 30, 35)]
+    [InlineData(20, 30, 25)]
+    public async Task DryRunOverride_reads_a_stale_reading_through_its_bound_or_the_stored_rules(
+        int? overrideMinutes, int? storedMinutes, int firesAgainAfterMinutes)
+    {
+        var ruleId = Guid.NewGuid();
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        var stored = ThresholdRule(ruleId, "below", 70m) with
+        {
+            OnUnknown = AlertRuleOnUnknown.Met,
+            GlucoseFreshnessMinutes = storedMinutes,
+        };
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { stored });
+        _alertRepository.Setup(r => r.GetRuleAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertRuleRecord(stored, null, true, null, null, []));
+        var reading = dayStart.AddHours(1);
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .ReturnsAsync(new[] { Reading(reading, 90) });
+        var ruleOverride = new ReplayRuleOverride(
+            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null,
+            GlucoseFreshnessMinutes: overrideMinutes);
+
+        var result = await _sut.ReplayDryRunAsync(
+            null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
+
+        result.Events.Where(e => e.RuleId == ruleId && e.Kind == AlertReplayEventKind.Fired && e.At > reading)
+            .Select(e => e.At).Should().Equal(reading.AddMinutes(firesAgainAfterMinutes));
+    }
+
+    /// <summary>
+    /// Replay ages a reading from when it was stored, as live does (docs/alerts/engine-semantics.md
+    /// §3): under <c>met</c>, one that arrived 20 minutes after its timestamp fires again only once
+    /// 11 minutes have passed since its arrival.
+    /// </summary>
+    [NativeFact]
+    public async Task DryRunOverride_ages_a_late_reading_from_its_arrival()
+    {
+        var ruleId = Guid.NewGuid();
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        var stored = ThresholdRule(ruleId, "below", 70m) with { OnUnknown = AlertRuleOnUnknown.Met };
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { stored });
+        _alertRepository.Setup(r => r.GetRuleAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertRuleRecord(stored, null, true, null, null, []));
+        var reading = dayStart.AddHours(1);
+        var late = Reading(reading, 90);
+        late.CreatedAt = reading.AddMinutes(20);
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .ReturnsAsync(new[] { late });
+        var ruleOverride = new ReplayRuleOverride(
+            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
+
+        var result = await _sut.ReplayDryRunAsync(
+            null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
+
+        result.Events.Where(e => e.RuleId == ruleId && e.Kind == AlertReplayEventKind.Fired && e.At > reading)
+            .Select(e => e.At).Should().Equal(reading.AddMinutes(35));
     }
 
     // ── firing search ────────────────────────────────────────────────────────────────────────

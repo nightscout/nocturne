@@ -89,6 +89,7 @@ pub(crate) struct RuleSpec {
     hysteresis_minutes: i32,
     auto_resolve: Option<Value>,
     on_unknown: &'static str,
+    pub(crate) glucose_freshness_minutes: Option<i64>,
 }
 
 impl RuleSpec {
@@ -104,6 +105,7 @@ impl RuleSpec {
             "auto_resolve_enabled": self.auto_resolve.is_some(),
             "auto_resolve_params": self.auto_resolve,
             "on_unknown": self.on_unknown,
+            "glucose_freshness_minutes": self.glucose_freshness_minutes,
         })
     }
 }
@@ -113,6 +115,12 @@ pub(crate) fn on_unknown() -> BoxedStrategy<&'static str> {
     prop_oneof![1 => Just(OnUnknown::Hold.name()), 1 => word::<OnUnknown>()].boxed()
 }
 
+/// A rule's own glucose freshness bound in minutes, absent half the time as
+/// the default it is.
+pub(crate) fn glucose_freshness_minutes() -> BoxedStrategy<Option<i64>> {
+    prop_oneof![1 => Just(None), 1 => (1..=30i64).prop_map(Some)].boxed()
+}
+
 pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
     (
         sustained_tree(),
@@ -120,21 +128,32 @@ pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
         0..10i32,
         option::of(sustained_tree()),
         on_unknown(),
+        glucose_freshness_minutes(),
     )
         .prop_map(
-            |(body, confirmation_readings, hysteresis_minutes, auto_resolve, on_unknown)| {
+            |(
+                body,
+                confirmation_readings,
+                hysteresis_minutes,
+                auto_resolve,
+                on_unknown,
+                glucose_freshness_minutes,
+            )| {
                 RuleSpec {
                     body,
                     confirmation_readings,
                     hysteresis_minutes,
                     auto_resolve,
                     on_unknown,
+                    glucose_freshness_minutes,
                 }
             },
         )
 }
 
-/// One evaluation instant and the context it reads.
+/// One evaluation instant and the context it reads. A reading arrives on its
+/// tick, timestamped at or before it and sometimes long before; a tick without
+/// a new reading carries the last one, which goes stale as the gap grows.
 #[derive(Debug, Clone)]
 pub(crate) struct Tick {
     pub(crate) now: DateTime<Utc>,
@@ -148,20 +167,27 @@ pub(crate) fn ticks() -> impl Strategy<Value = Vec<Tick>> {
             option::of(40..300i32),
             option::of(0..6i32),
             any::<bool>(),
+            prop_oneof![3 => Just(true), 1 => Just(false)],
+            prop_oneof![3 => Just(0i64), 1 => 0..=3600i64],
         ),
         1..=24,
     )
     .prop_map(|steps| {
         let mut now = base();
+        let mut reading: (DateTime<Utc>, DateTime<Utc>, Option<i32>) = (now, now, None);
         steps
             .into_iter()
-            .map(|(seconds, glucose, iob, asleep)| {
+            .map(|(seconds, glucose, iob, asleep, arrives, late)| {
                 now += TimeDelta::seconds(seconds);
+                if arrives {
+                    reading = (now - TimeDelta::seconds(late), now, glucose);
+                }
                 let mut context = json!({
-                    "latest_timestamp": now.to_rfc3339(),
+                    "latest_timestamp": reading.0.to_rfc3339(),
+                    "latest_received_at": reading.1.to_rfc3339(),
                     "sleep_session_active": asleep,
                 });
-                if let Some(glucose) = glucose {
+                if let Some(glucose) = reading.2 {
                     context["latest_value"] = glucose.into();
                 }
                 if let Some(iob) = iob {
