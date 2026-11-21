@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -19,7 +20,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
     {
         await using var db = await _contexts.CreateAsync(ct);
         var roles = await db.Roles.AsNoTracking().OrderBy(r => r.Name).ToListAsync(ct);
-        return roles.Select(ToRole).ToList();
+        return roles.Select(RoleMapper.ToDomainModel).ToList();
     }
 
     /// <inheritdoc/>
@@ -27,7 +28,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
     {
         await using var db = await _contexts.CreateAsync(ct);
         var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId, ct);
-        return role is null ? null : ToRole(role);
+        return role is null ? null : RoleMapper.ToDomainModel(role);
     }
 
     /// <inheritdoc/>
@@ -35,7 +36,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
     {
         await using var db = await _contexts.CreateAsync(ct);
         var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == name, ct);
-        return role is null ? null : ToRole(role);
+        return role is null ? null : RoleMapper.ToDomainModel(role);
     }
 
     /// <inheritdoc/>
@@ -52,7 +53,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
         };
         db.Roles.Add(entity);
         await db.SaveChangesAsync(ct);
-        return ToRole(entity);
+        return RoleMapper.ToDomainModel(entity);
     }
 
     /// <inheritdoc/>
@@ -69,7 +70,7 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
         entity.Description = description;
         entity.Permissions = [.. permissions];
         await db.SaveChangesAsync(ct);
-        return ToRole(entity);
+        return RoleMapper.ToDomainModel(entity);
     }
 
     /// <inheritdoc/>
@@ -96,15 +97,4 @@ public class RoleRepository(INocturneDbContextFactory contexts) : IRoleRepositor
             .Select(r => (DateTime?)r.UpdatedAt)
             .FirstOrDefaultAsync(ct);
     }
-
-    private static Role ToRole(RoleEntity role) => new()
-    {
-        Id = role.Id,
-        Name = role.Name,
-        Description = role.Description,
-        Permissions = [.. role.Permissions],
-        IsSystemRole = role.IsSystemRole,
-        CreatedAt = role.CreatedAt,
-        UpdatedAt = role.UpdatedAt,
-    };
 }
