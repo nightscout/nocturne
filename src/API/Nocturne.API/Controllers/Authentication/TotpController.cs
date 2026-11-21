@@ -8,6 +8,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -258,7 +259,10 @@ public class TotpController : ControllerBase
     /// TOTP is a second factor, so this endpoint needs a step-up token from a completed passkey
     /// assertion or OIDC callback — it cannot be reached with a code alone. The token names the subject; a
     /// caller-supplied username is not accepted.
-    /// Rate-limited via the "totp-login" policy.
+    /// Rate-limited per client address via the "totp-login" policy, and per step-up token and per
+    /// account by <see cref="StepUpCodeAttempts"/>: a token's wrong codes spend it, and an account's
+    /// wrong codes across its tokens refuse further codes, with the rate-limit response, until the
+    /// window ends.
     /// On success: issues session cookies, updates last login time, and logs
     /// <see cref="AuthAuditEventType.Login"/>. On failure: logs <see cref="AuthAuditEventType.FailedAuth"/>.
     /// </remarks>
@@ -278,7 +282,19 @@ public class TotpController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var ua = Request.Headers.UserAgent.ToString();
 
-        var result = await _totpService.VerifyStepUpAsync(request.StepUpToken, request.Code);
+        TotpLoginResult? result;
+        try
+        {
+            result = await _totpService.VerifyStepUpAsync(request.StepUpToken, request.Code);
+        }
+        catch (TotpStepUpLockedException ex)
+        {
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, ex.SubjectId, success: false,
+                ipAddress: ip, userAgent: ua,
+                detailsJson: JsonSerializer.Serialize(new { method = "totp", reason = "too_many_wrong_codes" }));
+            return new RateLimitRejectionResult(ex.RetryAfter);
+        }
+
         if (result == null)
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,

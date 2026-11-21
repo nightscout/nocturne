@@ -43,6 +43,7 @@ public class TotpService : ITotpService
     private readonly ITotpCredentialRepository _credentials;
     private readonly ISubjectRepository _subjects;
     private readonly ITrustedDeviceService _trustedDevices;
+    private readonly StepUpCodeAttempts _attempts;
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
     private readonly ILogger<TotpService> _logger;
@@ -51,6 +52,7 @@ public class TotpService : ITotpService
     /// <param name="credentials">Repository of the stored TOTP credentials and their consumed steps.</param>
     /// <param name="subjects">Repository for looking up the subject a step-up token names.</param>
     /// <param name="trustedDevices">Tells whether a sign-in comes from a device trusted to skip the code, and forgets those devices when an authenticator is removed.</param>
+    /// <param name="attempts">Bounds the wrong codes tried at the sign-in step, per step-up token and per subject.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting setup challenge tokens.</param>
     /// <param name="logger">Logger for credential changes, rejected codes and undecryptable tokens.</param>
     public TotpService(
@@ -58,6 +60,7 @@ public class TotpService : ITotpService
         ITotpCredentialRepository credentials,
         ISubjectRepository subjects,
         ITrustedDeviceService trustedDevices,
+        StepUpCodeAttempts attempts,
         IDataProtectionProvider dataProtectionProvider,
         ILogger<TotpService> logger)
     {
@@ -65,6 +68,7 @@ public class TotpService : ITotpService
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _trustedDevices = trustedDevices ?? throw new ArgumentNullException(nameof(trustedDevices));
+        _attempts = attempts ?? throw new ArgumentNullException(nameof(attempts));
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
         // A distinct purpose string keeps a setup challenge (which carries a secret the caller
         // already knows) from being redeemed as proof that a primary factor completed.
@@ -164,6 +168,16 @@ public class TotpService : ITotpService
             return null;
         }
 
+        var (attempt, retryAfter) = _attempts.Begin(stepUp.Id, stepUp.SubjectId);
+        switch (attempt)
+        {
+            case StepUpAttemptVerdict.MemberLocked:
+                throw new TotpStepUpLockedException(stepUp.SubjectId, retryAfter);
+            case StepUpAttemptVerdict.TokenSpent:
+                TotpHelper.Verify(DummySecret, code);
+                return null;
+        }
+
         var subject = await _subjects.GetAsync(stepUp.SubjectId, CancellationToken.None);
 
         if (subject is not { IsActive: true })
@@ -216,13 +230,23 @@ public class TotpService : ITotpService
 
         if (matchedCredential is null)
         {
+            // The row records the spend, so it outlasts the in-process count.
+            if (attempt == StepUpAttemptVerdict.LastForToken)
+            {
+                await db.TotpStepUpTokens
+                    .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(t => t.ConsumedAt, DateTime.UtcNow));
+            }
+
             return null;
         }
 
         // Consume the step-up token itself, conditionally, so the token yields one session however
         // many valid codes are presented within its window. Consumed after the code is verified, so
-        // a mistyped code does not force the user back through the primary factor. No rows updated
-        // means a concurrent request already redeemed it.
+        // a mistyped code, up to StepUpCodeAttempts.WrongCodesPerToken of them, does not force the
+        // user back through the primary factor. No rows updated means a concurrent request already
+        // redeemed it.
         var stepUpConsumed = await db.TotpStepUpTokens
             .Where(t => t.Id == stepUp.Id && t.ConsumedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ExecuteUpdateAsync(setters => setters
@@ -245,6 +269,8 @@ public class TotpService : ITotpService
                 subject.Id, matchedStep);
             return null;
         }
+
+        _attempts.Succeeded(stepUp.Id, subject.Id);
 
         _logger.LogInformation(
             "TOTP verification succeeded for subject {SubjectId}",

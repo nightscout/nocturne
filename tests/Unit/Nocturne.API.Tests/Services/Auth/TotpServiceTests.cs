@@ -28,6 +28,7 @@ public class TotpServiceTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly IDataProtectionProvider _dataProtectionProvider;
+    private readonly StepUpCodeAttempts _attempts = new(TimeProvider.System);
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private const string TestUsername = "testuser";
 
@@ -455,6 +456,53 @@ public class TotpServiceTests : IDisposable
         retried.Should().NotBeNull();
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task VerifyStepUpAsync_SpendsTheStepUpTokenOnItsLastWrongCode()
+    {
+        var service = CreateService();
+
+        var secret = TotpHelper.GenerateSecret();
+        var subject = SeedSubject(TestUsername);
+        SeedCredential(subject.Id, secret, "Test TOTP");
+
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
+        for (var i = 0; i < StepUpCodeAttempts.WrongCodesPerToken; i++)
+            (await service.VerifyStepUpAsync(stepUpToken, "000000")).Should().BeNull();
+
+        var row = await _dbContext.TotpStepUpTokens.AsNoTracking().SingleAsync(t => t.SubjectId == subject.Id);
+        row.ConsumedAt.Should().NotBeNull("the spend is recorded on the row, so a restart does not revive the token");
+
+        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        (await service.VerifyStepUpAsync(stepUpToken, code)).Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task VerifyStepUpAsync_RefusesToCheckACodeOnceTheSubjectsWrongCodesAreSpent()
+    {
+        var service = CreateService();
+
+        var secret = TotpHelper.GenerateSecret();
+        var subject = SeedSubject(TestUsername);
+        SeedCredential(subject.Id, secret, "Test TOTP");
+
+        for (var sent = 0; sent < StepUpCodeAttempts.WrongCodesPerMember;)
+        {
+            var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
+            for (var i = 0; i < StepUpCodeAttempts.WrongCodesPerToken - 1 && sent < StepUpCodeAttempts.WrongCodesPerMember; i++, sent++)
+                (await service.VerifyStepUpAsync(stepUpToken, "000000")).Should().BeNull();
+        }
+
+        var fresh = await service.CreateStepUpTokenAsync(subject.Id, null, false);
+        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var act = () => service.VerifyStepUpAsync(fresh, code);
+
+        (await act.Should().ThrowAsync<TotpStepUpLockedException>())
+            .Which.Should().Match<TotpStepUpLockedException>(e =>
+                e.SubjectId == subject.Id && e.RetryAfter > TimeSpan.Zero && e.RetryAfter <= StepUpCodeAttempts.MemberWindow);
+    }
+
     /// <summary>
     /// The token carries a reference to server state, not the subject, so a token whose row is gone
     /// (expired and pruned) cannot still name an account.
@@ -710,7 +758,7 @@ public class TotpServiceTests : IDisposable
     private TotpService CreateService()
     {
         var contexts = _dbContext.AsFactory();
-        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), CreateTrustedDevices(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(contexts, new TotpCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), CreateTrustedDevices(), _attempts, _dataProtectionProvider, NullLogger<TotpService>.Instance);
     }
 
     private TrustedDeviceService CreateTrustedDevices() => new(

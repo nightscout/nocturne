@@ -1,10 +1,12 @@
 using System.Globalization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Nocturne.API.RateLimiting;
 
 /// <summary>
 /// The response every rate-limit refusal answers with, whether the middleware or a limit applied
-/// after authentication (<see cref="DelegatedConnectorSyncLimiter"/>) refused the request.
+/// after authentication (<see cref="DelegatedConnectorSyncLimiter"/>, the authenticator-code bound in
+/// <see cref="Services.Auth.StepUpCodeAttempts"/>) refused the request.
 /// </summary>
 internal static class RateLimitRejection
 {
@@ -29,4 +31,12 @@ internal static class RateLimitRejection
             ct
         );
     }
+}
+
+/// <summary>An action's rate-limit refusal, answered by <see cref="RateLimitRejection"/>.</summary>
+/// <param name="retryAfter">When the caller may try again, or null when the limit does not say.</param>
+internal sealed class RateLimitRejectionResult(TimeSpan? retryAfter) : ActionResult
+{
+    public override Task ExecuteResultAsync(ActionContext context) =>
+        RateLimitRejection.WriteAsync(context.HttpContext, retryAfter, context.HttpContext.RequestAborted);
 }

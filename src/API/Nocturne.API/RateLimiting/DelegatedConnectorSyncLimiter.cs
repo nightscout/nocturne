@@ -73,18 +73,12 @@ public sealed class LimitDelegatedConnectorSyncAttribute : Attribute, IAsyncActi
 
             if (!lease.IsAcquired)
             {
-                context.Result = new RejectedResult(
+                context.Result = new RateLimitRejectionResult(
                     lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter) ? retryAfter : null);
                 return;
             }
         }
 
         await next();
-    }
-
-    private sealed class RejectedResult(TimeSpan? retryAfter) : IActionResult
-    {
-        public Task ExecuteResultAsync(ActionContext context) =>
-            RateLimitRejection.WriteAsync(context.HttpContext, retryAfter, context.HttpContext.RequestAborted);
     }
 }

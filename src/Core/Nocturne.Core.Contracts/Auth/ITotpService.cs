@@ -40,8 +40,11 @@ public interface ITotpService
     /// Verifies a TOTP code for the subject a step-up token was minted for and returns that subject,
     /// or null if the token or the code is not valid. Both halves are single-use: the token is
     /// consumed, so it yields at most one session, and the code's time step is consumed, so it
-    /// cannot be reused for the remainder of its acceptance window.
+    /// cannot be reused for the remainder of its acceptance window. Wrong codes are bounded per
+    /// token, which a few of them spend, and per subject across every token minted for it.
     /// </summary>
+    /// <exception cref="TotpStepUpLockedException">The subject has no wrong codes left until a
+    /// window ends; the code was not checked.</exception>
     Task<TotpLoginResult?> VerifyStepUpAsync(string stepUpToken, string code);
 
     Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId);
@@ -153,4 +156,27 @@ public class TotpSetupException : Exception
 
     /// <summary>Which check refused the attempt.</summary>
     public TotpSetupFailure Failure { get; }
+}
+
+/// <summary>
+/// Thrown when <see cref="ITotpService.VerifyStepUpAsync"/> refuses to check a code because the
+/// subject the step-up token names has had too many wrong codes recently. Only a caller who
+/// completed that subject's first factor holds such a token.
+/// </summary>
+public class TotpStepUpLockedException : Exception
+{
+    /// <param name="subjectId">The subject the step-up token names.</param>
+    /// <param name="retryAfter">How long until the subject's codes are checked again.</param>
+    public TotpStepUpLockedException(Guid subjectId, TimeSpan retryAfter)
+        : base("Too many wrong authenticator codes for this account.")
+    {
+        SubjectId = subjectId;
+        RetryAfter = retryAfter;
+    }
+
+    /// <summary>The subject the step-up token names.</summary>
+    public Guid SubjectId { get; }
+
+    /// <summary>How long until the subject's codes are checked again.</summary>
+    public TimeSpan RetryAfter { get; }
 }
