@@ -86,6 +86,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         NormalizeMills(ds);
         ds.Id = group.LegacyId;
+        group = group with { OverrideRebuilt = await IsRebuiltOverrideAsync(group, ds.Override, ct) };
 
         using (SystemAttributedBatchWrites(_auditContext))
         {
@@ -292,7 +293,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         DateTime Timestamp,
         V4Models.ApsSnapshot? Aps,
         V4Models.PumpSnapshot? Pump,
-        V4Models.UploaderSnapshot? Uploader);
+        V4Models.UploaderSnapshot? Uploader,
+        bool OverrideRebuilt = false);
 
     /// <summary>
     /// Resolves <paramref name="storedId"/>, the id a projected status carries (its legacy id, else its
@@ -363,6 +365,33 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             ?? (V4Models.IV4Record?)records.OfType<V4Models.PumpSnapshot>().FirstOrDefault()
             ?? records.OfType<V4Models.UploaderSnapshot>().FirstOrDefault();
         return anchor is null ? null : StoredKey(anchor);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="submitted"/> is the override the read rebuilds from the span of a status stored
+    /// without an override object. A client that edits such a status sends that rebuild back, and it must not be
+    /// stored as if Loop had uploaded it.
+    /// </summary>
+    private async Task<bool> IsRebuiltOverrideAsync(StoredGroup group, OverrideStatus? submitted, CancellationToken ct)
+    {
+        if (submitted is null || group.Aps is not { OverrideJson: null })
+            return false;
+
+        var span = (await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.Override,
+                from: group.Timestamp,
+                to: group.Timestamp,
+                count: int.MaxValue,
+                cancellationToken: ct))
+            .FirstOrDefault(s => IsUploaderSpan(s, group.Aps.Device)
+                && s.StartTimestamp <= group.Timestamp
+                && (!s.EndTimestamp.HasValue || s.EndTimestamp.Value > group.Timestamp));
+        if (span is null)
+            return false;
+
+        var rebuilt = new DeviceStatus();
+        DeviceStatusProjectionService.ProjectOverrideData(rebuilt, span);
+        return JsonSerializer.Serialize(rebuilt.Override, JsonOptions) == JsonSerializer.Serialize(submitted, JsonOptions);
     }
 
     /// <summary>
@@ -566,6 +595,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             aps.PatientDeviceId = links.Resolve(pumpDeviceId, status.Mills);
             if (group is not null)
                 (aps.DataSource, aps.SyncIdentifier) = (group.Aps?.DataSource, group.Aps?.SyncIdentifier);
+            // The edited document holds the read's span rebuild, not an override Loop sent.
+            if (group is { OverrideRebuilt: true })
+                aps.OverrideJson = null;
         }
 
         V4Models.UploaderSnapshot? uploader = null;
@@ -1081,6 +1113,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         };
         ApsSnapshotCurves.FillColumns(snapshot, ds.Loop);
         snapshot.LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, snapshot, JsonOptions);
+        snapshot.OverrideJson = ds.Override is null ? null : JsonSerializer.Serialize(ds.Override, JsonOptions);
         return snapshot;
     }
 

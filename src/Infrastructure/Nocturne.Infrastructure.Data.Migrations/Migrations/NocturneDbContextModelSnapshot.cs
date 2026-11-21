@@ -6538,6 +6538,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("loop_json");
 
+                    b.Property<string>("OverrideJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("override_json");
+
                     b.Property<Guid?>("PatientDeviceId")
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");

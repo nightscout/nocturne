@@ -104,6 +104,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         PredictedUamJson = request.PredictedUamJson,
         PredictedStartTimestamp = request.PredictedStartTimestamp?.UtcDateTime,
         LoopJson = request.LoopJson,
+        OverrideJson = request.OverrideJson,
         AdditionalProperties = request.AdditionalProperties,
     };
 }

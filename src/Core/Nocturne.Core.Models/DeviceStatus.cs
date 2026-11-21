@@ -846,6 +846,9 @@ public class OverrideStatus
 
     [JsonPropertyName("currentCorrectionRange")]
     public CorrectionRange? CurrentCorrectionRange { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public class CorrectionRange
