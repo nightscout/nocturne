@@ -6700,6 +6700,7 @@ msgstr "Mostrar valores de glucemia en la pestaña del navegador"
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 #: src/lib/components/settings/TitleFaviconSettings.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/components/ui/sheet/SheetHarness.test.svelte
 msgid "Title"
 msgstr "Título"
 
@@ -7018,6 +7019,7 @@ msgstr "Tu tipo de conector"
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
+#: src/lib/components/ui/sheet/SheetHarness.test.svelte
 msgid "Description"
 msgstr "Descripción"
 

@@ -6573,6 +6573,7 @@ msgstr "Show glucose values in browser tab"
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 #: src/lib/components/settings/TitleFaviconSettings.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/components/ui/sheet/SheetHarness.test.svelte
 msgid "Title"
 msgstr "Title"
 
@@ -6888,6 +6889,7 @@ msgstr "Your connector type"
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
+#: src/lib/components/ui/sheet/SheetHarness.test.svelte
 msgid "Description"
 msgstr "Description"
 
