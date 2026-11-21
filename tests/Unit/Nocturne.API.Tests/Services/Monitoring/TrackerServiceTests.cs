@@ -280,6 +280,22 @@ public class TrackerServiceTests
     }
 
     [Fact]
+    public async Task AnUpdateMovingADurationTrackerWithALifespanToEventMode_StoresItWithNoLifespan()
+    {
+        var stored = GivenStored();
+        _repository.Setup(r => r.UpdateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerDefinition d, CancellationToken _) => d);
+
+        var result = await _service.UpdateDefinitionAsync(
+            stored.Id, new TrackerDefinitionEdit { Mode = TrackerMode.Event }, default);
+
+        result!.Definition!.LifespanHours.Should().BeNull();
+        _repository.Verify(r => r.UpdateDefinitionAsync(
+            It.Is<TrackerDefinition>(d => d.Mode == TrackerMode.Event && d.LifespanHours == null),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task UpdatingADefinitionThatIsNotStored_IsNotFound() =>
         (await _service.UpdateDefinitionAsync(Guid.NewGuid(), new TrackerDefinitionEdit { Name = "Renamed" }, default))
             .Should().BeNull();

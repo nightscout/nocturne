@@ -134,8 +134,10 @@ public sealed record TrackerDefinition
     /// <returns>The revised definition, or the first rule it breaks, checked in <see cref="TrackerDefinitionRule"/> order.</returns>
     public TrackerDefinitionResult Revise(TrackerDefinitionEdit edit)
     {
+        if (edit.Name is not null && string.IsNullOrWhiteSpace(edit.Name))
+            return Broken(TrackerDefinitionRule.Name, "Name is required");
         var mode = edit.Mode ?? Mode;
-        var lifespan = edit.LifespanHours ?? LifespanHours;
+        var lifespan = mode == TrackerMode.Event ? edit.LifespanHours : edit.LifespanHours ?? LifespanHours;
         var thresholds = edit.NotificationThresholds ?? NotificationThresholds;
         if (CheckThresholds(thresholds, lifespan, mode) is { } thresholdError)
             return thresholdError;
@@ -388,6 +390,7 @@ public sealed record TrackerDefinitionEdit
     /// <summary>Applied with <see cref="TriggerEventTypes"/>, so a posted trigger list with no filter clears it.</summary>
     public string? TriggerNotesContains { get; init; }
 
+    /// <summary>Null keeps the stored lifespan, except that a revision to Event mode drops it.</summary>
     public int? LifespanHours { get; init; }
 
     /// <summary>Applied as posted, since the editor posts the whole definition: null clears the level rule.</summary>
@@ -413,6 +416,9 @@ public sealed record TrackerDefinitionEdit
 /// <summary>The rules a <see cref="TrackerDefinition"/> keeps, in the order they are checked.</summary>
 public enum TrackerDefinitionRule
 {
+    /// <summary>A revision does not name a definition nothing.</summary>
+    Name,
+
     /// <summary>A Duration tracker's negative threshold needs a lifespan and falls inside it.</summary>
     Thresholds,
 
