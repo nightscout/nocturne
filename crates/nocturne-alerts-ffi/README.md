@@ -83,7 +83,8 @@ preserves sub-second precision when present.
     "confirmation_readings": 1,             // default 1
     "hysteresis_minutes": 0,                // default 0
     "auto_resolve_enabled": false,          // default false
-    "auto_resolve_params": { "type": "…" }  // full ConditionNode or null
+    "auto_resolve_params": { "type": "…" }, // full ConditionNode or null
+    "on_unknown": "hold"                    // hold|met|not_met; default hold; any other word is an envelope error
   },
   "context": { /* ScenarioContext corpus shape */ },
   "now": "2026-01-05T12:00:00Z",            // the evaluation instant
@@ -118,7 +119,8 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
   "schema_version": 1,
   "ok": true,
   "result": { /* ExpectedRuleResult corpus shape:
-                 rule_id, skipped?, root, leaves[], transition, close_reason?,
+                 rule_id, skipped?, root, unknown?, leaves[{leaf_id, value,
+                 unknown?}], transition, close_reason?,
                  tracker {state, confirmation_count, excursion?,
                           hysteresis_started_at?, awaiting_rearm?},
                  auto_resolved?, timer_ops[], next_change_at? */ },
@@ -135,8 +137,16 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 }
 ```
 
+A root or leaf that is unknown (`docs/alerts/engine-semantics.md` §2.4) reads
+`false` with `"unknown": true` beside it; the flag is absent otherwise, so a
+reader that ignores it sees a two-valued result. The rule's `on_unknown` decides
+what an unknown root does to the tracker (§6.4): under `hold` the tracker is not
+advanced, `transition` is `none` unless a hysteresis window has elapsed, and the
+returned `tracker` is the one sent (with no per-rule state for a rule never
+evaluated before).
+
 Envelope-level errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
-`schema_version`, unknown root `condition_type`, a tracker `state` without
+`schema_version`, unknown root `condition_type`, an `on_unknown` naming no choice, a tracker `state` without
 `updated_at`, an instant (`now`, a timer, a tracker or context timestamp)
 before 0001-01-01 or from 10000-01-01 UTC on, and a rule body that cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
 `docs/alerts/engine-semantics.md` §1.4. That last error reads
@@ -217,7 +227,8 @@ auto-resolve (`root: "auto_resolve"`).
 {
   "schema_version": 1,
   "ok": true,
-  "value": true,                            // the node's truth
+  "value": true,                            // the node's truth; false when unknown
+  "unknown": true,                          // present only when the node is unknown
   "timers": { "snooze": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "timer_ops": [                            // observable mutations, execution order
     { "op": "set", "path": "snooze", "at": "2026-01-05T12:00:00Z" }
@@ -527,9 +538,12 @@ the rule has never been evaluated):
   "config": { "hysteresis_minutes": 30 } }
 ```
 
-`auto_resolve_met` is the rule's auto-resolve tree this evaluation, and is read
-only while the tracker awaits re-arm (§6.3): the rule then stays held off when
-both it and `condition_met` are true, and otherwise re-arms and goes on through
+`condition_met` is a known truth: an evaluation whose root the rule holds
+(`on_unknown` `hold`, §6.4) makes no `process` call, only
+`close_elapsed_hysteresis`. `auto_resolve_met` is the rule's auto-resolve tree
+this evaluation, true unless the tree is known false (an unknown tree keeps the
+hold), and is read only while the tracker awaits re-arm (§6.3): the rule then
+stays held off when both it and `condition_met` are true, and otherwise re-arms and goes on through
 the state machine in the same call, so a `condition_met` of true opens (or
 starts confirming) at once. Evaluate the tree at the `auto_resolve` root with
 `nocturne_alerts_evaluate_node` before this call when the stored tracker has
@@ -594,6 +608,9 @@ Request:
 - **Suppression.** `suppressed_rule_ids` names the rules a fire opening on
   that tick is recorded for as `suppressed_by_dnd` instead of `fired` (the
   host resolves Do Not Disturb). The rule fires either way.
+- **Unknown.** A rule's `on_unknown` reads an unknown `met` (§8): under
+  `hold` the rule stays firing or not as it was and keeps its timers; `met`
+  and `not_met` read it as true or false.
 - A rule whose body cannot be evaluated (§1.4), or whose `condition_params`
   is neither an object nor null, is skipped on every tick, not an error.
 
@@ -609,11 +626,11 @@ Response:
   ],
   "leaf_transitions": [                     // evaluation order; absent for a rule never evaluated
     { "rule_id": "…", "leaves": [
-        { "leaf_id": 0, "points": [ { "at_ms": 1767614400000, "value": true } ] } ] }
+        { "leaf_id": 0, "points": [ { "at_ms": 1767614400000, "value": true } ] } ] }  // a point's "unknown": true beside a false value marks an unknown leaf
   ],
   "ticks": [                                // only with include_ticks
     { "at": "2026-01-05T12:00:00Z", "rules": [
-        { "rule_id": "…", "met": true, "firing": true },
+        { "rule_id": "…", "met": true, "firing": true },  // "unknown": true beside a false met marks an unknown root
         { "rule_id": "…", "skipped": true } ] }
   ]
 }

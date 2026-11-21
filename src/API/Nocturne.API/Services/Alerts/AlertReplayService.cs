@@ -74,7 +74,7 @@ internal sealed class AlertReplayService(
             return new AlertFiringSearchResult(searchedTo, searchedTo, false, 0, []);
         }
 
-        var candidate = OverrideSnapshot(ruleOverride, tenantId);
+        var candidate = await OverrideSnapshotAsync(ruleOverride, tenantId, ct);
         IReadOnlyList<AlertRuleSnapshot> rules = RuleDataNeeds.Walk([candidate]).NeedsActiveAlerts
             ? Layer(await alertRepository.GetEnabledRulesAsync(ct), candidate)
             : [candidate];
@@ -143,7 +143,9 @@ internal sealed class AlertReplayService(
         }
 
         var stored = await alertRepository.GetEnabledRulesAsync(ct);
-        var rules = ApplyOverride(stored, ruleOverride, tenantId);
+        var rules = ruleOverride is null
+            ? stored
+            : Layer(stored, await OverrideSnapshotAsync(ruleOverride, tenantId, ct));
         if (rules.Count == 0)
         {
             return new AlertReplayResult(windowStart, windowEnd, []);
@@ -577,19 +579,13 @@ internal sealed class AlertReplayService(
     }
 
     /// <summary>
-    /// Layers <paramref name="ruleOverride"/> onto <paramref name="stored"/>: when its Id
-    /// matches an existing rule the override replaces it; otherwise the override is appended
-    /// (with a synthesised id so any <c>alert_state</c> references the editor seeded resolve
-    /// against the override rather than against a non-existent rule). The original list is
-    /// returned unchanged when <paramref name="ruleOverride"/> is null.
+    /// The override as a snapshot, with a synthesised id when it has none so any
+    /// <c>alert_state</c> references the editor seeded resolve against it. Without its own
+    /// <c>on_unknown</c> it takes the stored rule's, disabled or not, so a replay reads an unknown
+    /// root as the live engine does.
     /// </summary>
-    private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
-        IReadOnlyList<AlertRuleSnapshot> stored,
-        ReplayRuleOverride? ruleOverride,
-        Guid tenantId) =>
-        ruleOverride is null ? stored : Layer(stored, OverrideSnapshot(ruleOverride, tenantId));
-
-    private static AlertRuleSnapshot OverrideSnapshot(ReplayRuleOverride ruleOverride, Guid tenantId) =>
+    private async Task<AlertRuleSnapshot> OverrideSnapshotAsync(
+        ReplayRuleOverride ruleOverride, Guid tenantId, CancellationToken ct) =>
         new(
             Id: ruleOverride.Id ?? Guid.CreateVersion7(),
             TenantId: tenantId,
@@ -601,8 +597,15 @@ internal sealed class AlertReplayService(
             SortOrder: 0,
             AutoResolveEnabled: ruleOverride.AutoResolveEnabled,
             AutoResolveParams: ruleOverride.AutoResolveParams,
-            AllowThroughDnd: ruleOverride.AllowThroughDnd);
+            AllowThroughDnd: ruleOverride.AllowThroughDnd,
+            OnUnknown: ruleOverride.OnUnknown
+                ?? (ruleOverride.Id is { } id ? (await alertRepository.GetRuleAsync(id, ct))?.Rule.OnUnknown : null)
+                ?? AlertRuleOnUnknown.Hold);
 
+    /// <summary>
+    /// Layers <paramref name="candidate"/> onto <paramref name="stored"/>: when its Id matches an
+    /// existing rule it replaces it; otherwise it is appended.
+    /// </summary>
     private static IReadOnlyList<AlertRuleSnapshot> Layer(
         IReadOnlyList<AlertRuleSnapshot> stored, AlertRuleSnapshot candidate)
     {

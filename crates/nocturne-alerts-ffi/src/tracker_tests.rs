@@ -366,10 +366,11 @@ fn tracker_config(rule: &Value) -> Value {
     })
 }
 
-/// The rule's enabled auto-resolve tree at the `auto_resolve` root against
-/// the timers before the tick; the body's timers sit under other roots, so the
-/// order `evaluate` reads them in does not matter.
-fn auto_resolve_holds(
+/// Whether the rule's enabled auto-resolve tree at the `auto_resolve` root,
+/// against the timers before the tick, is anything but known false, which
+/// is what keeps a re-arm hold; the body's timers sit under other roots, so
+/// the order `evaluate` reads them in does not matter.
+fn auto_resolve_not_false(
     rule: &Value,
     tick: &crate::tests::ScenarioTick,
     timers: Option<&Value>,
@@ -391,13 +392,15 @@ fn auto_resolve_holds(
         })
         .to_string(),
     );
-    response["ok"] == json!(true) && response["value"] == json!(true)
+    response["ok"] == json!(true)
+        && (response["value"] == json!(true) || response["unknown"] == json!(true))
 }
 
 /// Every corpus scenario, run through `evaluate` while a second tracker per
 /// rule follows the same ticks through the tracker entry points: `process`
-/// with the tick's root truth (and, awaiting re-arm, its auto-resolve truth),
-/// then `force_close` when auto-resolve closed the excursion. The two trackers and transitions must agree at every step.
+/// with the tick's root truth as `on_unknown` reads it (and, awaiting re-arm,
+/// its auto-resolve truth), or `close_elapsed_hysteresis` for a root the rule
+/// holds, then `force_close` when auto-resolve closed the excursion. The two trackers and transitions must agree at every step.
 #[test]
 fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
     let paths = scenario_paths();
@@ -442,15 +445,29 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                     .unwrap_or_else(|| json!({}));
                 shadow["next_excursion_ordinal"] = json!(next_ordinal);
                 let auto_resolve_met = shadow["awaiting_rearm"] == json!(true)
-                    && auto_resolve_holds(rule, tick, timers.get(&rule_id));
-                let processed = process(&json!({
-                    "schema_version": 1,
-                    "tracker": shadow,
-                    "config": tracker_config(rule),
-                    "condition_met": result["root"],
-                    "auto_resolve_met": auto_resolve_met,
-                    "now": tick.at,
-                }));
+                    && auto_resolve_not_false(rule, tick, timers.get(&rule_id));
+                let condition_met = match (result.get("unknown"), rule.get("on_unknown")) {
+                    (None, _) => Some(result["root"].clone()),
+                    (Some(_), Some(word)) if word == "met" => Some(json!(true)),
+                    (Some(_), Some(word)) if word == "not_met" => Some(json!(false)),
+                    (Some(_), _) => None,
+                };
+                let processed = match condition_met {
+                    Some(condition_met) => process(&json!({
+                        "schema_version": 1,
+                        "tracker": shadow,
+                        "config": tracker_config(rule),
+                        "condition_met": condition_met,
+                        "auto_resolve_met": auto_resolve_met,
+                        "now": tick.at,
+                    })),
+                    None => close_elapsed(&json!({
+                        "schema_version": 1,
+                        "tracker": shadow,
+                        "config": tracker_config(rule),
+                        "now": tick.at,
+                    })),
+                };
                 assert_eq!(processed["ok"], json!(true), "{at}: {}", processed["error"]);
                 assert_eq!(
                     processed["transition"]["type"], result["transition"],

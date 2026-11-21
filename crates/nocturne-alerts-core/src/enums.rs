@@ -6,6 +6,8 @@
 //! which the backend's `EnumManifestTests` keeps equal to the C# enums, and
 //! `enums_match_manifest` pins each one to it.
 
+use crate::truth::Truth;
+
 /// An enum with a fixed set of wire names.
 pub trait WireEnum: Copy + Eq + 'static {
     /// Every member, in declaration order.
@@ -82,10 +84,10 @@ impl CmpOp {
     }
 }
 
-/// `op` applied to `actual`; false when it is absent.
+/// `op` applied to `actual`; unknown when it is absent.
 #[must_use]
-pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> bool {
-    actual.is_some_and(|actual| op.apply(actual, threshold))
+pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> Truth {
+    actual.map_or(Truth::Unknown, |actual| op.apply(actual, threshold).into())
 }
 
 wire_enum! {

@@ -476,15 +476,19 @@ public class AlertSweepJobWallClockTests
         fixture.Evaluations.Should().Be(2);
     }
 
-    public static TheoryData<string> RulesReadingOtherFacts => new()
+    /// <summary>
+    /// Each tree with whether the fixture's context leaves its other leaf unknown, so the rule is
+    /// held and keeps no tracker row (docs/alerts/engine-semantics.md §6.4).
+    /// </summary>
+    public static TheoryData<string, bool> RulesReadingOtherFacts => new()
     {
-        Or("""{"type": "pump_suspended", "pump_suspended": {"is_active": true}}"""),
-        Or("""{"type": "loop_stale", "loop_stale": {"operator": ">", "minutes": 30}}"""),
-        Or("""{"type": "override_active", "override_active": {"is_active": true}}"""),
-        Or("""{"type": "predicted", "predicted": {"operator": "<", "value": 55, "within_minutes": 30}}"""),
-        Or("""{"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}"""),
-        Or("""{"type": "day_of_week", "day_of_week": {"days": ["monday"]}}"""),
-        Or("""{"type": "glucose_bucket", "glucose_bucket": {"buckets": ["low"]}}"""),
+        { Or("""{"type": "pump_suspended", "pump_suspended": {"is_active": true}}"""), true },
+        { Or("""{"type": "loop_stale", "loop_stale": {"operator": ">", "minutes": 30}}"""), true },
+        { Or("""{"type": "override_active", "override_active": {"is_active": true}}"""), false },
+        { Or("""{"type": "predicted", "predicted": {"operator": "<", "value": 55, "within_minutes": 30}}"""), true },
+        { Or("""{"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}"""), false },
+        { Or("""{"type": "day_of_week", "day_of_week": {"days": ["monday"]}}"""), false },
+        { Or("""{"type": "glucose_bucket", "glucose_bucket": {"buckets": ["low"]}}"""), true },
     };
 
     private static string Or(string other) =>
@@ -492,7 +496,7 @@ public class AlertSweepJobWallClockTests
 
     [NativeTheory]
     [MemberData(nameof(RulesReadingOtherFacts))]
-    public async Task A_rule_reading_a_fact_no_reading_moves_is_evaluated_every_sweep(string tree)
+    public async Task A_rule_reading_a_fact_no_reading_moves_is_evaluated_every_sweep(string tree, bool held)
     {
         var fixture = new Fixture(AlertConditionType.Composite, tree) { LastReadingAt = T0 };
 
@@ -501,7 +505,11 @@ public class AlertSweepJobWallClockTests
         await fixture.SweepAt(T0.AddMinutes(2));
 
         fixture.Evaluations.Should().Be(3);
-        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.NextChangeKnown.Should().BeFalse();
+        var state = await fixture.TrackerRepo.GetTrackerStateAsync(RuleId);
+        if (held)
+            state.Should().BeNull();
+        else
+            state!.NextChangeKnown.Should().BeFalse();
     }
 
     [NativeFact]

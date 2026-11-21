@@ -96,6 +96,71 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [Fact]
+    public async Task On_unknown_round_trips_create_read_update_and_snapshot()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, db) = CreateController(validator.Object);
+        var body = Json("""{"direction": "below", "value": 70}""");
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            OnUnknown = AlertRuleOnUnknown.Met,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        created.OnUnknown.Should().Be(AlertRuleOnUnknown.Met);
+
+        var keptOnUpdate = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None);
+        keptOnUpdate.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.OnUnknown.Should().Be(AlertRuleOnUnknown.Met, "an update without it keeps the stored word");
+
+        var changed = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            OnUnknown = AlertRuleOnUnknown.NotMet,
+        }, CancellationToken.None);
+        changed.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+        var snapshot = (await new AlertRepository(new TestNocturneDbContextFactory(db)).GetEnabledRulesAsync(CancellationToken.None))
+            .Single();
+        snapshot.OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+    }
+
+    [Fact]
+    public async Task CreateRule_without_on_unknown_holds()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, _) = CreateController(validator.Object);
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 70}"""),
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+
+        created.OnUnknown.Should().Be(AlertRuleOnUnknown.Hold);
+    }
+
+    [Fact]
     public async Task UpdateRule_rejects_before_touching_the_stored_rule()
     {
         var validator = new Mock<IAlertRuleConditionValidator>();

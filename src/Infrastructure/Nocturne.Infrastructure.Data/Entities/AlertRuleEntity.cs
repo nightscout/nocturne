@@ -63,6 +63,13 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string? AutoResolveParams { get; set; }
 
     /// <summary>
+    /// What an unknown root means to the tracker, one of <see cref="AlertRuleOnUnknown"/>.
+    /// </summary>
+    [Column("on_unknown")]
+    [MaxLength(16)]
+    public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+
+    /// <summary>
     /// Alert severity. Critical alerts bypass quiet hours.
     /// </summary>
     [Column("severity")]

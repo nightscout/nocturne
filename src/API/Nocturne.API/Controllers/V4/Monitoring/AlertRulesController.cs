@@ -224,7 +224,8 @@ public class AlertRulesController : ControllerBase
                     request.AllowThroughDnd,
                     request.AutoResolveEnabled,
                     trees.AutoResolveParams,
-                    trees.ClientConfiguration ?? "{}"),
+                    trees.ClientConfiguration ?? "{}",
+                    OnUnknown: request.OnUnknown ?? AlertRuleOnUnknown.Hold),
                 _channels.ToWrites(request.Channels ?? [])),
             ct);
 
@@ -294,7 +295,8 @@ public class AlertRulesController : ControllerBase
             request.AllowThroughDnd,
             request.AutoResolveEnabled,
             sameAutoResolve ? rule.Rule.AutoResolveParams : trees.AutoResolveParams,
-            trees.ClientConfiguration ?? "{}");
+            trees.ClientConfiguration ?? "{}",
+            OnUnknown: request.OnUnknown ?? rule.Rule.OnUnknown);
         if (!await rules.UpdateAsync(id, write, ct))
             return NotFound();
         if (request.Channels is not null)
@@ -567,6 +569,7 @@ public class AlertRulesController : ControllerBase
         AutoResolveParams = record.Rule.AutoResolveParams is null
             ? null
             : AlertRuleResponses.Json(record.Rule.AutoResolveParams),
+        OnUnknown = record.Rule.OnUnknown,
         ClientConfiguration = AlertRuleResponses.Json(record.Rule.ClientConfiguration),
         Channels = record.Channels
             .Select(AlertRuleResponses.Channel)
@@ -737,6 +740,9 @@ public class AlertRuleResponse
     public bool IsLastLowCover { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
+    /// <summary>What an unknown condition means to the rule's alert: <c>hold</c> keeps it as it
+    /// is, <c>met</c> reads it as true, <c>not_met</c> as false (<see cref="AlertRuleOnUnknown"/>).</summary>
+    public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
     public object ClientConfiguration { get; set; } = new { };
     /// <summary>Flat list of delivery channels. Dispatched in parallel when the rule fires.</summary>
     public List<AlertRuleChannelResponse> Channels { get; set; } = [];
@@ -754,6 +760,8 @@ public class CreateAlertRuleRequest
     public bool AllowThroughDnd { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
+    /// <summary>One of <see cref="AlertRuleOnUnknown"/>; null is <c>hold</c>.</summary>
+    public string? OnUnknown { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertRuleChannelRequest>? Channels { get; set; }
 }
@@ -770,6 +778,8 @@ public class UpdateAlertRuleRequest
     public bool AllowThroughDnd { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
+    /// <summary>One of <see cref="AlertRuleOnUnknown"/>; null keeps the stored value.</summary>
+    public string? OnUnknown { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertRuleChannelRequest>? Channels { get; set; }
 }

@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::{SensorContext, TrackerReference};
-use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, evaluate_rule};
+use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
 use nocturne_alerts_core::excursion::{
@@ -25,6 +25,7 @@ use nocturne_alerts_core::excursion::{
 };
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseResult, Reason, parse_payload};
 use nocturne_alerts_core::sustained::TimerStore;
+use nocturne_alerts_core::truth::Truth::{self, False, True, Unknown};
 
 fn base() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap()
@@ -44,7 +45,7 @@ fn glucose_ctx(latest_value: Option<&str>, trend_rate: Option<&str>) -> SensorCo
     }
 }
 
-fn eval_payload(kind: ConditionKind, payload: &Value, ctx: &SensorContext) -> bool {
+fn eval_payload(kind: ConditionKind, payload: &Value, ctx: &SensorContext) -> Truth {
     eval_payload_at(kind, payload, ctx, base())
 }
 
@@ -53,14 +54,14 @@ fn eval_payload_at(
     payload: &Value,
     ctx: &SensorContext,
     now: DateTime<Utc>,
-) -> bool {
+) -> Truth {
     let parsed = parse_payload(kind, payload).expect("payload parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(now, Uuid::nil(), ctx, &mut timers);
     eval_parsed(&parsed, kind.name(), &mut env)
 }
 
-fn eval_tree(node_json: &Value, ctx: &SensorContext) -> bool {
+fn eval_tree(node_json: &Value, ctx: &SensorContext) -> Truth {
     let node = Node::parse(node_json).expect("node parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(base(), Uuid::nil(), ctx, &mut timers);
@@ -76,42 +77,54 @@ fn eval_tree(node_json: &Value, ctx: &SensorContext) -> bool {
 fn threshold_below_triggers_when_value_below_threshold() {
     let payload = json!({"direction": "below", "value": 70});
     let ctx = glucose_ctx(Some("65"), Some("0"));
-    assert!(eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(True, eval_payload(ConditionKind::Threshold, &payload, &ctx));
 }
 
 #[test]
 fn threshold_below_does_not_trigger_when_value_above_threshold() {
     let payload = json!({"direction": "below", "value": 70});
     let ctx = glucose_ctx(Some("85"), Some("0"));
-    assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::Threshold, &payload, &ctx)
+    );
 }
 
 #[test]
 fn threshold_below_exact_boundary_returns_false() {
     let payload = json!({"direction": "below", "value": 70});
     let ctx = glucose_ctx(Some("70"), Some("0"));
-    assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::Threshold, &payload, &ctx)
+    );
 }
 
 #[test]
 fn threshold_above_triggers_when_value_above_threshold() {
     let payload = json!({"direction": "above", "value": 250});
     let ctx = glucose_ctx(Some("260"), Some("0"));
-    assert!(eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(True, eval_payload(ConditionKind::Threshold, &payload, &ctx));
 }
 
 #[test]
 fn threshold_above_exact_boundary_returns_false() {
     let payload = json!({"direction": "above", "value": 250});
     let ctx = glucose_ctx(Some("250"), Some("0"));
-    assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::Threshold, &payload, &ctx)
+    );
 }
 
 #[test]
-fn threshold_null_latest_value_returns_false() {
+fn threshold_null_latest_value_is_unknown() {
     let payload = json!({"direction": "below", "value": 70});
     let ctx = glucose_ctx(None, Some("0"));
-    assert!(!eval_payload(ConditionKind::Threshold, &payload, &ctx));
+    assert_eq!(
+        Unknown,
+        eval_payload(ConditionKind::Threshold, &payload, &ctx)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,42 +136,60 @@ fn rate_of_change_falling_triggers_at_negative_threshold() {
     // rate = -3.0, threshold = 3.0 => -3.0 <= -3.0 => true
     let payload = json!({"direction": "falling", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), Some("-3.0"));
-    assert!(eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        True,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 #[test]
 fn rate_of_change_falling_triggers_below_negative_threshold() {
     let payload = json!({"direction": "falling", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), Some("-4.0"));
-    assert!(eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        True,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 #[test]
 fn rate_of_change_falling_does_not_trigger_above_negative_threshold() {
     let payload = json!({"direction": "falling", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), Some("-2.0"));
-    assert!(!eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 #[test]
 fn rate_of_change_rising_triggers_at_threshold() {
     let payload = json!({"direction": "rising", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), Some("3.0"));
-    assert!(eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        True,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 #[test]
 fn rate_of_change_rising_does_not_trigger_below_threshold() {
     let payload = json!({"direction": "rising", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), Some("2.0"));
-    assert!(!eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 #[test]
-fn rate_of_change_null_trend_rate_returns_false() {
+fn rate_of_change_null_trend_rate_is_unknown() {
     let payload = json!({"direction": "falling", "rate": 3.0});
     let ctx = glucose_ctx(Some("100"), None);
-    assert!(!eval_payload(ConditionKind::RateOfChange, &payload, &ctx));
+    assert_eq!(
+        Unknown,
+        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,25 +212,25 @@ fn composite_tree(operator: &str) -> Value {
 #[test]
 fn composite_and_all_true_returns_true() {
     let ctx = glucose_ctx(Some("60"), Some("-4.0"));
-    assert!(eval_tree(&composite_tree("and"), &ctx));
+    assert_eq!(True, eval_tree(&composite_tree("and"), &ctx));
 }
 
 #[test]
 fn composite_and_one_false_returns_false() {
     let ctx = glucose_ctx(Some("60"), Some("-1.0"));
-    assert!(!eval_tree(&composite_tree("and"), &ctx));
+    assert_eq!(False, eval_tree(&composite_tree("and"), &ctx));
 }
 
 #[test]
 fn composite_or_any_true_returns_true() {
     let ctx = glucose_ctx(Some("100"), Some("-4.0"));
-    assert!(eval_tree(&composite_tree("or"), &ctx));
+    assert_eq!(True, eval_tree(&composite_tree("or"), &ctx));
 }
 
 #[test]
 fn composite_or_all_false_returns_false() {
     let ctx = glucose_ctx(Some("100"), Some("-1.0"));
-    assert!(!eval_tree(&composite_tree("or"), &ctx));
+    assert_eq!(False, eval_tree(&composite_tree("or"), &ctx));
 }
 
 #[test]
@@ -222,7 +253,7 @@ fn composite_nested_works() {
         }
     });
     let ctx = glucose_ctx(Some("300"), Some("-1.0"));
-    assert!(eval_tree(&tree, &ctx));
+    assert_eq!(True, eval_tree(&tree, &ctx));
 }
 
 // ---------------------------------------------------------------------------
@@ -248,16 +279,19 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
     };
 
     // The first row is false, yet the sustained row starts its clock.
-    assert!(!at(base(), "100", &mut timers));
+    assert_eq!(False, at(base(), "100", &mut timers));
     let path = "composite[1].sustained";
     assert_eq!(
         timers.snapshot_for_rule(Uuid::nil()).collect::<Vec<_>>(),
         vec![(path, base())]
     );
     // Ten minutes on, with the first row now true, the rule holds at once.
-    assert!(at(base() + TimeDelta::minutes(10), "65", &mut timers));
+    assert_eq!(True, at(base() + TimeDelta::minutes(10), "65", &mut timers));
     // Both rows false: the clock clears although the first row is false.
-    assert!(!at(base() + TimeDelta::minutes(15), "150", &mut timers));
+    assert_eq!(
+        False,
+        at(base() + TimeDelta::minutes(15), "150", &mut timers)
+    );
     assert_eq!(timers.snapshot_for_rule(Uuid::nil()).count(), 0);
 }
 
@@ -274,65 +308,92 @@ fn staleness_infinity_convention_with_reading_history() {
         last_reading_at: None,
         ..Default::default()
     };
-    assert!(eval_payload(
-        ConditionKind::Staleness,
-        &json!({"operator": ">", "value": 15}),
-        &ctx
-    ));
-    assert!(eval_payload(
-        ConditionKind::Staleness,
-        &json!({"operator": ">=", "value": 15}),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::Staleness,
-        &json!({"operator": "<", "value": 15}),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::Staleness,
-        &json!({"operator": "==", "value": 15}),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::Staleness,
+            &json!({"operator": ">", "value": 15}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::Staleness,
+            &json!({"operator": ">=", "value": 15}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::Staleness,
+            &json!({"operator": "<", "value": 15}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::Staleness,
+            &json!({"operator": "==", "value": 15}),
+            &ctx
+        )
+    );
 }
 
 #[test]
-fn staleness_cold_start_short_circuits_before_infinity() {
+fn staleness_cold_start_is_unknown_before_infinity() {
     let ctx = SensorContext::default();
-    assert!(!eval_payload(
-        ConditionKind::Staleness,
-        &json!({"operator": ">", "value": 15}),
-        &ctx
-    ));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::Staleness,
+            &json!({"operator": ">", "value": 15}),
+            &ctx
+        )
+    );
 }
 
 #[test]
 fn time_since_last_carb_missing_anchor_is_positive_infinity() {
     let ctx = SensorContext::default();
-    assert!(eval_payload(
-        ConditionKind::TimeSinceLastCarb,
-        &json!({"operator": ">", "minutes": 30}),
-        &ctx
-    ));
-    assert!(eval_payload(
-        ConditionKind::TimeSinceLastCarb,
-        &json!({"operator": ">=", "minutes": 30}),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::TimeSinceLastCarb,
-        &json!({"operator": "<", "minutes": 30}),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::TimeSinceLastCarb,
-        &json!({"operator": "==", "minutes": 30}),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TimeSinceLastCarb,
+            &json!({"operator": ">", "minutes": 30}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TimeSinceLastCarb,
+            &json!({"operator": ">=", "minutes": 30}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TimeSinceLastCarb,
+            &json!({"operator": "<", "minutes": 30}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TimeSinceLastCarb,
+            &json!({"operator": "==", "minutes": 30}),
+            &ctx
+        )
+    );
 }
 
 #[test]
-fn temp_basal_percent_with_zero_scheduled_rate_returns_false() {
+fn temp_basal_percent_with_zero_scheduled_rate_is_unknown() {
     let ctx = SensorContext {
         active_temp_basal: Some(nocturne_alerts_core::context::TempBasalSnapshot {
             rate: d("1.5"),
@@ -341,11 +402,14 @@ fn temp_basal_percent_with_zero_scheduled_rate_returns_false() {
         }),
         ..Default::default()
     };
-    assert!(!eval_payload(
-        ConditionKind::TempBasal,
-        &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 50}),
-        &ctx
-    ));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::TempBasal,
+            &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 50}),
+            &ctx
+        )
+    );
 }
 
 #[test]
@@ -354,43 +418,58 @@ fn sleep_session_active_matches_the_asserted_side_of_the_signal() {
         sleep_session_active: true,
         ..Default::default()
     };
-    assert!(eval_payload(
-        ConditionKind::SleepSessionActive,
-        &json!({"is_active": true}),
-        &active
-    ));
-    assert!(!eval_payload(
-        ConditionKind::SleepSessionActive,
-        &json!({"is_active": false}),
-        &active
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::SleepSessionActive,
+            &json!({"is_active": true}),
+            &active
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::SleepSessionActive,
+            &json!({"is_active": false}),
+            &active
+        )
+    );
 
     let idle = SensorContext::default();
-    assert!(eval_payload(
-        ConditionKind::SleepSessionActive,
-        &json!({"is_active": false}),
-        &idle
-    ));
-    assert!(!eval_payload(
-        ConditionKind::SleepSessionActive,
-        &json!({"is_active": true}),
-        &idle
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::SleepSessionActive,
+            &json!({"is_active": false}),
+            &idle
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::SleepSessionActive,
+            &json!({"is_active": true}),
+            &idle
+        )
+    );
 }
 
 #[test]
-fn loop_stale_null_timestamp_with_guard_set_returns_false() {
+fn loop_stale_null_timestamp_with_guard_set_is_unknown() {
     // Guard passes but the cycle timestamp is null: no infinity convention.
     let ctx = SensorContext {
         has_ever_aps_cycled: true,
         last_aps_cycle_at: None,
         ..Default::default()
     };
-    assert!(!eval_payload(
-        ConditionKind::LoopStale,
-        &json!({"operator": ">", "minutes": 15}),
-        &ctx
-    ));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::LoopStale,
+            &json!({"operator": ">", "minutes": 15}),
+            &ctx
+        )
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -801,6 +880,7 @@ fn relapsing_low_rule() -> Rule {
             "sustained": { "minutes": 10, "child": {
                 "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
         })),
+        on_unknown: OnUnknown::Hold,
     }
 }
 
@@ -971,7 +1051,7 @@ fn recorded_ctx(
     ctx
 }
 
-fn tracker_age_holds(ctx: &SensorContext, operator: &str, minutes: i32) -> bool {
+fn tracker_age_holds(ctx: &SensorContext, operator: &str, minutes: i32) -> Truth {
     eval_payload(
         ConditionKind::TrackerAge,
         &tracker_age_payload(operator, minutes),
@@ -991,32 +1071,41 @@ fn tracker_age_payload(operator: &str, minutes: i32) -> Value {
 fn tracker_age_fires_at_and_after_threshold() {
     // Started 48h ago, threshold >= 48h.
     let ctx = tracker_ctx(base() - TimeDelta::hours(48));
-    assert!(eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", 48 * 60),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", 48 * 60),
+            &ctx
+        )
+    );
 }
 
 #[test]
 fn tracker_age_false_before_threshold() {
     let ctx = tracker_ctx(base() - TimeDelta::hours(47));
-    assert!(!eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", 48 * 60),
-        &ctx
-    ));
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", 48 * 60),
+            &ctx
+        )
+    );
 }
 
 #[test]
 fn tracker_age_no_active_instance_is_false() {
     // Deliberately opposite to time_since_last_* cold-start infinity.
     let ctx = SensorContext::default();
-    assert!(!eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", 0),
-        &ctx
-    ));
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", 0),
+            &ctx
+        )
+    );
 }
 
 #[test]
@@ -1026,11 +1115,14 @@ fn tracker_age_other_definition_is_false() {
         Uuid::from_u128(0xFFFF),
         TrackerReference::at(base() - TimeDelta::hours(48)),
     );
-    assert!(!eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", 60),
-        &ctx
-    ));
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", 60),
+            &ctx
+        )
+    );
 }
 
 #[test]
@@ -1039,16 +1131,22 @@ fn tracker_age_negative_minutes_pre_event_window() {
     // A "-24h before event" threshold (minutes = -1440) is already crossed;
     // a "-6h before event" threshold (minutes = -360) is not yet.
     let ctx = tracker_ctx(base() + TimeDelta::hours(12));
-    assert!(eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", -1440),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", -360),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", -1440),
+            &ctx
+        )
+    );
+    assert_eq!(
+        False,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", -360),
+            &ctx
+        )
+    );
 }
 
 #[test]
@@ -1058,8 +1156,8 @@ fn tracker_age_threshold_due_before_recording_does_not_fire() {
         base() - TimeDelta::hours(72),
         Some(base() - TimeDelta::hours(1)),
     );
-    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
-    assert!(!tracker_age_holds(&ctx, ">", 48 * 60));
+    assert_eq!(False, tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert_eq!(False, tracker_age_holds(&ctx, ">", 48 * 60));
 }
 
 #[test]
@@ -1069,20 +1167,20 @@ fn tracker_age_threshold_due_after_recording_fires() {
         base() - TimeDelta::hours(72),
         Some(base() - TimeDelta::hours(30)),
     );
-    assert!(tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert_eq!(True, tracker_age_holds(&ctx, ">=", 48 * 60));
 }
 
 #[test]
 fn tracker_age_threshold_due_exactly_at_recording_does_not_fire() {
     let start = base() - TimeDelta::hours(72);
     let at_due = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(48)));
-    assert!(!tracker_age_holds(&at_due, ">=", 48 * 60));
+    assert_eq!(False, tracker_age_holds(&at_due, ">=", 48 * 60));
 
     let just_before = recorded_tracker_ctx(
         start,
         Some(start + TimeDelta::hours(48) - TimeDelta::seconds(1)),
     );
-    assert!(tracker_age_holds(&just_before, ">=", 48 * 60));
+    assert_eq!(True, tracker_age_holds(&just_before, ">=", 48 * 60));
 }
 
 #[test]
@@ -1090,13 +1188,13 @@ fn tracker_age_strictly_greater_is_held_back_only_after_its_due_time() {
     // `> 48h` does not hold at 48h, so a run recorded exactly then still alerts.
     let start = base() - TimeDelta::hours(72);
     let at_due = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(48)));
-    assert!(tracker_age_holds(&at_due, ">", 48 * 60));
+    assert_eq!(True, tracker_age_holds(&at_due, ">", 48 * 60));
 
     let after = recorded_tracker_ctx(
         start,
         Some(start + TimeDelta::hours(48) + TimeDelta::seconds(1)),
     );
-    assert!(!tracker_age_holds(&after, ">", 48 * 60));
+    assert_eq!(False, tracker_age_holds(&after, ">", 48 * 60));
 }
 
 #[test]
@@ -1108,7 +1206,7 @@ fn tracker_age_event_run_is_never_held_back() {
         Some(base() - TimeDelta::hours(2)),
         true,
     );
-    assert!(tracker_age_holds(&ctx, ">=", -24 * 60));
+    assert_eq!(True, tracker_age_holds(&ctx, ">=", -24 * 60));
 }
 
 #[test]
@@ -1116,14 +1214,14 @@ fn tracker_age_later_threshold_of_the_same_run_still_fires() {
     // Recorded 50h into the run: 48h is held back, 70h fires once reached.
     let start = base() - TimeDelta::hours(72);
     let ctx = recorded_tracker_ctx(start, Some(start + TimeDelta::hours(50)));
-    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
-    assert!(tracker_age_holds(&ctx, ">=", 70 * 60));
+    assert_eq!(False, tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert_eq!(True, tracker_age_holds(&ctx, ">=", 70 * 60));
 }
 
 #[test]
 fn tracker_age_upper_bound_is_not_held_back_by_recording() {
     let ctx = recorded_tracker_ctx(base() - TimeDelta::hours(2), Some(base()));
-    assert!(tracker_age_holds(&ctx, "<", 3 * 60));
+    assert_eq!(True, tracker_age_holds(&ctx, "<", 3 * 60));
 }
 
 #[test]
@@ -1138,7 +1236,7 @@ fn tracker_age_wire_recorded_at_holds_back_a_due_threshold() {
         ]
     });
     let ctx: SensorContext = serde_json::from_value(wire).expect("context parses");
-    assert!(!tracker_age_holds(&ctx, ">=", 48 * 60));
+    assert_eq!(False, tracker_age_holds(&ctx, ">=", 48 * 60));
 }
 
 #[test]
@@ -1153,11 +1251,14 @@ fn tracker_age_wire_context_round_trips() {
     });
     let ctx: SensorContext = serde_json::from_value(wire).expect("context parses");
     // base() is 2026-01-05T12:00:00Z — 48h after the reference.
-    assert!(eval_payload(
-        ConditionKind::TrackerAge,
-        &tracker_age_payload(">=", 48 * 60),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", 48 * 60),
+            &ctx
+        )
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1176,33 +1277,42 @@ fn temp_basal_ctx(rate: Decimal, scheduled_rate: Decimal) -> SensorContext {
 }
 
 #[test]
-fn temp_basal_percent_division_overflow_is_false() {
+fn temp_basal_percent_division_overflow_is_unknown() {
     let ctx = temp_basal_ctx(Decimal::MAX, d("0.5"));
-    assert!(!eval_payload(
-        ConditionKind::TempBasal,
-        &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
-        &ctx
-    ));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::TempBasal,
+            &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
+            &ctx
+        )
+    );
 }
 
 #[test]
-fn temp_basal_percent_multiplication_overflow_is_false() {
+fn temp_basal_percent_multiplication_overflow_is_unknown() {
     let ctx = temp_basal_ctx(Decimal::MAX, d("2"));
-    assert!(!eval_payload(
-        ConditionKind::TempBasal,
-        &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
-        &ctx
-    ));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::TempBasal,
+            &json!({"metric": "percent_of_scheduled", "operator": ">=", "value": 0}),
+            &ctx
+        )
+    );
 }
 
 #[test]
 fn temp_basal_percent_in_range_still_compares() {
     let ctx = temp_basal_ctx(d("1.5"), d("1"));
-    assert!(eval_payload(
-        ConditionKind::TempBasal,
-        &json!({"metric": "percent_of_scheduled", "operator": "==", "value": 150}),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::TempBasal,
+            &json!({"metric": "percent_of_scheduled", "operator": "==", "value": 150}),
+            &ctx
+        )
+    );
 }
 
 #[test]
@@ -1280,12 +1390,15 @@ fn elapsed_across_the_whole_domain_still_evaluates() {
         ..Default::default()
     };
     let now = Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap();
-    assert!(eval_payload_at(
-        ConditionKind::Staleness,
-        &json!({"operator": ">", "value": 15}),
-        &ctx,
-        now
-    ));
+    assert_eq!(
+        True,
+        eval_payload_at(
+            ConditionKind::Staleness,
+            &json!({"operator": ">", "value": 15}),
+            &ctx,
+            now
+        )
+    );
 }
 
 #[test]
@@ -1359,21 +1472,26 @@ fn unknown_context_enum_values_drop_only_their_facts() {
     assert!(ctx.active_pump_state.is_none());
     assert_eq!(ctx.active_state_spans.len(), 1);
 
-    assert!(eval_payload(
-        ConditionKind::Threshold,
-        &json!({"direction": "below", "value": 70}),
-        &ctx
-    ));
-    assert!(eval_payload(
-        ConditionKind::StateSpanActive,
-        &json!({"category": "Illness", "state": null, "is_active": true}),
-        &ctx
-    ));
-    assert!(!eval_payload(
-        ConditionKind::Trend,
-        &json!({"bucket": "flat"}),
-        &ctx
-    ));
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::Threshold,
+            &json!({"direction": "below", "value": 70}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        True,
+        eval_payload(
+            ConditionKind::StateSpanActive,
+            &json!({"category": "Illness", "state": null, "is_active": true}),
+            &ctx
+        )
+    );
+    assert_eq!(
+        Unknown,
+        eval_payload(ConditionKind::Trend, &json!({"bucket": "flat"}), &ctx)
+    );
 }
 
 #[test]
@@ -1412,8 +1530,14 @@ fn a_repeated_property_binds_its_last_occurrence() {
     let ctx = glucose_ctx(Some("60"), Some("0"));
     let last_is_70 = raw(r#"{"direction": "below", "value": 50, "value": 70}"#);
     let last_is_50 = raw(r#"{"direction": "below", "value": 70, "value": 50}"#);
-    assert!(eval_payload(ConditionKind::Threshold, &last_is_70, &ctx));
-    assert!(!eval_payload(ConditionKind::Threshold, &last_is_50, &ctx));
+    assert_eq!(
+        True,
+        eval_payload(ConditionKind::Threshold, &last_is_70, &ctx)
+    );
+    assert_eq!(
+        False,
+        eval_payload(ConditionKind::Threshold, &last_is_50, &ctx)
+    );
 }
 
 #[test]

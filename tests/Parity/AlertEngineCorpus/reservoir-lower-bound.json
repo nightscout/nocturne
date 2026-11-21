@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "reservoir-lower-bound",
-  "description": "reservoir_is_lower_bound gates \u003C / \u003C= / == to false while \u003E and \u003E= compare against the bound; exact readings are unaffected",
+  "description": "a lower-bound reading decides a comparison only where holding at least the bound does, and is unknown otherwise; exact readings are unaffected",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

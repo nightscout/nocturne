@@ -121,5 +121,6 @@ public class FfiCorpusParityTests
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveParams,
+        OnUnknown = rule.OnUnknown ?? "hold",
     };
 }

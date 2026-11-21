@@ -52,6 +52,20 @@ public class RustEnvelopeMapperTests
             .AutoResolveParams.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(AlertRuleOnUnknown.Hold)]
+    [InlineData(AlertRuleOnUnknown.Met)]
+    [InlineData(AlertRuleOnUnknown.NotMet)]
+    public void BuildRule_sends_the_rules_on_unknown(string onUnknown)
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.OnUnknown = onUnknown;
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule));
+
+        wire.GetProperty("on_unknown").GetString().Should().Be(onUnknown);
+    }
+
     [Fact]
     public void BuildContext_sends_a_windows_tenant_zone_as_iana()
     {

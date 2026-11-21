@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "site-age-hours-boundaries",
-  "description": "site_age compares hours since last site change: 72h-old site at threshold 72 for \u003E=, \u003E, \u003C; null anchor false",
+  "description": "site_age compares hours since last site change: 72h-old site at threshold 72 for \u003E=, \u003E, \u003C; null anchor unknown",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

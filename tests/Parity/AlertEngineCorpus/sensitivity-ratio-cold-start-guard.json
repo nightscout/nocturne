@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "sensitivity-ratio-cold-start-guard",
-  "description": "sensitivity_ratio returns false when its HasEver* guard is unset even though the fact value would match",
+  "description": "sensitivity_ratio is unknown when its HasEver* guard is unset even though the fact value would match",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

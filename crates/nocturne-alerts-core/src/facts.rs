@@ -170,6 +170,7 @@ mod tests {
     use crate::eval::{Env, eval_payload};
     use crate::model::Payload;
     use crate::sustained::TimerStore;
+    use crate::truth::Truth;
     use crate::wall_clock::{is_wall_clock, references_wall_clock};
     use ContextFact as F;
 
@@ -592,7 +593,7 @@ mod tests {
         parse_payload(kind, &params).expect("sample payload parses")
     }
 
-    fn evaluate(kind: ConditionKind, on: &[ContextFact]) -> bool {
+    fn evaluate(kind: ConditionKind, on: &[ContextFact]) -> Truth {
         let ctx = context(on);
         let mut timers = TimerStore::default();
         let mut env = Env::new(now(), Uuid::nil(), &ctx, &mut timers);
@@ -615,8 +616,11 @@ mod tests {
     #[test]
     fn every_leaf_sample_turns_on_its_own_facts() {
         for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
-            assert!(evaluate(kind, reads(kind)), "{kind:?} with its facts");
-            assert!(!evaluate(kind, &[]), "{kind:?} with no facts");
+            assert!(
+                evaluate(kind, reads(kind)).is_true(),
+                "{kind:?} with its facts"
+            );
+            assert!(!evaluate(kind, &[]).is_true(), "{kind:?} with no facts");
         }
     }
 
@@ -629,7 +633,10 @@ mod tests {
                     .copied()
                     .filter(|&f| f != fact)
                     .collect();
-                assert!(!evaluate(kind, &without), "{kind:?} without {fact:?}");
+                assert!(
+                    !evaluate(kind, &without).is_true(),
+                    "{kind:?} without {fact:?}"
+                );
             }
         }
     }

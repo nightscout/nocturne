@@ -33,6 +33,7 @@ internal sealed class AlertRuleEntityConfiguration : IEntityTypeConfiguration<Al
             new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>());
         entity.Property(e => e.ClientConfiguration).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.IsEnabled).HasDefaultValue(true);
+        entity.Property(e => e.OnUnknown).HasDefaultValue(Core.Models.Alerts.AlertRuleOnUnknown.Hold);
     }
 }
 

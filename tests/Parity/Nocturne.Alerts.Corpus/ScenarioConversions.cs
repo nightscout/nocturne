@@ -43,6 +43,7 @@ public static class ScenarioConversions
             HysteresisMinutes = rule.HysteresisMinutes,
             AutoResolveEnabled = rule.AutoResolveEnabled,
             AutoResolveParams = rule.AutoResolveParams?.GetRawText(),
+            OnUnknown = rule.OnUnknown ?? AlertRuleOnUnknown.Hold,
         };
     }
 

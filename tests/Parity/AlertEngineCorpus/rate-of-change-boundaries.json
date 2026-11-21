@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "rate-of-change-boundaries",
-  "description": "rising fires at rate \u003E= threshold (inclusive); falling fires at rate \u003C= -threshold (inclusive); null rate is false",
+  "description": "rising fires at rate \u003E= threshold (inclusive); falling fires at rate \u003C= -threshold (inclusive); null rate is unknown",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

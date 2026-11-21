@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -70,6 +71,43 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 
         (await noTenant.GetEnabledRulesAsync(CancellationToken.None))
             .Should().BeEmpty("a scope with no tenant reads no tenant's rules");
+    }
+
+    /// <summary>
+    /// A rule created without an <c>on_unknown</c> reads <c>hold</c>, one created with a word keeps
+    /// it, and an update that starts from the stored rule keeps the stored word
+    /// (docs/alerts/engine-semantics.md §6.4).
+    /// </summary>
+    [Fact]
+    public async Task A_created_rule_without_a_word_holds_and_an_update_keeps_the_stored_word()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var tenant = await AuthTestHelpers.SeedTenantAsync(Fixture, $"on-unknown-{suffix}", "On unknown");
+        await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
+        var factory = new InterceptingContextFactory(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(dataSource)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options);
+        var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant));
+        var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
+        static NewAlertRule Rule(string name, string? onUnknown) => new(
+            onUnknown is null
+                ? new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+                    RuleScopeClass.Low, AlertRuleSeverity.Warning, true, 0, false, false, null, "{}")
+                : new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+                    RuleScopeClass.Low, AlertRuleSeverity.Warning, true, 0, false, false, null, "{}",
+                    OnUnknown: onUnknown),
+            []);
+
+        var unnamed = await writer.CreateAsync(Rule("Unnamed", null), CancellationToken.None);
+        var named = await writer.CreateAsync(Rule("Named", AlertRuleOnUnknown.NotMet), CancellationToken.None);
+        var stored = (await reader.GetRuleAsync(named, CancellationToken.None))!;
+        await writer.UpdateAsync(named, AlertRuleWrite.Of(stored) with { Name = "Renamed" }, CancellationToken.None);
+
+        (await reader.GetRuleAsync(unnamed, CancellationToken.None))!.Rule.OnUnknown.Should().Be(AlertRuleOnUnknown.Hold);
+        var updated = (await reader.GetRuleAsync(named, CancellationToken.None))!;
+        updated.Rule.Name.Should().Be("Renamed");
+        updated.Rule.OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
     }
 
     [Fact]

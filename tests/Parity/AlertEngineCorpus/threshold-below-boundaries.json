@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "threshold-below-boundaries",
-  "description": "below is strictly less-than: 69.9 fires, 70 and 70.1 do not; null glucose is false",
+  "description": "below is strictly less-than: 69.9 fires, 70 and 70.1 do not; null glucose is unknown",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

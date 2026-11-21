@@ -583,6 +583,41 @@ public class AlertReplayServiceTests
             dayStart.AddHours(1), ruleId, "tightened", AlertRuleSeverity.Warning, AlertReplayEventKind.Fired));
     }
 
+    /// <summary>
+    /// Before the first reading the threshold is unknown (docs/alerts/engine-semantics.md §2.4), so
+    /// whether the dry run fires there is decided by the rule's on_unknown, as live decides it.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(null, AlertRuleOnUnknown.Met, true)]
+    [InlineData(null, AlertRuleOnUnknown.Hold, false)]
+    [InlineData(AlertRuleOnUnknown.NotMet, AlertRuleOnUnknown.Met, false)]
+    [InlineData(AlertRuleOnUnknown.Met, AlertRuleOnUnknown.Hold, true)]
+    public async Task DryRunOverride_reads_an_unknown_root_through_its_on_unknown_or_the_stored_rules(
+        string? overrideWord, string storedWord, bool firesOnTheGap)
+    {
+        var ruleId = Guid.NewGuid();
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        var stored = ThresholdRule(ruleId, "below", 70m) with { OnUnknown = storedWord };
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { stored });
+        _alertRepository.Setup(r => r.GetRuleAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertRuleRecord(stored, null, true, null, null, []));
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
+            .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
+        var ruleOverride = new ReplayRuleOverride(
+            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null,
+            OnUnknown: overrideWord);
+
+        var result = await _sut.ReplayDryRunAsync(
+            null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
+
+        result.Events.Any(e => e.RuleId == ruleId && e.Kind == AlertReplayEventKind.Fired)
+            .Should().Be(firesOnTheGap);
+    }
+
     // ── firing search ────────────────────────────────────────────────────────────────────────
 
     private static readonly DateTime SearchNow = new(2026, 4, 28, 12, 0, 0, DateTimeKind.Utc);

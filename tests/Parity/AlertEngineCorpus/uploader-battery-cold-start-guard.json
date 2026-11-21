@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "uploader-battery-cold-start-guard",
-  "description": "uploader_battery returns false when its HasEver* guard is unset even though the fact value would match",
+  "description": "uploader_battery is unknown when its HasEver* guard is unset even though the fact value would match",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

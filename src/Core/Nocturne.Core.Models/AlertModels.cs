@@ -704,6 +704,9 @@ public class AlertRule
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
 
+    /// <summary>What an unknown root means to the tracker: one of <see cref="AlertRuleOnUnknown"/>.</summary>
+    public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+
     public DateTime CreatedAt { get; set; }
 
     /// <summary>When this rule was last modified.</summary>

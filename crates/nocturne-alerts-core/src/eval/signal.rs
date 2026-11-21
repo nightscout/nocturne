@@ -5,13 +5,18 @@ use chrono::Duration;
 use super::elapsed::{ClockLeaf, Elapsed, Measure};
 use crate::context::SensorContext;
 use crate::model::SignalLossPayload;
+use crate::truth::Truth;
 
 /// True once `now - last_reading_at >= timeout_minutes`, compared as exact
-/// durations. No reading history is false; `last_reading_at` absent with a
+/// durations. No reading history is unknown; `last_reading_at` absent with a
 /// `latest_timestamp` is infinitely stale.
 pub(super) fn signal_loss(p: &SignalLossPayload, ctx: &SensorContext) -> ClockLeaf {
     let Some(last_reading_at) = ctx.last_reading_at else {
-        return ClockLeaf::Fixed(ctx.latest_timestamp.is_some());
+        return ClockLeaf::Fixed(if ctx.latest_timestamp.is_some() {
+            Truth::True
+        } else {
+            Truth::Unknown
+        });
     };
     ClockLeaf::Measured(Elapsed {
         anchor: last_reading_at,

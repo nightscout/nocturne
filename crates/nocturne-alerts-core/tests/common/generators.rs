@@ -10,6 +10,7 @@ use proptest::sample::select;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
+use nocturne_alerts_core::engine::OnUnknown;
 use nocturne_alerts_core::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
     StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
@@ -87,6 +88,7 @@ pub(crate) struct RuleSpec {
     confirmation_readings: i32,
     hysteresis_minutes: i32,
     auto_resolve: Option<Value>,
+    on_unknown: &'static str,
 }
 
 impl RuleSpec {
@@ -101,8 +103,14 @@ impl RuleSpec {
             "hysteresis_minutes": self.hysteresis_minutes,
             "auto_resolve_enabled": self.auto_resolve.is_some(),
             "auto_resolve_params": self.auto_resolve,
+            "on_unknown": self.on_unknown,
         })
     }
+}
+
+/// An `on_unknown` word, `hold` half the time as the default it is.
+pub(crate) fn on_unknown() -> BoxedStrategy<&'static str> {
+    prop_oneof![1 => Just(OnUnknown::Hold.name()), 1 => word::<OnUnknown>()].boxed()
 }
 
 pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
@@ -111,13 +119,17 @@ pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
         0..4i32,
         0..10i32,
         option::of(sustained_tree()),
+        on_unknown(),
     )
         .prop_map(
-            |(body, confirmation_readings, hysteresis_minutes, auto_resolve)| RuleSpec {
-                body,
-                confirmation_readings,
-                hysteresis_minutes,
-                auto_resolve,
+            |(body, confirmation_readings, hysteresis_minutes, auto_resolve, on_unknown)| {
+                RuleSpec {
+                    body,
+                    confirmation_readings,
+                    hysteresis_minutes,
+                    auto_resolve,
+                    on_unknown,
+                }
             },
         )
 }

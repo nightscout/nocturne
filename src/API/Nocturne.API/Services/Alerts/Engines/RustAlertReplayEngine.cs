@@ -49,6 +49,7 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
         ConditionParams = RuleTrees.Body(rule.ConditionType, rule.ConditionParams),
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
+        OnUnknown = rule.OnUnknown,
     };
 
     private static AlertReplayRun ToRun(RustReplayResponse response) => new(
@@ -58,10 +59,10 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
             log.RuleId,
             log.Leaves.Select(leaf => new LeafTransitionLog(
                 leaf.LeafId,
-                leaf.Points.Select(p => new LeafTransitionPoint(p.AtMs, p.Value)).ToList())).ToList())).ToList(),
+                leaf.Points.Select(p => new LeafTransitionPoint(p.AtMs, p.Value, p.Unknown)).ToList())).ToList())).ToList(),
         response.Ticks?.Select(t => new AlertReplayTickOutcome(
             Utc(t.At),
-            t.Rules.Select(r => new AlertReplayRuleTick(r.RuleId, r.Skipped, r.Met ?? false, r.Firing ?? false)).ToList()))
+            t.Rules.Select(r => new AlertReplayRuleTick(r.RuleId, r.Skipped, r.Met ?? false, r.Firing ?? false, r.Unknown)).ToList()))
             .ToList());
 
     private static AlertReplayTransition Transition(RustReplayEventKind kind) => kind switch

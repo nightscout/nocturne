@@ -357,6 +357,7 @@ public class AlertRuleRepository : IAlertRuleRepository
         entity.AutoResolveParams = rule.AutoResolveParams;
         entity.ClientConfiguration = rule.ClientConfiguration;
         entity.ReviewReason = rule.ReviewReason;
+        entity.OnUnknown = rule.OnUnknown;
     }
 
     private static AlertRuleChannelEntity NewChannel(

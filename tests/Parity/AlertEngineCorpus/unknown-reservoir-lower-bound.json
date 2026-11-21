@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "name": "unknown-reservoir-lower-bound",
+  "description": "a lower-bound reservoir reading of 50 (at least 50) against 40, 50 and 60 for each operator (rules 1-3 \u003E, 4-6 \u003E=, 7-9 \u003C, 10-12 \u003C=, 13-15 ==): true or false wherever holding at least 50 decides the comparison, unknown otherwise",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E=",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E=",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E=",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "rule-8",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "rule-9",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "rule-10",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C=",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C=",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C=",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "==",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "rule-14",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "==",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000015",
+      "name": "rule-15",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "==",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": true,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "reservoir_units": 50,
+        "reservoir_is_lower_bound": true
+      }
+    }
+  ]
+}

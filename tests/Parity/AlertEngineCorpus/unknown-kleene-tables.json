@@ -1,0 +1,530 @@
+{
+  "schema_version": 1,
+  "name": "unknown-kleene-tables",
+  "description": "and/or over every pair of true, false and unknown children (rules 1-9 and, 10-18 or, each in the order TT TF TU FT FF FU UT UF UU), and not over each (19-21: T F U): and is false on any false, else unknown on any unknown; or is true on any true, else unknown on any unknown; not keeps unknown. True is sleep_session_active false, false is it true, unknown is threshold above 180 with no reading",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "rule-8",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "rule-9",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "rule-10",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "rule-14",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000015",
+      "name": "rule-15",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000016",
+      "name": "rule-16",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": false
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000017",
+      "name": "rule-17",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "sleep_session_active",
+            "sleep_session_active": {
+              "is_active": true
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000018",
+      "name": "rule-18",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          },
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "above",
+              "value": 180
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000019",
+      "name": "rule-19",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "sleep_session_active",
+          "sleep_session_active": {
+            "is_active": false
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000020",
+      "name": "rule-20",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "sleep_session_active",
+          "sleep_session_active": {
+            "is_active": true
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000021",
+      "name": "rule-21",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "above",
+            "value": 180
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

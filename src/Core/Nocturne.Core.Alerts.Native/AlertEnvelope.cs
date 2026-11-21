@@ -90,6 +90,13 @@ public sealed record RustAlertRule
     /// <summary>A full ConditionNode object (<c>{"type": …, …}</c>), or null.</summary>
     [JsonPropertyName("auto_resolve_params")]
     public JsonElement? AutoResolveParams { get; init; }
+
+    /// <summary>
+    /// What an unknown root means to the tracker: <c>hold</c>, <c>met</c> or <c>not_met</c>
+    /// (docs/alerts/engine-semantics.md §6.4). Any other word is an envelope error.
+    /// </summary>
+    [JsonPropertyName("on_unknown")]
+    public string OnUnknown { get; init; } = "hold";
 }
 
 /// <summary>
@@ -211,8 +218,17 @@ public sealed record RustRuleResult
     /// <summary>The rule was skipped; the wire carries <c>skipped</c> only when true.</summary>
     public bool Skipped { get; init; }
 
-    /// <summary>Root condition truth; present on every result that was not skipped.</summary>
+    /// <summary>
+    /// Root condition truth; present on every result that was not skipped, and false when
+    /// <see cref="Unknown"/>.
+    /// </summary>
     public bool? Root { get; init; }
+
+    /// <summary>
+    /// The root is unknown (docs/alerts/engine-semantics.md §2.4); the wire carries it only when
+    /// true.
+    /// </summary>
+    public bool Unknown { get; init; }
 
     /// <summary>
     /// Per-leaf force-eval truths, ascending by leaf id; present on every result that was not
@@ -272,10 +288,14 @@ public enum RustCloseReason
 public sealed class StrictStringEnumConverter<TEnum>() : JsonStringEnumConverter<TEnum>(null, allowIntegerValues: false)
     where TEnum : struct, Enum;
 
-/// <summary>One per-leaf force-eval truth in <see cref="RustRuleResult.Leaves"/>.</summary>
+/// <summary>
+/// One per-leaf force-eval truth in <see cref="RustRuleResult.Leaves"/>; <see cref="Value"/> is
+/// false when <see cref="Unknown"/>.
+/// </summary>
 public sealed record RustLeafValue(
     [property: JsonPropertyName("leaf_id")] int LeafId,
-    [property: JsonPropertyName("value")] bool Value);
+    [property: JsonPropertyName("value")] bool Value,
+    [property: JsonPropertyName("unknown")] bool Unknown = false);
 
 /// <summary>One sustained-timer mutation; <see cref="At"/> is present exactly on a <see cref="RustTimerOpKind.Set"/>.</summary>
 public sealed record RustTimerOp(
@@ -329,8 +349,11 @@ public sealed record RustEvaluateNodeResponse : IRustResponseEnvelope
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>
     public string? Error { get; init; }
 
-    /// <summary>The node's truth; present on every successful response.</summary>
+    /// <summary>The node's truth; present on every successful response, and false when <see cref="Unknown"/>.</summary>
     public bool? Value { get; init; }
+
+    /// <summary>The node is unknown; the wire carries it only when true.</summary>
+    public bool Unknown { get; init; }
 
     /// <summary>Post-evaluation timer state to persist for the rule.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
@@ -491,9 +514,11 @@ public sealed record RustReplayLeaf(
     [property: JsonPropertyName("leaf_id"), JsonRequired] int LeafId,
     [property: JsonPropertyName("points"), JsonRequired] List<RustReplayLeafPoint> Points);
 
+/// <summary>A leaf log point; <see cref="Value"/> is false when <see cref="Unknown"/>.</summary>
 public sealed record RustReplayLeafPoint(
     [property: JsonPropertyName("at_ms"), JsonRequired] long AtMs,
-    [property: JsonPropertyName("value"), JsonRequired] bool Value);
+    [property: JsonPropertyName("value"), JsonRequired] bool Value,
+    [property: JsonPropertyName("unknown")] bool Unknown = false);
 
 public sealed record RustReplayTickOutcome(
     [property: JsonPropertyName("at"), JsonRequired] DateTime At,
@@ -507,7 +532,11 @@ public sealed record RustReplayRuleTick
 
     public bool Skipped { get; init; }
 
+    /// <summary>False when <see cref="Unknown"/>.</summary>
     public bool? Met { get; init; }
+
+    /// <summary>The root is unknown; the wire carries it only when true.</summary>
+    public bool Unknown { get; init; }
 
     public bool? Firing { get; init; }
 }
