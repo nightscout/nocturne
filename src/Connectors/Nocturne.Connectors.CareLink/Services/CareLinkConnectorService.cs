@@ -104,12 +104,11 @@ public class CareLinkConnectorService
 
         var activeTypes = ResolveActiveTypes(request, config);
         var isStale = IsDataStale(data);
-        var now = Clock.GetUtcNow().UtcDateTime;
 
-        await PublishSensorGlucoseStepAsync(data, config, activeTypes, isStale, now, result, cancellationToken);
-        await PublishDeviceStatusStepAsync(data, config, activeTypes, now, result, cancellationToken);
-        await PublishAlarmStepAsync(data, config, activeTypes, now, result, cancellationToken);
-        await PublishTreatmentsStepAsync(data, config, activeTypes, now, result, cancellationToken);
+        await PublishSensorGlucoseStepAsync(data, config, activeTypes, isStale, result, cancellationToken);
+        await PublishDeviceStatusStepAsync(data, config, activeTypes, result, cancellationToken);
+        await PublishAlarmStepAsync(data, config, activeTypes, result, cancellationToken);
+        await PublishTreatmentsStepAsync(data, config, activeTypes, result, cancellationToken);
 
         return result;
     }
@@ -219,7 +218,6 @@ public class CareLinkConnectorService
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
         bool isStale,
-        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -239,7 +237,7 @@ public class CareLinkConnectorService
         try
         {
             await PublishRecordTypeAsync(result, activeTypes,
-                _sgMapper.Map(data, now), config, cancellationToken);
+                _sgMapper.Map(data), config, cancellationToken);
         }
         catch (HttpRequestException ex)
         {
@@ -262,7 +260,6 @@ public class CareLinkConnectorService
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
-        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -273,7 +270,7 @@ public class CareLinkConnectorService
         try
         {
             List<Nocturne.Core.Models.DeviceStatus> deviceStatuses =
-                CareLinkDeviceStatusMapper.Map(data, now) is { } deviceStatus ? [deviceStatus] : [];
+                CareLinkDeviceStatusMapper.Map(data) is { } deviceStatus ? [deviceStatus] : [];
 
             await PublishRecordTypeAsync(result, activeTypes,
                 deviceStatuses, config, cancellationToken);
@@ -302,7 +299,6 @@ public class CareLinkConnectorService
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
-        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -316,7 +312,7 @@ public class CareLinkConnectorService
             {
                 var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                     data.MedicalDeviceTime ?? "", data.CurrentServerTime);
-                var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime, now);
+                var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
                 if (systemEvent != null
                     && await PublishRecordTypeAsync(result, activeTypes,
                         [systemEvent], config, cancellationToken,
@@ -343,7 +339,6 @@ public class CareLinkConnectorService
         CareLinkData data,
         CareLinkConnectorConfiguration config,
         HashSet<SyncDataType> activeTypes,
-        DateTime now,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -353,16 +348,16 @@ public class CareLinkConnectorService
                 data.MedicalDeviceTime ?? "", data.CurrentServerTime);
 
             await PublishRecordTypeAsync(result, activeTypes,
-                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs, now), config, cancellationToken);
+                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), config, cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
-                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs, now), config, cancellationToken);
+                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), config, cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
-                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs, now), config, cancellationToken);
+                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), config, cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
-                CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs, now),
+                CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs),
                 config, cancellationToken,
                 context: "from notification history");
         }

@@ -18,7 +18,8 @@ namespace Nocturne.Connectors.Eversense.Configurations;
     MaxHistoricalDays = EversenseConnectorConfiguration.MaxHistoryDays,
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
-    SensorReadingIntervalSeconds = 300
+    SensorReadingIntervalSeconds = 300,
+    LegacyIdPrefix = "eversense"
 )]
 public class EversenseConnectorConfiguration : BaseConnectorConfiguration
 {

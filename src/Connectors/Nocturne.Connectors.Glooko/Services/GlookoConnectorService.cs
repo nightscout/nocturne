@@ -24,6 +24,8 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService
     : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly IMealMatchingService? _mealMatchingService;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
@@ -707,7 +709,7 @@ public class GlookoConnectorService
         // Food attribution resolves against the carbs published above.
         var foodEntryImports = batchData.Foods is { Length: > 0 }
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
-        Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
+        Func<string, string?> foodResolver = externalEntryId => LegacyIds.Of("food", externalEntryId);
         landed &= await PublishFoodEntriesAndAttributeAsync(
             foodEntryImports, carbs, foodResolver, config, result, activeTypes, cancellationToken);
 
@@ -822,7 +824,7 @@ public class GlookoConnectorService
 
                 foodResolver = externalEntryId =>
                     foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
-                        ? $"glooko_v3meal_{mealGuid}" : null;
+                        ? LegacyIds.Of("v3meal", mealGuid) : null;
             }
 
             await PublishFoodEntriesAndAttributeAsync(

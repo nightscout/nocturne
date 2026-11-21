@@ -129,7 +129,7 @@ public class EversenseConnectorService
 
             var now = Clock.GetUtcNow().UtcDateTime;
             var history = await FetchHistoryAsync(config, session, patient, request, now, cancellationToken);
-            var records = MergeReadings(history, _mapper.Map(patient, config.Server, now));
+            var records = MergeReadings(history, _mapper.Map(patient, config.Server));
             if (records.Count == 0)
             {
                 _logger.LogDebug(
@@ -270,7 +270,7 @@ public class EversenseConnectorService
                 break;
             }
 
-            records.AddRange(_mapper.MapHistory(events, now));
+            records.AddRange(_mapper.MapHistory(events));
         }
 
         return records;

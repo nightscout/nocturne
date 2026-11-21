@@ -124,7 +124,7 @@ public class TwiistConnectorService
         }
 
         var sensorGlucose = _glucoseMapper.MapGlucoseRecords(
-            glucoseRecords, Clock.GetUtcNow().UtcDateTime, status.Summary?.LastGlucoseTrend).ToList();
+            glucoseRecords, status.Summary?.LastGlucoseTrend).ToList();
 
         // Apply trend to the most recent reading if available
         if (sensorGlucose.Count > 0 && status.Summary?.LastGlucoseTrend != null)
@@ -142,7 +142,7 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         await PublishRecordTypeAsync(result, activeTypes,
-            _insulinMapper.MapBoluses(status.InsulinHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
+            _insulinMapper.MapBoluses(status.InsulinHistory).ToList(), config, cancellationToken);
     }
 
     private async Task SyncCarbIntakeAsync(
@@ -150,7 +150,7 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         await PublishRecordTypeAsync(result, activeTypes,
-            _mealMapper.MapMeals(status.MealHistory, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
+            _mealMapper.MapMeals(status.MealHistory).ToList(), config, cancellationToken);
     }
 
     private async Task SyncTempBasalsAsync(
@@ -158,9 +158,8 @@ public class TwiistConnectorService
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var scheduledRate = _tempBasalMapper.ParseScheduledRate(status.Details?.BasalRateUnitsPerHour);
-        var now = Clock.GetUtcNow().UtcDateTime;
-        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate, now)
-            .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory, now))
+        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate)
+            .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory))
             .ToList();
 
         await PublishRecordTypeAsync(result, activeTypes,

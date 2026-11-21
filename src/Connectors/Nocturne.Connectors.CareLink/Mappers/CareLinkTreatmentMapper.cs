@@ -1,5 +1,7 @@
+using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -20,6 +22,8 @@ namespace Nocturne.Connectors.CareLink.Mappers;
 /// </remarks>
 public static class CareLinkTreatmentMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<CareLinkConnectorConfiguration>();
+
     private const string InsulinMarker = "INSULIN";
     private const string MealMarker = "MEAL";
     private const string AutoBasalMarker = "AUTO_BASAL_DELIVERY";
@@ -29,7 +33,7 @@ public static class CareLinkTreatmentMapper
     // marker to bound its end. The pump delivers an auto-basal roughly every 5 minutes.
     private const int DefaultAutoBasalIntervalMinutes = 5;
 
-    public static List<Bolus> MapBoluses(CareLinkData data, double pumpOffsetMs, DateTime now)
+    public static List<Bolus> MapBoluses(CareLinkData data, double pumpOffsetMs)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
@@ -57,10 +61,8 @@ public static class CareLinkTreatmentMapper
 
             results.Add(new Bolus
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
                 Device = deviceName,
-                DataSource = DataSources.CareLinkConnector,
                 Insulin = delivered,
                 Programmed = programmed,
                 Delivered = delivered,
@@ -71,15 +73,13 @@ public static class CareLinkTreatmentMapper
                     ? marker.ProgrammedDuration
                     : null,
                 SyncIdentifier = $"carelink:insulin:{idPart}:{mills}",
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 
         return results;
     }
 
-    public static List<CarbIntake> MapCarbIntakes(CareLinkData data, double pumpOffsetMs, DateTime now)
+    public static List<CarbIntake> MapCarbIntakes(CareLinkData data, double pumpOffsetMs)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
@@ -101,22 +101,18 @@ public static class CareLinkTreatmentMapper
 
             results.Add(new CarbIntake
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
                 Device = deviceName,
-                DataSource = DataSources.CareLinkConnector,
                 Carbs = carbs,
                 AbsorptionTime = null,
                 SyncIdentifier = $"carelink:meal:{mills}:{carbs}",
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 
         return results;
     }
 
-    public static List<TempBasal> MapTempBasals(CareLinkData data, double pumpOffsetMs, DateTime now)
+    public static List<TempBasal> MapTempBasals(CareLinkData data, double pumpOffsetMs)
     {
         if (data.Markers is not { Count: > 0 })
             return [];
@@ -150,17 +146,13 @@ public static class CareLinkTreatmentMapper
 
             results.Add(new TempBasal
             {
-                Id = Guid.CreateVersion7(),
                 StartTimestamp = start,
                 EndTimestamp = next ?? start.AddMinutes(DefaultAutoBasalIntervalMinutes),
                 Device = deviceName,
-                DataSource = DataSources.CareLinkConnector,
                 Rate = rate,
                 Origin = TempBasalOrigin.Algorithm,
                 LegacyId = key,
                 SyncIdentifier = key,
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 
@@ -174,7 +166,7 @@ public static class CareLinkTreatmentMapper
     /// the span and rate stay free to change once the next marker bounds it.
     /// </summary>
     private static string AutoBasalKey(DateTime start) =>
-        FormattableString.Invariant($"carelink_autobasal_{start.ToMills()}");
+        LegacyIds.Of("autobasal", start.ToMills());
 
     private static bool IsType(CareLinkMarker marker, string type) =>
         string.Equals(marker.Type, type, StringComparison.OrdinalIgnoreCase);

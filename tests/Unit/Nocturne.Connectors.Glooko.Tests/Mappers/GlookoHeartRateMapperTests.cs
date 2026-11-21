@@ -38,7 +38,6 @@ public class GlookoHeartRateMapperTests
 
         result.Should().ContainSingle();
         result[0].Bpm.Should().Be(58);
-        result[0].DataSource.Should().Be("glooko-connector");
     }
 
     [Fact]

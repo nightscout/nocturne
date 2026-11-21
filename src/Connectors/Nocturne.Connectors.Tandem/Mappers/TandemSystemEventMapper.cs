@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models;
 
@@ -11,6 +13,8 @@ namespace Nocturne.Connectors.Tandem.Mappers;
 /// </summary>
 public sealed class TandemSystemEventMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
@@ -79,7 +83,6 @@ public sealed class TandemSystemEventMapper(ILogger logger, TandemTimeResolver t
             Code = code?.ToString(),
             Description = description,
             Mills = _time.ToUtc(ev.RawTimestampSeconds).ToMills(),
-            Source = TandemMapHelpers.Source,
-            OriginalId = $"tandem_sysevent_{ev.SeqNum}",
+            OriginalId = LegacyIds.Of("sysevent", ev.SeqNum),
         };
 }

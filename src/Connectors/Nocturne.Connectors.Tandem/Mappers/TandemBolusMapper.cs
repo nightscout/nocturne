@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models.V4;
 
@@ -20,10 +22,12 @@ public sealed class TandemBolusResult
 /// </summary>
 public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public TandemBolusResult Map(IEnumerable<TandemPumpEvent> events, DateTime now)
+    public TandemBolusResult Map(IEnumerable<TandemPumpEvent> events)
     {
         var result = new TandemBolusResult();
 
@@ -79,14 +83,12 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
 
             var bolus = new Bolus
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
                 UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
-                DataSource = TandemMapHelpers.Source,
                 CorrelationId = correlationId,
-                SyncIdentifier = $"tandem_bolus_{bolusId}",
-                LegacyId = $"tandem_bolus_{bolusId}",
+                SyncIdentifier = LegacyIds.Of("bolus", bolusId),
+                LegacyId = LegacyIds.Of("bolus", bolusId),
                 Insulin = TandemMapHelpers.Round2(delivered),
                 Programmed = TandemMapHelpers.Round2(requested),
                 Delivered = TandemMapHelpers.Round2(delivered),
@@ -95,8 +97,6 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 Kind = isAutomatic ? BolusKind.Algorithm : BolusKind.Manual,
                 Duration = duration > 0 ? duration : null,
                 PumpRecordId = seqNums,
-                CreatedAt = now,
-                ModifiedAt = now,
                 AdditionalProperties = BuildNotes(options, msg2),
             };
             result.Boluses.Add(bolus);
@@ -105,17 +105,13 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
             if (carbAmount > 0)
                 result.CarbIntakes.Add(new CarbIntake
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = timestamp,
                     UtcOffset = _time.OffsetMinutesAt(timestamp),
                     Device = TandemMapHelpers.Source,
-                    DataSource = TandemMapHelpers.Source,
                     CorrelationId = correlationId,
-                    SyncIdentifier = $"tandem_carb_{bolusId}",
-                    LegacyId = $"tandem_carb_{bolusId}",
+                    SyncIdentifier = LegacyIds.Of("carb", bolusId),
+                    LegacyId = LegacyIds.Of("carb", bolusId),
                     Carbs = carbAmount,
-                    CreatedAt = now,
-                    ModifiedAt = now,
                 });
 
             if (msg1 != null || msg3 != null)
@@ -123,13 +119,11 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 var bg = msg1?.Num("BG") ?? 0;
                 result.BolusCalculations.Add(new BolusCalculation
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = timestamp,
                     UtcOffset = _time.OffsetMinutesAt(timestamp),
                     Device = TandemMapHelpers.Source,
-                    DataSource = TandemMapHelpers.Source,
                     CorrelationId = correlationId,
-                    LegacyId = $"tandem_boluscalc_{bolusId}",
+                    LegacyId = LegacyIds.Of("boluscalc", bolusId),
                     CarbInput = carbAmount > 0 ? carbAmount : null,
                     BloodGlucoseInput = bg > 0 ? bg : null,
                     InsulinOnBoard = msg1?.Num("IOB"),
@@ -137,8 +131,6 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                     InsulinRecommendation = msg3?.Num("TotalBolusSize"),
                     InsulinRecommendationForCarbs = msg3?.Num("FoodBolusSize"),
                     InsulinProgrammed = TandemMapHelpers.Round2(requested),
-                    CreatedAt = now,
-                    ModifiedAt = now,
                 });
             }
         }

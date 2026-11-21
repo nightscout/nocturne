@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -14,22 +15,21 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 /// </summary>
 public class GlookoPumpEventMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource;
     private readonly GlookoTimeMapper _timeMapper;
     private readonly ILogger _logger;
-    private readonly TimeProvider _clock;
 
-    public GlookoPumpEventMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
+    public GlookoPumpEventMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
     {
         _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
         _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public List<DeviceEvent> TransformPumpEventsToDeviceEvents(IEnumerable<GlookoPumpEvent>? events)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var results = new List<DeviceEvent>();
         if (events == null) return results;
 
@@ -50,21 +50,17 @@ public class GlookoPumpEventMapper
 
             // Stable across timezone re-correction: prefer Glooko's guid, else the raw fake-UTC string.
             var key = !string.IsNullOrEmpty(evt.Guid)
-                ? $"glooko_event_{evt.Guid}"
-                : $"glooko_event_raw_{evt.Type}_{evt.PumpTimestamp}";
+                ? LegacyIds.Of("event", evt.Guid)
+                : LegacyIds.Of("event_raw", evt.Type, evt.PumpTimestamp);
 
             results.Add(new DeviceEvent
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = date.Value,
                 LegacyId = key,
                 SyncIdentifier = key,
                 Device = _connectorSource,
-                DataSource = _connectorSource,
                 EventType = eventType.Value,
                 Notes = evt.Type,
-                CreatedAt = now,
-                ModifiedAt = now
             });
         }
 

@@ -24,7 +24,7 @@ public class GlookoSettingsProfileMapperTests
     }
 
     /// <summary>Builds a settings record matching the live shape from the task brief.</summary>
-    private static GlookoSsv2PumpSettings Sample(
+    internal static GlookoSsv2PumpSettings Sample(
         string guid = "f6b48506-0000-0000-0000-000000000000",
         string timestamp = "2025-05-12T03:19:49.859Z",
         bool softDeleted = false,

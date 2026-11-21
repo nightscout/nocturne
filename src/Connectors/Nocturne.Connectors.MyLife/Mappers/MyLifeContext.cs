@@ -18,11 +18,9 @@ public sealed class MyLifeContext
         Dictionary<long, double> tempBasalProgramRates,
         int tempBasalConsolidationWindowMs,
         bool enableMealCarbConsolidation,
-        bool enableTempBasalConsolidation,
-        DateTime now
+        bool enableTempBasalConsolidation
     )
     {
-        Now = now;
         BolusCarbMatches = bolusCarbMatches;
         SuppressedCarbTimes = suppressedCarbTimes;
         TempBasalTimes = tempBasalTimes;
@@ -33,7 +31,6 @@ public sealed class MyLifeContext
         EnableTempBasalConsolidation = enableTempBasalConsolidation;
     }
 
-    internal DateTime Now { get; }
     internal List<DecompositionBatch> DecompositionBatches { get; } = [];
     internal Dictionary<string, double> BolusCarbMatches { get; }
     internal HashSet<long> SuppressedCarbTimes { get; }
@@ -48,8 +45,7 @@ public sealed class MyLifeContext
         IEnumerable<MyLifeEvent> events,
         bool enableMealCarbConsolidation,
         bool enableTempBasalConsolidation,
-        int tempBasalConsolidationWindowMinutes,
-        DateTime now
+        int tempBasalConsolidationWindowMinutes
     )
     {
         var suppressedCarbTimes = new HashSet<long>();
@@ -121,8 +117,7 @@ public sealed class MyLifeContext
                 tempBasalProgramRates,
                 tempBasalWindowMs,
                 enableMealCarbConsolidation,
-                enableTempBasalConsolidation,
-                now
+                enableTempBasalConsolidation
             );
 
         var carbEvents = new List<CarbEvent>();
@@ -192,8 +187,7 @@ public sealed class MyLifeContext
             tempBasalProgramRates,
             tempBasalWindowMs,
             enableMealCarbConsolidation,
-            enableTempBasalConsolidation,
-            now
+            enableTempBasalConsolidation
         );
     }
 

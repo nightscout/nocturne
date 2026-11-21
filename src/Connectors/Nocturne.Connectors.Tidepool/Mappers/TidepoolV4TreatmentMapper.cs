@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Core.Utilities;
@@ -7,13 +8,14 @@ namespace Nocturne.Connectors.Tidepool.Mappers;
 
 public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TidepoolConnectorConfiguration>();
+
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public (List<Bolus> Boluses, List<CarbIntake> CarbIntakes, List<DecompositionBatch> Batches) MapTreatments(
         TidepoolBolus[]? boluses,
-        TidepoolFood[]? foods,
-        DateTime now)
+        TidepoolFood[]? foods)
     {
         var mappedBoluses = new List<(TidepoolBolus Source, Bolus Mapped)>();
         var mappedCarbs = new List<CarbIntake>();
@@ -25,7 +27,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
             {
                 try
                 {
-                    var mapped = MapBolus(bolus, now);
+                    var mapped = MapBolus(bolus);
                     if (mapped != null)
                         mappedBoluses.Add((bolus, mapped));
                 }
@@ -62,24 +64,19 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                         var batch = new DecompositionBatch
                         {
                             Id = Guid.CreateVersion7(),
-                            Source = "tidepool",
+                            Source = LegacyIds.Prefix,
                             SourceRecordId = food.Id,
-                            CreatedAt = now,
                         };
                         batches.Add(batch);
                         existingBolus.CorrelationId = batch.Id;
 
                         mappedCarbs.Add(new CarbIntake
                         {
-                            Id = Guid.CreateVersion7(),
                             Timestamp = timestamp,
-                            LegacyId = $"tidepool_{food.Id}",
+                            LegacyId = LegacyIds.Of(food.Id),
                             Device = _connectorSource,
-                            DataSource = _connectorSource,
                             Carbs = carbs.Value,
                             CorrelationId = batch.Id,
-                            CreatedAt = now,
-                            ModifiedAt = now
                         });
                     }
                     else
@@ -87,14 +84,10 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
                         // Standalone carb entry
                         mappedCarbs.Add(new CarbIntake
                         {
-                            Id = Guid.CreateVersion7(),
                             Timestamp = timestamp,
-                            LegacyId = $"tidepool_{food.Id}",
+                            LegacyId = LegacyIds.Of(food.Id),
                             Device = _connectorSource,
-                            DataSource = _connectorSource,
                             Carbs = carbs.Value,
-                            CreatedAt = now,
-                            ModifiedAt = now
                         });
                     }
                 }
@@ -108,7 +101,7 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
         return (mappedBoluses.Select(b => b.Mapped).ToList(), mappedCarbs, batches);
     }
 
-    private Bolus? MapBolus(TidepoolBolus bolus, DateTime now)
+    private Bolus? MapBolus(TidepoolBolus bolus)
     {
         if (!bolus.Time.HasValue) return null;
 
@@ -139,17 +132,13 @@ public class TidepoolV4TreatmentMapper(ILogger logger, string connectorSource)
 
         return new Bolus
         {
-            Id = Guid.CreateVersion7(),
             Timestamp = timestamp,
-            LegacyId = $"tidepool_{bolus.Id}",
+            LegacyId = LegacyIds.Of(bolus.Id),
             Device = _connectorSource,
-            DataSource = _connectorSource,
             Insulin = totalInsulin,
             BolusType = bolusType,
             Automatic = false,
             Duration = durationMinutes,
-            CreatedAt = now,
-            ModifiedAt = now
         };
     }
 }

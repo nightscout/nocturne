@@ -268,7 +268,7 @@ public class TandemConnectorService
         var fetchedThrough = fetchTo < ceiling ? null : (DateTime?)ceiling;
 
         return await PublishEventsAsync(
-            groups, activeTypes, fetchedThrough, window, now, cgm, bolus, basal, deviceEvents,
+            groups, activeTypes, fetchedThrough, window, cgm, bolus, basal, deviceEvents,
             systemEvents, userMode, deviceStatus, result, config, cancellationToken);
     }
 
@@ -298,7 +298,7 @@ public class TandemConnectorService
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window, DateTime now,
+        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
@@ -312,11 +312,11 @@ public class TandemConnectorService
 
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
             await PublishRecordTypeAsync(result, activeTypes,
-                cgm.Map(cgmEvents, now), config, cancellationToken);
+                cgm.Map(cgmEvents), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
-            var decomposed = bolus.Map(bolusEvents, now);
+            var decomposed = bolus.Map(bolusEvents);
             await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.Boluses, record => record.Timestamp),
                 config, cancellationToken);
@@ -331,7 +331,7 @@ public class TandemConnectorService
         string? unclosed = null;
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
         {
-            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal, now);
+            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal);
 
             // The padded day held no further delivery event, so this span ran longer than the day
             // the fetch reached past the window and is the tenant's to chase, not silently absent.
@@ -347,7 +347,7 @@ public class TandemConnectorService
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
         await PublishRecordTypeAsync(result, activeTypes,
-            deviceEvents.Map(devEvents, now), config, cancellationToken);
+            deviceEvents.Map(devEvents), config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
         await PublishRecordTypeAsync(result, activeTypes,

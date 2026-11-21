@@ -76,7 +76,7 @@ public class TidepoolConnectorService
                 else
                 {
                     await PublishRecordTypeAsync(result, activeTypes,
-                        _sensorGlucoseMapper.MapBgValues(bgValues, Clock.GetUtcNow().UtcDateTime).ToList(), config, cancellationToken);
+                        _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), config, cancellationToken);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
@@ -97,7 +97,7 @@ public class TidepoolConnectorService
                 var boluses = await bolusTask;
                 var foods = await foodTask;
 
-                var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods, Clock.GetUtcNow().UtcDateTime);
+                var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
                 // Both fetches are issued whenever either type is active, because the correlation
                 // that pairs a carb intake with a bolus needs the boluses even when boluses

@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
@@ -916,8 +914,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         if (IsAlreadySha1Hash(apiSecret))
             return apiSecret.ToLowerInvariant();
 
-        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(apiSecret));
-        return Convert.ToHexStringLower(bytes);
+        return HashUtils.Sha1Hex(apiSecret);
     }
 
     private static bool IsAlreadySha1Hash(string value)

@@ -26,7 +26,7 @@ public class GlookoSensorGlucoseTimelineTests
         var timeMapper = new GlookoTimeMapper(config, NullLogger.Instance);
         if (timeline is not null)
             timeMapper.UseTimeline(timeline);
-        return new GlookoSensorGlucoseMapper(config, ConnectorSource, timeMapper, NullLogger.Instance, TimeProvider.System);
+        return new GlookoSensorGlucoseMapper(config, ConnectorSource, timeMapper, NullLogger.Instance);
     }
 
     private static GlookoV3GraphResponse CgmResponse(long x, double y) =>

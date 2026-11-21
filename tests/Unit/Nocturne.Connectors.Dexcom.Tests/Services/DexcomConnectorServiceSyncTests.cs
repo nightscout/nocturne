@@ -139,6 +139,42 @@ public class DexcomConnectorServiceSyncTests
     }
 
     /// <summary>
+    /// The store skips a reading whose legacy id a stored row carries, so a second sync of the same
+    /// readings stores nothing new only while each keeps its legacy id.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameReadings_PublishesUnderTheSameLegacyIds()
+    {
+        var clock = new FakeTimeProvider(Instant);
+        var publisher = new Mock<IConnectorPublisher>();
+        var glucose = new Mock<IGlucosePublisher>();
+        var published = new List<List<SensorGlucose>>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => published.Add(records.ToList()))
+            .ReturnsAsync(true);
+        var service = Service(
+            (_, _) => Task.FromResult(Json(
+                """[{"WT":"Date(1781956800000)","ST":"Date(1781956800000)","DT":"Date(1781956800000+0000)","Value":120,"Trend":"Flat"}]""")),
+            publisher.Object,
+            clock);
+
+        await service.SyncDataAsync(Request(), Config(), CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await service.SyncDataAsync(Request(), Config(), CancellationToken.None);
+
+        published.Should().HaveCount(2);
+        published[0].Single().LegacyId.Should().Be("dexcom_Date(1781956800000)");
+        published[1].Single().LegacyId.Should().Be(published[0].Single().LegacyId);
+        published[1].Single().Id.Should().NotBe(published[0].Single().Id);
+    }
+
+    /// <summary>
     /// A second scheduled run asks Share only for what came after the first run's newest reading,
     /// less the catch-up overlap.
     /// </summary>

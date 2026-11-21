@@ -722,8 +722,9 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     The one place the publisher is checked for availability, the route's preparation step is run
-    ///     and its origin family is resolved.
+    ///     The one place the publisher is checked for availability, each record is stamped with its
+    ///     <see cref="ConnectorRecordIdentity"/>, the route's preparation step is run and its origin
+    ///     family is resolved. Every record of one dispatch is stamped with one instant.
     /// </summary>
     /// <param name="unavailable">What a caller gets when the publisher is unavailable.</param>
     private async Task<TOut> DispatchAsync<T, TOut>(
@@ -739,9 +740,12 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             return unavailable;
         }
 
-        if (route.Prepare is { } prepare)
-            foreach (var record in records)
-                prepare(record, config);
+        var stampedAt = Clock.GetUtcNow().UtcDateTime;
+        foreach (var record in records)
+        {
+            ConnectorRecordIdentity.Stamp(record, ConnectorSource, stampedAt);
+            route.Prepare?.Invoke(record, config);
+        }
 
         var origin = route.Origin switch
         {
