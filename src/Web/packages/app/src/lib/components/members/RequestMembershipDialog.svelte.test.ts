@@ -36,6 +36,7 @@ beforeEach(() => {
 describe("RequestMembershipDialog", () => {
   it("sends the name and message through the passkey ceremony, then says the owner must approve", async () => {
     render(RequestMembershipDialog, { open: true });
+    await expect.element(page.getByLabelText("Your name")).toHaveFocus();
 
     await page.getByLabelText("Your name").fill("  Sam Smith ");
     await page.getByLabelText("Message to the owner").fill("I'm Sam's endocrinologist");
@@ -57,10 +58,19 @@ describe("RequestMembershipDialog", () => {
 
   it("cannot send without a name", async () => {
     render(RequestMembershipDialog, { open: true });
+    await expect.element(page.getByLabelText("Your name")).toHaveFocus();
+    const name = page.getByLabelText("Your name");
+    const send = page.getByRole("button", { name: "Send request" });
 
     await page.getByLabelText("Message to the owner").fill("hello");
+    await name.fill("Sam Smith");
+    await expect.element(send).toBeEnabled();
 
-    await expect.element(page.getByRole("button", { name: "Send request" })).toBeDisabled();
+    await name.fill("   ");
+    await expect.element(send).toBeDisabled();
+
+    await name.fill("");
+    await expect.element(send).toBeDisabled();
   });
 
   it("shows the server's reason and stays on the form when the request is refused", async () => {
@@ -71,6 +81,7 @@ describe("RequestMembershipDialog", () => {
       }),
     );
     render(RequestMembershipDialog, { open: true });
+    await expect.element(page.getByLabelText("Your name")).toHaveFocus();
 
     await page.getByLabelText("Your name").fill("Sam Smith");
     await page.getByRole("button", { name: "Send request" }).click();
@@ -84,6 +95,7 @@ describe("RequestMembershipDialog", () => {
   it("files nothing when the visitor cancels the passkey prompt", async () => {
     state.startRegistration.mockRejectedValue(Object.assign(new Error("cancelled"), { name: "NotAllowedError" }));
     render(RequestMembershipDialog, { open: true });
+    await expect.element(page.getByLabelText("Your name")).toHaveFocus();
 
     await page.getByLabelText("Your name").fill("Sam Smith");
     await page.getByRole("button", { name: "Send request" }).click();
