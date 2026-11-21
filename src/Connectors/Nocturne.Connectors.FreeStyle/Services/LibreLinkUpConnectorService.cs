@@ -136,6 +136,9 @@ public class LibreConnectorService(
     protected override bool NeedsSignIn(SyncRequest request, LibreLinkUpConnectorConfiguration config) =>
         WantsSensorGraph(ResolveActiveTypes(request, config));
 
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, LibreLinkUpConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     // The sensor arrives with the glucose graph, so a run wanting only device events still fetches it.
     private static bool WantsSensorGraph(HashSet<SyncDataType> activeTypes) =>
         activeTypes.Contains(SyncDataType.Glucose) || activeTypes.Contains(SyncDataType.DeviceEvents);
@@ -165,7 +168,8 @@ public class LibreConnectorService(
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, session, request.From, cancellationToken);
+            var sensorGlucose = await FetchSensorGlucoseAsync(
+                config, session, WindowStart(request, ResumeFamily.Glucose), cancellationToken);
 
             if (sensorGlucose == null)
             {

@@ -104,19 +104,6 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     private static readonly ConnectorRegistrationAttribute? Registration =
         typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
 
-    /// <summary>
-    ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.
-    ///     It carries no configuration, so a connector whose credentials are per-tenant has nothing
-    ///     to authenticate against here and admits the run: it resolves and checks the tenant's
-    ///     credential inside <see cref="PerformSyncInternalAsync"/>, where the config is in hand.
-    ///     Only a connector holding a process-wide credential overrides this.
-    /// </summary>
-    public virtual Task<bool> AuthenticateAsync()
-    {
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(
         SyncRequest request,
@@ -129,18 +116,15 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             progressReporter,
             cancellationToken,
             async () => await EnsureAuthenticatedAsync(config, cancellationToken)
-                ? await PerformSyncInternalAsync(request, config, cancellationToken)
+                ? await RunAsync(request.From, request.To, request.DataTypes, scheduled: false, config, cancellationToken)
                 : AuthenticationFailedResult());
     }
 
     /// <summary>
-    ///     Hand-shake run before <see cref="PerformSyncInternalAsync"/> on the requested-range entry
-    ///     point. Connectors that must authenticate before they can fetch override this instead of the
-    ///     <see cref="SyncRequest"/> overload, so a rejected credential still passes through
+    ///     Hand-shake run once before <see cref="PerformSyncInternalAsync"/> on both entry points, with
+    ///     the tenant's configuration in hand. Connectors that must authenticate before they can fetch
+    ///     override this rather than an entry point, so a rejected credential still passes through
     ///     <see cref="RunWithProgressAsync"/> and produces the run's one terminal progress message.
-    ///     The background entry point authenticates through <see cref="AuthenticateAsync"/> in
-    ///     <see cref="RunBackgroundSyncAsync"/> and never reaches this overload, so a connector
-    ///     overriding both is not authenticated twice for one run.
     /// </summary>
     protected virtual Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
@@ -361,7 +345,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     caller's bound through <see cref="ResumeFrom(DateTime?, DateTime?)"/> rather than
     ///     choosing between the two.
     /// </summary>
-    protected async Task<DateTime?> CalculateSinceTimestampAsync(TConfig config)
+    private async Task<DateTime?> CalculateSinceTimestampAsync(TConfig config)
     {
         var latestEntryTimestamp = await FetchLatestEntryTimestampAsync(config);
 
@@ -372,7 +356,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     The treatment family's resume point: the most recent stored treatment (minus the
     ///     catch-up overlap), or <see cref="InitialSyncFloor"/> when none is stored.
     /// </summary>
-    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config)
+    private async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config)
     {
         var latestTreatmentTimestamp = await FetchLatestTreatmentTimestampAsync(config);
 
@@ -384,7 +368,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     catch-up overlap), or <c>null</c> — the whole history, whatever
     ///     <see cref="InitialSyncFloor"/> says — when none is stored.
     /// </summary>
-    protected async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
+    private async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
     {
         var latest = await FetchLatestDeviceStatusTimestampAsync(config);
         return TryCalculateCatchUpSince(latest, "device status");
@@ -394,7 +378,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     The activity family's resume point, read as
     ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> reads device status.
     /// </summary>
-    protected async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
+    private async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
     {
         var latest = await FetchLatestActivityTimestampAsync(config);
         return TryCalculateCatchUpSince(latest, "activity");
@@ -405,7 +389,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     over the newest stored record of <paramref name="type"/> alone, for a source that fetches
     ///     each treatment type separately and so can leave one behind while its siblings advance.
     /// </summary>
-    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
+    private async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
     {
         var latest = await FetchLatestWatermarkAsync(
             () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
@@ -418,7 +402,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     activity categories (minus the catch-up overlap), or <see cref="InitialSyncFloor"/> when
     ///     none is stored.
     /// </summary>
-    protected async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
+    private async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
     {
         var latest = await FetchLatestWatermarkAsync(
             () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
@@ -475,17 +459,18 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         ResumeFrom(requested, (DateTime?)resumePoint) ?? resumePoint;
 
     /// <summary>
-    ///     The lower bound a family other than glucose crawls from on an open-ended request: as
-    ///     <see cref="ResumeFrom(DateTime?, DateTime?)"/>, except that a background run's derived
-    ///     glucose resume point is no bound at all.
+    ///     Where a source that reads the family in one window starts: the start a window policy set
+    ///     for the run (<see cref="RunScheduledAsync"/>), else the family's resume point on a scheduled
+    ///     run, else the caller's <see cref="SyncRequest.From"/> as given.
     /// </summary>
-    /// <remarks>
-    ///     Widening a family to the glucose resume point ties it to glucose succeeding: a glucose
-    ///     endpoint that fails every run, or nothing stored for glucose, keeps that point at the
-    ///     initial floor, and every other family re-crawls everything above it on every run.
-    /// </remarks>
-    protected static DateTime? ResumeFrom(SyncRequest request, DateTime? resumePoint) =>
-        request.FromIsGlucoseResumePoint ? resumePoint : ResumeFrom(request.From, resumePoint);
+    /// <remarks>Declare what it reads with <see cref="WindowResumesFrom"/>.</remarks>
+    protected static DateTime? WindowStart(SyncRequest request, ResumeFamily family)
+    {
+        var resume = request.Resume;
+        if (resume.HasRunStart)
+            return resume.RunStart;
+        return resume.Scheduled ? resume.Point(family) : request.From;
+    }
 
     /// <summary>
     ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
@@ -494,11 +479,12 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     between. A range naming no lower bound is asking for everything available, so it starts
     ///     at <paramref name="historyFloor"/> — as far back as the connector reaches, which is the
     ///     reading the reset-cursor endpoint documents and the only one under which it resets
-    ///     anything.
+    ///     anything. <paramref name="resumePoint"/> is read only for an open-ended request, so the
+    ///     connector declares its points (<see cref="ResumesFrom"/>) only for one.
     /// </summary>
     protected static DateTime ResumeFrom(
-        SyncRequest request, DateTime resumePoint, DateTime historyFloor) =>
-        request.To is null ? ResumeFrom(request.From, resumePoint) : request.From ?? historyFloor;
+        SyncRequest request, Func<DateTime> resumePoint, DateTime historyFloor) =>
+        request.To is null ? ResumeFrom(request.From, resumePoint()) : request.From ?? historyFloor;
 
     /// <summary>
     ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp
@@ -996,16 +982,14 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
         try
         {
-            if (!await AuthenticateAsync())
+            if (!await EnsureAuthenticatedAsync(config, cancellationToken))
             {
                 _logger.LogError("Authentication failed for {ConnectorSource}", ConnectorSource);
                 return AuthenticationFailedResult();
             }
 
-            var request = CreateBackgroundSyncRequest(since ?? await CalculateSinceTimestampAsync(config));
-            request.FromIsGlucoseResumePoint = since is null;
-
-            var result = await PerformSyncInternalAsync(request, config, cancellationToken);
+            var result = await RunAsync(
+                since, null, SupportedDataTypes, scheduled: since is null, config, cancellationToken);
 
             if (result.Success)
             {
@@ -1052,11 +1036,110 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         }
     }
 
-    protected virtual SyncRequest CreateBackgroundSyncRequest(DateTime? since) => new()
+    /// <summary>
+    ///     The scheduled run: <paramref name="run"/> syncs with the resume points it is given. The
+    ///     default runs every family from its own point. A connector with its own window policy
+    ///     overrides this, and only this, to choose the window (<see cref="ResumePoints.StartingAt"/>)
+    ///     and to record what the run covered once it returns.
+    /// </summary>
+    protected virtual Task<SyncResult> RunScheduledAsync(
+        ResumePoints resume,
+        Func<ResumePoints, Task<SyncResult>> run,
+        TConfig config,
+        CancellationToken cancellationToken) => run(resume);
+
+    /// <summary>
+    ///     The resume points <paramref name="request"/>'s sync reads (<see cref="ResumePoints.Point(ResumeFamily)"/>),
+    ///     each of which the base reads once before the run signs in or publishes anything. Declare
+    ///     only what this run reads: a point read for nothing is a query on every scheduled run, and
+    ///     a read that fails can fail the run (<see cref="RunAsync"/>). <paramref name="request"/> carries the run's
+    ///     <see cref="ResumePoints.Scheduled"/> but no points yet.
+    /// </summary>
+    protected virtual IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TConfig config) => [];
+
+    /// <summary>
+    ///     What <see cref="WindowStart"/> reads for <paramref name="family"/>, for a connector to
+    ///     declare in <see cref="ResumesFrom"/>.
+    /// </summary>
+    protected static IEnumerable<ResumeKey> WindowResumesFrom(SyncRequest request, ResumeFamily family) =>
+        request.Resume.Scheduled ? [family] : [];
+
+    /// <summary>The points the base resolves for the run: <see cref="ResumesFrom"/>, unless the run fetches nothing.</summary>
+    private protected virtual IEnumerable<ResumeKey> RunResumesFrom(SyncRequest request, TConfig config) =>
+        ResumesFrom(request, config);
+
+    /// <summary>
+    ///     One run: resolves its resume points, then syncs. The request is always a new one, since a
+    ///     tenant-wide reset hands the same request to every connector it fans out to and each run
+    ///     carries its own <see cref="SyncRequest.Resume"/>.
+    /// </summary>
+    /// <remarks>
+    ///     A point that cannot be read is never read as "nothing stored", which would recrawl and
+    ///     republish the family's whole history. A scheduled run's glucose point fails the run before
+    ///     it signs in or fetches anything, since the scheduled window has always started there; any
+    ///     other point fails when the sync asks for it, inside whatever bounds the family it serves,
+    ///     so one family whose point cannot be read does not stop the others.
+    /// </remarks>
+    private async Task<SyncResult> RunAsync(
+        DateTime? from,
+        DateTime? to,
+        List<SyncDataType> dataTypes,
+        bool scheduled,
+        TConfig config,
+        CancellationToken cancellationToken)
     {
-        From = since,
-        DataTypes = SupportedDataTypes,
-    };
+        SyncRequest Request(ResumePoints resume) =>
+            new() { From = from, To = to, DataTypes = dataTypes, Resume = resume };
+
+        var unresolved = new ResumePoints(scheduled);
+        var resume = unresolved.Resolved(await ReadResumePointsAsync(
+            RunResumesFrom(Request(unresolved), config), config, cancellationToken));
+
+        if (scheduled && resume.Holds(ResumeFamily.Glucose))
+            _ = resume.Point(ResumeFamily.Glucose);
+
+        return scheduled
+            ? await RunScheduledAsync(
+                resume,
+                points => PerformSyncInternalAsync(Request(points), config, cancellationToken),
+                config,
+                cancellationToken)
+            : await PerformSyncInternalAsync(Request(resume), config, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Reads each point once. A read that fails is kept, for <see cref="ResumePoints.Point(ResumeFamily)"/>
+    ///     to rethrow; only the caller's own cancel travels at once.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<ResumeKey, Task<DateTime?>>> ReadResumePointsAsync(
+        IEnumerable<ResumeKey> keys, TConfig config, CancellationToken cancellationToken)
+    {
+        var points = new Dictionary<ResumeKey, Task<DateTime?>>();
+        foreach (var key in keys)
+        {
+            if (points.ContainsKey(key))
+                continue;
+
+            var read = key.TreatmentType is { } type
+                    ? CalculateTreatmentSinceTimestampAsync(config, type)
+                    : key.Family switch
+                    {
+                        ResumeFamily.Glucose => CalculateSinceTimestampAsync(config),
+                        ResumeFamily.Treatments => CalculateTreatmentSinceTimestampAsync(config),
+                        ResumeFamily.StateSpans => CalculateStateSpanSinceTimestampAsync(config),
+                        ResumeFamily.DeviceStatus => CalculateDeviceStatusCatchUpSinceAsync(config),
+                        ResumeFamily.Activity => CalculateActivityCatchUpSinceAsync(config),
+                        _ => throw new ArgumentOutOfRangeException(nameof(keys), key.Family, null),
+                    };
+            await ((Task)read).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            if ((read.IsCanceled || read.Exception?.InnerException is OperationCanceledException)
+                && cancellationToken.IsCancellationRequested)
+                await read;
+            points[key] = read;
+        }
+
+        return points;
+    }
 
     protected virtual void Dispose(bool disposing)
     {

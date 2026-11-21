@@ -219,6 +219,47 @@ public class MyLifeConnectorServiceSyncWindowTests
         result.ItemsSynced.Should().NotContainKey(SyncDataType.TempBasals);
     }
 
+    /// <summary>
+    /// A scheduled run streams from the family furthest behind. Once the first run has published
+    /// the stranded bolus, the second streams only from it, less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunStreamsOnlyFromTheFirstRunsNewestTreatment()
+    {
+        var strandedBolus = new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc);
+        var fixture = new Fixture(BolusAt(strandedBolus));
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+        var firstSince = fixture.Sync.Since;
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        firstSince.Should().Be(TreatmentWatermark - CatchUpOverlap);
+        fixture.Sync.Since.Should().Be(strandedBolus - CatchUpOverlap);
+    }
+
+    /// <summary>
+    /// On a scheduled run each family filters the one month stream at its own resume point. The
+    /// stream starts at the earlier of the two, so glucose behind treatments widens it, but a
+    /// treatment between the two points is older than the newest stored treatment and is not
+    /// published again.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledRun_WhenGlucoseIsBehindTreatments_FiltersTreatmentsAtTheirOwnPoint()
+    {
+        var glucoseWatermark = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var treatmentWatermark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var betweenThePoints = new DateTime(2026, 4, 15, 9, 0, 0, DateTimeKind.Utc);
+        var afterBoth = new DateTime(2026, 6, 15, 9, 0, 0, DateTimeKind.Utc);
+        var fixture = new Fixture(
+            glucoseWatermark, treatmentWatermark, null, BolusAt(betweenThePoints), BolusAt(afterBoth));
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        fixture.Sync.Since.Should().Be(glucoseWatermark - CatchUpOverlap,
+            "the stream still reaches back to the family furthest behind");
+        fixture.Boluses.Should().ContainSingle().Which.Timestamp.Should().Be(afterBoth);
+    }
+
     private static MyLifeEvent TempBasalAt(DateTime at) => new()
     {
         EventTypeId = MyLifeEventType.TempBasal,
@@ -268,7 +309,7 @@ public class MyLifeConnectorServiceSyncWindowTests
             treatments
                 .Setup(p => p.GetLatestTreatmentTimestampAsync(
                     It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(treatmentWatermark);
+                .ReturnsAsync(() => Boluses.Count > 0 ? Boluses.Max(b => b.Timestamp) : treatmentWatermark);
             treatments
                 .Setup(p => p.PublishBolusesAsync(
                     It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
@@ -306,16 +347,17 @@ public class MyLifeConnectorServiceSyncWindowTests
                 clock);
         }
 
+        private static MyLifeConnectorConfiguration Config() => new()
+        {
+            Username = "user@example.com",
+            Password = "secret",
+            PatientId = "patient-1",
+        };
+
         public Task<SyncResult> RunAsync(SyncRequest request) =>
-            _service.SyncDataAsync(
-                request,
-                new MyLifeConnectorConfiguration
-                {
-                    Username = "user@example.com",
-                    Password = "secret",
-                    PatientId = "patient-1",
-                },
-                CancellationToken.None);
+            _service.SyncDataAsync(request, Config(), CancellationToken.None);
+
+        public Task<SyncResult> RunScheduledAsync() => _service.SyncDataAsync(Config(), CancellationToken.None);
     }
 
     private sealed class RecordingSyncService(

@@ -40,6 +40,10 @@ public abstract class TokenConnectorService<TConfig, TTokenProvider> : BaseConne
     /// </summary>
     protected virtual bool NeedsSignIn(SyncRequest request, TConfig config) => true;
 
+    /// <summary>A run that does not sign in fetches nothing, so it resumes from nothing.</summary>
+    private protected sealed override IEnumerable<ResumeKey> RunResumesFrom(SyncRequest request, TConfig config) =>
+        NeedsSignIn(request, config) ? base.RunResumesFrom(request, config) : [];
+
     /// <summary>
     ///     Work that has to precede the sign-in, such as seeding the provider with stored secrets or
     ///     announcing the step. Runs only when <see cref="NeedsSignIn"/> does.

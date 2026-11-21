@@ -13,13 +13,11 @@ public interface IConnectorService<in TConfig> : IDisposable
 
     List<SyncDataType> SupportedDataTypes { get; }
 
-    Task<bool> AuthenticateAsync();
-
     Task<SyncResult> SyncDataAsync(SyncRequest request, TConfig config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null);
 
     /// <summary>
-    ///     Perform a scheduled sync, resolving the range from the connector's own resume watermark
-    ///     when <paramref name="since"/> is omitted.
+    ///     Perform a scheduled sync, each data family resuming from its own point, or from
+    ///     <paramref name="since"/> as a caller's lower bound when it is given.
     /// </summary>
     Task<SyncResult> SyncDataAsync(TConfig config, CancellationToken cancellationToken = default, DateTime? since = null, ISyncProgressReporter? progressReporter = null);
 }

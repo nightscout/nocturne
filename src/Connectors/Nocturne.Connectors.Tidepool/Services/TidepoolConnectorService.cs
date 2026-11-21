@@ -41,6 +41,9 @@ public class TidepoolConnectorService
     protected override bool NeedsSignIn(SyncRequest request, TidepoolConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Count > 0;
 
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TidepoolConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TidepoolConnectorConfiguration config,
@@ -50,6 +53,11 @@ public class TidepoolConnectorService
         var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
+        if (activeTypes.Count == 0)
+            return result;
+
+        // Every type is read in one window, which starts where glucose resumes.
+        var from = WindowStart(request, ResumeFamily.Glucose);
 
         // CBG and SMBG both map to SensorGlucose.
         if (activeTypes.Contains(SyncDataType.Glucose))
@@ -59,7 +67,7 @@ public class TidepoolConnectorService
                 var bgValues = await FetchDataAsync<TidepoolBgValue[]>(
                     config, session,
                     $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
-                    request.From, request.To, cancellationToken);
+                    from, request.To, cancellationToken);
 
                 if (bgValues is null)
                 {
@@ -82,8 +90,8 @@ public class TidepoolConnectorService
         {
             try
             {
-                var bolusTask = FetchDataAsync<TidepoolBolus[]>(config, session, TidepoolConstants.DataTypes.Bolus, request.From, request.To, cancellationToken);
-                var foodTask = FetchDataAsync<TidepoolFood[]>(config, session, TidepoolConstants.DataTypes.Food, request.From, request.To, cancellationToken);
+                var bolusTask = FetchDataAsync<TidepoolBolus[]>(config, session, TidepoolConstants.DataTypes.Bolus, from, request.To, cancellationToken);
+                var foodTask = FetchDataAsync<TidepoolFood[]>(config, session, TidepoolConstants.DataTypes.Food, from, request.To, cancellationToken);
                 await Task.WhenAll(bolusTask, foodTask);
 
                 var boluses = await bolusTask;

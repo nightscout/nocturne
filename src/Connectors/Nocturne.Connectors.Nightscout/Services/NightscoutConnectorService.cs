@@ -22,7 +22,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     where TConfig : NightscoutConnectorConfiguration
 {
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
-    // per-tenant config when AuthenticateWithConfigAsync runs at the start of a sync.
+    // per-tenant config when EnsureAuthenticatedAsync runs at the start of a sync.
     // Per-instance, no concurrency: connectors are resolved into a fresh DI scope per
     // tenant sync, and SyncDataAsync is not invoked concurrently on the same instance.
     private TConfig _currentConfig;
@@ -60,14 +60,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private DateTime? HistoryFloor(TConfig config) =>
         NightscoutConnectorConfiguration.HistoryStart(config.HistoryDays, Clock.GetUtcNow().UtcDateTime);
 
-
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // Legacy no-config overload; uses whatever config the service was last primed
-        // with (startup defaults until AuthenticateWithConfigAsync replaces it).
-        // Per-tenant sync uses AuthenticateWithConfigAsync instead.
-        return await AuthenticateWithConfigAsync(_currentConfig, CancellationToken.None);
-    }
 
     private async Task<bool> AuthenticateWithConfigAsync(TConfig config, CancellationToken cancellationToken)
     {
@@ -148,22 +140,35 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         }
     }
 
-    public override async Task<SyncResult> SyncDataAsync(
-        TConfig config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null)
-    {
-        // _currentConfig starts as startup defaults (empty URL). Prime it with the
-        // tenant config before base calls AuthenticateAsync(), which delegates to
-        // AuthenticateWithConfigAsync(_currentConfig).
-        _currentConfig = config;
-        return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
-    }
-
     protected override Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
         CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config, cancellationToken);
+
+    private static readonly SyncDataType[] TreatmentTypes =
+    [
+        SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
+        SyncDataType.BolusCalculations, SyncDataType.Notes, SyncDataType.DeviceEvents
+    ];
+
+    /// <summary>
+    ///     Each active family's point on an open-ended run; an explicit range reads none. Glucose
+    ///     resumes from its point only on a scheduled run (<see cref="BaseConnectorService{TConfig}.GlucoseFromAsync"/>).
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TConfig config)
+    {
+        if (request.To is not null)
+            yield break;
+
+        var activeTypes = ResolveActiveTypes(request, config);
+        if (request.Resume.Scheduled && activeTypes.Contains(SyncDataType.Glucose))
+            yield return ResumeFamily.Glucose;
+        if (activeTypes.Overlaps(TreatmentTypes))
+            yield return ResumeFamily.Treatments;
+        if (activeTypes.Contains(SyncDataType.DeviceStatus))
+            yield return ResumeFamily.DeviceStatus;
+        if (activeTypes.Contains(SyncDataType.Activity))
+            yield return ResumeFamily.Activity;
+    }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
@@ -218,19 +223,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         // Nightscout fetches every treatment type as one batch, so each active sub-type
         // carries the whole batch's outcome.
-        SyncDataType[] treatmentTypes =
-        [
-            SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
-            SyncDataType.BolusCalculations, SyncDataType.Notes, SyncDataType.DeviceEvents
-        ];
-        if (activeTypes.Any(t => treatmentTypes.Contains(t)))
+        if (activeTypes.Overlaps(TreatmentTypes))
         {
             try
             {
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
                 // with none stored it is this connector's own open InitialSyncFloor.
                 var treatmentFrom = openEnded
-                    ? ResumeFrom(request, await ResumePointAsync("Treatments", await CalculateTreatmentSinceTimestampAsync(config)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments)))
                     : request.From;
 
                 var now = Clock.GetUtcNow().UtcDateTime;
@@ -253,7 +253,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         await RecordFullReconcileAsync(now);
                 }
 
-                foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
+                foreach (var treatmentType in TreatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
@@ -281,7 +281,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request, await ResumePointAsync("DeviceStatus", await CalculateDeviceStatusCatchUpSinceAsync(config)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus)))
                     : request.From;
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
@@ -328,7 +328,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var activityFrom = openEnded
-                    ? ResumeFrom(request, await ResumePointAsync("Activity", await CalculateActivityCatchUpSinceAsync(config)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity)))
                     : request.From;
 
                 var recent = openEnded && activityFrom is { } crawlFrom

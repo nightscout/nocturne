@@ -93,6 +93,37 @@ public class TidepoolConnectorServiceTests
     /// differ, so reporting one type's batch under the other's key cannot pass, and the published
     /// payloads are checked as well so a swap beneath the counting cannot pass either.
     /// </summary>
+    /// <summary>
+    /// A scheduled run for a tenant who switched every data type off has nothing to fetch, so it
+    /// succeeds, calls nothing at Tidepool and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_EveryDataTypeOff_SucceedsWithoutAVendorCallOrAResumePoint()
+    {
+        var handler = new TidepoolFakeHandler();
+        var glucose = new Mock<IGlucosePublisher>();
+        var fixture = new ServiceFixture(
+            handler,
+            withPublisher: true,
+            config: new TidepoolConnectorConfiguration
+            {
+                Username = "user@example.com",
+                Password = "secret",
+                SyncGlucose = false,
+                SyncBoluses = false,
+                SyncCarbIntake = false,
+            },
+            glucose: glucose.Object);
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        handler.DataCalls.Should().Be(0);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task SyncDataAsync_RecordsEachTreatmentTypeUnderItsOwnKey()
     {
@@ -282,6 +313,31 @@ public class TidepoolConnectorServiceTests
         });
     }
 
+    /// <summary>
+    /// Tidepool reads every type in one window. A second scheduled run starts it where glucose
+    /// resumes after the first, the newest stored reading less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var glucose = new Mock<IGlucosePublisher>();
+        glucose.SetupSequence(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null)
+            .ReturnsAsync(new DateTime(2026, 3, 1, 11, 50, 0, DateTimeKind.Utc));
+        var handler = new TidepoolFakeHandler();
+        var fixture = new ServiceFixture(handler, withPublisher: true, clock: clock, glucose: glucose.Object);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+        var firstRun = handler.DataQueries.Count;
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        firstRun.Should().Be(3);
+        handler.DataQueries.Take(firstRun).Should().OnlyContain(q => q.Contains("startDate=2025-09-01T12:00:00.0000000Z"));
+        handler.DataQueries.Skip(firstRun).Should().HaveCount(3)
+            .And.OnlyContain(q => q.Contains("startDate=2026-03-01T11:45:00.0000000Z"));
+    }
+
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
     private sealed class ServiceFixture
     {
@@ -296,7 +352,8 @@ public class TidepoolConnectorServiceTests
             bool withPublisher = false,
             TidepoolConnectorConfiguration? config = null,
             TimeProvider? clock = null,
-            IRetryDelayStrategy? retryDelayStrategy = null)
+            IRetryDelayStrategy? retryDelayStrategy = null,
+            IGlucosePublisher? glucose = null)
         {
             Config = config ?? new TidepoolConnectorConfiguration
             {
@@ -342,7 +399,7 @@ public class TidepoolConnectorServiceTests
                 var mock = new Mock<IConnectorPublisher>();
                 mock.Setup(p => p.IsAvailable).Returns(true);
                 mock.Setup(p => p.Treatments).Returns(treatments.Object);
-                mock.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+                mock.Setup(p => p.Glucose).Returns(glucose ?? Mock.Of<IGlucosePublisher>());
                 mock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
                 publisher = mock.Object;
             }
@@ -382,6 +439,8 @@ public class TidepoolConnectorServiceTests
 
         internal int DataCalls { get; private set; }
 
+        internal List<string> DataQueries { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -405,6 +464,7 @@ public class TidepoolConnectorServiceTests
             {
                 DataCalls++;
                 var query = Uri.UnescapeDataString(request.RequestUri.Query);
+                DataQueries.Add(query);
                 var isBolus = query.Contains($"type={TidepoolConstants.DataTypes.Bolus}", StringComparison.Ordinal);
                 var isFood = query.Contains($"type={TidepoolConstants.DataTypes.Food}", StringComparison.Ordinal);
 

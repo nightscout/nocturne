@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -124,18 +125,63 @@ public class TokenConnectorServiceTests
         service.Failed().Message.Should().Be(provider.SignInFailureReason);
     }
 
+    [Fact]
+    public async Task ScheduledSync_GlucosePointThatCannotBeRead_FailsBeforeThePrepareAndTheSignIn()
+    {
+        var provider = new ScriptedTokenProvider(refuse: false, tokens: ["token-1"]);
+        var service = new ProbeService(provider, GlucoseReadThat(fails: true).Object) { ResumesFromGlucose = true };
+
+        var result = await service.RunScheduledAsync();
+
+        result.Success.Should().BeFalse();
+        service.AcquiredWhenPrepared.Should().BeNull();
+        provider.Acquired.Should().Be(0);
+        service.SyncRan.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Sync_NoSignInNeeded_ReadsNoResumePoint()
+    {
+        var publisher = GlucoseReadThat(fails: false);
+        var service = new ProbeService(new ScriptedTokenProvider(refuse: false, tokens: []), publisher.Object)
+        {
+            SignIn = false,
+            ResumesFromGlucose = true,
+        };
+
+        var result = await service.RunScheduledAsync();
+
+        result.Success.Should().BeTrue();
+        publisher.Verify(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private static Mock<IConnectorPublisher> GlucoseReadThat(bool fails)
+    {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        var read = publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        if (fails)
+            read.ThrowsAsync(new HttpRequestException("watermark store down"));
+        else
+            read.ReturnsAsync(DateTime.UtcNow);
+        return publisher;
+    }
+
     /// <summary>Runs the base's gate over a sync that records what it was handed.</summary>
-    private sealed class ProbeService(ScriptedTokenProvider provider)
+    private sealed class ProbeService(ScriptedTokenProvider provider, IConnectorPublisher? publisher = null)
         : TokenConnectorService<TestConnectorConfig, ScriptedTokenProvider>(
             new HttpClient(),
             new ConnectorServerResolver<TestConnectorConfig>(null, null, null),
             NullLogger<ProbeService>.Instance,
             new RecordingRetryDelayStrategy(),
-            provider)
+            provider,
+            publisher)
     {
         private readonly TestConnectorConfig _config = new();
 
         public bool SignIn { get; init; } = true;
+        public bool ResumesFromGlucose { get; init; }
         public bool SyncRan { get; private set; }
         public string? TokenSeen { get; private set; }
         public int? AcquiredWhenPrepared { get; private set; }
@@ -146,9 +192,14 @@ public class TokenConnectorServiceTests
 
         public Task<SyncResult> RunAsync() => SyncDataAsync(new SyncRequest(), _config, CancellationToken.None);
 
+        public Task<SyncResult> RunScheduledAsync() => SyncDataAsync(_config, CancellationToken.None);
+
         public SyncResult Failed() => AuthenticationFailedResult();
 
         protected override bool NeedsSignIn(SyncRequest request, TestConnectorConfig config) => SignIn;
+
+        protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TestConnectorConfig config) =>
+            ResumesFromGlucose ? [ResumeFamily.Glucose] : [];
 
         protected override Task PrepareSignInAsync(TestConnectorConfig config, CancellationToken cancellationToken)
         {

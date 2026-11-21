@@ -54,6 +54,30 @@ public class LibreConnectorServiceTests
     }
 
     /// <summary>
+    /// A scheduled run with glucose and device events switched off has nothing to fetch, so it
+    /// succeeds, publishes nothing and reads no resume point.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSync_GlucoseAndDeviceEventsOff_SucceedsWithoutAResumePoint()
+    {
+        var fixture = new ServiceFixture();
+        fixture.Config.SyncGlucose = false;
+        fixture.Config.SyncDeviceEvents = false;
+
+        var result = await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue(string.Join("; ", result.Errors));
+        fixture.Glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        fixture.Glucose.Verify(
+            g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
     /// A null in the vendor's array is one malformed record. It is dropped before mapping, so the
     /// readings beside it still publish and the run stays green.
     /// </summary>
@@ -190,6 +214,46 @@ public class LibreConnectorServiceTests
         var now = clock.GetUtcNow().UtcDateTime;
         glucose.Should().HaveCount(2).And.OnlyContain(sg => sg.CreatedAt == now && sg.ModifiedAt == now);
         starts.Should().ContainSingle().Which.CreatedAt.Should().Be(now);
+    }
+
+    /// <summary>
+    /// LibreLinkUp always answers with its whole graph, so a second scheduled run publishes only the
+    /// readings after the first run's newest one, less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunPublishesOnlyFromTheFirstRunsNewestReading()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var fixture = new ServiceFixture(
+            connectionsJson: Connections,
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:55:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3},"
+                       + "\"sensor\":null},"
+                       + "\"graphData\":[{\"factoryTimestamp\":\"3/1/2026 11:40:00 AM\",\"valueInMgPerDl\":100,\"trendArrow\":3},"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:52:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}",
+            clock: clock);
+        DateTime? newest = null;
+        var runs = new List<List<SensorGlucose>>();
+        fixture.Glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => newest);
+        fixture.Glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>((records, _, _, _) =>
+            {
+                runs.Add(records.ToList());
+                newest = DateTimeOffset.FromUnixTimeMilliseconds(records.Max(r => r.Mills)).UtcDateTime;
+            })
+            .ReturnsAsync(true);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        runs.Should().HaveCount(2);
+        runs[0].Should().HaveCount(3);
+        runs[1].Select(sg => sg.Mgdl).Should().BeEquivalentTo([105d, 110d],
+            "the 11:40 reading is older than the first run's newest less five minutes");
     }
 
     [Theory]

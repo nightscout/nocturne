@@ -31,8 +31,6 @@ public class BaseConnectorServiceTests
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
 
-        public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-
         // These tests exercise the base helpers directly, never a sync run.
         protected override Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,
