@@ -18,6 +18,7 @@ namespace Nocturne.API.Controllers.V1;
 [Tags("V1")]
 [Route("api/[controller]")]
 [AllowAnonymous]
+[ErrorEnvelope]
 public class VersionsController : ControllerBase
 {
     private readonly IVersionService _versionService;

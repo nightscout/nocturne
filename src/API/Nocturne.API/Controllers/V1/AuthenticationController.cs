@@ -17,6 +17,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[ErrorEnvelope]
 [AllowAnonymous]
 public class AuthenticationController : ControllerBase
 {

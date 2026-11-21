@@ -16,6 +16,7 @@ namespace Nocturne.API.Controllers.V2;
 [Tags("V2")]
 [Route("api/v2")]
 [Produces("application/json")]
+[ErrorEnvelope]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class LoopController : ControllerBase
 {

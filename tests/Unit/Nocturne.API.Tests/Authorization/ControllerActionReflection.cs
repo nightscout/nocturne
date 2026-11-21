@@ -31,6 +31,15 @@ internal static class ControllerActionReflection
                         && m.GetCustomAttributes().OfType<IActionHttpMethodProvider>().Any());
 
     /// <summary>
+    /// Every action the API assembly declares on a controller, with or without an HTTP verb attribute.
+    /// </summary>
+    public static IEnumerable<MethodInfo> GetDeclaredActions(Type controller) =>
+        controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => !m.IsSpecialName
+                        && m.DeclaringType!.Assembly == ApiAssembly
+                        && m.GetCustomAttribute<NonActionAttribute>() is null);
+
+    /// <summary>
     /// The absolute routes an action answers on, with a leading slash and no trailing one.
     /// </summary>
     /// <remarks>Attribute routing only; the API declares no conventional routes.</remarks>

@@ -13,10 +13,12 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -100,6 +102,37 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
             $$"""{"status":500,"message":"Internal server error","type":"internal","error":"{{BoomMessage}}"}""",
             await response.Content.ReadAsStringAsync()
         );
+    }
+
+    /// <summary>
+    /// <c>/api/versions</c> carries no version segment, so the envelope is the ProblemDetails body
+    /// of an unversioned path.
+    /// </summary>
+    [Fact]
+    public async Task V1_VersionsController_AnswersProblemDetailsWithoutTheExceptionMessage()
+    {
+        var response = await _client.GetAsync("/api/versions");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        var raw = await response.Content.ReadAsStringAsync();
+        using var body = JsonDocument.Parse(raw);
+        var root = body.RootElement;
+        Assert.Equal("Internal Server Error", root.GetProperty("title").GetString());
+        Assert.Equal("Internal server error", root.GetProperty("detail").GetString());
+        Assert.Equal(500, root.GetProperty("status").GetInt32());
+        Assert.DoesNotContain(BoomMessage, raw);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/verifyauth", """{"status":200,"message":{"canRead":true""")]
+    [InlineData("/api/v1/experiments/test", """{"status":"ok"}""")]
+    public async Task V1_AttributedActionThatCannotThrow_KeepsItsSuccessBody(string route, string expectedStart)
+    {
+        var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.StartsWith(expectedStart, await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -189,6 +222,7 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     [InlineData("/api/v2/authorization/subjects")]
     [InlineData("/api/v2/authorization/roles")]
     [InlineData("/api/v2/summary")]
+    [InlineData("/api/v2/loop/status")]
     public async Task V2_ThrowingAction_AnswersProblemDetailsWithoutTheExceptionMessage(string route)
     {
         var response = await _client.GetAsync(route);
@@ -302,6 +336,17 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
                     )
                     .ThrowsAsync(new InvalidOperationException(BoomMessage));
                 services.AddSingleton(summary.Object);
+
+                var versions = new Mock<IVersionService>();
+                versions
+                    .Setup(s => s.GetSupportedVersionsAsync())
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(versions.Object);
+
+                var loop = new Mock<ILoopService>();
+                loop.Setup(s => s.GetConfigurationStatus())
+                    .Throws(new InvalidOperationException(BoomMessage));
+                services.AddSingleton(loop.Object);
 
                 var activities = new Mock<IActivityService>();
                 activities
