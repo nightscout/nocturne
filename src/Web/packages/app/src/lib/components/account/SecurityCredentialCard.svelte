@@ -2,6 +2,7 @@
   import type { Component } from "svelte";
   import * as Card from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Clock from "@lucide/svelte/icons/clock";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -24,6 +25,8 @@
     isAdding: boolean;
     isRemoving: boolean;
     removingId?: string;
+    /** The credential a recovery just added, marked in the list. */
+    justAddedId?: string;
     canRemove: boolean;
     maxCredentials?: number;
     onAdd: () => void;
@@ -38,6 +41,7 @@
     credentials,
     isAdding,
     removingId,
+    justAddedId,
     canRemove,
     maxCredentials,
     onAdd,
@@ -92,8 +96,11 @@
           class="flex items-center justify-between gap-4 rounded-md border p-3"
         >
           <div class="space-y-1 flex-1 min-w-0">
-            <p class="text-sm font-medium">
+            <p class="flex flex-wrap items-center gap-2 text-sm font-medium">
               {credential.label ?? `Unnamed ${title.toLowerCase()}`}
+              {#if credential.id === justAddedId}
+                <Badge variant="secondary" size="sm">Added just now</Badge>
+              {/if}
             </p>
             <div
               class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"

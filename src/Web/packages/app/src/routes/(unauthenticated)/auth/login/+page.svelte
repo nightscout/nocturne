@@ -28,6 +28,7 @@
   // Check if tenant allows access requests
   const authStatusQuery = getAuthStatus();
   const allowAccessRequests = $derived(authStatusQuery.current?.allowAccessRequests ?? false);
+  const emailRecoveryOffered = $derived(authStatusQuery.current?.emailRecoveryOffered ?? false);
 
   let showRequestDialog = $state(false);
 
@@ -162,16 +163,26 @@
             >privacy policy</a>
           </p>
         </div>
+        {#if !authStatusQuery.loading}
         <div class="text-center text-xs text-muted-foreground">
           <p>
-            Having trouble signing in? 
+            {#if emailRecoveryOffered}
+              <a
+                href={resolve('auth/recovery/email')}
+                class="underline hover:text-foreground"
+                data-testid="cant-sign-in-link"
+              >Cannot sign in?</a>
+            {:else}
+              Having trouble signing in? 
 
-            <a
-              href={resolve('auth/help')}
-              class="underline hover:text-foreground"
-            >Get help</a>
+              <a
+                href={resolve('auth/help')}
+                class="underline hover:text-foreground"
+              >Get help</a>
+            {/if}
           </p>
         </div>
+        {/if}
       </Card.Footer>
     {/if}
   </Card.Root>

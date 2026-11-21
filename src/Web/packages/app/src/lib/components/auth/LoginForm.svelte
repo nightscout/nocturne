@@ -17,7 +17,6 @@
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
-    setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
   } from "#routes/(unauthenticated)/auth/auth.remote.js";
@@ -27,7 +26,6 @@
     loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
   import { getTrustedDevicePolicy } from "#lib/api/generated/totps.generated.remote.js";
-  import { invalidateAll } from "$app/navigation";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";
@@ -36,6 +34,7 @@
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
+  import { settleSignIn, type SignInResult } from "./sign-in-result";
   import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
@@ -123,47 +122,22 @@
    */
   let stepUpToken = $state(untrack(() => pendingStepUpToken ?? ""));
 
-  async function handleAuthResult(result: {
-    success?: boolean;
-    accessToken?: string;
-    refreshToken?: string;
-    expiresIn?: number;
-    refreshExpiresIn?: number;
-    totpRequired?: boolean;
-    stepUpToken?: string | null;
-    error?: string;
-  }) {
-    if (!result.success) {
-      passkeyError =
-        result.error ?? "Could not sign you in. Try again.";
+  async function handleAuthResult(result: SignInResult) {
+    const outcome = await settleSignIn(result);
+
+    if (outcome.state === "refused") {
+      passkeyError = outcome.message;
       return;
     }
 
-    // The passkey was accepted but this account also has an authenticator, so there is
-    // no session yet — collect the code and finish there.
-    if (result.totpRequired) {
-      if (!result.stepUpToken) {
-        passkeyError = "Could not sign you in. Try again.";
-        return;
-      }
-      stepUpToken = result.stepUpToken;
+    // No session yet: collect the authenticator code and finish there.
+    if (outcome.state === "second-factor") {
+      stepUpToken = outcome.stepUpToken;
       totpCode = "";
       authenticator.clear();
       mode = "totp";
       return;
     }
-
-    // Set auth cookies via server-side command
-    if (result.accessToken) {
-      await setAuthCookies({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresIn: result.expiresIn,
-        refreshExpiresIn: result.refreshExpiresIn,
-      });
-    }
-
-    await invalidateAll();
 
     if (onSuccess) {
       onSuccess();
@@ -482,8 +456,6 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
-
         <FormError issues={recovery.error} focusOnShow />
 
         <FormField
