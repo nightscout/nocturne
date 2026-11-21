@@ -53,7 +53,7 @@
     setSourceDefaults,
   } from "#lib/api/generated/glucoseProcessingSettings.generated.remote.js";
   import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
-  import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
+  import type { FeatureSettings } from "@nocturne/api-client";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
   import { patchFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -97,7 +97,7 @@
   import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/env";
   import { resolve } from "$app/paths";
-  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { WidgetId } from "@nocturne/api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";

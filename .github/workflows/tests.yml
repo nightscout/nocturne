@@ -244,6 +244,7 @@ jobs:
         with:
           name: api-client
           path: |
+            src/Web/packages/api-client/src/
             src/Web/packages/app/src/lib/api/generated/
             src/Web/packages/app/src/lib/api/api-client.generated.ts
           if-no-files-found: error
@@ -432,7 +433,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
@@ -601,7 +602,7 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
       - uses: ./.github/actions/setup-playwright
         with:
           working-directory: src/Web/packages/app
@@ -982,9 +983,9 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: api-client
-          path: src/Web/packages/app/src/lib/api
+          path: src/Web/packages
       - name: Filter spec to SDK endpoints (V4 + OAuth)
-        run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
+        run: node sdk/filter-v4-spec.js src/Web/packages/api-client/src/openapi.json sdk/openapi-v4.json
       - name: Generate Java SDK
         uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:

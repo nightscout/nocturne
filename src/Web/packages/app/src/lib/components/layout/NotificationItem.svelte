@@ -7,7 +7,7 @@
   import {
     type InAppNotificationDto,
     NotificationUrgency,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
   import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
   import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";

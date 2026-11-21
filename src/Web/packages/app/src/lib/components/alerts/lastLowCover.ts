@@ -1,4 +1,4 @@
-import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleResponse } from "@nocturne/api-client";
 
 export const lastLowCoverMessage =
   "This is the only rule that alerts for low glucose. No alert for low glucose will remain.";

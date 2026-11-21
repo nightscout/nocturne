@@ -11,7 +11,7 @@
     ConnectionKind,
     ConnectionStatus,
     type Connection,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { Item } from "#lib/components/ui/item/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { formatNumber } from "#lib/utils/formatting.js";

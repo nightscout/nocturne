@@ -36,7 +36,7 @@
     StateSpanCategory,
     AlertWeekday,
   } from "./types";
-  import { AlertComparisonOperator } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertComparisonOperator } from "@nocturne/api-client";
 
   interface AvailableRule {
     id: string;

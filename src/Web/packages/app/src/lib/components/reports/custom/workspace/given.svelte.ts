@@ -8,7 +8,7 @@ import type {
   CustomReportCatalogue,
   CustomReportDataset,
   CustomReportDatasetMark,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { formatList } from "#lib/utils/formatting.js";
 import { bindingsOf, type Cell } from "./catalogue-vocabulary.js";
 import type { Reason } from "./workspace.svelte.js";

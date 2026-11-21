@@ -11,7 +11,7 @@ import {
   OAuthClientIdentity,
   type Connection,
   type ConnectionsOverview,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const mocks = vi.hoisted(() => ({
   connections: vi.fn(),

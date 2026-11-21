@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse, TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleResponse, TenantAlertSettingsResponse } from "@nocturne/api-client";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantPersonDetail } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantPersonDetail } from "@nocturne/api-client";
   import GlucoseSparkline from "#lib/components/calendar/GlucoseSparkline.svelte";
   import { tracePoints, traceThresholds } from "./person-trace.js";
 

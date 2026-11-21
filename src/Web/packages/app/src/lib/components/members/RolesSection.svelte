@@ -26,7 +26,7 @@
     updateRole,
     deleteRole,
   } from "#lib/api/generated/roles.generated.remote.js";
-  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantRoleDto } from "@nocturne/api-client";
 
   // Query
   const rolesQuery = getRoles();

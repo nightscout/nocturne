@@ -5,7 +5,7 @@ import {
 	AlertConditionType,
 	type AlertHistoryResponse,
 	type HistoryExcursionResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import AlertHistoryCard from "./AlertHistoryCard.svelte";
 
 function excursion(over: Partial<HistoryExcursionResponse> = {}): HistoryExcursionResponse {

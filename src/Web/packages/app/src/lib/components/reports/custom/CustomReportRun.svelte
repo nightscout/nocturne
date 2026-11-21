@@ -12,7 +12,7 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { Button } from "#lib/components/ui/button/index.js";
   import { drawReportPanelImage } from "#lib/api/report-image.remote.js";
-  import type { CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportRunResponse } from "@nocturne/api-client";
   import { chartFormat } from "#lib/utils/formatting.js";
   import { customReportLabels } from "./custom-report-labels.svelte.js";
   import SpecErrorList from "./SpecErrorList.svelte";

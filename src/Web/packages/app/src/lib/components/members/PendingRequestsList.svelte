@@ -13,7 +13,7 @@
   import type {
     MembershipRequestDto,
     TenantRoleDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { relativeAge } from "#lib/utils/formatting.js";
 
   interface Props {

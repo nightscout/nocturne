@@ -13,7 +13,7 @@
     getRules,
   } from "#lib/api/generated/alertRules.generated.remote.js";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
-  import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ReplayRuleDefinition } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";

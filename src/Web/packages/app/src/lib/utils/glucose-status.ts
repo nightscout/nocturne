@@ -3,7 +3,7 @@
  * never re-derive status from mg/dL values on the frontend.
  */
 
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import {
   glucoseStatusTileVariant,
   type GlucoseTileVariant,

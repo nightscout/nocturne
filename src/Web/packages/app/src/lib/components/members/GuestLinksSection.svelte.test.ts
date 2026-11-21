@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { formatLocale } from "#lib/utils/formatting.js";
-import { GuestLinkStatus, type GuestLinkInfo } from "#lib/api/generated/nocturne-api-client.js";
+import { GuestLinkStatus, type GuestLinkInfo } from "@nocturne/api-client";
 import {
   remoteCommand,
   remoteQuery,

@@ -19,7 +19,7 @@
   import {
     NotificationUrgency,
     type InAppNotificationDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { EmptyState } from "#lib/components/shared/index.js";
   import NotificationItem from "./NotificationItem.svelte";
   import DndPanel from "#lib/components/alerts/DndPanel.svelte";

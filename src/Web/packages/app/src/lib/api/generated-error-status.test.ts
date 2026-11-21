@@ -14,7 +14,7 @@ import {
 import { missingItemError, rateLimitedError } from "../forms/submit-messages.svelte";
 import { remoteErrorMessage } from "./remote-error";
 import { parseCode, parseErrorBody, parseIssues } from "./error-body";
-import { TotpSetupFailure, type ReferencingRulesResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { TotpSetupFailure, type ReferencingRulesResponse } from "@nocturne/api-client";
 import {
   describeTotpSetupError,
   describeTotpSetupStartError,
@@ -662,9 +662,9 @@ describe("a rejected rule save that carries issues", () => {
  * on the controller and its tests.
  */
 describe("every typed error body a remote operation declares", () => {
-  const SPEC_URL = new URL("./generated/openapi.json", import.meta.url);
+  const SPEC_URL = new URL(import.meta.resolve("@nocturne/api-client/openapi.json"));
   const SPEC_ABSENT =
-    "src/lib/api/generated/openapi.json is not present — run `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true` first.";
+    "src/Web/packages/api-client/src/openapi.json is not present — run `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true` first.";
 
   type Spec = {
     paths: Record<string, Record<string, RemoteOperation>>;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertRuleResponse } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";

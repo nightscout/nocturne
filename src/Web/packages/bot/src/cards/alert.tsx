@@ -1,5 +1,6 @@
 import { Card, CardText, Fields, Field, Actions, Button } from "chat";
-import type { ActiveExcursion, AlertPayload, AlertSeverity } from "../types.js";
+import { AlertConditionType, AlertPayloadKind, AlertRuleSeverity, type ActiveExcursionResponse } from "@nocturne/api-client";
+import type { AlertPayload } from "../types.js";
 import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
 import { isKnownSeverity } from "../lib/severity.js";
@@ -12,24 +13,27 @@ import { isKnownSeverity } from "../lib/severity.js";
  * Labels mirror `severity.ts` in `@nocturne/app`, and an unrecognised value
  * degrades to a neutral title as the app degrades to a muted style.
  */
-const SEVERITY_TITLES: Record<AlertSeverity, string> = {
-  critical: "CRITICAL",
-  warning: "Warning",
-  info: "Info",
+const SEVERITY_TITLES: Record<AlertRuleSeverity, string> = {
+  [AlertRuleSeverity.Critical]: "CRITICAL",
+  [AlertRuleSeverity.Warning]: "Warning",
+  [AlertRuleSeverity.Info]: "Info",
 };
 
 /**
  * The condition kinds that fire on readings stopping, so a payload of one with no glucose value
  * is an alert about having no reading rather than a reading the card failed to get.
  */
-const NO_READING_KINDS: ReadonlySet<string> = new Set(["signal_loss", "staleness"]);
+const NO_READING_KINDS: ReadonlySet<string> = new Set<AlertConditionType>([
+  AlertConditionType.SignalLoss,
+  AlertConditionType.Staleness,
+]);
 
 export function AlertCard(props: {
   payload: AlertPayload;
   unit?: "mg/dL" | "mmol/L";
 }) {
   const { payload, unit = "mg/dL" } = props;
-  if (payload.kind === "unevaluable") return UnevaluableCard({ payload });
+  if (payload.kind === AlertPayloadKind.Unevaluable) return UnevaluableCard({ payload });
   const noReading = payload.glucoseValue == null && payload.alertType != null && NO_READING_KINDS.has(payload.alertType);
   const value =
     payload.glucoseValue != null
@@ -49,7 +53,7 @@ export function AlertCard(props: {
 
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>
-      <CardText style={severity === "critical" ? "bold" : "plain"}>
+      <CardText style={severity === AlertRuleSeverity.Critical ? "bold" : "plain"}>
         {text}
       </CardText>
       <Fields>
@@ -103,7 +107,7 @@ export function AcknowledgedCard(props: { title?: string; detail: string }) {
   );
 }
 
-function status(excursion: ActiveExcursion): string {
+function status(excursion: ActiveExcursionResponse): string {
   if (excursion.acknowledgedAt) return "Acknowledged";
   if (excursion.snoozedUntil) {
     return `Snoozed until ${new Date(excursion.snoozedUntil).toLocaleTimeString()}`;
@@ -111,7 +115,7 @@ function status(excursion: ActiveExcursion): string {
   return "Firing";
 }
 
-export function ActiveAlertsCard(props: { excursions: ActiveExcursion[] }) {
+export function ActiveAlertsCard(props: { excursions: ActiveExcursionResponse[] }) {
   return (
     <Card title="Active alerts">
       <Fields>

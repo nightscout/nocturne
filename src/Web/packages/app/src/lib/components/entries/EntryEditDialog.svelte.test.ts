@@ -24,7 +24,7 @@ async function kit() {
   const { form } = await import("#lib/api/remote-server.js");
   const { formCoerce } = await import("#lib/api/generated/form-utils.generated.js");
   const { z } = await import("zod");
-  const schemas = await import("#lib/api/generated/schemas.js");
+  const schemas = await import("@nocturne/api-client/schemas");
   return { form, formCoerce, z, schemas };
 }
 

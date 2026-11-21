@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RailItemId } from "#lib/api/generated/nocturne-api-client.js";
+import { RailItemId } from "@nocturne/api-client";
 import { effectiveRail, parseRailPreference, railOrder } from "./rail";
 
 const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;

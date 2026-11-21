@@ -1,4 +1,4 @@
-import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertConditionType } from "@nocturne/api-client";
 import { factLabel } from "./factText.svelte";
 
 export function conditionLabel(

@@ -7,7 +7,7 @@
     type Connection,
     type ConnectionCredential,
     type ConnectionStream,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { revoke as revokeAppGrant } from "#lib/api/generated/connectedApps.generated.remote.js";
   import { revoke as revokeDirectGrant } from "#lib/api/generated/directGrants.generated.remote.js";
   import { deleteConnectionRecords } from "#lib/api/generated/services.generated.remote.js";

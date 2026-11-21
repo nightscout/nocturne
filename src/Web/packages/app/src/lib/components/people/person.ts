@@ -1,7 +1,7 @@
 import {
   GlucoseStatus,
   type TenantOverviewItem,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { tenantUrl } from "#lib/utils/tenant-host.js";
 
 export function personName(person: TenantOverviewItem): string {

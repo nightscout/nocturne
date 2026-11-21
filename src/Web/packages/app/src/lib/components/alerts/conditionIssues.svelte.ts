@@ -1,4 +1,4 @@
-import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
+import type { RustValidationIssue } from "@nocturne/api-client";
 import { errorIssues } from "#lib/forms/submit-error.js";
 
 const MALFORMED = "Part of this rule's conditions is malformed, so it cannot be saved.";

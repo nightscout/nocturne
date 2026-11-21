@@ -85,7 +85,7 @@ import { isRecord } from "#lib/utils/type-guards.js";
 import {
   SyncPhase,
   type V4BasalInjectionStatus,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import {

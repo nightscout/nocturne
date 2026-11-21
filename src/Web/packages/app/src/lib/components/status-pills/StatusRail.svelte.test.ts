@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import { LegacyConsumableKind, RailItemId } from "#lib/api/generated/nocturne-api-client.js";
+import { LegacyConsumableKind, RailItemId } from "@nocturne/api-client";
 
 const { now, store, settings } = vi.hoisted(() => {
   const now = Date.UTC(2026, 5, 14, 9, 30, 0);

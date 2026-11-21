@@ -5,7 +5,7 @@ import {
 	type AlertPresetResponse,
 	type TrackerCategory,
 	type TrackerDefinitionDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { plural } from "#lib/utils/plural.js";
 import { summarizeCondition } from "../summarizeCondition.svelte";

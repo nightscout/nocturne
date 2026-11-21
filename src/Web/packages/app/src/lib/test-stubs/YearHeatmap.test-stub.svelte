@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+  import type { DailySummaryDay } from "@nocturne/api-client";
 
   let {
     year,

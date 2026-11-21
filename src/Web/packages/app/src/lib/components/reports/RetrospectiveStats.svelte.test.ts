@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import { Direction } from "#lib/api/generated/nocturne-api-client.js";
+import { Direction } from "@nocturne/api-client";
 
 let reportedDirection: string | undefined;
 let reportedError: unknown;

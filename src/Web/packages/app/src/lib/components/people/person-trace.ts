@@ -1,7 +1,7 @@
 import type {
   TenantOverviewPoint,
   TenantOverviewThresholds,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { FALLBACK_GLUCOSE_Y_MAX } from "@nocturne/charts/core";
 
 const Y_HEADROOM = 1.05;

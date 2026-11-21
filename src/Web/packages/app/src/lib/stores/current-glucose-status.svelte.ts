@@ -3,7 +3,7 @@ import { getSummary } from "#lib/api/generated/summaries.generated.remote.js";
 import type {
   GlucoseStatus,
   V4BasalInjectionStatus,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */

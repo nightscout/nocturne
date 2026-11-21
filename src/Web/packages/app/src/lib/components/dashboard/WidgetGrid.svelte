@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import type { WidgetId } from "@nocturne/api-client";
   import { MAX_TOP_WIDGETS, knownTopWidgets, loadTopWidget, topWidgetPlaceholder } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
   import WidgetPlaceholder from "./widgets/WidgetPlaceholder.svelte";

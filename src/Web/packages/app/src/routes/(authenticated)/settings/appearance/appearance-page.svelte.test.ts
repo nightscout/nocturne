@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
+import type { FeatureSettings } from "@nocturne/api-client";
 import { remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
 import { page as appState } from "$app/state";
 import { missingScopeError } from "#lib/forms/submit-messages.svelte.js";

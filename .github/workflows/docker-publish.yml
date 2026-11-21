@@ -249,7 +249,14 @@ jobs:
       - name: Verify generated API client files
         run: |
           GENERATED_DIR="src/Web/packages/app/src/lib/api/generated"
+          CLIENT_DIR="src/Web/packages/api-client/src"
           MISSING=()
+
+          for f in nocturne-api-client.ts schemas.ts openapi.json; do
+            if [ ! -f "$CLIENT_DIR/$f" ]; then
+              MISSING+=("$f")
+            fi
+          done
 
           # Spot-check a representative set of generated remote files
           for f in passkeys patientRecords chartDatas profiles alerts; do
@@ -259,7 +266,7 @@ jobs:
           done
 
           if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::error::Missing generated remote files: ${MISSING[*]}"
+            echo "::error::Missing generated files: ${MISSING[*]}"
             ls -la "$GENERATED_DIR/"*.generated.remote.ts 2>/dev/null || echo "No generated remote files found"
             exit 1
           fi

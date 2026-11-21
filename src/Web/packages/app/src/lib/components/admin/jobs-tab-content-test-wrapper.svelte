@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import JobsTabContent from "./JobsTabContent.svelte";
-  import type { JobLedgerEntry } from "#lib/api/generated/nocturne-api-client.js";
+  import type { JobLedgerEntry } from "@nocturne/api-client";
 
   interface Props {
     jobs: JobLedgerEntry[];

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import type { CustomReportSummary } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportSummary } from "@nocturne/api-client";
 
 let reports: CustomReportSummary[] = [];
 const removed = vi.hoisted(() => [] as unknown[]);

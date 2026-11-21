@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { UploaderPlatform, type UploaderApp } from "#lib/api/generated/nocturne-api-client.js";
+import { UploaderPlatform, type UploaderApp } from "@nocturne/api-client";
 
 const { create } = vi.hoisted(() => ({ create: vi.fn() }));
 

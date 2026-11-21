@@ -1,4 +1,4 @@
-import type { FactSnapshotPoint } from "#lib/api/generated/nocturne-api-client.js";
+import type { FactSnapshotPoint } from "@nocturne/api-client";
 import type { ConditionNode } from "./types";
 import { formatMinutesDuration } from "#lib/utils/duration.js";
 import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";

@@ -5,7 +5,7 @@ import {
   OuraImportPhase,
   OuraImportState,
   type OuraImportStatus,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const notFound = { status: 404, body: { message: "Not found" } };
 

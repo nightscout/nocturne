@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import OidcProvidersTabContent from "./OidcProvidersTabContent.svelte";
-  import type { OidcProviderResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { OidcProviderResponse } from "@nocturne/api-client";
 
   interface Props {
     providers: OidcProviderResponse[];

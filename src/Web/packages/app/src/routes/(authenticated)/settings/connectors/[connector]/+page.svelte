@@ -16,7 +16,7 @@
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
-  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AvailableConnector } from "@nocturne/api-client";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(

@@ -4,8 +4,8 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
-  import type { DeviceCapabilityCatalog } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertRuleSeverity } from "@nocturne/api-client";
+  import type { DeviceCapabilityCatalog } from "@nocturne/api-client";
   import type { ChannelDef } from "./types";
   import { deviceKindLabel } from "#lib/utils/device-kind-labels.js";
 

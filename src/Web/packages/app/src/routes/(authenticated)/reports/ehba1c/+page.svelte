@@ -24,7 +24,7 @@
     A1cDisplayValue,
     A1cDisplayReferences,
     TimeZoneUnavailableReason,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { a1cUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     a1cLabel,

@@ -34,7 +34,7 @@
   import {
     type GuestLinkInfo,
     GuestLinkStatus,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError, FormError } from "#lib/forms/index.js";
 

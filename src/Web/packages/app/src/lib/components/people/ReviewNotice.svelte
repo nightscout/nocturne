@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { TenantReviewUnavailable } from "#lib/api/generated/nocturne-api-client.js";
+  import { TenantReviewUnavailable } from "@nocturne/api-client";
   import Lock from "@lucide/svelte/icons/lock";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import type { ReviewCell } from "./review-lens.js";

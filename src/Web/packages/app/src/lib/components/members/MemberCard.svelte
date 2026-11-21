@@ -25,7 +25,7 @@
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import FormError from "#lib/forms/FormError.svelte";
-  import type { TenantMemberDto, TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantMemberDto, TenantRoleDto } from "@nocturne/api-client";
 
   interface Props {
     member: TenantMemberDto;

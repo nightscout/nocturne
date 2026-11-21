@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportRunResponse } from "@nocturne/api-client";
 import { PreviewRunner } from "./preview-runner.svelte.js";
 
 /** A send whose answers the test releases one by one. */

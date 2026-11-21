@@ -6,7 +6,7 @@ import {
 	type AlertRuleResponse,
 	type DashboardChartData,
 	type FactSnapshotPoint,
-} from "@nocturne/app/api-client";
+} from "@nocturne/api-client";
 import { transformChartData, type TransformedChartData } from "@nocturne/charts/core";
 import { wirePayload, type ConditionNode, type ReplayResult, type ReplayTick, type Severity, type SimRule } from "./wire";
 import { carbsOnBoard, insulinOnBoard, tickTimes, type Scenario } from "./fixtures";

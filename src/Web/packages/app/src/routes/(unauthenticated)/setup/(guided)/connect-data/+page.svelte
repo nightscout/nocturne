@@ -12,7 +12,7 @@
     UploaderApp,
     UploaderSetupResponse,
     AvailableConnector,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
   import DataSourceSelectionView from "#lib/components/connectors/DataSourceSelectionView.svelte";
   import UploaderSetupView from "#lib/components/connectors/UploaderSetupView.svelte";

@@ -5,7 +5,7 @@
   import WizardOptionList from "#lib/components/wizard/WizardOptionList.svelte";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import type { TrackerDefinitionDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TrackerDefinitionDto } from "@nocturne/api-client";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";

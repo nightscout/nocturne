@@ -6,7 +6,7 @@ import ArrowDownRight from "@lucide/svelte/icons/arrow-down-right";
 import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
 import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
 import { canonicalDirection } from "@nocturne/ui/glucose";
-import { Direction } from "#lib/api/generated/nocturne-api-client.js";
+import { Direction } from "@nocturne/api-client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;

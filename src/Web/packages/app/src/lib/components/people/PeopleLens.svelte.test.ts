@@ -6,7 +6,7 @@ import {
   TenantReviewUnavailable,
   type TenantOverviewResponse,
   type TenantReviewResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { formatMediumDateRange } from "#lib/utils/formatting.js";
 import { OVERVIEW_PING_DEBOUNCE_MS } from "./live-overview.svelte.js";
 import { overviewSockets } from "./people-socket-fixture.svelte.js";

@@ -6,7 +6,7 @@
   import Eye from "@lucide/svelte/icons/eye";
   import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
-  import type { JoinInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import type { JoinInviteInfo } from "@nocturne/api-client";
 
   interface Props {
     invite: JoinInviteInfo;

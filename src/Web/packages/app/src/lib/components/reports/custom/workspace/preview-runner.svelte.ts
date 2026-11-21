@@ -1,4 +1,4 @@
-import type { CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportRunResponse } from "@nocturne/api-client";
 
 /**
  * Runs the builder's spec for its preview: a change waits `delay` ms for the next, and at most one run

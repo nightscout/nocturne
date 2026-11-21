@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ConnectionStatus } from "#lib/api/generated/nocturne-api-client.js";
+  import { ConnectionStatus } from "@nocturne/api-client";
   import Ban from "@lucide/svelte/icons/ban";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import CircleCheck from "@lucide/svelte/icons/circle-check";

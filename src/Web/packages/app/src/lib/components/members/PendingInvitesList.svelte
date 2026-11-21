@@ -7,7 +7,7 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
-  import type { MemberInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import type { MemberInviteInfo } from "@nocturne/api-client";
 
   interface Props {
     invites: MemberInviteInfo[];

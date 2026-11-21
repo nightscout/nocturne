@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { ChartThresholdsDto } from "@nocturne/api-client";
 import {
 	FALLBACK_GLUCOSE_THRESHOLDS,
 	FALLBACK_GLUCOSE_Y_MAX,

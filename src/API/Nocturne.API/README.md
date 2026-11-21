@@ -189,7 +189,7 @@ The API automatically generates TypeScript client code using NSwag whenever the 
 
 **Generated Files:**
 
-- `../../Web/Nocturne.Web/src/lib/api/generated/nocturne-api-client.ts` - Auto-generated TypeScript client
+- `../../Web/packages/api-client/src/nocturne-api-client.ts` - Auto-generated TypeScript client
 
 **Usage in Frontend:**
 

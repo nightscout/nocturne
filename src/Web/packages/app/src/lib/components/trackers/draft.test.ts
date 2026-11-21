@@ -4,7 +4,7 @@ import {
   PumpCapability,
   TrackerCategory,
   TrackerMode,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { beginLifespanEdit, draftFrom, holdsInsulin, newDraftFrom, postedThresholds, showsCovers } from "./draft";
 
 const sensor = {

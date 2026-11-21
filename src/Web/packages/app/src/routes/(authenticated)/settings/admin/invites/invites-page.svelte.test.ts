@@ -6,7 +6,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import {
   TenantCreationInviteStatus,
   type TenantCreationInviteOverview,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const mocks = vi.hoisted(() => ({
   overview: undefined as unknown as TenantCreationInviteOverview,

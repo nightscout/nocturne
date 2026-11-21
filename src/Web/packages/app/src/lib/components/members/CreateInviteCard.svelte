@@ -25,7 +25,7 @@
   import CopyButton from "#lib/components/members/CopyButton.svelte";
   import { Artwork } from "water-ui";
   import { createInvite } from "#lib/api/generated/memberInvites.generated.remote.js";
-  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantRoleDto } from "@nocturne/api-client";
   import { describeSubmitError, FormError } from "#lib/forms/index.js";
 
   interface Props {

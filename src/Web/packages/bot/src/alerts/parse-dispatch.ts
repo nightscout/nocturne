@@ -1,0 +1,52 @@
+import type { AlertDispatchEvent, AlertPayload } from "../types.js";
+
+const field = (source: object, name: string): unknown => (name in source ? Reflect.get(source, name) : undefined);
+
+const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const asNumber = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/**
+ * Reads the payload without judging its values: a chat alert that is refused is dropped, so only
+ * the ids the acknowledge action needs stop delivery. Any other value that is absent or of
+ * another type gives a plainer card, and the cards degrade an enum member they do not know.
+ */
+function parseAlertPayload(raw: unknown): AlertPayload | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const excursionId = asString(field(raw, "excursionId"));
+  const tenantId = asString(field(raw, "tenantId"));
+  if (excursionId === undefined || tenantId === undefined) return undefined;
+  return {
+    ...raw,
+    ruleName: asString(field(raw, "ruleName")) ?? "",
+    subjectName: asString(field(raw, "subjectName")) ?? "",
+    readingTimestamp: asString(field(raw, "readingTimestamp")) ?? "",
+    excursionId,
+    tenantId,
+    severity: asString(field(raw, "severity")) ?? "",
+    kind: asString(field(raw, "kind")),
+    alertType: asString(field(raw, "alertType")),
+    glucoseValue: asNumber(field(raw, "glucoseValue")),
+    trendRate: asNumber(field(raw, "trendRate")),
+    trend: asString(field(raw, "trend")),
+  };
+}
+
+/** Undefined when the body is not a dispatch the cards can render. */
+export function parseAlertDispatchEvent(body: unknown): AlertDispatchEvent | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const deliveryId = field(body, "deliveryId");
+  const channelType = field(body, "channelType");
+  const destination = field(body, "destination");
+  const tenantSlug = field(body, "tenantSlug");
+  const payload = parseAlertPayload(field(body, "payload"));
+  if (
+    typeof deliveryId !== "string" ||
+    typeof channelType !== "string" ||
+    typeof destination !== "string" ||
+    typeof tenantSlug !== "string" ||
+    payload === undefined
+  ) {
+    return undefined;
+  }
+  return { deliveryId, channelType, destination, tenantSlug, payload };
+}

@@ -3,7 +3,7 @@
     NotificationUrgency,
     TenantOverviewAttentionKind,
     type TenantOverviewItem,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import Lock from "@lucide/svelte/icons/lock";

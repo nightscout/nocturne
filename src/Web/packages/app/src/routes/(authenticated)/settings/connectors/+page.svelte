@@ -17,7 +17,7 @@
     type ConnectorStatusDto,
     type SyncResult,
     type UploaderApp,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";

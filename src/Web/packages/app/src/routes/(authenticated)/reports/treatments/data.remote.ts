@@ -15,7 +15,7 @@ import {
 	UpsertDeviceEventRequestSchema,
 	CreateBasalInjectionRequestSchema,
 	UpdateBasalInjectionRequestSchema,
-} from '#lib/api/generated/schemas.js';
+} from '@nocturne/api-client/schemas';
 import { DateRangeSchema, resolveReportRange } from '#lib/api/report-range.js';
 
 async function fetchEntries(startDate: string, endDate: string) {

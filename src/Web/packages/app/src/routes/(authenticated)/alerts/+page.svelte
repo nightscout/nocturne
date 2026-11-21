@@ -19,7 +19,7 @@
   import type {
     AlertRuleResponse,
     TenantAlertSettingsResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import {

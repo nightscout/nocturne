@@ -5,7 +5,7 @@ import { Report } from "./report.svelte.js";
 import { STARTERS, starter } from "./starters.js";
 import { preferredLanguage, regionFormat } from "#lib/stores/appearance-store.svelte.js";
 import { Workspace, fromDisplay } from "./workspace.svelte.js";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 
 /** The live catalogue as a tenant that reads glucose in mmol/L sees it. */
 function mmolCatalogue(): CustomReportCatalogue {

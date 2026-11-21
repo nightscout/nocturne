@@ -1,4 +1,4 @@
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import { formatList } from "#lib/utils/formatting.js";
 import type { StarterGroup } from "./starters.js";
 import {

@@ -16,13 +16,13 @@ flowchart TD
     end
 
     subgraph generated ["Generated Output"]
-        subgraph gendir ["<code>lib/api/generated/</code>"]
+        subgraph gendir ["<code>packages/api-client/src/</code>"]
             OAS["<b>openapi.json</b><br/>OpenAPI 3.0 spec<br/>(schemas + operations)"]
             CLIENT["<b>nocturne-api-client.ts</b><br/>Typed TS classes per controller<br/>(NSwag)"]
             ZOD["<b>schemas.ts</b><br/>Zod validators per DTO<br/><code>satisfies z.ZodType&lt;Dto&gt;</code>"]
-            REMOTE["<b>*.generated.remote.ts</b><br/>query() / command() wrappers<br/>per [Remote*] endpoint"]
         end
-        APICLIENT["<b>api-client.generated.ts</b><br/><code>lib/api/</code><br/>Barrel re-export importing from<br/><code>./generated/nocturne-api-client</code>"]
+        REMOTE["<b>*.generated.remote.ts</b><br/><code>app/src/lib/api/generated/</code><br/>query() / command() wrappers<br/>per [Remote*] endpoint"]
+        APICLIENT["<b>api-client.generated.ts</b><br/><code>lib/api/</code><br/>Barrel re-export importing from<br/><code>@nocturne/api-client</code>"]
     end
 
     subgraph frontend ["SvelteKit Frontend"]

@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "#lib/api/generated/nocturne-api-client.js";
-import { SyncRequestSchema } from "#lib/api/generated/schemas.js";
+import { ApiException, type SyncResult } from "@nocturne/api-client";
+import { SyncRequestSchema } from "@nocturne/api-client/schemas";
 
 let syncImpl: () => Promise<SyncResult>;
 let sentRequest: unknown;

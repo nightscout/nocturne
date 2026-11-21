@@ -2,12 +2,12 @@
   import {
     UploaderPlatform,
     UploaderCategory,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import type {
     UploaderApp,
     DataSourceInfo,
     AvailableConnector,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

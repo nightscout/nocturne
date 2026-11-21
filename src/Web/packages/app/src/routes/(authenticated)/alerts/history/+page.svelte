@@ -3,7 +3,7 @@
   import { resolve } from "$app/paths";
   import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
-  import type { HistoryExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { HistoryExcursionResponse } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import {

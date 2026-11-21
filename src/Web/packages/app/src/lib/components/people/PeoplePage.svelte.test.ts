@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { page as pageState } from "$app/state";
-import type { TenantOverviewResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantOverviewResponse } from "@nocturne/api-client";
 import { makePerson } from "./people-fixtures.js";
 
 const overview = $state<{

@@ -3,7 +3,7 @@
   blank report.
 -->
 <script lang="ts">
-  import type { CustomReportTemplate } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportTemplate } from "@nocturne/api-client";
   import * as Item from "#lib/components/ui/item/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { minuteLabel } from "./clock.js";

@@ -2,7 +2,7 @@
   import type {
     AvailableConnector,
     ConnectorStatusDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   export type ConnectorStatusWithDescription = ConnectorStatusDto &
     Pick<AvailableConnector, "description">;
@@ -35,8 +35,8 @@
     SyncDataType,
     type ConnectorCapabilities,
     type SyncResult,
-  } from "#lib/api/generated/nocturne-api-client.js";
-  import type { SyncRequestInput } from "#lib/api/generated/schemas.js";
+  } from "@nocturne/api-client";
+  import type { SyncRequestInput } from "@nocturne/api-client/schemas";
   import { formatNumber } from "#lib/utils/formatting.js";
   import ConnectionTime from "./ConnectionTime.svelte";
   import { SkippedRecordsNote } from "#lib/components/shared/index.js";

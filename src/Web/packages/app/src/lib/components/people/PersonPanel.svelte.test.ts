@@ -8,7 +8,7 @@ import {
   TenantPersonEntryKind,
   type TenantOverviewResponse,
   type TenantPersonDetail,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { makeDetail, makePerson, minutesAgo } from "./people-fixtures.js";
 
 const overview = $state<{ data: TenantOverviewResponse | undefined }>({

@@ -9,7 +9,7 @@
   import { showsCurrentGlucoseWidget } from "#lib/components/dashboard/top-widget-ids.js";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
   import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { WidgetId } from "@nocturne/api-client";
   import { isMainSectionEnabled, showsPredictions } from "#lib/types/dashboard-widgets.js";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";

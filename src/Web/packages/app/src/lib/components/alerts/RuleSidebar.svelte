@@ -28,7 +28,7 @@
   import Moon from "@lucide/svelte/icons/moon";
   import Ban from "@lucide/svelte/icons/ban";
   import Timer from "@lucide/svelte/icons/timer";
-  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertRuleResponse } from "@nocturne/api-client";
   import type { ConditionNode } from "./types";
   import {
     composeRuleTruth,

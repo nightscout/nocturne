@@ -14,7 +14,7 @@ import { z } from "zod";
 import { query, command, form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 
-import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
+import type { OidcProviderInfo } from "@nocturne/api-client";
 import { clearAuthCookies } from "#lib/config/auth-cookies.js";
 import { errorStatus } from "#lib/forms/submit-error.js";
 import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";

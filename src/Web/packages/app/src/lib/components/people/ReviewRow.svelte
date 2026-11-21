@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TenantOverviewItem } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantOverviewItem } from "@nocturne/api-client";
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
   import LimitedData from "./LimitedData.svelte";
   import NoFigure from "./NoFigure.svelte";

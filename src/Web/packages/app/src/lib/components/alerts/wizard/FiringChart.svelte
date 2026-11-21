@@ -2,7 +2,7 @@
   import {
     AlertReplayEventKind,
     type AlertRuleSeverity,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, ChartTooltip } from "@nocturne/charts";

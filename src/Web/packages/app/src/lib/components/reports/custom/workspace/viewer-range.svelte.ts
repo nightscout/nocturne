@@ -5,7 +5,7 @@
  * writes every block's range out, so which blocks follow is read from the workspace's state saved
  * with the spec (`followsReport`).
  */
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import { asObject, givenMaxHours, type Json } from "./given.svelte.js";
 import { BUILDER_VERSION, builderOf, withoutBuilder } from "./saved-state.js";
 import { daysText, rangeLabel } from "./vocabulary-words.svelte.js";
