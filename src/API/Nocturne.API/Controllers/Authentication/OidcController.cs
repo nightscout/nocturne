@@ -480,12 +480,12 @@ public class OidcController : ControllerBase
         if (!string.IsNullOrEmpty(error))
         {
             _logger.LogWarning("OIDC provider returned error on recovery link callback: {Error}", error);
-            return RedirectToError(error, errorDescription ?? "Link failed");
+            return RedirectToError(error, errorDescription ?? "Link failed", fromRecovery: true);
         }
 
         var expectedState = Request.Cookies[_options.Cookie.LinkStateCookieName];
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(expectedState))
-            return RedirectToError("invalid_state", "Link state not found. Start the link again.");
+            return RedirectToError("invalid_state", "Link state not found. Start the link again.", fromRecovery: true);
 
         var enrolment = await _recoverySession.EnrolAsync(
             HttpContext,
@@ -501,8 +501,8 @@ public class OidcController : ControllerBase
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc_recovery_link" }));
 
             return enrolment.Result is { } refused
-                ? RedirectToError(refused.Error ?? "link_failed", refused.ErrorDescription ?? "Link failed")
-                : RedirectToError("recovery_session_required", "The recovery session has ended. Start again.");
+                ? RedirectToError(refused.Error ?? "link_failed", refused.ErrorDescription ?? "Link failed", fromRecovery: true)
+                : RedirectToError("recovery_session_required", "The recovery session has ended. Start again.", fromRecovery: true);
         }
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, subjectId, success: true,
@@ -849,10 +849,18 @@ public class OidcController : ControllerBase
     /// <summary>
     /// Redirect to an error page
     /// </summary>
-    private IActionResult RedirectToError(string error, string description)
+    /// <param name="error">The error code the page maps to its message.</param>
+    /// <param name="description">The fallback description.</param>
+    /// <param name="fromRecovery">
+    /// The failure came from linking a provider under a recovery session. A refused link leaves
+    /// that session usable, so the page offers the way back to it; a refusal carries the same
+    /// codes as an ordinary sign-in, so the code alone cannot tell the page.
+    /// </param>
+    private IActionResult RedirectToError(string error, string description, bool fromRecovery = false)
     {
         var returnUrl =
-            $"/auth/error?error={Uri.EscapeDataString(error)}&description={Uri.EscapeDataString(description)}";
+            $"/auth/error?error={Uri.EscapeDataString(error)}&description={Uri.EscapeDataString(description)}"
+            + (fromRecovery ? "&flow=recovery" : "");
         return Redirect(returnUrl);
     }
 

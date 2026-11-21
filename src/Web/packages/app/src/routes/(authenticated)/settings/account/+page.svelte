@@ -18,6 +18,7 @@
   import Server from "@lucide/svelte/icons/server";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import Smartphone from "@lucide/svelte/icons/smartphone";
+  import X from "@lucide/svelte/icons/x";
   import QRCode from "qrcode";
   import type { PageData } from "./$types";
   import {
@@ -54,8 +55,13 @@
     describeTotpSetupError,
     describeTotpSetupStartError,
   } from "#lib/components/account/totp-errors.js";
+  import {
+    readRecoveredMethod,
+    withoutRecoveredMethod,
+  } from "#lib/components/auth/recovered-method.js";
   import { page } from "$app/state";
-  import { invalidateAll } from "$app/navigation";
+  import { invalidateAll, replaceState } from "$app/navigation";
+  import { onMount } from "svelte";
 
   const { data }: { data: PageData } = $props();
 
@@ -118,6 +124,16 @@
   const remainingRecoveryCodes = $derived(recoveryStatus?.remainingCodes ?? 0);
   const isSecurityLoading = $derived(credentialsQuery.loading);
   const canRemovePasskey = $derived(primaryAuthFactorCount > 1);
+
+  // A recovery lands here with the method it added in the address; the address is cleaned once read.
+  let recovered = $state(readRecoveredMethod(page.url));
+  const passkeyMarked = $derived(
+    recovered?.passkeyId !== undefined && credentials.some((c) => c.id === recovered?.passkeyId)
+  );
+  onMount(() => {
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current path with the recovery parameters removed
+    if (recovered) replaceState(withoutRecoveredMethod(page.url), page.state);
+  });
 
   // Handle ?linked= query param from OIDC link flow return
   $effect(() => {
@@ -371,6 +387,41 @@
       </div>
     </div>
 
+    {#if recovered && !isSecurityLoading}
+      <div
+        class="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-3"
+        role="status"
+        data-testid="recovered-notice"
+      >
+        <Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div class="flex-1 space-y-1 text-sm">
+          {#if passkeyMarked}
+            <p class="font-medium">You are back in your account.</p>
+            <p class="text-muted-foreground">
+              The passkey you just added is marked "Added just now". Remove any older sign-in
+              method you no longer have, such as the passkey on a lost phone. Nothing is removed
+              unless you remove it.
+            </p>
+          {:else}
+            <p class="font-medium">Check your sign-in methods.</p>
+            <p class="text-muted-foreground">
+              Remove any sign-in method you no longer have, such as the passkey on a lost phone.
+              Nothing is removed unless you remove it.
+            </p>
+          {/if}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="shrink-0"
+          aria-label="Dismiss"
+          onclick={() => (recovered = null)}
+        >
+          <X class="h-4 w-4" />
+        </Button>
+      </div>
+    {/if}
+
     <!-- User Profile Card -->
     <UserProfileCard {user} />
 
@@ -409,6 +460,7 @@
         isAdding={isRegistering}
         isRemoving={isRemoving !== null}
         removingId={isRemoving ?? undefined}
+        justAddedId={recovered?.passkeyId}
         canRemove={canRemovePasskey}
         maxCredentials={maxPasskeys}
         onAdd={handleAddPasskey}
@@ -416,7 +468,7 @@
       />
 
       <!-- Section 1b: Linked OIDC identities -->
-      <LinkedOidcIdentities {primaryAuthFactorCount} />
+      <LinkedOidcIdentities {primaryAuthFactorCount} justAddedId={recovered?.identityId} />
 
       <!-- Section 2: Authenticator Apps -->
       <SecurityCredentialCard

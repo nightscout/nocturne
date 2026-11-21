@@ -3,6 +3,7 @@
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { invalidateAll } from "$app/navigation";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Plus from "@lucide/svelte/icons/plus";
@@ -23,9 +24,11 @@
 
   interface Props {
     primaryAuthFactorCount: number;
+    /** The identity a recovery just linked, marked in the list. */
+    justAddedId?: string;
   }
 
-  const { primaryAuthFactorCount }: Props = $props();
+  const { primaryAuthFactorCount, justAddedId }: Props = $props();
 
   const linkedQuery = getLinkedIdentities();
   const providersQuery = getProvidersInfo();
@@ -169,8 +172,11 @@
           class="flex items-center justify-between gap-4 rounded-md border p-3"
         >
           <div class="space-y-1 flex-1 min-w-0">
-            <p class="text-sm font-medium">
+            <p class="flex flex-wrap items-center gap-2 text-sm font-medium">
               {identity.providerName ?? "Unknown provider"}
+              {#if identity.id === justAddedId}
+                <Badge variant="secondary" size="sm">Added just now</Badge>
+              {/if}
             </p>
             {#if identity.email}
               <p class="text-xs text-muted-foreground truncate">

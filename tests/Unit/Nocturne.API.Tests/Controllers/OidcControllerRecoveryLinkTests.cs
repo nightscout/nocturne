@@ -258,7 +258,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
         PresentCookies(session);
         var second = await CallbackAsync();
 
-        second.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error");
+        second.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Once);
     }
@@ -292,7 +292,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         var result = await CallbackAsync();
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
     }
@@ -334,7 +334,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         var result = await CallbackAsync();
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
         _authService.Verify(s => s.HandleLinkCallbackAsync(
@@ -352,7 +352,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         var result = await CallbackAsync();
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
     }
