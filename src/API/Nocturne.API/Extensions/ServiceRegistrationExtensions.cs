@@ -704,7 +704,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAuthHandler, OidcTokenHandler>(); // Priority 100
         services.AddSingleton<IAuthHandler, OAuthAccessTokenHandler>(); // Priority 150
         services.AddSingleton<IAuthHandler, DirectGrantTokenHandler>(); // Priority 150
-        services.AddSingleton<IAuthHandler, LegacyJwtHandler>(); // Priority 200
+        services.AddSingleton<IAuthHandler, SessionBearerHandler>(); // Priority 200
         services.AddSingleton<IAuthHandler, ApiKeyHandler>(); // Priority 400
 
         // OIDC provider discovery HTTP client. The issuer URL is tenant configuration, and the

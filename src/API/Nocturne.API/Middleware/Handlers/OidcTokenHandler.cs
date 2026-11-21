@@ -106,7 +106,7 @@ public class OidcTokenHandler : IAuthHandler
 
         if (provider == null || !provider.IsEnabled)
         {
-            // Not from a configured provider, let legacy JWT handler try
+            // Not from a configured provider, let the session bearer handler try
             _logger.LogDebug(
                 "Token issuer {Issuer} not found in configured OIDC providers",
                 issuer
