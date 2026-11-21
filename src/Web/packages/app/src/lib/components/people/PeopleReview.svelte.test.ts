@@ -33,13 +33,13 @@ function ready(
 
 function renderReview(people: TenantOverviewItem[], review: ReviewState) {
   return render(PeopleRoster, {
-    props: { people, baseDomain: "example.com", review },
+    props: { people, review },
   });
 }
 
 function rowOf(slug: string) {
   const row = page
-    .getByTestId("person-link")
+    .getByTestId("person-row")
     .elements()
     .find((link) => link.querySelector("p")?.textContent?.trim() === slug);
   if (!row) throw new Error(`no row for ${slug}`);
@@ -48,7 +48,7 @@ function rowOf(slug: string) {
 
 function linkedNames() {
   return page
-    .getByTestId("person-link")
+    .getByTestId("person-row")
     .elements()
     .map((link) => link.querySelector("p")?.textContent?.trim());
 }
@@ -144,7 +144,7 @@ describe("Review rows", () => {
       ...crowd(4),
     ];
     const now = render(PeopleRoster, {
-      props: { people, baseDomain: "example.com" },
+      props: { people },
     });
     await expect.element(page.getByText("Zoe")).toBeVisible();
     const nowNames = linkedNames();
@@ -559,7 +559,7 @@ describe("Review row at a narrow width", () => {
         )
       );
 
-      const links = page.getByTestId("person-link");
+      const links = page.getByTestId("person-row");
       await expect.element(links.first()).toBeVisible();
       for (const link of links.elements()) {
         expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth);

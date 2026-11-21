@@ -5,18 +5,42 @@
   import PersonSummary from "./PersonSummary.svelte";
   import ReviewRow from "./ReviewRow.svelte";
   import ReviewSummary from "./ReviewSummary.svelte";
+  import { setPersonSelection } from "./person-selection.js";
   import { reviewCell, type ReviewState } from "./review-lens.js";
   import { REVIEW_ROW_GRID, ROW_GRID } from "./row-grid.js";
 
   interface Props {
     /** In the order the API returned them; the roster never reorders. */
     people: TenantOverviewItem[];
-    baseDomain: string | null;
+    /** The slug of the person whose panel is open. */
+    selectedSlug?: string | null;
+    onSelect?: (person: TenantOverviewItem) => void;
+    hrefFor?: (person: TenantOverviewItem) => string;
     /** Set in the Review lens: the data columns show period statistics in place of the live readings. */
     review?: ReviewState;
   }
 
-  const { people, baseDomain, review }: Props = $props();
+  const {
+    people,
+    selectedSlug = null,
+    onSelect = () => {},
+    hrefFor = () => "#",
+    review,
+  }: Props = $props();
+
+  let root = $state<HTMLElement>();
+
+  setPersonSelection({
+    get selectedSlug() {
+      return selectedSlug;
+    },
+    hrefFor: (person) => hrefFor(person),
+    select: (person) => onSelect(person),
+  });
+
+  export function focusRow(slug: string) {
+    root?.querySelector<HTMLElement>(`[data-person="${CSS.escape(slug)}"]`)?.focus();
+  }
 
   /** At this many people or fewer, each person gets the large layout. */
   const LARGE_LAYOUT_MAX = 4;
@@ -80,20 +104,20 @@
     <ul class="divide-y divide-border {large ? 'border-y' : 'border-b'}">
       {#each section as person (person.tenantId)}
         {#if review && large}
-          <ReviewSummary {person} {baseDomain} cell={cellOf(person, review)} />
+          <ReviewSummary {person} cell={cellOf(person, review)} />
         {:else if review}
-          <ReviewRow {person} {baseDomain} cell={cellOf(person, review)} />
+          <ReviewRow {person} cell={cellOf(person, review)} />
         {:else if large}
-          <PersonSummary {person} {baseDomain} />
+          <PersonSummary {person} />
         {:else}
-          <PersonRow {person} {baseDomain} />
+          <PersonRow {person} />
         {/if}
       {/each}
     </ul>
   </section>
 {/snippet}
 
-<div class="@container space-y-6">
+<div class="@container space-y-6" bind:this={root}>
   {#if flagged.length > 0}
     {@render section("Flagged", flagged)}
     {#if others.length > 0}

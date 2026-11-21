@@ -4,25 +4,23 @@
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
   import LimitedData from "./LimitedData.svelte";
   import PersonCell from "./PersonCell.svelte";
-  import PersonLink from "./PersonLink.svelte";
+  import PersonSelect from "./PersonSelect.svelte";
   import ReviewBar from "./ReviewBar.svelte";
   import ReviewNotice from "./ReviewNotice.svelte";
   import { NO_FIGURE, displayChange, onePlacePercent, wholePercent } from "./review-format.js";
   import { isNotReliable, type ReviewCell } from "./review-lens.js";
   import { changeSentence } from "./review-phrases.svelte.js";
-  import { personHref } from "./person.js";
 
   interface Props {
     person: TenantOverviewItem;
-    baseDomain: string | null;
     cell: ReviewCell;
   }
 
-  const { person, baseDomain, cell }: Props = $props();
+  const { person, cell }: Props = $props();
 </script>
 
 <li>
-  <PersonLink href={personHref(person, baseDomain)} class="space-y-3 px-3 py-4">
+  <PersonSelect {person} class="block space-y-3 px-3 py-4">
     <PersonCell {person} size="lg" />
     {#if cell.kind === "figures"}
       {@const statistics = cell.statistics}
@@ -80,5 +78,5 @@
     {:else if cell.kind !== "read-failed"}
       <ReviewNotice {cell} />
     {/if}
-  </PersonLink>
+  </PersonSelect>
 </li>

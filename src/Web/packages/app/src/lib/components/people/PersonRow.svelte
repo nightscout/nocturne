@@ -5,18 +5,16 @@
   import PersonAlerts from "./PersonAlerts.svelte";
   import PersonCell from "./PersonCell.svelte";
   import PersonGlucose from "./PersonGlucose.svelte";
-  import PersonLink from "./PersonLink.svelte";
+  import PersonSelect from "./PersonSelect.svelte";
   import PersonTrace from "./PersonTrace.svelte";
   import ReadingAge from "./ReadingAge.svelte";
-  import { personHref } from "./person.js";
   import { ROW_GRID } from "./row-grid.js";
 
   interface Props {
     person: TenantOverviewItem;
-    baseDomain: string | null;
   }
 
-  const { person, baseDomain }: Props = $props();
+  const { person }: Props = $props();
 
   const reservoirUnits = $derived(person.devices?.reservoirUnits);
   const batteryPercent = $derived(person.devices?.pumpBatteryPercent);
@@ -24,8 +22,8 @@
 </script>
 
 <li>
-  <PersonLink
-    href={personHref(person, baseDomain)}
+  <PersonSelect
+    {person}
     class="flex flex-wrap items-center gap-x-3 gap-y-1 {ROW_GRID}"
   >
     <PersonCell {person} class="basis-full @2xl:basis-auto" />
@@ -61,5 +59,5 @@
         {/if}
       {/if}
     </div>
-  </PersonLink>
+  </PersonSelect>
 </li>

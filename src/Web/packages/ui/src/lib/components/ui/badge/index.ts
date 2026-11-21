@@ -56,6 +56,8 @@ export const badgeVariants = tv({
       default: "",
       // A count or tag packed into a dense row, a tab or a table header.
       sm: "px-1.5 py-0 text-2xs",
+      // A kind label in a column that must line up from row to row.
+      fixed: "w-14 justify-center",
       // A status that is the subject of its section, or read from across a room.
       lg: "px-3 py-1 text-sm [&>svg]:size-4",
     },

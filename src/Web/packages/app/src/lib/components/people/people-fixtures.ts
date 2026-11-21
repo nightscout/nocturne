@@ -1,7 +1,9 @@
 import {
   GlucoseDirection,
   GlucoseStatus,
+  TenantPersonEntryKind,
   type TenantOverviewItem,
+  type TenantPersonDetail,
   type TenantReviewPerson,
   type TenantReviewResponse,
   type TenantReviewStatistics,
@@ -88,5 +90,26 @@ export function makeReview(
     previousFrom: "2026-10-24T00:00:00Z",
     previousTo: "2026-11-07T00:00:00Z",
     people,
+  };
+}
+
+export function makeDetail(
+  person: TenantOverviewItem,
+  overrides: Partial<TenantPersonDetail> = {}
+): TenantPersonDetail {
+  return {
+    person,
+    readings: [
+      { timestamp: minutesAgo(600), mgdl: 95 },
+      { timestamp: minutesAgo(300), mgdl: 140 },
+      { timestamp: minutesAgo(5), mgdl: 120 },
+    ],
+    entries: [
+      { kind: TenantPersonEntryKind.Bolus, timestamp: minutesAgo(30), units: 4.5 },
+      { kind: TenantPersonEntryKind.Carbs, timestamp: minutesAgo(90), grams: 45 },
+    ],
+    from: minutesAgo(24 * 60),
+    to: minutesAgo(0),
+    ...overrides,
   };
 }
