@@ -45340,3 +45340,11 @@ msgid "# active alert"
 msgid_plural "# active alerts"
 msgstr[0] "# active alert"
 msgstr[1] "# active alerts"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View which data sources are connected and whether they are syncing"
+msgstr "View which data sources are connected and whether they are syncing"
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Connect, change and remove data sources. Data from a connected source is added to your record"
+msgstr "Connect, change and remove data sources. Data from a connected source is added to your record"
