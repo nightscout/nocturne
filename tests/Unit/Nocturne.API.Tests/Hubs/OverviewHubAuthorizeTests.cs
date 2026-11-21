@@ -470,4 +470,67 @@ public class OverviewHubAuthorizeTests
             g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    private static void SignInAsSession(DefaultHttpContext httpContext)
+    {
+        httpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = Subject,
+            AuthType = AuthType.SessionCookie,
+        };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
+    }
+
+    [Theory]
+    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    public async Task Authorize_answers_a_failed_membership_read_with_a_failed_response(Exception failure)
+    {
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
+        SignInAsSession(httpContext);
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var result = await hub.Authorize(new OverviewAuthorizeRequest());
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Authorization failed.");
+        result.TenantIds.Should().BeEmpty();
+        groups.Verify(
+            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    public async Task Authorize_answers_a_failed_token_check_with_a_failed_response(Exception failure)
+    {
+        var (hub, _, overview, jwt, revocation, _, _) = CreateHub();
+        jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
+        revocation.Setup(r => r.IsRevokedAsync("jti-1")).ThrowsAsync(failure);
+
+        var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Authorization failed.");
+        overview.Verify(
+            o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Authorize_does_not_swallow_a_failure_it_has_no_answer_for()
+    {
+        var (hub, _, overview, _, _, _, httpContext) = CreateHub();
+        SignInAsSession(httpContext);
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => hub.Authorize(new OverviewAuthorizeRequest());
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
+    }
 }

@@ -156,7 +156,7 @@ public class OverviewHub : Hub
 
             return new OverviewAuthorizeResponse { Success = true, TenantIds = tenantIds };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex, "Error during overview authorization for client {ConnectionId}",

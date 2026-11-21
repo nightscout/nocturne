@@ -103,7 +103,7 @@ public class AlarmHub : TenantAwareHub
 
             return new { read = true, success = true };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
@@ -199,7 +199,7 @@ public class AlarmHub : TenantAwareHub
                 );
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(ex, "Error processing alarm acknowledgment");
 
@@ -231,11 +231,11 @@ public class AlarmHub : TenantAwareHub
                 await Clients.Caller.SendCoreAsync(alarm.EventName, [alarm.Notify], Context.ConnectionAborted);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
         {
             _logger.LogDebug("Replay of the sounding alarm to {ConnectionId} cancelled", Context.ConnectionId);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(ex, "Failed to replay the sounding alarm to {ConnectionId}", Context.ConnectionId);
         }
