@@ -52,14 +52,17 @@ public class AuthHandlerPriorityTests
     }
 
     [Fact]
-    public void InstanceKeyHandler_ShouldRunBefore_OidcTokenHandler()
+    public void InstanceKeyHandler_ShouldRunBefore_TheBearerTokenHandlers()
     {
         var instanceKeyHandler = new InstanceKeyHandler(
             new InstanceKeyValidator(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
             NullLogger<InstanceKeyHandler>.Instance);
+        var oauthHandler = new OAuthAccessTokenHandler(
+            Mock.Of<IServiceScopeFactory>(),
+            NullLogger<OAuthAccessTokenHandler>.Instance);
 
-        instanceKeyHandler.Priority.Should().BeLessThan(100,
-            "InstanceKeyHandler should run before OidcTokenHandler (priority 100) " +
+        instanceKeyHandler.Priority.Should().BeLessThan(oauthHandler.Priority,
+            "InstanceKeyHandler should run before the bearer token handlers " +
             "so that infrastructure service calls are fast-pathed");
     }
 

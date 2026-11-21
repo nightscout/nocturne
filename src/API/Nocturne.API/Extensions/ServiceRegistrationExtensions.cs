@@ -701,7 +701,6 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAuthHandler, GuestSessionHandler>(); // Priority 52
         services.AddSingleton<GuestSessionHandler>(); // For direct cookie-setting use
         services.AddSingleton<IAuthHandler, InstanceKeyHandler>(); // Priority 55
-        services.AddSingleton<IAuthHandler, OidcTokenHandler>(); // Priority 100
         services.AddSingleton<IAuthHandler, OAuthAccessTokenHandler>(); // Priority 150
         services.AddSingleton<IAuthHandler, DirectGrantTokenHandler>(); // Priority 150
         services.AddSingleton<IAuthHandler, SessionBearerHandler>(); // Priority 200

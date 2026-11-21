@@ -19,7 +19,6 @@ public class MemberScopeResolverTests
     private static readonly AuthType[] ExpectedUnscopedTypes =
     [
         AuthType.SessionCookie,
-        AuthType.OidcToken,
         AuthType.LegacyJwt,
     ];
 

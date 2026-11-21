@@ -33,8 +33,8 @@ public static class SecuritySchemeDefinitions
         + "All clients are public — PKCE is mandatory, no client secrets.";
 
     public const string BearerDescription =
-        "Paste an existing token: an OAuth access token (JWT), "
-        + "OIDC token, or a direct grant token (prefixed `noc_`).";
+        "Paste an existing token: an OAuth access token (JWT) "
+        + "or a direct grant token (prefixed `noc_`).";
 
     public const string InstanceKeyDescription =
         "Platform-internal instance key. Grants full admin permissions "

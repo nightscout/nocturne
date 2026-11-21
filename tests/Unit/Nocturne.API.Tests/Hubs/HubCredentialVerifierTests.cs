@@ -204,7 +204,6 @@ public class HubCredentialVerifierTests
     [Theory]
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.LegacyJwt)]
-    [InlineData(AuthType.OidcToken)]
     public async Task A_token_with_no_grant_behind_it_lasts_only_as_long_as_the_token(AuthType authType)
     {
         await SeedAsync();

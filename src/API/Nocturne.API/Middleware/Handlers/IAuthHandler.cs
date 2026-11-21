@@ -13,7 +13,6 @@ public interface IAuthHandler
     /// Recommended priorities:
     /// - Session Cookie: 50
     /// - Instance Key: 55
-    /// - OIDC Token: 100
     /// - Direct Grant Token: 150
     /// - Session bearer JWT: 200
     /// - Access Token: 300

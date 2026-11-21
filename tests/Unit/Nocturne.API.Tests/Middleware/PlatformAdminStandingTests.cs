@@ -53,7 +53,6 @@ public class PlatformAdminStandingTests
             [AuthType.LegacyJwt] = true,
             [AuthType.PlatformAccess] = true,
             [AuthType.InstanceKey] = true,
-            [AuthType.OidcToken] = false,
             [AuthType.ApiKey] = false,
             [AuthType.DirectGrant] = false,
             [AuthType.OAuthAccessToken] = false,

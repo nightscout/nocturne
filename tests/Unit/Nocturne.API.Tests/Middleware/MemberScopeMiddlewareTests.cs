@@ -302,26 +302,6 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
-    public async Task InteractiveOidcLogin_IsNotBoundedByTheProvidersProtocolScopes()
-    {
-        // OidcTokenHandler sets Scopes to the provider's configured scopes — openid/profile/email,
-        // an outbound protocol list identical for every user of that provider, not a Nocturne data
-        // grant. Normalize drops all three, so treating them as a ceiling resolved the member to
-        // nothing.
-        var context = await ResolveAsync(
-            RoleSeeds.Permissions[RoleSeeds.Caretaker],
-            ["openid", "profile", "email"],
-            AuthType.OidcToken);
-
-        var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().Contain(Scope.GlucoseRead);
-        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
-        // The IdP's protocol scopes are not Nocturne scopes and must not be published.
-        grantedScopes.Should().NotContain("openid");
-        grantedScopes.Should().NotContain("profile");
-    }
-
-    [Fact]
     public async Task UnscopedCredential_RebuildsThePermissionTrieForLegacyEndpoints()
     {
         // The trie drives the HasPermissions policy on v1/v2/v3. An empty resolved scope set left it

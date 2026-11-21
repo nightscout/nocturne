@@ -105,8 +105,7 @@ public class RequireInteractiveSessionTests
     /// Every credential type, and whether the filter admits it: only the ones a person's own sign-in
     /// produces are admitted. <see cref="AuthType.LegacyJwt"/> is a session token presented as a
     /// bearer; a JWT exchanged from an access token carries its grant and resolves as
-    /// <see cref="AuthType.OAuthAccessToken"/>. <see cref="AuthType.OidcToken"/> is a provider's ID
-    /// token sent as a bearer, which skips this instance's second factor.
+    /// <see cref="AuthType.OAuthAccessToken"/>.
     /// </summary>
     private static readonly IReadOnlyDictionary<AuthType, bool> AdmittedByCredentialType =
         new Dictionary<AuthType, bool>
@@ -114,7 +113,6 @@ public class RequireInteractiveSessionTests
             [AuthType.None] = false,
             [AuthType.SessionCookie] = true,
             [AuthType.LegacyJwt] = true,
-            [AuthType.OidcToken] = false,
             [AuthType.ApiKey] = false,
             [AuthType.DirectGrant] = false,
             [AuthType.OAuthAccessToken] = false,

@@ -22,7 +22,7 @@ namespace Nocturne.API.Middleware.Handlers;
 public class SessionBearerHandler : IAuthHandler
 {
     /// <summary>
-    /// Handler priority (200 - after OIDC and OAuth access tokens)
+    /// Handler priority (200 - after OAuth access tokens)
     /// </summary>
     public int Priority => 200;
 
