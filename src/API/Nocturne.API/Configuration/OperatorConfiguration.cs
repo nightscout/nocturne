@@ -27,6 +27,35 @@ public class OperatorConfiguration
     /// </summary>
     public string? UsernameValidationWebhookUrl { get; set; }
 
+    /// <summary>
+    /// Optional webhook URL that delivers account links by email. While it is unset Nocturne sends
+    /// no account email, and recovery by email is neither offered nor accepted.
+    /// When configured, Nocturne POSTs one JSON object per message and treats any 2xx answer as
+    /// delivered:
+    /// <code>
+    /// {
+    ///   "kind": "recovery" | "email_confirmation",
+    ///   "email": "the recipient address",
+    ///   "link": "https://{slug}.{base domain}/auth/recovery?code=...",
+    ///   "expiresAt": "2026-11-21T10:30:00Z",
+    ///   "siteSlug": "the site's slug",
+    ///   "siteDisplayName": "the site's display name",
+    ///   "accountDisplayName": "the display name of the account the link is for"
+    /// }
+    /// </code>
+    /// The link is a bearer secret until it expires: the receiver must send it only to the address
+    /// named and must not log it.
+    /// </summary>
+    public string? AccountLinkWebhookUrl { get; set; }
+
+    /// <summary>
+    /// Whether <paramref name="url"/> is unset or an absolute http or https URL, the only webhook
+    /// targets a delivery can reach. Checked when the options bind, so a bad value stops startup.
+    /// </summary>
+    public static bool IsUnsetOrAbsoluteHttpUrl(string? url) =>
+        string.IsNullOrWhiteSpace(url)
+        || (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps));
+
     public OperatorSupportConfiguration Support { get; set; } = new();
 }
 

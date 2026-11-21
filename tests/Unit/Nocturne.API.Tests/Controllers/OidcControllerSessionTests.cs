@@ -1,3 +1,5 @@
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -64,6 +66,7 @@ public class OidcControllerSessionTests
             new Mock<ISubjectService>().Object,
             new Mock<IAuthAuditService>().Object,
             _tenantMemberService.Object,
+            new RecoverySession(new Mock<INocturneDbContextFactory>().Object, new Mock<ILoginCodeService>().Object, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcController>.Instance)

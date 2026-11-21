@@ -110,8 +110,9 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
             responses.Select(r => r.StatusCode).Should()
                 .BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.BadRequest]);
             RecoveryCookies(responses.Single(r => r.StatusCode == HttpStatusCode.OK)).Should().ContainSingle();
-            (await ScalarAsync<bool>(conn, "SELECT consumed_at IS NOT NULL FROM login_codes WHERE id = @id;", ("id", codeId)))
-                .Should().BeTrue();
+            // Starting the recovery session issues a code, which prunes spent ones, so the row may be gone.
+            (await ScalarAsync<long>(conn, "SELECT count(*) FROM login_codes WHERE id = @id AND consumed_at IS NULL;", ("id", codeId)))
+                .Should().Be(0);
         }
         finally
         {

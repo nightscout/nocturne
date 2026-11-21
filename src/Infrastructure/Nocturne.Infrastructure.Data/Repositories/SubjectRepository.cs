@@ -163,6 +163,25 @@ public class SubjectRepository : ISubjectRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(
+        Guid tenantId, string email, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        // The query only narrows to the tenant's confirmed members; whether an address is the one
+        // named is decided by EmailAddresses.AreSame below, so no SQL comparison restates it.
+        var confirmed = await Subjects(db)
+            .ExcludeDemo()
+            .Where(s => s.IsActive && !s.IsSystemSubject && s.Email != null && s.EmailConfirmedAt != null
+                && db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id))
+            .ToListAsync(ct);
+        return confirmed
+            .Where(s => EmailAddresses.AreSame(s.Email, email))
+            .Select(s => ToRecord(s)!)
+            .ToList();
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);

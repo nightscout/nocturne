@@ -191,7 +191,9 @@ public class TenantResolutionMiddleware
         // to route the callback home, which on a tenantless host is where the caller already is —
         // the same shape as the login/callback pair above.
         new TenantlessPath("/api/auth/oidc/link", HttpMethods.Get),
-        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get),
+        // The callback also completes a link under a recovery session, which is a code on the
+        // site's tenant, so the apex of a single-tenant install serves it as that tenant.
+        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get, SoleTenantAtApex: true),
         // GET is [AllowAnonymous] and serves any subject's picture by id on every tenant host
         // already; it is admitted here because the page renders through it.
         "/api/v4/me/avatar",

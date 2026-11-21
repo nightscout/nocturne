@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -46,6 +47,7 @@ public class OidcController : ControllerBase
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
     private readonly ITenantMemberService _tenantMemberService;
+    private readonly RecoverySession _recoverySession;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
@@ -59,6 +61,7 @@ public class OidcController : ControllerBase
         ISubjectService subjectService,
         IAuthAuditService auditService,
         ITenantMemberService tenantMemberService,
+        RecoverySession recoverySession,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcController> logger
@@ -69,6 +72,7 @@ public class OidcController : ControllerBase
         _subjectService = subjectService;
         _auditService = auditService;
         _tenantMemberService = tenantMemberService;
+        _recoverySession = recoverySession;
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
         _logger = logger;
@@ -334,11 +338,71 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Handle the OIDC link callback. Verifies the authorization code against the IdP,
-    /// then attaches the external identity to the currently-authenticated subject.
-    /// Does NOT issue new session cookies.
+    /// Starts linking an identity provider under a recovery session, as that session's one enrolment. Answers the provider's authorisation URL for the browser to open; the provider returns to the link callback.
     /// </summary>
+    /// <remarks>
+    /// A POST, not a GET, because the recovery cookie is SameSite=Lax (<see cref="RecoverySession"/>)
+    /// and rides a cross-site top-level GET: a GET start would let another site begin a link while
+    /// the browser holds an identity-provider session the other site chose.
+    /// </remarks>
+    [HttpPost("recovery/link")]
+    [AllowAnonymous]
+    [AllowDuringSetup]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(OidcRecoveryLinkResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<OidcRecoveryLinkResponse>> StartRecoveryLink([FromBody] OidcRecoveryLinkRequest request)
+    {
+        if (!string.IsNullOrEmpty(request.ReturnUrl) && !_baseDomain.IsValidReturnUrl(request.ReturnUrl))
+            return Problem(detail: "Invalid return URL", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+
+        var subjectId = await _recoverySession.ReadSubjectAsync(HttpContext, HttpContext.RequestAborted);
+        if (subjectId is null)
+            return Problem(detail: "A recovery session is required", statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized");
+
+        OidcAuthorizationRequest authRequest;
+        try
+        {
+            // The slug of the host, not of the resolved tenant: the apex relay sends the callback
+            // to that subdomain, and the apex of a single-tenant install serves no subdomain.
+            authRequest = await _authService.GenerateRecoveryLinkAuthorizationUrlAsync(
+                request.ProviderId, subjectId.Value, request.ReturnUrl,
+                SubdomainParser.Extract(Request.Host.Host, _baseDomain.BaseDomain));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate a recovery link authorization URL");
+            return Problem(detail: "This provider is not available", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+        }
+
+        SetLinkStateCookie(authRequest.State, authRequest.ExpiresAt);
+        return Ok(new OidcRecoveryLinkResponse { AuthorizationUrl = authRequest.AuthorizationUrl });
+    }
+
+    /// <summary>
+    /// Handle the OIDC link callback. Verifies the authorisation code against the IdP, then attaches the external identity to the currently-authenticated subject, or under a recovery session to that session's subject. Does NOT issue new session cookies.
+    /// </summary>
+    /// <remarks>
+    /// The two kinds of state are not interchangeable: a link state completes only with a signed-in
+    /// session, and a recovery state only with the recovery session it was started under
+    /// (<see cref="OidcAuthService.AttachVerifiedIdentityAsync"/>). A recovery link spends the
+    /// session and then sends the browser through the ordinary sign-in with the provider just
+    /// linked, so the member arrives signed in through that sign-in's own checks, second factor
+    /// included. Its return URL names the identity added, so the page can offer to remove older
+    /// sign-in methods; an identity the account already had was not added and is not named, but
+    /// still ends the session. A refused link, such as an identity already linked to someone else, leaves
+    /// the session usable.
+    /// <para>
+    /// Anonymous and allowed during setup because the recovery session is a cookie, not an auth
+    /// context, and is used most when the site is in recovery mode. The link branch refuses an
+    /// unauthenticated caller in its body.
+    /// </para>
+    /// </remarks>
     [HttpGet("link/callback")]
+    [AllowAnonymous]
+    [AllowDuringSetup]
     [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
@@ -349,6 +413,9 @@ public class OidcController : ControllerBase
         [FromQuery] string? error,
         [FromQuery] string? error_description)
     {
+        if (!string.IsNullOrEmpty(state) && _authService.IsRecoveryState(state))
+            return await RecoveryLinkCallbackAsync(code, state, error, error_description);
+
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
         {
@@ -405,6 +472,56 @@ public class OidcController : ControllerBase
         var separator = returnUrl.Contains('?') ? '&' : '?';
         return Redirect($"{returnUrl}{separator}linked=success");
     }
+
+    private async Task<IActionResult> RecoveryLinkCallbackAsync(
+        string? code, string state, string? error, string? errorDescription)
+    {
+        ClearLinkStateCookie();
+        if (!string.IsNullOrEmpty(error))
+        {
+            _logger.LogWarning("OIDC provider returned error on recovery link callback: {Error}", error);
+            return RedirectToError(error, errorDescription ?? "Link failed");
+        }
+
+        var expectedState = Request.Cookies[_options.Cookie.LinkStateCookieName];
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(expectedState))
+            return RedirectToError("invalid_state", "Link state not found. Start the link again.");
+
+        var enrolment = await _recoverySession.EnrolAsync(
+            HttpContext,
+            (subjectId, _) => _authService.HandleRecoveryLinkCallbackAsync(code, state, expectedState, subjectId),
+            result => result.Success,
+            HttpContext.RequestAborted);
+
+        if (enrolment is not { State: RecoveryEnrolmentState.Enrolled, Result: { } linked, SubjectId: { } subjectId })
+        {
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
+                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                errorMessage: enrolment.Result?.ErrorDescription ?? "recovery_session_required",
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc_recovery_link" }));
+
+            return enrolment.Result is { } refused
+                ? RedirectToError(refused.Error ?? "link_failed", refused.ErrorDescription ?? "Link failed")
+                : RedirectToError("recovery_session_required", "The recovery session has ended. Start again.");
+        }
+
+        await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, subjectId, success: true,
+            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            detailsJson: JsonSerializer.Serialize(new { identityId = linked.IdentityId, method = "recovery" }));
+
+        var returnUrl = linked.ReturnUrl ?? "/";
+        var separator = returnUrl.Contains('?') ? '&' : '?';
+        var signedInUrl = linked.Added
+            ? $"{returnUrl}{separator}{RecoveryLinkedIdentityParameter}={linked.IdentityId}"
+            : returnUrl;
+        return Redirect(
+            $"/api/auth/oidc/login?provider={linked.ProviderId}&returnUrl={Uri.EscapeDataString(signedInUrl)}");
+    }
+
+    /// <summary>
+    /// The query parameter a recovery link's return URL carries the new identity's id in.
+    /// </summary>
+    public const string RecoveryLinkedIdentityParameter = "linkedIdentity";
 
     /// <summary>
     /// List OIDC identities linked to the currently-authenticated subject.
@@ -801,6 +918,20 @@ public class OidcProviderInfo
     /// in which case the button keeps its themed style.
     /// </summary>
     public string? ButtonForegroundColor { get; set; }
+}
+
+/// <summary>The provider a recovery session links, and where to return after signing in with it.</summary>
+public class OidcRecoveryLinkRequest
+{
+    public Guid ProviderId { get; set; }
+
+    public string? ReturnUrl { get; set; }
+}
+
+/// <summary>The provider's authorisation URL, for the browser to open.</summary>
+public class OidcRecoveryLinkResponse
+{
+    public string AuthorizationUrl { get; set; } = string.Empty;
 }
 
 /// <summary>

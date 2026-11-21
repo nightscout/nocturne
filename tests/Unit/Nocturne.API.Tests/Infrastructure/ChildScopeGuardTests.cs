@@ -99,6 +99,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs: DevAdminController.SyncAll",
         "src/API/Nocturne.API/Middleware/CompatibilityProxyMiddleware.cs: CompatibilityProxyMiddleware.InvokeAsync",
         "src/API/Nocturne.API/Middleware/Handlers/ApiKeyHandler.cs: ApiKeyHandler.SendRotationNudgeAsync",
+        "src/API/Nocturne.API/Services/Auth/AccountLinkService.cs: RecoveryLinkRequests.RequestAsync",
         "src/API/Nocturne.API/Services/Auth/ShareLinkRotatedNotifier.cs: ShareLinkRotatedNotifier.NotifyAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.ExecuteAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorSyncService.cs: ConnectorSyncService.TriggerSyncAsync",

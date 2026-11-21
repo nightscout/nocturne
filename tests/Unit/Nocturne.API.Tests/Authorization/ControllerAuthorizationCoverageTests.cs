@@ -141,6 +141,7 @@ public class ControllerAuthorizationCoverageTests
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["DirectGrantController.Create"] = NoScope.OwnDelegation,
+            ["EmailConfirmationController.Send"] = NoScope.OwnCredentials,
             ["OAuthController.ApproveConsent"] = NoScope.OwnDelegation,
             ["OAuthController.DeviceApprove"] = NoScope.OwnDelegation,
             ["OAuthController.UpdateGrant"] = NoScope.OwnDelegation,
@@ -149,7 +150,6 @@ public class ControllerAuthorizationCoverageTests
             ["OAuthController.GetDeviceInfo"] = NoScope.CapabilityCode,
             ["OAuthController.Introspect"] = NoScope.OwnTokens,
             ["OidcController.Link"] = NoScope.OwnCredentials,
-            ["OidcController.LinkCallback"] = NoScope.OwnCredentials,
             ["OidcController.GetLinkedIdentities"] = NoScope.OwnCredentials,
             ["OidcController.UnlinkIdentity"] = NoScope.OwnCredentials,
             ["OidcController.Logout"] = NoScope.OwnCredentials,

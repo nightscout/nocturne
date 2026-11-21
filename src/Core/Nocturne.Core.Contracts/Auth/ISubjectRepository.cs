@@ -41,6 +41,13 @@ public interface ISubjectRepository
     Task<SubjectRecord?> FindMemberByUsernameAsync(Guid tenantId, string username, bool activeOnly, CancellationToken ct);
 
     /// <summary>
+    /// The active members of <paramref name="tenantId"/>, neither system nor demo subjects, whose
+    /// confirmed address is <paramref name="email"/> by <see cref="EmailAddresses.AreSame"/>,
+    /// roles not read. One address can sit on several accounts, so there may be more than one.
+    /// </summary>
+    Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(Guid tenantId, string email, CancellationToken ct);
+
+    /// <summary>
     /// The first-run owner candidate: the earliest active subject that is neither a system subject
     /// nor the demo visitor and holds no passkey and no identity-provider link, roles not read.
     /// That is normally the account an earlier owner options step created and whose ceremony was abandoned,

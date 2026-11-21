@@ -176,6 +176,13 @@ public static class ServiceRegistrationExtensions
         // one permit, and every code its holder could legitimately present was minted in the last
         // five minutes.
         ("login-handoff", 10, TimeSpan.FromMinutes(1)),
+        // Asking for a recovery link sends mail to someone else's inbox when the address is theirs.
+        // The ceiling bounds one client; LoginCodeService.MayEmailAsync bounds what reaches one
+        // account from every client together.
+        ("recovery-link", 5, TimeSpan.FromMinutes(10)),
+        // A signed-in member asking for their own confirmation link again. Each one is mail, so the
+        // ceiling is as tight as a recovery link's.
+        ("email-confirmation", 5, TimeSpan.FromMinutes(10)),
         // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
@@ -567,6 +574,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<MemberRecoveryEligibility>();
+        services.AddScoped<RecoverySession>();
+        services.AddScoped<AccountLinkService>();
+        services.AddSingleton<RecoveryLinkRequests>();
+        services.AddSingleton<IAccountLinkDelivery, OperatorWebhookLinkDelivery>();
+        // The message carries a bearer link, so a redirect the operator did not configure must not
+        // receive it.
+        services.AddHttpClient(OperatorWebhookLinkDelivery.HttpClientName, client => client.Timeout = OperatorWebhookLinkDelivery.Timeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
@@ -656,7 +671,11 @@ public static class ServiceRegistrationExtensions
                 if (config.Support.AccountPortal is { } portal)
                     return !string.IsNullOrWhiteSpace(portal.Url);
                 return true;
-            }, "Operator:Support:AccountPortal:Url is required when AccountPortal is configured");
+            }, "Operator:Support:AccountPortal:Url is required when AccountPortal is configured")
+            .Validate(
+                config => OperatorConfiguration.IsUnsetOrAbsoluteHttpUrl(config.AccountLinkWebhookUrl),
+                "Operator:AccountLinkWebhookUrl must be an absolute http or https URL")
+            .ValidateOnStart();
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
