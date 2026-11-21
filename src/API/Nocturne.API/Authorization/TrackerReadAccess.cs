@@ -5,7 +5,7 @@ namespace Nocturne.API.Authorization;
 
 /// <summary>
 /// Who reads the tenant's trackers, wherever they are served: the tracker endpoints, the dashboard
-/// chart's tracker markers and the widget summary's tracker statuses.
+/// chart's tracker markers, the widget summary's tracker statuses and the cross-tenant overview.
 /// </summary>
 /// <remarks>
 /// Trackers are the tenant's, so a reader sees all of them or none, and a definition's

@@ -12,8 +12,10 @@ namespace Nocturne.API.Services.Identity;
 public interface ITenantOverviewService
 {
     /// <summary>
-    /// Returns the latest canonical reading, resolved thresholds, status classification,
-    /// and active alert summary for every qualifying tenant of <paramref name="subjectId"/>.
+    /// Returns one item for every qualifying tenant of <paramref name="subjectId"/>, in display
+    /// order: tenants with a reason for attention first, most severe first, then by name.
+    /// The alert summary and the therapy, device and tracker parts of an item are null when the
+    /// caller's access to that tenant does not cover them.
     /// Per-tenant access is resolved by <see cref="MemberScopeResolver"/> from each membership's
     /// effective permissions, <paramref name="authType"/> and <paramref name="tokenScopes"/> — the
     /// same resolution <c>MemberScopeMiddleware</c> applies per request. A tenant whose

@@ -1,13 +1,18 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Widget;
+using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -24,6 +29,9 @@ namespace Nocturne.API.Services.Identity;
 public class TenantOverviewService : ITenantOverviewService
 {
     private const string AuditEndpoint = "service:tenant-overview";
+
+    private static readonly TimeSpan TraceWindow = TimeSpan.FromHours(3);
+    private static readonly TimeSpan TraceBucket = TimeSpan.FromMinutes(5);
 
     private readonly ITenantMembershipRepository _members;
     private readonly IServiceProvider _scope;
@@ -56,25 +64,57 @@ public class TenantOverviewService : ITenantOverviewService
         foreach (var (tenant, allowed, membershipLimitTo24Hours, effectivePermissions) in glucoseReadTenants)
         {
             var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
+            var includeTherapy = Scope.Satisfies(allowed, Scope.TreatmentsRead);
+            var includeDevices = Scope.Satisfies(allowed, Scope.DevicesRead);
             var historyClamped = MemberScopeResolver.IsHistoryClamped(
                 credentialLimitTo24Hours, membershipLimitTo24Hours, effectivePermissions);
 
             try
             {
-                items.Add(await BuildItemAsync(tenant, includeAlerts, historyClamped, ct));
+                items.Add(await BuildItemAsync(tenant, includeAlerts, includeTherapy, includeDevices, historyClamped, ct));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Failed to build overview for tenant {TenantId}", tenant.Id);
+                var nowUtc = _time.GetUtcNow().UtcDateTime;
+                var fallbackLastReadingAt = historyClamped ? null : tenant.LastReadingAt;
+                var fallbackStatus = _classifier.Classify(
+                    null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
                 items.Add(new TenantOverviewItem(
                     tenant.Id, tenant.Slug, tenant.DisplayName,
-                    historyClamped ? null : tenant.LastReadingAt, Latest: null, GlucoseStatus.Unknown,
-                    _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null));
+                    fallbackLastReadingAt, Latest: null, fallbackStatus,
+                    _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
+                    RecentReadings: [], Therapy: null, Devices: null, Trackers: null,
+                    Attention: BuildAttention(
+                        fallbackStatus, latest: null, fallbackLastReadingAt,
+                        activeAlertCount: null, highestSeverity: null, trackers: null,
+                        nowUtc)));
             }
         }
 
+        items.Sort(CompareForDisplay);
         return new TenantOverviewResponse(items);
     }
+
+    /// <summary>
+    /// Display order: people with a reason for attention first, by their most severe reason, then
+    /// everyone by name.
+    /// </summary>
+    internal static int CompareForDisplay(TenantOverviewItem a, TenantOverviewItem b)
+    {
+        var aSeverity = MostSevere(a);
+        var bSeverity = MostSevere(b);
+        if (aSeverity.HasValue != bSeverity.HasValue)
+            return aSeverity.HasValue ? -1 : 1;
+        if (aSeverity.HasValue && aSeverity != bSeverity)
+            return bSeverity!.Value.CompareTo(aSeverity.Value);
+
+        var byName = StringComparer.OrdinalIgnoreCase.Compare(a.DisplayName, b.DisplayName);
+        return byName != 0 ? byName : StringComparer.OrdinalIgnoreCase.Compare(a.Slug, b.Slug);
+    }
+
+    private static NotificationUrgency? MostSevere(TenantOverviewItem item) =>
+        item.Attention.Count == 0 ? null : item.Attention.Max(r => r.Level);
 
     public async Task<IReadOnlyList<GlucoseReadTenant>> GetGlucoseReadTenantsAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
@@ -101,9 +141,12 @@ public class TenantOverviewService : ITenantOverviewService
     private async Task<TenantOverviewItem> BuildItemAsync(
         TenantRecord tenant,
         bool includeAlerts,
+        bool includeTherapy,
+        bool includeDevices,
         bool historyClamped,
         CancellationToken ct)
     {
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
         // A scope per tenant: the caller's request never passed through MemberScopeMiddleware for
         // this tenant, so its clamp here is the one this membership decides, and every read below
         // goes through the scope.
@@ -111,9 +154,9 @@ public class TenantOverviewService : ITenantOverviewService
             .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
             .ClampedToDay(historyClamped);
         await using var scope = TenantJobScope.OpenFor(_scope, reader, AuditEndpoint);
-        var latest = await scope.ServiceProvider
-            .GetRequiredService<ICanonicalGlucoseService>()
-            .GetLatestAsync(ct);
+        var canonical = scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>();
+        var latest = await canonical.GetLatestAsync(ct);
+        var recent = await canonical.GetRecentAsync(nowUtc - TraceWindow, ct);
 
         await using var db = await scope.ServiceProvider
             .GetRequiredService<INocturneDbContextFactory>()
@@ -121,6 +164,7 @@ public class TenantOverviewService : ITenantOverviewService
 
         int? activeAlertCount = null;
         AlertRuleSeverity? highestSeverity = null;
+        List<V4TrackerStatus>? trackers = null;
         if (includeAlerts)
         {
             var activeExcursions = await db.AlertExcursions.AsNoTracking()
@@ -135,6 +179,30 @@ public class TenantOverviewService : ITenantOverviewService
                 .Where(e => e.AlertRule is not null)
                 .Select(e => (AlertRuleSeverity?)e.AlertRule!.Severity)
                 .Min();
+
+            trackers = TrackerStatusCondenser.Condense(
+                await scope.ServiceProvider.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(ct),
+                nowUtc);
+        }
+
+        TenantOverviewTherapy? therapy = null;
+        if (includeTherapy)
+        {
+            var onBoard = await scope.ServiceProvider.GetRequiredService<IIobCobReader>()
+                .ReadTotalAsync(new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(), live: true, ct);
+            therapy = new TenantOverviewTherapy(
+                onBoard.HasIob ? ScaledRounding.Round(onBoard.Iob.Iob, 2) : 0,
+                onBoard.HasIob,
+                onBoard.HasCob ? Math.Round(onBoard.Cob!.Cob) : 0,
+                onBoard.HasCob);
+        }
+
+        TenantOverviewDevices? devices = null;
+        if (includeDevices)
+        {
+            var pump = await scope.ServiceProvider.GetRequiredService<IPumpSnapshotRepository>()
+                .GetLatestAsync(asOf: null, ct);
+            devices = new TenantOverviewDevices(pump?.Reservoir, pump?.BatteryPercent, pump?.Timestamp);
         }
 
         var thresholds = _classifier.ResolveThresholds(
@@ -149,12 +217,80 @@ public class TenantOverviewService : ITenantOverviewService
         var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
 
         var status = _classifier.Classify(
-            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, _time.GetUtcNow().UtcDateTime);
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, nowUtc);
 
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
             latest?.Timestamp ?? lastReadingAt,
             reading, status, thresholds,
-            activeAlertCount, highestSeverity);
+            activeAlertCount, highestSeverity,
+            ThinToBuckets(recent),
+            therapy, devices, trackers,
+            BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc));
+    }
+
+    /// <summary>Oldest first, the newest reading of each 5-minute bucket.</summary>
+    internal static List<TenantOverviewPoint> ThinToBuckets(IEnumerable<SensorGlucose> readings) =>
+        readings
+            .GroupBy(r => r.Timestamp.Ticks / TraceBucket.Ticks)
+            .Select(g => g.MaxBy(r => r.Timestamp)!)
+            .OrderBy(r => r.Timestamp)
+            .Select(r => new TenantOverviewPoint(r.Timestamp, r.Mgdl))
+            .ToList();
+
+    /// <summary>Most severe first. A plain high is not a reason: the alert rules cover it.</summary>
+    internal static List<TenantOverviewAttention> BuildAttention(
+        GlucoseStatus status,
+        TenantOverviewReading? latest,
+        DateTime? lastReadingAt,
+        int? activeAlertCount,
+        AlertRuleSeverity? highestSeverity,
+        List<V4TrackerStatus>? trackers,
+        DateTime nowUtc)
+    {
+        var reasons = new List<TenantOverviewAttention>();
+
+        switch (status)
+        {
+            case GlucoseStatus.UrgentLow:
+                reasons.Add(new(TenantOverviewAttentionKind.GlucoseOutOfRange, NotificationUrgency.Urgent));
+                break;
+            case GlucoseStatus.Low:
+            case GlucoseStatus.UrgentHigh:
+                reasons.Add(new(TenantOverviewAttentionKind.GlucoseOutOfRange, NotificationUrgency.Hazard));
+                break;
+        }
+
+        var lastAt = latest?.Timestamp ?? lastReadingAt;
+        if (status == GlucoseStatus.Stale || lastAt is null)
+        {
+            int? minutes = lastAt is { } at
+                ? (int)Math.Max(0, Math.Floor((nowUtc - at).TotalMinutes))
+                : null;
+            reasons.Add(new(TenantOverviewAttentionKind.NoRecentReading, NotificationUrgency.Warn, minutes));
+        }
+
+        if (activeAlertCount > 0)
+        {
+            var level = highestSeverity switch
+            {
+                AlertRuleSeverity.Critical => NotificationUrgency.Urgent,
+                AlertRuleSeverity.Warning => NotificationUrgency.Warn,
+                _ => NotificationUrgency.Info,
+            };
+            reasons.Add(new(TenantOverviewAttentionKind.ActiveAlert, level));
+        }
+
+        foreach (var tracker in trackers ?? [])
+        {
+            if (tracker.Urgency >= NotificationUrgency.Warn)
+            {
+                reasons.Add(new(
+                    TenantOverviewAttentionKind.TrackerDue, tracker.Urgency,
+                    TrackerName: tracker.Name, HoursUntilEvent: tracker.HoursUntilEvent));
+            }
+        }
+
+        return reasons.OrderByDescending(r => r.Level).ToList();
     }
 }
