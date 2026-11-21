@@ -34,7 +34,7 @@ public static class MemberScopeResolver
     /// protocol list identical for every user of that provider, not a per-user Nocturne grant.</item>
     /// <item><see cref="AuthType.LegacyJwt"/> — structurally unscoped:
     /// <c>OAuthAccessTokenHandler</c> runs first and claims every JWT bearing a <c>scope</c> or
-    /// <c>client_id</c> claim, so a JWT that reaches <c>LegacyJwtHandler</c> has neither.
+    /// <c>client_id</c> claim, so a JWT that reaches <c>SessionBearerHandler</c> has neither.
     /// <c>SessionService</c> mints session tokens through the same <c>IJwtService</c>, so this is
     /// the same credential as a session cookie presented on a different transport.</item>
     /// </list>

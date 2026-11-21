@@ -15,21 +15,21 @@ namespace Nocturne.API.Tests.Middleware.Handlers;
 
 /// <summary>
 /// Round-trip tests: tokens are minted with the real <see cref="JwtService"/> (as the
-/// token-exchange endpoint does) and presented back to <see cref="LegacyJwtHandler"/>.
+/// token-exchange endpoint does) and presented back to <see cref="SessionBearerHandler"/>.
 /// Literal-name claim lookups ("sub", "roles", "permissions") pass a hand-rolled unit
 /// test but fail on real tokens, because JwtSecurityTokenHandler's inbound claim-type
 /// map rewrites sub/role during validation — so these tests must use the real service
 /// on both sides.
 /// </summary>
-public class LegacyJwtHandlerTests
+public class SessionBearerHandlerTests
 {
     private readonly JwtService _jwtService;
-    private readonly LegacyJwtHandler _handler;
+    private readonly SessionBearerHandler _handler;
 
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private readonly Guid _tenantId = Guid.CreateVersion7();
 
-    public LegacyJwtHandlerTests()
+    public SessionBearerHandlerTests()
     {
         _jwtService = CreateJwtService("test-secret-key-with-at-least-32-characters!");
 
@@ -37,9 +37,9 @@ public class LegacyJwtHandlerTests
         services.AddScoped<IJwtService>(_ => _jwtService);
         var serviceProvider = services.BuildServiceProvider();
 
-        _handler = new LegacyJwtHandler(
+        _handler = new SessionBearerHandler(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            Mock.Of<ILogger<LegacyJwtHandler>>());
+            Mock.Of<ILogger<SessionBearerHandler>>());
     }
 
     private static JwtService CreateJwtService(string secretKey)
@@ -221,8 +221,8 @@ public class LegacyJwtHandlerTests
     }
 
     [Fact]
-    public void Name_IsLegacyJwtHandler()
+    public void Name_IsSessionBearerHandler()
     {
-        Assert.Equal("LegacyJwtHandler", _handler.Name);
+        Assert.Equal("SessionBearerHandler", _handler.Name);
     }
 }

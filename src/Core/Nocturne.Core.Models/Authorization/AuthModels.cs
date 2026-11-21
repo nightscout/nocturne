@@ -225,7 +225,8 @@ public enum AuthType
     OidcToken,
 
     /// <summary>
-    /// Legacy JWT token (self-issued)
+    /// A first-party session JWT presented as a bearer token. A Nightscout exchange JWT carries its
+    /// grant and resolves as <see cref="OAuthAccessToken"/>. The member name is stored in audit rows.
     /// </summary>
     LegacyJwt,
 

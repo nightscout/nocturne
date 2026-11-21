@@ -273,7 +273,7 @@ public class MemberScopeMiddlewareTests
         AuthType authType)
     {
         // The real web-app credential shape: no scopes at all, because SessionCookieHandler
-        // never sets them and a JWT reaching LegacyJwtHandler has no scope claim
+        // never sets them and a JWT reaching SessionBearerHandler has no scope claim
         // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
         // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
         // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,

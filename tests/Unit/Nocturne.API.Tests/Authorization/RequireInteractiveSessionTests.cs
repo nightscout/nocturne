@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -29,6 +32,12 @@ public class RequireInteractiveSessionTests
         { typeof(DirectGrantController), nameof(DirectGrantController.List) },
         { typeof(DirectGrantController), nameof(DirectGrantController.Revoke) },
 
+        { typeof(EmailConfirmationController), nameof(EmailConfirmationController.Send) },
+
+        { typeof(TrustedDevicesController), nameof(TrustedDevicesController.List) },
+        { typeof(TrustedDevicesController), nameof(TrustedDevicesController.Revoke) },
+        { typeof(TrustedDevicesController), nameof(TrustedDevicesController.RevokeAll) },
+
         { typeof(OAuthController), nameof(OAuthController.ApproveConsent) },
         { typeof(OAuthController), nameof(OAuthController.DeviceApprove) },
         { typeof(OAuthController), nameof(OAuthController.GetGrants) },
@@ -48,6 +57,11 @@ public class RequireInteractiveSessionTests
         { typeof(OidcController), nameof(OidcController.LinkCallback) },
         { typeof(OidcController), nameof(OidcController.UnlinkIdentity) },
 
+        { typeof(ChatIdentityController), nameof(ChatIdentityController.ClaimLink) },
+        { typeof(CustomReportsController), nameof(CustomReportsController.CreateCustomReport) },
+        { typeof(CustomReportsController), nameof(CustomReportsController.UpdateCustomReport) },
+        { typeof(CustomReportsController), nameof(CustomReportsController.DeleteCustomReport) },
+        { typeof(ServicesController), nameof(ServicesController.GetConnections) },
         { typeof(GuestLinkController), nameof(GuestLinkController.CreateGuestLink) },
         { typeof(ShareLinkController), nameof(ShareLinkController.RevealShareLink) },
         { typeof(ShareLinkController), nameof(ShareLinkController.RotateShareLink) },
@@ -67,6 +81,24 @@ public class RequireInteractiveSessionTests
         (method.GetCustomAttribute<RequireInteractiveSessionAttribute>() is not null
             || controller.GetCustomAttribute<RequireInteractiveSessionAttribute>() is not null)
             .Should().BeTrue($"{controller.Name}.{action} manages credentials or sign-in factors");
+    }
+
+    [Fact]
+    public void EveryActionCarryingTheAttribute_IsListed()
+    {
+        var carrying = typeof(RequireInteractiveSessionAttribute).Assembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+            .SelectMany(t => t
+                .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(m => m.GetCustomAttributes<HttpMethodAttribute>().Any())
+                .Where(m => m.GetCustomAttribute<RequireInteractiveSessionAttribute>() is not null
+                    || t.GetCustomAttribute<RequireInteractiveSessionAttribute>() is not null)
+                .Select(m => (t, m.Name)))
+            .ToHashSet();
+
+        var listed = GatedEndpoints.Select(row => ((Type)row[0], (string)row[1])).ToHashSet();
+
+        carrying.Should().BeEquivalentTo(listed);
     }
 
     /// <summary>

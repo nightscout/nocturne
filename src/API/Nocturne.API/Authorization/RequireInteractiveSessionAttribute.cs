@@ -13,8 +13,9 @@ namespace Nocturne.API.Authorization;
 /// account holder's decision. A delegated credential (an app's OAuth token, a direct grant, an
 /// api-secret, a guest link, the instance key) holds only what it was given; one that could enrol a
 /// factor or mint another credential would outlive its own revocation and expiry. The interactive
-/// types are exactly <see cref="MemberScopeResolver.UnscopedCredentialTypes"/>: the ones that carry
-/// no grant of their own and resolve to the member's role.
+/// types are the ones that are the person, not a grant they gave out, by the rule
+/// <see cref="PlatformAdminCredentials"/> states. This attribute keeps its own list so a change to
+/// scope handling cannot move this boundary.
 /// <para>
 /// An unauthenticated request is left to the action: it answers with its own 401, or admits the
 /// recovery session a spent recovery code mints, which no auth handler recognises.
@@ -23,6 +24,13 @@ namespace Nocturne.API.Authorization;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class RequireInteractiveSessionAttribute : Attribute, IAuthorizationFilter
 {
+    private static readonly IReadOnlySet<AuthType> SignInCredentialTypes = new HashSet<AuthType>
+    {
+        AuthType.SessionCookie,
+        AuthType.OidcToken,
+        AuthType.LegacyJwt,
+    };
+
     public void OnAuthorization(AuthorizationFilterContext context)
     {
         if (Refuses(context.HttpContext))
@@ -37,5 +45,5 @@ public sealed class RequireInteractiveSessionAttribute : Attribute, IAuthorizati
     /// </summary>
     public static bool Refuses(HttpContext httpContext) =>
         httpContext.GetAuthContext() is { IsAuthenticated: true } auth
-        && !MemberScopeResolver.UnscopedCredentialTypes.Contains(auth.AuthType);
+        && !SignInCredentialTypes.Contains(auth.AuthType);
 }

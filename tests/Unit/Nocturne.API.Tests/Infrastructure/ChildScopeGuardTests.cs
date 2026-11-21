@@ -69,7 +69,7 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Hubs/HubCredentialVerifier.cs: HubCredentialVerifier.GuestSessionAsync",
         "src/API/Nocturne.API/Middleware/AuthenticationMiddleware.cs: AuthenticationMiddleware.InvokeAsync",
         "src/API/Nocturne.API/Middleware/Handlers/GuestSessionHandler.cs: GuestSessionHandler.AuthenticateAsync",
-        "src/API/Nocturne.API/Middleware/Handlers/LegacyJwtHandler.cs: LegacyJwtHandler.AuthenticateAsync",
+        "src/API/Nocturne.API/Middleware/Handlers/SessionBearerHandler.cs: SessionBearerHandler.AuthenticateAsync",
         "src/API/Nocturne.API/Middleware/Handlers/OAuthAccessTokenHandler.cs: OAuthAccessTokenHandler.AuthenticateAsync",
         "src/API/Nocturne.API/Middleware/Handlers/OidcTokenHandler.cs: OidcTokenHandler.AuthenticateAsync",
         "src/API/Nocturne.API/Middleware/Handlers/OidcTokenHandler.cs: OidcTokenHandler.RecordLastLoginAsync",

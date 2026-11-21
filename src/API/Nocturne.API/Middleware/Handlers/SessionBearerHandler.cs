@@ -19,7 +19,7 @@ namespace Nocturne.API.Middleware.Handlers;
 /// are emitted as repeated singular <c>permission</c> claims. IJwtService owns
 /// that mapping in one place.
 /// </remarks>
-public class LegacyJwtHandler : IAuthHandler
+public class SessionBearerHandler : IAuthHandler
 {
     /// <summary>
     /// Handler priority (200 - after OIDC and OAuth access tokens)
@@ -29,15 +29,15 @@ public class LegacyJwtHandler : IAuthHandler
     /// <summary>
     /// Handler name for logging
     /// </summary>
-    public string Name => "LegacyJwtHandler";
+    public string Name => "SessionBearerHandler";
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<LegacyJwtHandler> _logger;
+    private readonly ILogger<SessionBearerHandler> _logger;
 
     /// <summary>
-    /// Creates a new instance of LegacyJwtHandler
+    /// Creates a new instance of SessionBearerHandler
     /// </summary>
-    public LegacyJwtHandler(IServiceScopeFactory scopeFactory, ILogger<LegacyJwtHandler> logger)
+    public SessionBearerHandler(IServiceScopeFactory scopeFactory, ILogger<SessionBearerHandler> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -62,7 +62,7 @@ public class LegacyJwtHandler : IAuthHandler
         if (!validationResult.IsValid || validationResult.Claims is null)
         {
             _logger.LogDebug(
-                "Legacy JWT validation failed: {Error}",
+                "Session bearer validation failed: {Error}",
                 validationResult.Error
             );
             return Task.FromResult(
@@ -96,7 +96,7 @@ public class LegacyJwtHandler : IAuthHandler
         };
 
         _logger.LogDebug(
-            "Legacy JWT authentication successful for subject {SubjectId}",
+            "Session bearer authentication successful for subject {SubjectId}",
             authContext.SubjectId
         );
         return Task.FromResult(AuthResult.Success(authContext));

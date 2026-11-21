@@ -22,7 +22,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     internal const string TokenPrefix = "noc_";
 
     /// <summary>
-    /// Handler priority (150 - after session cookies, before OIDC/legacy JWT)
+    /// Handler priority (150 - after session cookies, before OIDC and the session bearer handler)
     /// </summary>
     public int Priority => 150;
 
