@@ -29,14 +29,14 @@ public class DemoServiceOptions
     public string ConfigSection { get; set; } = "Parameters:DemoMode";
 
     /// <summary>
-    /// Whether to clear existing demo data on startup.
+    /// Clears and regenerates the demo data on every start, even when the existing data is fresh.
     /// </summary>
-    public bool ClearOnStartup { get; set; } = true;
+    public bool ClearOnStartup { get; set; }
 
     /// <summary>
-    /// Whether to regenerate demo data on startup.
+    /// Regenerates the demo data on every start, even when the existing data is fresh.
     /// </summary>
-    public bool RegenerateOnStartup { get; set; } = true;
+    public bool RegenerateOnStartup { get; set; }
 
     /// <summary>
     /// Number of days of historical data to backfill.
