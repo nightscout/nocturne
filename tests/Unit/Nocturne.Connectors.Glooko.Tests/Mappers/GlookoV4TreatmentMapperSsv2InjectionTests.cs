@@ -23,7 +23,7 @@ public class GlookoV4TreatmentMapperSsv2InjectionTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
     }
 
     private static GlookoInjectionInsulin Injection(
@@ -48,7 +48,6 @@ public class GlookoV4TreatmentMapperSsv2InjectionTests
         b.InsulinType.Should().Be("Humalog");
         b.BolusType.Should().Be(BolusType.Normal);
         b.Automatic.Should().BeFalse();
-        b.DataSource.Should().Be("glooko-connector");
         b.InsulinContext.Should().NotBeNull("a known insulin should resolve DIA/peak from the catalog");
     }
 

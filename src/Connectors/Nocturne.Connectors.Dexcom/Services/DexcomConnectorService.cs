@@ -46,7 +46,7 @@ public class DexcomConnectorService
         var batchData = await FetchBatchDataAsync(config, session, since, cancellationToken);
         if (batchData == null) return [];
 
-        var records = _sensorGlucoseMapper.MapBatchData(batchData, Clock.GetUtcNow().UtcDateTime).ToList();
+        var records = _sensorGlucoseMapper.MapBatchData(batchData).ToList();
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} SensorGlucose records from Dexcom",
             ConnectorSource,

@@ -30,7 +30,7 @@ public class TidepoolNullRecordTests
     {
         TidepoolBgValue[] values = [new() { Id = "bg-1", Value = value, Units = units!, Time = Now }];
 
-        var readings = new TidepoolSensorGlucoseMapper(NullLogger.Instance, Source).MapBgValues(values, Now);
+        var readings = new TidepoolSensorGlucoseMapper(NullLogger.Instance, Source).MapBgValues(values);
 
         readings.Should().ContainSingle().Which.Mgdl.Should().Be(expectedMgdl);
     }
@@ -44,7 +44,7 @@ public class TidepoolNullRecordTests
             new() { Id = "bg-1", Value = 120, Units = "mg/dL", Time = Now },
         ];
 
-        var readings = new TidepoolSensorGlucoseMapper(NullLogger.Instance, Source).MapBgValues(values, Now);
+        var readings = new TidepoolSensorGlucoseMapper(NullLogger.Instance, Source).MapBgValues(values);
 
         readings.Should().ContainSingle().Which.Mgdl.Should().Be(120);
     }
@@ -66,7 +66,7 @@ public class TidepoolNullRecordTests
         ];
 
         var (mappedBoluses, carbs, _) = new TidepoolV4TreatmentMapper(NullLogger.Instance, Source)
-            .MapTreatments(boluses, foods, Now);
+            .MapTreatments(boluses, foods);
 
         mappedBoluses.Should().ContainSingle().Which.Insulin.Should().Be(3.0);
         carbs.Should().ContainSingle().Which.Carbs.Should().Be(40);

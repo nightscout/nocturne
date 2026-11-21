@@ -93,6 +93,19 @@ public class ConnectorRegistrationAttribute(
     public string DataSourceId { get; } = dataSourceId;
 
     /// <summary>
+    ///     What every key <see cref="Utilities.ConnectorLegacyIds"/> builds for this connector starts
+    ///     with. <see cref="DataSourceId"/> unless declared: a connector whose stored keys predate the
+    ///     rule declares the prefix they carry; see <see cref="Utilities.ConnectorLegacyIds"/> for why a key must not change.
+    /// </summary>
+    public string LegacyIdPrefix
+    {
+        get => _legacyIdPrefix ?? DataSourceId;
+        set => _legacyIdPrefix = value;
+    }
+
+    private string? _legacyIdPrefix;
+
+    /// <summary>
     ///     Icon identifier for the connector in the UI (e.g., "libre", "dexcom", "glooko")
     /// </summary>
     public string Icon { get; } = icon;

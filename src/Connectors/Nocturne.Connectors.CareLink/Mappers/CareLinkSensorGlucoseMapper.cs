@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -10,9 +11,11 @@ namespace Nocturne.Connectors.CareLink.Mappers;
 
 public class CareLinkSensorGlucoseMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<CareLinkConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public List<SensorGlucose> Map(CareLinkData data, DateTime now)
+    public List<SensorGlucose> Map(CareLinkData data)
     {
         if (data.Sgs is not { Count: > 0 })
             return [];
@@ -45,15 +48,11 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
 
             results.Add(new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
-                LegacyId = $"carelink_{timestamp.Value.ToMills()}",
+                LegacyId = LegacyIds.Of(timestamp.Value.ToMills()),
                 Device = deviceName,
-                DataSource = DataSources.CareLinkConnector,
                 Mgdl = mgdl,
                 Direction = i == 0 ? trendDirection : GlucoseDirection.None,
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 

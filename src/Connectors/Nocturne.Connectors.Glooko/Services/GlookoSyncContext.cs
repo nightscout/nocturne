@@ -18,15 +18,15 @@ internal sealed class GlookoSyncContext
     {
         Config = config;
         TimeMapper = new GlookoTimeMapper(config, logger);
-        SensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, connectorSource, TimeMapper, logger, clock);
-        V4TreatmentMapper = new GlookoV4TreatmentMapper(connectorSource, TimeMapper, logger, clock);
+        SensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, connectorSource, TimeMapper, logger);
+        V4TreatmentMapper = new GlookoV4TreatmentMapper(connectorSource, TimeMapper, logger);
         StateSpanMapper = new GlookoStateSpanMapper(connectorSource, TimeMapper, logger);
-        TempBasalMapper = new GlookoTempBasalMapper(connectorSource, TimeMapper, logger, clock);
+        TempBasalMapper = new GlookoTempBasalMapper(connectorSource, TimeMapper, logger);
         SystemEventMapper = new GlookoSystemEventMapper(connectorSource, TimeMapper, logger);
         ProfileMapper = new GlookoProfileMapper(connectorSource, logger);
-        PumpEventMapper = new GlookoPumpEventMapper(connectorSource, TimeMapper, logger, clock);
+        PumpEventMapper = new GlookoPumpEventMapper(connectorSource, TimeMapper, logger);
         DeviceMapper = new GlookoDeviceMapper(connectorSource, TimeMapper, logger, clock);
-        NoteMapper = new GlookoNoteMapper(connectorSource, TimeMapper, logger, clock);
+        NoteMapper = new GlookoNoteMapper(connectorSource, TimeMapper, logger);
         ActivityMapper = new GlookoActivityMapper(connectorSource, TimeMapper, logger);
         BodyWeightMapper = new GlookoBodyWeightMapper(connectorSource, TimeMapper, logger);
         StepCountMapper = new GlookoStepCountMapper(connectorSource, TimeMapper, logger);

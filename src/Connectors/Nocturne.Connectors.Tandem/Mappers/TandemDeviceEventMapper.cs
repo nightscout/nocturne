@@ -1,5 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -14,10 +16,12 @@ namespace Nocturne.Connectors.Tandem.Mappers;
 /// </summary>
 public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver time)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TandemConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events, DateTime now)
+    public List<DeviceEvent> Map(IEnumerable<TandemPumpEvent> events)
     {
         var records = new List<DeviceEvent>();
 
@@ -52,17 +56,13 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
 
             records.Add(new DeviceEvent
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
                 UtcOffset = _time.OffsetMinutesAt(timestamp),
                 Device = TandemMapHelpers.Source,
-                DataSource = TandemMapHelpers.Source,
-                SyncIdentifier = $"tandem_devent_{ev.SeqNum}",
-                LegacyId = $"tandem_devent_{ev.SeqNum}",
+                SyncIdentifier = LegacyIds.Of("devent", ev.SeqNum),
+                LegacyId = LegacyIds.Of("devent", ev.SeqNum),
                 EventType = mapped.Value.Item1,
                 Notes = mapped.Value.Item2,
-                CreatedAt = now,
-                ModifiedAt = now,
             });
         }
 

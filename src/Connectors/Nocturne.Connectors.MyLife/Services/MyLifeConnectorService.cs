@@ -164,7 +164,7 @@ public class MyLifeConnectorService(
                 if (needGlucose)
                 {
                     var sgList = eventProcessor
-                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks), now)
+                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
                     await PublishRecordTypeAsync(result, activeTypes,
@@ -182,8 +182,7 @@ public class MyLifeConnectorService(
                         contextEvents,
                         config.EnableMealCarbConsolidation,
                         config.EnableTempBasalConsolidation,
-                        config.TempBasalConsolidationWindowMinutes,
-                        now);
+                        config.TempBasalConsolidationWindowMinutes);
 
                     // Treatment records
                     if (needRecords)
@@ -229,7 +228,7 @@ public class MyLifeConnectorService(
                 await PublishRecordTypeAsync(result, activeTypes,
                     profiles, config, cancellationToken);
 
-                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
+                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
                 await PublishRecordTypeAsync(result, activeTypes,
                     activations, config, cancellationToken, "from pump settings");
             }

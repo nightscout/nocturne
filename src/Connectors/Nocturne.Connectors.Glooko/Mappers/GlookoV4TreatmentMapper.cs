@@ -1,7 +1,6 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -10,12 +9,13 @@ using V4BolusType = Nocturne.Core.Models.V4.BolusType;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
-public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger, TimeProvider clock)
+public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper timeMapper, ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource = connectorSource ?? throw new ArgumentNullException(nameof(connectorSource));
     private readonly GlookoTimeMapper _timeMapper = timeMapper ?? throw new ArgumentNullException(nameof(timeMapper));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly TimeProvider _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
     private IReadOnlyList<T> Records<T>(IEnumerable<T?>? records, string recordType) where T : class =>
         ConnectorFaults.NonNullRecords(records, _logger, _connectorSource, recordType);
@@ -25,7 +25,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<Bolus> boluses, List<CarbIntake> carbs, List<DecompositionBatch> batches) MapBatchData(GlookoBatchData batchData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
         var carbs = new List<CarbIntake>();
         var batches = new List<DecompositionBatch>();
@@ -48,9 +47,8 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         var batch = new DecompositionBatch
                         {
                             Id = Guid.CreateVersion7(),
-                            Source = "glooko",
-                            SourceRecordId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
-                            CreatedAt = now,
+                            Source = LegacyIds.Prefix,
+                            SourceRecordId = LegacyIds.Hashed("bolus", bolusDate.Ticks, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
                         };
                         batches.Add(batch);
                         correlationId = batch.Id;
@@ -58,40 +56,32 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                     if (hasInsulin)
                     {
-                        var bolusLegacyId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
+                        var bolusLegacyId = LegacyIds.Hashed("bolus", bolusDate.Ticks, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
                         boluses.Add(new Bolus
                         {
-                            Id = Guid.CreateVersion7(),
                             Timestamp = correctedDate,
                             LegacyId = bolusLegacyId,
                             // Stable (raw-timestamp-derived) key so re-correction upserts in place.
                             SyncIdentifier = bolusLegacyId,
                             Device = _connectorSource,
-                            DataSource = _connectorSource,
                             Insulin = bolus.InsulinDelivered,
                             BolusType = V4BolusType.Normal,
                             Automatic = false,
                             CorrelationId = correlationId,
-                            CreatedAt = now,
-                            ModifiedAt = now
                         });
                     }
 
                     if (hasCarbs)
                     {
-                        var carbLegacyId = GenerateLegacyId("carbs", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
+                        var carbLegacyId = LegacyIds.Hashed("carbs", bolusDate.Ticks, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
                         carbs.Add(new CarbIntake
                         {
-                            Id = Guid.CreateVersion7(),
                             Timestamp = correctedDate,
                             LegacyId = carbLegacyId,
                             SyncIdentifier = carbLegacyId,
                             Device = _connectorSource,
-                            DataSource = _connectorSource,
                             Carbs = bolus.CarbsInput,
                             CorrelationId = correlationId,
-                            CreatedAt = now,
-                            ModifiedAt = now
                         });
                     }
                 }
@@ -117,19 +107,15 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     if (carbValue <= 0) continue;
 
                     var legacyId = !string.IsNullOrEmpty(food.Guid)
-                        ? $"glooko_food_{food.Guid}"
-                        : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
+                        ? LegacyIds.Of("food", food.Guid)
+                        : LegacyIds.Hashed("food", foodDate.Ticks, $"carbs:{carbValue}");
 
                     carbs.Add(new CarbIntake
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedDate,
                         LegacyId = legacyId,
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Carbs = carbValue,
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
                 catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -150,7 +136,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
         if (batchData.Foods == null) return carbs;
 
@@ -167,19 +152,15 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 if (carbValue <= 0) continue;
 
                 var legacyId = !string.IsNullOrEmpty(food.Guid)
-                    ? $"glooko_food_{food.Guid}"
-                    : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
+                    ? LegacyIds.Of("food", food.Guid)
+                    : LegacyIds.Hashed("food", foodDate.Ticks, $"carbs:{carbValue}");
 
                 carbs.Add(new CarbIntake
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedDate,
                     LegacyId = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Carbs = carbValue,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -215,7 +196,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 var externalEntryId = !string.IsNullOrEmpty(food.Guid)
                     ? food.Guid
-                    : $"glooko_food_{foodDate.Ticks}_{carbValue}";
+                    : LegacyIds.Of("food", foodDate.Ticks, carbValue);
 
                 var externalFoodId = food.ExternalId ?? food.Guid ?? string.Empty;
 
@@ -301,7 +282,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<Bolus> boluses, List<CarbIntake> carbs, List<DecompositionBatch> batches) MapV3Boluses(GlookoV3GraphResponse graphData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
         var carbs = new List<CarbIntake>();
         var batches = new List<DecompositionBatch>();
@@ -336,9 +316,8 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     var batch = new DecompositionBatch
                     {
                         Id = Guid.CreateVersion7(),
-                        Source = "glooko",
-                        SourceRecordId = GenerateLegacyId("v3_bolus", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}"),
-                        CreatedAt = now,
+                        Source = LegacyIds.Prefix,
+                        SourceRecordId = LegacyIds.Hashed("v3_bolus", rawTimestamp.Ticks, $"carbs:{carbsInput}_insulin:{insulin}"),
                     };
                     batches.Add(batch);
                     correlationId = batch.Id;
@@ -346,41 +325,33 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 if (hasInsulin)
                 {
-                    var v3BolusLegacyId = GenerateLegacyId("v3_bolus", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}");
+                    var v3BolusLegacyId = LegacyIds.Hashed("v3_bolus", rawTimestamp.Ticks, $"carbs:{carbsInput}_insulin:{insulin}");
                     boluses.Add(new Bolus
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
                         LegacyId = v3BolusLegacyId,
                         // rawTimestamp is the raw fake-UTC (stable); key the upsert on it so re-correction
                         // moves the row instead of duplicating it.
                         SyncIdentifier = v3BolusLegacyId,
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Insulin = insulin,
                         BolusType = V4BolusType.Normal,
                         Automatic = automatic,
                         CorrelationId = correlationId,
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
 
                 if (hasCarbs)
                 {
-                    var v3CarbLegacyId = GenerateLegacyId("v3_carbs", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}");
+                    var v3CarbLegacyId = LegacyIds.Hashed("v3_carbs", rawTimestamp.Ticks, $"carbs:{carbsInput}_insulin:{insulin}");
                     carbs.Add(new CarbIntake
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
                         LegacyId = v3CarbLegacyId,
                         SyncIdentifier = v3CarbLegacyId,
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Carbs = carbsInput,
                         CorrelationId = correlationId,
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
             }
@@ -404,7 +375,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapV3CarbAll(GlookoV3GraphResponse graphData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
 
         if (graphData?.Series?.CarbAll == null)
@@ -422,14 +392,10 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 carbs.Add(new CarbIntake
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
-                    LegacyId = GenerateLegacyId("v3_carball", rawTimestamp, $"carbs:{carbValue}"),
+                    LegacyId = LegacyIds.Hashed("v3_carball", rawTimestamp.Ticks, $"carbs:{carbValue}"),
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Carbs = carbValue,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -486,7 +452,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         string legacyKind,
         List<DeviceEvent> into)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         if (points == null)
             return;
 
@@ -499,15 +464,11 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 into.Add(new DeviceEvent
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
-                    LegacyId = GenerateLegacyId(legacyKind, rawTimestamp),
+                    LegacyId = LegacyIds.Hashed(legacyKind, rawTimestamp.Ticks, null),
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     EventType = eventType,
                     Notes = change.Label,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -525,7 +486,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapV3HistoryMealsToCarbIntakes(GlookoV3HistoriesResponse historiesData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
         if (historiesData?.Histories == null) return carbs;
 
@@ -542,19 +502,15 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 if (timestamp == null) continue;
 
                 var legacyId = !string.IsNullOrEmpty(meal.Guid)
-                    ? $"glooko_v3meal_{meal.Guid}"
-                    : GenerateLegacyId("v3meal", timestamp.Value, $"carbs:{totalCarbs}");
+                    ? LegacyIds.Of("v3meal", meal.Guid)
+                    : LegacyIds.Hashed("v3meal", timestamp.Value.Ticks, $"carbs:{totalCarbs}");
 
                 carbs.Add(new CarbIntake
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = timestamp.Value,
                     LegacyId = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Carbs = totalCarbs,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -755,7 +711,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public (List<BasalInjection> basalInjections, List<Bolus> boluses) MapV3ManualInsulin(GlookoV3GraphResponse graphData)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -779,15 +734,11 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                     basalInjections.Add(new BasalInjection
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("v3_insulin_basal", rawTimestamp, $"units:{units}_name:{point.InsulinName}"),
+                        LegacyId = LegacyIds.Hashed("v3_insulin_basal", rawTimestamp.Ticks, $"units:{units}_name:{point.InsulinName}"),
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Units = units,
                         InsulinContext = insulinContext,
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
                 catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -814,18 +765,14 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                     boluses.Add(new Bolus
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("v3_insulin_bolus", rawTimestamp, $"units:{units}_name:{point.InsulinName}"),
+                        LegacyId = LegacyIds.Hashed("v3_insulin_bolus", rawTimestamp.Ticks, $"units:{units}_name:{point.InsulinName}"),
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Insulin = units,
                         BolusType = V4BolusType.Normal,
                         Automatic = false,
                         InsulinType = point.InsulinName,
                         InsulinContext = insulinContext,
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
                 catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -853,7 +800,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         IReadOnlyList<GlookoInjectionInsulin> injectionBasals,
         IReadOnlyList<GlookoInjectionInsulin> injectionBoluses)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -867,21 +813,17 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
 
                 var legacyId = !string.IsNullOrEmpty(basal.Guid)
-                    ? $"glooko_injection_basal_{basal.Guid}"
-                    : GenerateLegacyId("ssv2_injection_basal", rawTimestamp, $"units:{basal.InsulinDelivered}_name:{basal.Name}");
+                    ? LegacyIds.Of("injection_basal", basal.Guid)
+                    : LegacyIds.Hashed("ssv2_injection_basal", rawTimestamp.Ticks, $"units:{basal.InsulinDelivered}_name:{basal.Name}");
 
                 basalInjections.Add(new BasalInjection
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
                     LegacyId = legacyId,
                     SyncIdentifier = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Units = basal.InsulinDelivered,
                     InsulinContext = ResolveInsulinContext(basal.Name, InsulinCategory.LongActing, InsulinCategory.UltraLongActing),
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -900,24 +842,20 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
 
                 var legacyId = !string.IsNullOrEmpty(bolus.Guid)
-                    ? $"glooko_injection_bolus_{bolus.Guid}"
-                    : GenerateLegacyId("ssv2_injection_bolus", rawTimestamp, $"units:{bolus.InsulinDelivered}_name:{bolus.Name}");
+                    ? LegacyIds.Of("injection_bolus", bolus.Guid)
+                    : LegacyIds.Hashed("ssv2_injection_bolus", rawTimestamp.Ticks, $"units:{bolus.InsulinDelivered}_name:{bolus.Name}");
 
                 boluses.Add(new Bolus
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
                     LegacyId = legacyId,
                     SyncIdentifier = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Insulin = bolus.InsulinDelivered,
                     BolusType = V4BolusType.Normal,
                     Automatic = false,
                     InsulinType = bolus.Name,
                     InsulinContext = ResolveInsulinContext(bolus.Name, InsulinCategory.RapidActing, InsulinCategory.ShortActing),
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -945,7 +883,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     public (List<BasalInjection> basalInjections, List<Bolus> boluses) MapSsv2InsulinEvents(
         IReadOnlyList<GlookoSsv2InsulinEvent> insulinEvents)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var basalInjections = new List<BasalInjection>();
         var boluses = new List<Bolus>();
 
@@ -964,43 +901,35 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 if (isBasal)
                 {
                     var legacyId = !string.IsNullOrEmpty(evt.Guid)
-                        ? $"glooko_insulin_event_basal_{evt.Guid}"
-                        : GenerateLegacyId("ssv2_insulin_event_basal", rawTimestamp, $"units:{evt.Insulin}");
+                        ? LegacyIds.Of("insulin_event_basal", evt.Guid)
+                        : LegacyIds.Hashed("ssv2_insulin_event_basal", rawTimestamp.Ticks, $"units:{evt.Insulin}");
 
                     basalInjections.Add(new BasalInjection
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
                         LegacyId = legacyId,
                         SyncIdentifier = legacyId,
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Units = evt.Insulin,
                         InsulinContext = ResolveInsulinContext(null, InsulinCategory.LongActing, InsulinCategory.UltraLongActing),
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
                 else
                 {
                     var legacyId = !string.IsNullOrEmpty(evt.Guid)
-                        ? $"glooko_insulin_event_bolus_{evt.Guid}"
-                        : GenerateLegacyId("ssv2_insulin_event_bolus", rawTimestamp, $"units:{evt.Insulin}");
+                        ? LegacyIds.Of("insulin_event_bolus", evt.Guid)
+                        : LegacyIds.Hashed("ssv2_insulin_event_bolus", rawTimestamp.Ticks, $"units:{evt.Insulin}");
 
                     boluses.Add(new Bolus
                     {
-                        Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
                         LegacyId = legacyId,
                         SyncIdentifier = legacyId,
                         Device = _connectorSource,
-                        DataSource = _connectorSource,
                         Insulin = evt.Insulin,
                         BolusType = V4BolusType.Normal,
                         Automatic = false,
                         InsulinContext = ResolveInsulinContext(null, InsulinCategory.RapidActing, InsulinCategory.ShortActing),
-                        CreatedAt = now,
-                        ModifiedAt = now
                     });
                 }
             }
@@ -1037,7 +966,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<CarbIntake> MapSsv2CarbsEvents(IReadOnlyList<GlookoSsv2CarbsEvent> carbsEvents)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var carbs = new List<CarbIntake>();
 
         foreach (var evt in Records(carbsEvents, "SSV2 carbs event"))
@@ -1053,20 +981,16 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(rawTimestamp);
 
                 var legacyId = !string.IsNullOrEmpty(evt.Guid)
-                    ? $"glooko_carbs_event_{evt.Guid}"
-                    : GenerateLegacyId("ssv2_carbs_event", rawTimestamp, $"carbs:{evt.CgmCarbs}");
+                    ? LegacyIds.Of("carbs_event", evt.Guid)
+                    : LegacyIds.Hashed("ssv2_carbs_event", rawTimestamp.Ticks, $"carbs:{evt.CgmCarbs}");
 
                 carbs.Add(new CarbIntake
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
                     LegacyId = legacyId,
                     SyncIdentifier = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Carbs = evt.CgmCarbs,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -1090,7 +1014,6 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// </summary>
     public List<Bolus> MapSsv2ExtendedBoluses(IReadOnlyList<GlookoExtendedBolus> extendedBoluses)
     {
-        var now = _clock.GetUtcNow().UtcDateTime;
         var boluses = new List<Bolus>();
 
         foreach (var eb in Records(extendedBoluses, "SSV2 extended bolus"))
@@ -1110,23 +1033,19 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var bolusType = initial > 0 && extended > 0 ? V4BolusType.Dual : V4BolusType.Square;
 
                 var legacyId = !string.IsNullOrEmpty(eb.Guid)
-                    ? $"glooko_extended_bolus_{eb.Guid}"
-                    : GenerateLegacyId("ssv2_extended_bolus", rawTimestamp, $"insulin:{total}");
+                    ? LegacyIds.Of("extended_bolus", eb.Guid)
+                    : LegacyIds.Hashed("ssv2_extended_bolus", rawTimestamp.Ticks, $"insulin:{total}");
 
                 boluses.Add(new Bolus
                 {
-                    Id = Guid.CreateVersion7(),
                     Timestamp = correctedTimestamp,
                     LegacyId = legacyId,
                     SyncIdentifier = legacyId,
                     Device = _connectorSource,
-                    DataSource = _connectorSource,
                     Insulin = total,
                     BolusType = bolusType,
                     Duration = eb.ExtendedBolusDuration > 0 ? eb.ExtendedBolusDuration : null,
                     Automatic = false,
-                    CreatedAt = now,
-                    ModifiedAt = now
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
@@ -1221,13 +1140,5 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             Curve = categoryDefault?.Curve ?? "bilinear",
             Concentration = categoryDefault?.Concentration ?? 100,
         };
-    }
-
-    private static string GenerateLegacyId(string eventType, DateTime timestamp, string? additionalData = null)
-    {
-        var dataToHash = $"glooko_{eventType}_{timestamp.Ticks}_{additionalData ?? string.Empty}";
-        using var sha1 = SHA1.Create();
-        var hashBytes = sha1.ComputeHash(Encoding.UTF8.GetBytes(dataToHash));
-        return $"glooko_{Convert.ToHexString(hashBytes).ToLowerInvariant()}";
     }
 }

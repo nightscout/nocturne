@@ -185,6 +185,42 @@ public class TidepoolConnectorServiceTests
     }
 
     /// <summary>
+    /// The store skips a record whose legacy id a stored row carries, so a second sync of the same
+    /// vendor data stores nothing new only while every record keeps its legacy id.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameData_PublishesUnderTheSameLegacyIds()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var handler = new TidepoolFakeHandler
+        {
+            BolusJson = """[{ "id": "b1", "time": "2026-03-01T08:00:00Z", "normal": 1.5 }]""",
+            FoodJson = """
+                [{ "id": "f1", "time": "2026-03-01T09:00:00Z", "nutrition": { "carbohydrate": { "net": 40 } } }]
+                """,
+        };
+        var fixture = new ServiceFixture(handler, withPublisher: true, clock: clock);
+        var request = new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        var stored = fixture.PublishedBoluses.Select(b => b.LegacyId)
+            .Concat(fixture.PublishedCarbIntakes.Select(c => c.LegacyId)).ToHashSet();
+        var firstIds = fixture.PublishedBoluses.Select(b => b.Id).ToList();
+        fixture.PublishedBoluses.Clear();
+        fixture.PublishedCarbIntakes.Clear();
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        stored.Should().BeEquivalentTo(["tidepool_b1", "tidepool_f1"]);
+        fixture.PublishedBoluses.Select(b => b.LegacyId)
+            .Concat(fixture.PublishedCarbIntakes.Select(c => c.LegacyId))
+            .Should().OnlyContain(id => stored.Contains(id!));
+        fixture.PublishedBoluses.Select(b => b.Id).Should().NotIntersectWith(firstIds);
+        fixture.PublishedBoluses.Should().OnlyContain(b => b.DataSource == DataSources.TidepoolConnector);
+    }
+
+    /// <summary>
     /// Every data request being rejected must not be reported as a window that held nothing. The
     /// fetch returns null rather than throwing, so without a guard the mapper yields empty lists
     /// and the sync card states — in green — that Tidepool was reached and had no insulin or carbs.

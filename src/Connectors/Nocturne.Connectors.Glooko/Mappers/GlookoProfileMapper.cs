@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -9,6 +10,8 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 
 public class GlookoProfileMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource;
     private readonly ILogger _logger;
 
@@ -122,13 +125,12 @@ public class GlookoProfileMapper
 
                 activations.Add(new ProfileActivation
                 {
-                    SyncIdentifier = $"glooko_active_profile_{deviceGuid}_{startMills}",
+                    SyncIdentifier = LegacyIds.Of("active_profile", deviceGuid, startMills),
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
                     Phase = ProfileActivationPhase.Effective,
                     Origin = ProfileActivationOrigin.Connector,
                     BaseProfileName = profileName,
-                    DataSource = _connectorSource,
                 });
             }
         }
@@ -224,7 +226,7 @@ public class GlookoProfileMapper
 
         return new Profile
         {
-            Id = $"glooko_{mills}",
+            Id = LegacyIds.Of(mills),
             DefaultProfile = defaultProfile,
             StartDate = syncTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = mills,

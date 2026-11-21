@@ -23,7 +23,8 @@ namespace Nocturne.Connectors.Tidepool.Configurations;
         SyncDataType.Glucose,
         SyncDataType.Boluses,
         SyncDataType.CarbIntake
-    ]
+    ],
+    LegacyIdPrefix = "tidepool"
 )]
 public class TidepoolConnectorConfiguration : BaseConnectorConfiguration
 {

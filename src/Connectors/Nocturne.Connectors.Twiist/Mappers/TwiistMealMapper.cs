@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -11,22 +13,24 @@ namespace Nocturne.Connectors.Twiist.Mappers;
 /// </summary>
 public class TwiistMealMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TwiistConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public IEnumerable<CarbIntake> MapMeals(List<TwiistMeal>? meals, DateTime now)
+    public IEnumerable<CarbIntake> MapMeals(List<TwiistMeal>? meals)
     {
         if (meals == null || meals.Count == 0) return [];
 
         return meals
             .Where(m => m.Grams is > 0)
-            .Select(m => ConvertMeal(m, now))
+            .Select(m => ConvertMeal(m))
             .Where(c => c != null)
             .Cast<CarbIntake>()
             .OrderBy(c => c.Mills)
             .ToList();
     }
 
-    private CarbIntake? ConvertMeal(TwiistMeal meal, DateTime now)
+    private CarbIntake? ConvertMeal(TwiistMeal meal)
     {
         try
         {
@@ -40,15 +44,11 @@ public class TwiistMealMapper(ILogger logger)
 
             return new CarbIntake
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
-                LegacyId = $"twiist_meal_{timestamp.Value.ToMills()}",
+                LegacyId = LegacyIds.Of("meal", timestamp.Value.ToMills()),
                 Device = DataSources.TwiistConnector,
-                DataSource = DataSources.TwiistConnector,
                 Carbs = (double)meal.Grams.Value,
                 AbsorptionTime = absorptionMinutes,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)

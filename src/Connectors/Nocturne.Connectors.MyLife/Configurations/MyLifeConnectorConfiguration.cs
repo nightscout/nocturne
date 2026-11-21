@@ -28,7 +28,8 @@ namespace Nocturne.Connectors.MyLife.Configurations;
         SyncDataType.DeviceEvents,
         SyncDataType.StateSpans,
         SyncDataType.Profiles
-    ]
+    ],
+    LegacyIdPrefix = "mylife"
 )]
 public class MyLifeConnectorConfiguration : BaseConnectorConfiguration
 {

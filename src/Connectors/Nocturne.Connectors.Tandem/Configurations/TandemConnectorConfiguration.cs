@@ -34,7 +34,8 @@ namespace Nocturne.Connectors.Tandem.Configurations;
         SyncDataType.StateSpans,
         SyncDataType.DeviceStatus,
         SyncDataType.Profiles
-    ]
+    ],
+    LegacyIdPrefix = "tandem"
 )]
 public class TandemConnectorConfiguration : BaseConnectorConfiguration
 {

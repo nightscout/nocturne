@@ -47,7 +47,6 @@ public class GlookoStepCountMapper(string connectorSource, GlookoTimeMapper time
                     Source = AbsoluteTotalSource,
                     Device = _connectorSource,
                     EnteredBy = _connectorSource,
-                    DataSource = _connectorSource,
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))

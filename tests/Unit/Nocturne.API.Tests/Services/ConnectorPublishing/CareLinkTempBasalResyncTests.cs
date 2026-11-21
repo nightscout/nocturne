@@ -27,7 +27,6 @@ namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 public class CareLinkTempBasalResyncTests : IDisposable
 {
     private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private static readonly DateTime Now = new(2026, 6, 10, 12, 30, 0, DateTimeKind.Utc);
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
@@ -81,13 +80,26 @@ public class CareLinkTempBasalResyncTests : IDisposable
         AutoBasal("2026-06-10T12:04:39", 0.15),
     ];
 
-    private Task SyncAsync(params CareLinkMarker[] markers) => SyncAtAsync(Now, markers);
+    private DateTime _publishedAt = new(2026, 6, 10, 12, 10, 0, DateTimeKind.Utc);
 
-    private async Task SyncAtAsync(DateTime now, params CareLinkMarker[] markers)
+    /// <summary>
+    /// The temp basals as the connector publishes them: stamped with its data source and, as the
+    /// publish stamp does, with the instant of this sync, which is later each time.
+    /// </summary>
+    private async Task SyncAsync(params CareLinkMarker[] markers)
     {
+        _publishedAt = _publishedAt.AddMinutes(5);
         var data = new CareLinkData { MedicalDeviceFamily = "780G", Markers = [.. markers] };
+        var tempBasals = CareLinkTreatmentMapper.MapTempBasals(data, 0);
+        foreach (var tempBasal in tempBasals)
+        {
+            tempBasal.DataSource = DataSources.CareLinkConnector;
+            tempBasal.CreatedAt = _publishedAt;
+            tempBasal.ModifiedAt = _publishedAt;
+        }
+
         var published = await _publisher.PublishTempBasalsAsync(
-            CareLinkTreatmentMapper.MapTempBasals(data, 0, now), DataSources.CareLinkConnector, WriteOrigin.Live);
+            tempBasals, DataSources.CareLinkConnector, WriteOrigin.Live);
         published.Should().BeTrue();
     }
 
@@ -112,7 +124,7 @@ public class CareLinkTempBasalResyncTests : IDisposable
         var first = await _context.TempBasals.AsNoTracking()
             .ToDictionaryAsync(t => t.Id, t => t.SysUpdatedAt);
 
-        await SyncAtAsync(Now.AddMinutes(5), Window);
+        await SyncAsync(Window);
 
         var rows = await _context.TempBasals.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         rows.Should().HaveCount(Window.Length);

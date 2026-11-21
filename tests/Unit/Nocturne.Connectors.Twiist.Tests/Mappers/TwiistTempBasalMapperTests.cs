@@ -12,8 +12,6 @@ namespace Nocturne.Connectors.Twiist.Tests.Mappers;
 
 public class TwiistTempBasalMapperTests
 {
-    private static readonly DateTime Now = new(2026, 6, 17, 1, 0, 0, DateTimeKind.Utc);
-
     private readonly TwiistTempBasalMapper _mapper = new(NullLogger.Instance);
 
     [Fact]
@@ -27,7 +25,7 @@ public class TwiistTempBasalMapperTests
             (start1, start1.AddMinutes(5), 0.97),
             (start2, start2.AddMinutes(5), -0.40));
 
-        var result = _mapper.MapTempBasals(blob, scheduledRate: 0.40, Now).ToList();
+        var result = _mapper.MapTempBasals(blob, scheduledRate: 0.40).ToList();
 
         result.Should().HaveCount(2);
 
@@ -39,17 +37,6 @@ public class TwiistTempBasalMapperTests
 
         result[1].Rate.Should().BeApproximately(0.0, 0.001);
         result[1].Origin.Should().Be(TempBasalOrigin.Algorithm);
-    }
-
-    [Fact]
-    public void MapTempBasals_StampsEveryRecordWithTheBatchInstant()
-    {
-        var start = new DateTime(2026, 6, 16, 22, 42, 0, DateTimeKind.Utc);
-        var blob = BuildBlob((start, start.AddMinutes(5), 0.97), (start.AddMinutes(5), start.AddMinutes(10), 0.10));
-
-        var result = _mapper.MapTempBasals(blob, scheduledRate: 0.40, Now).ToList();
-
-        result.Should().OnlyContain(t => t.CreatedAt == Now && t.ModifiedAt == Now);
     }
 
     [Fact]
@@ -67,7 +54,7 @@ public class TwiistTempBasalMapperTests
             new() { DoseType = "Suspend", StartDate = suspend2 }
         };
 
-        var result = _mapper.MapSuspensions(doses, Now).ToList();
+        var result = _mapper.MapSuspensions(doses).ToList();
 
         result.Should().HaveCount(2);
         result.Should().OnlyContain(t => t.Origin == TempBasalOrigin.Suspended && t.Rate == 0);
@@ -86,15 +73,15 @@ public class TwiistTempBasalMapperTests
             new() { DoseType = "Bolus", StartDate = DateTime.UtcNow, Value = 1.0m }
         };
 
-        _mapper.MapSuspensions(doses, Now).Should().BeEmpty();
-        _mapper.MapSuspensions(null, Now).Should().BeEmpty();
+        _mapper.MapSuspensions(doses).Should().BeEmpty();
+        _mapper.MapSuspensions(null).Should().BeEmpty();
     }
 
     [Fact]
     public void MapTempBasals_EmptyBlob_ReturnsEmpty()
     {
-        _mapper.MapTempBasals(null, 0.4, Now).Should().BeEmpty();
-        _mapper.MapTempBasals("", 0.4, Now).Should().BeEmpty();
+        _mapper.MapTempBasals(null, 0.4).Should().BeEmpty();
+        _mapper.MapTempBasals("", 0.4).Should().BeEmpty();
     }
 
     [Theory]
@@ -112,7 +99,7 @@ public class TwiistTempBasalMapperTests
     /// Builds a Twiist insulin-delivery blob the way the API encodes it: raw-deflate over fixed
     /// 10-byte little-endian records (u32 start, u32 end seconds-since-2008, i16 delta*100), base64.
     /// </summary>
-    private static string BuildBlob(params (DateTime Start, DateTime End, double Delta)[] records)
+    internal static string BuildBlob(params (DateTime Start, DateTime End, double Delta)[] records)
     {
         var raw = new byte[records.Length * 10];
         for (var i = 0; i < records.Length; i++)

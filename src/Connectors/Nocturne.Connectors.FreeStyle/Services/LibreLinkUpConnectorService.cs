@@ -181,7 +181,7 @@ public class LibreConnectorService(
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose, config, cancellationToken);
 
-            List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor, Clock.GetUtcNow().UtcDateTime) is { } start ? [start] : [];
+            List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor) is { } start ? [start] : [];
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorStarts, config, cancellationToken);
         }
@@ -272,10 +272,9 @@ public class LibreConnectorService(
                 existing.TrendArrow = latestMeasurement.TrendArrow;
         }
 
-        var now = Clock.GetUtcNow().UtcDateTime;
         var glucoseRecords = measurements
             .Where(m => m.ValueInMgPerDl > 0)
-            .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m, now))
+            .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .Where(sg => !since.HasValue || sg.Mills.ToUtcDateTime() > since.Value)
