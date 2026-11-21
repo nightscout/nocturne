@@ -16,7 +16,8 @@ namespace Nocturne.API.Services.Monitoring;
 /// The event is written after the tracker's transaction commits, because a device event write cannot
 /// join a <see cref="Infrastructure.Data.DbUnitOfWork"/>. It carries <see cref="DataSources.Tracker"/>,
 /// which <see cref="TrackerTriggerService"/> passes over: the event records a move the tracker has
-/// already made, and reacting to it would start or complete a run a second time.
+/// already made, and reacting to it would start or complete a run a second time. Every caller writes
+/// the event before it broadcasts the move, so a client that reacts to the broadcast reads the event.
 /// </remarks>
 public sealed class TrackerDeviceEventWriter(
     IDeviceEventRepository deviceEvents,

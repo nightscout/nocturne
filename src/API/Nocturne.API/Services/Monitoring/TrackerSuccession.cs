@@ -31,6 +31,9 @@ public static class TrackerSuccession
     /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
     /// <see cref="TrackerRealtimeAction.Create"/>; with no <paramref name="broadcast"/> nothing is,
     /// for a caller inside a transaction it has yet to commit, which broadcasts after.
+    /// <paramref name="afterCommit"/> runs with the started run once the repository's work returns and
+    /// before any broadcast, for a caller that owns no outer transaction, as the broadcasts are (see
+    /// <see cref="TrackerDeviceEventWriter"/>).
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
@@ -44,7 +47,8 @@ public static class TrackerSuccession
         Func<ITrackerRepository, CancellationToken, Task<TrackerInstance>> start,
         CancellationToken ct,
         Func<IReadOnlyList<TrackerInstance>, bool>? alreadyStarted = null,
-        bool replay = false)
+        bool replay = false,
+        Func<TrackerInstance, Task>? afterCommit = null)
     {
         var result = await repository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
@@ -85,6 +89,9 @@ public static class TrackerSuccession
                 && await tx.GetInstanceByIdAsync(started.Id, token) is not null,
             ct
         );
+
+        if (afterCommit is not null && result.Started is { } committed)
+            await afterCommit(committed);
 
         foreach (var instance in result.Completed)
         {
