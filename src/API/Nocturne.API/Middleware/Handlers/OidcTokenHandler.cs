@@ -134,6 +134,11 @@ public class OidcTokenHandler : IAuthHandler
                 token
             );
 
+            if (authContext is null)
+            {
+                return AuthResult.Failure("Token validation failed");
+            }
+
             _logger.LogDebug(
                 "OIDC token authentication successful for subject {SubjectName} from provider {Provider}",
                 authContext.SubjectName,
@@ -273,9 +278,10 @@ public class OidcTokenHandler : IAuthHandler
     }
 
     /// <summary>
-    /// Build an AuthContext from validated OIDC claims
+    /// Build an AuthContext from validated OIDC claims, or null when the subject the identity
+    /// resolves to is not active.
     /// </summary>
-    private async Task<AuthContext> BuildAuthContextAsync(
+    private async Task<AuthContext?> BuildAuthContextAsync(
         ClaimsPrincipal claims,
         OidcProvider provider,
         ISubjectService subjectService,
@@ -333,6 +339,11 @@ public class OidcTokenHandler : IAuthHandler
             name,
             provider.DefaultRoles
         );
+
+        if (!subject.IsActive)
+        {
+            return null;
+        }
 
         // Get permissions for the subject
         var permissions = await subjectService.GetSubjectPermissionsAsync(subject.Id);

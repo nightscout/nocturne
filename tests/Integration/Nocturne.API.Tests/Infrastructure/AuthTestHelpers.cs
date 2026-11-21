@@ -286,6 +286,45 @@ public static class AuthTestHelpers
         string redirectUri = "http://localhost:9999/callback",
         string scope = "glucose.read treatments.read")
     {
+        var (code, codeVerifier) = await AuthorizeAsync(authenticatedClient, clientId, redirectUri, scope);
+
+        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["code_verifier"] = codeVerifier,
+            ["redirect_uri"] = redirectUri,
+            ["client_id"] = clientId
+        });
+
+        var tokenResponse = await authenticatedClient.PostAsync("/api/oauth/token", tokenForm);
+        tokenResponse.EnsureSuccessStatusCode();
+
+        var tokenContent = await tokenResponse.Content.ReadAsStringAsync();
+        var tokenDoc = JsonDocument.Parse(tokenContent);
+
+        return new OAuthFlowResult
+        {
+            AccessToken = tokenDoc.RootElement.GetProperty("access_token").GetString()!,
+            RefreshToken = tokenDoc.RootElement.TryGetProperty("refresh_token", out var rtEl) ? rtEl.GetString() : null,
+            AuthorizationCode = code,
+            CodeVerifier = codeVerifier,
+            Scope = tokenDoc.RootElement.TryGetProperty("scope", out var scopeEl)
+                ? scopeEl.GetString() ?? scope
+                : scope
+        };
+    }
+
+    /// <summary>
+    /// Consents to <paramref name="clientId"/> as the authenticated client's subject and returns
+    /// the authorization code from the redirect, not yet exchanged, with its PKCE verifier.
+    /// </summary>
+    public static async Task<(string Code, string CodeVerifier)> AuthorizeAsync(
+        HttpClient authenticatedClient,
+        string clientId,
+        string redirectUri = "http://localhost:9999/callback",
+        string scope = "glucose.read treatments.read")
+    {
         var (codeVerifier, codeChallenge) = GeneratePkceChallenge();
 
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
@@ -318,31 +357,7 @@ public static class AuthTestHelpers
         var code = query["code"]
                    ?? throw new InvalidOperationException("Authorization redirect did not contain a code parameter.");
 
-        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["code"] = code,
-            ["code_verifier"] = codeVerifier,
-            ["redirect_uri"] = redirectUri,
-            ["client_id"] = clientId
-        });
-
-        var tokenResponse = await authenticatedClient.PostAsync("/api/oauth/token", tokenForm);
-        tokenResponse.EnsureSuccessStatusCode();
-
-        var tokenContent = await tokenResponse.Content.ReadAsStringAsync();
-        var tokenDoc = JsonDocument.Parse(tokenContent);
-
-        return new OAuthFlowResult
-        {
-            AccessToken = tokenDoc.RootElement.GetProperty("access_token").GetString()!,
-            RefreshToken = tokenDoc.RootElement.TryGetProperty("refresh_token", out var rtEl) ? rtEl.GetString() : null,
-            AuthorizationCode = code,
-            CodeVerifier = codeVerifier,
-            Scope = tokenDoc.RootElement.TryGetProperty("scope", out var scopeEl)
-                ? scopeEl.GetString() ?? scope
-                : scope
-        };
+        return (code, codeVerifier);
     }
 
     /// <summary>

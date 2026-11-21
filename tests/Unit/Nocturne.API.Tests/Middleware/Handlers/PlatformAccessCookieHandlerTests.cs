@@ -149,6 +149,27 @@ public class PlatformAccessCookieHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task DeactivatedPlatformAdmin_SkipsAsOneWhoIsNoLongerAnAdmin()
+    {
+        var deactivatedId = Guid.CreateVersion7();
+        using (var ctx = _db.CreateContext())
+        {
+            ctx.Subjects.Add(new SubjectEntity
+            {
+                Id = deactivatedId, Name = "Deactivated Operator", IsActive = false, IsPlatformAdmin = true,
+            });
+            ctx.SaveChanges();
+        }
+        var token = MintGrant(deactivatedId, tenantId: _tenantId, platformAccess: true);
+        var context = BuildContext(_tenantId, cookieValue: token);
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.ShouldSkip.Should().BeTrue();
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Grant_PinnedToDifferentTenant_Skips()
     {
         var token = MintGrant(_subjectId, tenantId: _otherTenantId, platformAccess: true);
