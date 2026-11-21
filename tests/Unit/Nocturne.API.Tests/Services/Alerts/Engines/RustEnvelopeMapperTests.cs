@@ -66,6 +66,19 @@ public class RustEnvelopeMapperTests
         wire.GetProperty("on_unknown").GetString().Should().Be(onUnknown);
     }
 
+    [Theory]
+    [InlineData("Automatic")]
+    [InlineData("Turbo")]
+    public void BuildContext_sends_the_active_pump_mode_as_written(string mode)
+    {
+        var started = new DateTime(2026, 1, 5, 11, 0, 0, DateTimeKind.Utc);
+        var context = BuildContext() with { ActivePumpState = new PumpStateSnapshot(mode, started) };
+
+        var wire = RustEnvelopeMapper.BuildContext(context).GetProperty("active_pump_state");
+
+        wire.GetProperty("mode").GetString().Should().Be(mode);
+    }
+
     [Fact]
     public void BuildContext_sends_a_windows_tenant_zone_as_iana()
     {

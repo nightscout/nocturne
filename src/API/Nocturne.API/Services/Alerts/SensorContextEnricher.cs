@@ -273,22 +273,24 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.ReferencedPumpStates.Count > 0)
         {
-            // Pump modes are mutually exclusive per StateSpan semantics — at most one mode-span
-            // is active at any instant. Walking the referenced set is still cheap enough to do
-            // sequentially: typical rules reference one or two modes.
+            // Automatic/Manual and Suspended spans share the PumpMode category and may overlap,
+            // so the mode a rule names is looked up by its own state, never by "the newest span".
+            // The context holds one pump state, so the first referenced mode with a span wins.
+            PumpStateSnapshot? pumpState = null;
             foreach (var mode in needs.ReferencedPumpStates)
             {
                 var span = await _deps.StateSpans.GetActiveAtAsync(
                     StateSpanCategory.PumpMode, mode.ToString(), now, ct);
                 if (span is not null)
                 {
-                    enriched = enriched with
-                    {
-                        ActivePumpState = new PumpStateSnapshot(mode, span.StartTimestamp)
-                    };
-                    break; // exclusive — first match wins
+                    pumpState = new PumpStateSnapshot(mode.ToString(), span.StartTimestamp);
+                    break;
                 }
             }
+
+            pumpState ??= await UnrecognisedPumpStateAsync(now, ct);
+            if (pumpState is not null)
+                enriched = enriched with { ActivePumpState = pumpState };
         }
 
         if (needs.ReferencedStateSpans.Count > 0)
@@ -642,6 +644,26 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         var evt = await _deps.DeviceEvents.GetLatestByEventTypeAsync(eventType, asOf, ct);
         return evt?.Timestamp;
+    }
+
+    /// <summary>
+    /// The active pump-mode span whose state names no <see cref="PumpModeState"/> member, as written,
+    /// for the engine to read as a mode it cannot name. Several: the newest start, then the
+    /// ordinal-smallest state. Null when every active span names a known mode.
+    /// </summary>
+    private async Task<PumpStateSnapshot?> UnrecognisedPumpStateAsync(DateTime now, CancellationToken ct)
+    {
+        var active = await _deps.StateSpans.GetStateSpansAsync(
+            StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct);
+        return active
+            .Where(s => s.State is { Length: > 0 } state
+                        && !Enum.GetNames<PumpModeState>().Contains(state)
+                        && s.StartTimestamp <= now
+                        && (s.EndTimestamp is null || s.EndTimestamp > now))
+            .OrderByDescending(s => s.StartTimestamp)
+            .ThenBy(s => s.State, StringComparer.Ordinal)
+            .Select(s => new PumpStateSnapshot(s.State!, s.StartTimestamp))
+            .FirstOrDefault();
     }
 
     /// <summary>

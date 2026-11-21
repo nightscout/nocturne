@@ -504,7 +504,7 @@ mod tests {
             active_override: span(F::StateSpans),
             active_pump_suspension: span(F::StateSpans),
             active_pump_state: spans.then(|| PumpStateSnapshot {
-                mode: PumpMode::Exercise,
+                mode: Some(PumpMode::Exercise),
                 started_at: ago(30),
             }),
             active_state_spans: if spans {

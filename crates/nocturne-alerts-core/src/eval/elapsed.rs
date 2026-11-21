@@ -18,6 +18,8 @@ use crate::truth::Truth;
 pub(crate) enum ClockLeaf {
     Fixed(Truth),
     Measured(Elapsed),
+    /// False until the bound holds, unknown from then on.
+    UnknownOnceHeld(Elapsed),
 }
 
 impl ClockLeaf {
@@ -25,6 +27,21 @@ impl ClockLeaf {
         match self {
             ClockLeaf::Fixed(value) => value,
             ClockLeaf::Measured(e) => e.holds(now).into(),
+            ClockLeaf::UnknownOnceHeld(e) => {
+                if e.holds(now) {
+                    Truth::Unknown
+                } else {
+                    Truth::False
+                }
+            }
+        }
+    }
+
+    /// The comparison whose flips are this leaf's changes.
+    pub(crate) fn elapsed(self) -> Option<Elapsed> {
+        match self {
+            ClockLeaf::Fixed(_) => None,
+            ClockLeaf::Measured(e) | ClockLeaf::UnknownOnceHeld(e) => Some(e),
         }
     }
 }

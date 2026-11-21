@@ -5,6 +5,8 @@ using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
@@ -19,11 +21,45 @@ namespace Nocturne.API.Tests.Services.Alerts.Engines;
 /// </summary>
 public class AlertEngineCorpusTests
 {
+    // The host derives these names from its own enums (the bucket of a rate, a referenced
+    // span category), so it never sends one its enums lack and the seam has no context to
+    // build. Only the FFI corpus suite runs these scenarios. A pump mode is stored as free
+    // text and does reach the engine, so its scenario runs here.
+    private static readonly (string Scenario, Type Enum, string Name)[] NamesThisHostCannotSend =
+    [
+        ("state-span-unknown-enum-name", typeof(StateSpanCategory), "Hibernation"),
+        ("trend-unknown-enum-name", typeof(TrendBucket), "sideways"),
+        ("glucose-bucket-unknown-enum-name", typeof(GlucoseBucket), "off_the_chart"),
+    ];
+
     public static TheoryData<string> ScenarioNames()
     {
         var data = new TheoryData<string>();
-        foreach (var name in CorpusLocator.EnumerateScenarioNames())
+        var skipped = NamesThisHostCannotSend.Select(n => n.Scenario);
+        foreach (var name in CorpusLocator.EnumerateScenarioNames().Except(skipped))
             data.Add(name);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(UnsendableScenarios))]
+    public async Task A_name_this_host_cannot_send_has_no_context_here(string scenarioName, Type enumType, string name)
+    {
+        Enum.GetNames(enumType).Should().NotContain(name);
+        var (scenario, _) = await CorpusLocator.LoadScenarioAsync(scenarioName);
+        var wire = JsonSerializer.Serialize(scenario.Ticks.Select(t => t.Context), CorpusJson.Options);
+        wire.Should().Contain($"\"{name}\"");
+
+        var convert = () => scenario.Ticks.ForEach(t => ScenarioConversions.ToSensorContext(t.Context));
+
+        convert.Should().Throw<JsonException>();
+    }
+
+    public static TheoryData<string, Type, string> UnsendableScenarios()
+    {
+        var data = new TheoryData<string, Type, string>();
+        foreach (var (scenario, enumType, name) in NamesThisHostCannotSend)
+            data.Add(scenario, enumType, name);
         return data;
     }
 

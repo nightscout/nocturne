@@ -123,7 +123,7 @@ impl Scan<'_> {
                 }
                 Payload::DayOfWeek(_) => self.calendar(tenant_zone(self.ctx), &[NaiveTime::MIN]),
                 payload => {
-                    if let Some(ClockLeaf::Measured(e)) = clock_leaf(payload, self.ctx) {
+                    if let Some(e) = clock_leaf(payload, self.ctx).and_then(ClockLeaf::elapsed) {
                         self.elapsed(e);
                     }
                 }

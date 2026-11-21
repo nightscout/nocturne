@@ -53,14 +53,31 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, ctx: &SensorContext) -> Clock
 }
 
 /// `is_active: false` is true whenever the active mode differs from the
-/// configured one, including when no mode is active.
+/// configured one, including when no mode is active. An active pump in a mode
+/// the crate cannot name may or may not be in the configured one: unknown
+/// wherever the answer depends on it. With `is_active: true` and `for_minutes`
+/// both completions are false until the span has lasted that long.
 pub(super) fn pump_state(p: &PumpStatePayload, ctx: &SensorContext) -> ClockLeaf {
-    let in_mode = ctx.active_pump_state.filter(|s| s.mode == p.mode);
-    active_for(p.is_active, p.for_minutes, in_mode.map(|s| s.started_at))
+    let Some(active) = ctx.active_pump_state else {
+        return active_for(p.is_active, p.for_minutes, None);
+    };
+    match (active.mode, p.for_minutes) {
+        (Some(mode), _) => active_for(
+            p.is_active,
+            p.for_minutes,
+            (mode == p.mode).then_some(active.started_at),
+        ),
+        (None, Some(m)) if p.is_active => {
+            ClockLeaf::UnknownOnceHeld(Elapsed::held_for(active.started_at, m))
+        }
+        (None, _) => ClockLeaf::Fixed(Truth::Unknown),
+    }
 }
 
 /// Generic state-span leaf. The lookup key is the exact `(category, state)`
-/// pair; a null state means "any state of this category".
+/// pair; a null state means "any state of this category". A span of a
+/// category the crate cannot name is not in the map, and cannot be the
+/// category the leaf names.
 pub(super) fn state_span_active(p: &StateSpanPayload, ctx: &SensorContext) -> ClockLeaf {
     let span = ctx.active_state_spans.get(&(p.category, p.state.clone()));
     active_for(p.is_active, p.for_minutes, span.map(|s| s.started_at))
