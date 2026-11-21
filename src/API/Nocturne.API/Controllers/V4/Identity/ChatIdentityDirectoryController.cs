@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -167,7 +168,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         List<Guid> excursionIds;
         if (body.ExcursionId is { } requested)
         {
-            if (!await db.AlertExcursions.AsNoTracking().AnyAsync(e => e.Id == requested, ct))
+            if (!await db.AlertExcursions.AsNoTracking().OfCondition(includeTest: true).AnyAsync(e => e.Id == requested, ct))
                 return NotFound();
             excursionIds = [requested];
         }
@@ -175,6 +176,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         {
             var now = DateTime.UtcNow;
             excursionIds = await db.AlertExcursions.AsNoTracking()
+                .OfCondition(includeTest: true)
                 .Where(e => e.EndedAt == null || e.EndedAt > now)
                 .Select(e => e.Id)
                 .ToListAsync(ct);
@@ -205,6 +207,7 @@ public class ChatIdentityDirectoryController : ControllerBase
             return Ok(new ChatAcknowledgeResponse { Outcome = AlertAcknowledgementOutcome.Closed });
 
         var recorded = await db.AlertExcursions.AsNoTracking()
+            .OfCondition(includeTest: true)
             .Where(e => acknowledgedIds.Contains(e.Id))
             .Select(e => new { e.AcknowledgedAt, e.AcknowledgedBy })
             .ToListAsync(ct);

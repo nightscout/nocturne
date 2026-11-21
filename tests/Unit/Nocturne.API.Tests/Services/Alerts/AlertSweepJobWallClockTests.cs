@@ -732,6 +732,8 @@ public class AlertSweepJobWallClockTests
             services.AddSingleton<ConditionVersionLog>();
             services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
             services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
+            services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
+            services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
             _services = services.BuildServiceProvider();

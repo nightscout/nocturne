@@ -23,6 +23,7 @@ export function AlertCard(props: {
   unit?: "mg/dL" | "mmol/L";
 }) {
   const { payload, unit = "mg/dL" } = props;
+  if (payload.kind === "unevaluable") return UnevaluableCard({ payload });
   const value =
     payload.glucoseValue != null
       ? formatGlucose(payload.glucoseValue, unit)
@@ -58,6 +59,20 @@ export function AlertCard(props: {
           Acknowledge
         </Button>
       </Actions>
+    </Card>
+  );
+}
+
+function UnevaluableCard(props: { payload: AlertPayload }) {
+  const { payload } = props;
+  const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
+  const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
+
+  return (
+    <Card title={`${titlePrefix}: ${payload.ruleName}`}>
+      <CardText>
+        This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.
+      </CardText>
     </Card>
   );
 }

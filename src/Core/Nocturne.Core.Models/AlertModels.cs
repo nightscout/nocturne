@@ -744,6 +744,16 @@ public class AlertExcursion
 /// <seealso cref="AlertExcursion"/>
 public record AlertPayload
 {
+    /// <summary>
+    /// What the payload tells its recipients, so a webhook or other consumer can tell a notice
+    /// that the rule cannot run from an excursion. Serialised as <c>"excursion"</c> or
+    /// <c>"unevaluable"</c>; an <see cref="Alerts.AlertPayloadKind.Unevaluable"/> payload has no
+    /// <see cref="GlucoseValue"/>, <see cref="Trend"/> or <see cref="TrendRate"/>, and its
+    /// <see cref="ReadingTimestamp"/> is the time of the notice. Documented for webhook receivers
+    /// in the portal's alert rule docs (docs/alerts/building-rules).
+    /// </summary>
+    public Alerts.AlertPayloadKind Kind { get; init; } = Alerts.AlertPayloadKind.Excursion;
+
     public required AlertConditionType AlertType { get; init; }
 
     /// <summary>Human-readable name of the <see cref="AlertRule"/> that fired.</summary>

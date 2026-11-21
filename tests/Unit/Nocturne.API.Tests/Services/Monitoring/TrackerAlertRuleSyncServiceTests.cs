@@ -52,7 +52,7 @@ public class TrackerAlertRuleSyncServiceTests
             classifier.Object,
             _referenceService.Object,
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object),
+            new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object, Mock.Of<IUnevaluableRuleNotice>()),
             _clock,
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }

@@ -1,9 +1,13 @@
 import type { InAppNotificationDto } from "#lib/api/index.js";
 import { createSystemNotification } from "#lib/audio/alarm-sounds.js";
+import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
 import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
 
-/** The in-app notification type an alert delivered to this person's own account carries. */
-const ALERT_FIRING = "alert.firing";
+/**
+ * The in-app notification types an alert rule delivers to this person's own account: an alert,
+ * and the notice that the rule cannot run until its conditions are edited.
+ */
+const ALERT_TYPES = new Set(["alert.firing", "alert.unevaluable"]);
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders from it
 const shown = new Map<string, Notification>();
@@ -15,10 +19,10 @@ const shown = new Map<string, Notification>();
  */
 export function raiseAlertNotification(notification: InAppNotificationDto): void {
   const id = notification.id;
-  if (notification.type !== ALERT_FIRING || !id || shown.has(id)) return;
+  if (!ALERT_TYPES.has(notification.type ?? "") || !id || shown.has(id)) return;
   const raised = createSystemNotification(
     notification.title ?? "",
-    notification.subtitle ?? "",
+    resolveNotificationLabel(notification.subtitle),
     `alert-${id}`,
     false
   );

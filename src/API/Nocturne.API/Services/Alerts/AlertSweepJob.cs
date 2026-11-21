@@ -21,6 +21,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <list type="number">
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
+///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
 ///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="RuleTrees.ReferencesWallClock"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
@@ -100,6 +101,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                  {
                      (CloseHysteresisWindowsAsync, "closing hysteresis windows"),
                      (CheckSnoozedInstancesAsync, "checking snoozed instances"),
+                     (CheckRuleConditionsAsync, "checking rule conditions"),
                      (EvaluateWallClockRulesAsync, "evaluating wall-clock rules"),
                      (EvaluateAutoResolveAsync, "evaluating auto-resolve"),
                  })
@@ -125,6 +127,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private sealed class Sweep(IServiceProvider services, IAlertRepository repository, Guid tenantId, DateTime now)
     {
         private TenantAlertContext? _tenant;
+        private IReadOnlyList<AlertRuleSnapshot>? _enabledRules;
         private (Guid ReadingId, DateTime At, ReadingTrend Trend)? _trend;
 
         public IServiceProvider Services => services;
@@ -139,6 +142,10 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         public async Task<TenantAlertContext> TenantAsync(CancellationToken ct) =>
             _tenant ??= await repository.GetTenantAlertContextAsync(tenantId, ct)
                         ?? throw new InvalidOperationException($"Tenant {tenantId} has no alert context.");
+
+        /// <summary>The tenant's enabled rules, read once per run.</summary>
+        public async Task<IReadOnlyList<AlertRuleSnapshot>> EnabledRulesAsync(CancellationToken ct) =>
+            _enabledRules ??= await repository.GetEnabledRulesAsync(ct);
 
         /// <summary>
         /// The trend of <paramref name="reading"/>, read once per run: the snooze and wall-clock
@@ -480,6 +487,17 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     }
 
     /// <summary>
+    /// Hands every enabled rule to <see cref="IUnevaluableRuleNotice"/>, the only sender of the
+    /// notice, so a rule whose condition cannot be evaluated is told within one run of being stored
+    /// rather than at the next reading, and a notice whose dispatch did not finish is sent by the
+    /// next run. It runs with no enabled rule too: that is when every standing notice is one the
+    /// run must resolve, and then it costs one read and no validation.
+    /// </summary>
+    private static async Task CheckRuleConditionsAsync(Sweep sweep, CancellationToken ct) =>
+        await sweep.Services.GetRequiredService<IUnevaluableRuleNotice>()
+            .CheckAsync(await sweep.EnabledRulesAsync(ct), ct);
+
+    /// <summary>
     /// Evaluates every enabled rule that <see cref="RuleTrees.ReferencesWallClock"/> selects
     /// through the orchestrator's full pipeline. Those conditions change truth with the clock
     /// alone, so between readings, or with no readings at all, only this pass moves them. The
@@ -505,7 +523,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// </remarks>
     private async Task EvaluateWallClockRulesAsync(Sweep sweep, CancellationToken ct)
     {
-        var enabled = await sweep.Repository.GetEnabledRulesAsync(ct);
+        var enabled = await sweep.EnabledRulesAsync(ct);
         _wallClock.TryGetValue(sweep.TenantId, out var kept);
         var verdicts = new Dictionary<Guid, WallClockVerdict>(enabled.Count);
         var wallClockRules = enabled.Where(rule => ReferencesWallClock(rule, kept, verdicts)).ToList();

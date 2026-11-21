@@ -255,6 +255,7 @@ public sealed class SweepJobsPostgresTests(SweepJobsPostgresTests.Database datab
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
         services.AddScoped(_ => Mock.Of<ISignalRBroadcastService>());
+        services.AddScoped(_ => Mock.Of<Nocturne.API.Services.Alerts.IUnevaluableRuleNotice>());
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 

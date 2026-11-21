@@ -14,6 +14,8 @@ const LABEL_MAP: Record<string, string> = {
   instance_key_changed_platform: "Enter the platform credentials again",
   open_connectors: "Open connectors",
   open_alerts: "Open alerts",
+  alert_unevaluable_subtitle:
+    "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
   share_link_rotated: "Your sharing link has been replaced",

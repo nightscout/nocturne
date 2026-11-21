@@ -21,13 +21,20 @@ public class DeviceNotificationMirror
     public const string AlertFiringType = "alert.firing";
 
     /// <summary>
+    /// The in-app type of a notice that an alert rule cannot be evaluated. Excluded from the mirror:
+    /// its subtitle is a label key that only the web app resolves, and it reaches its recipients
+    /// through the rule's own channels.
+    /// </summary>
+    public const string AlertUnevaluableType = "alert.unevaluable";
+
+    /// <summary>
     /// Whether an in-app notification should mirror to devices: never an alert (those go via
-    /// device_action), and only when it's worth interrupting — urgency <see cref="NotificationUrgency.Warn"/>+
+    /// device_action) or a notice that an alert rule cannot be evaluated, and only when it's worth interrupting: urgency <see cref="NotificationUrgency.Warn"/>+
     /// or an <see cref="NotificationCategory.Alert"/>/<see cref="NotificationCategory.ActionRequired"/> category.
     /// Bare informational notifications are not mirrored.
     /// </summary>
     public static bool Qualifies(InAppNotificationDto notification)
-        => notification.Type != AlertFiringType
+        => notification.Type is not (AlertFiringType or AlertUnevaluableType)
            && (notification.Urgency >= NotificationUrgency.Warn
                || notification.Category is NotificationCategory.Alert or NotificationCategory.ActionRequired);
 }

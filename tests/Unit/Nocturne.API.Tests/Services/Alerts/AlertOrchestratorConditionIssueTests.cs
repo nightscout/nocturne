@@ -185,6 +185,29 @@ public class AlertOrchestratorConditionIssueTests
         harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task Evaluation_over_a_rule_whose_body_cannot_be_evaluated_records_and_sends_nothing()
+    {
+        var harness = new Harness();
+        harness.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([new RustValidationIssue("condition", "threshold", "field_missing", "value")]);
+        harness.Delivery
+            .Setup(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+                It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .Returns(new TaskCompletionSource().Task);
+
+        var evaluation = harness.EvaluateAsync(Rule(WizardUrgentLow));
+
+        (await Task.WhenAny(evaluation, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(evaluation,
+            "evaluation of a reading never waits on the notice's delivery");
+        await evaluation;
+        harness.Delivery.VerifyNoOtherCalls();
+        harness.NoticeRows.VerifyNoOtherCalls();
+        harness.Logger.Warnings.Should().ContainSingle();
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, AlertConditionType type = AlertConditionType.Threshold) =>
         new(RuleId, Tenant, "Urgent Low", type, conditionParams,
             AlertRuleSeverity.Critical, "{}", 0, false, null);
@@ -193,7 +216,9 @@ public class AlertOrchestratorConditionIssueTests
     {
         public Mock<IAlertEvaluationEngine> Engine { get; } = new();
         public Mock<IAlertRuleConditionValidator> Validator { get; } = new();
-        public ListLogger<AlertOrchestrator> Logger { get; } = new();
+        public ListLogger<UnevaluableRuleNotice> Logger { get; } = new();
+        public Mock<IAlertRepository> NoticeRows { get; } = new();
+        public Mock<IAlertDeliveryService> Delivery { get; } = new();
 
         private readonly AlertOrchestrator _orchestrator;
 
@@ -212,19 +237,30 @@ public class AlertOrchestratorConditionIssueTests
                 .Setup(x => x.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => c);
 
-            _orchestrator = new AlertOrchestrator(
-                Engine.Object,
-                Mock.Of<IAlertRepository>(),
+            var notice = new UnevaluableRuleNotice(
+                NoticeRows.Object,
                 Mock.Of<IAlertRuleRepository>(),
                 tenant.Object,
-                Mock.Of<IAlertDeliveryService>(),
+                Delivery.Object,
                 enricher.Object,
-                Mock.Of<IAlertAcknowledgementService>(),
                 Mock.Of<IExcursionResolutionHandler>(),
                 new ConditionVersionLog(),
                 Validator.Object,
                 TimeProvider.System,
                 Logger);
+
+            _orchestrator = new AlertOrchestrator(
+                Engine.Object,
+                Mock.Of<IAlertRepository>(),
+                Mock.Of<IAlertRuleRepository>(),
+                tenant.Object,
+                Delivery.Object,
+                enricher.Object,
+                Mock.Of<IAlertAcknowledgementService>(),
+                Mock.Of<IExcursionResolutionHandler>(),
+                notice,
+                TimeProvider.System,
+                new ListLogger<AlertOrchestrator>());
         }
 
         public Task EvaluateAsync(params AlertRuleSnapshot[] rules) =>

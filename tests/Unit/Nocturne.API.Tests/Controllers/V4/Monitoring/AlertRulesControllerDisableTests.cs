@@ -90,7 +90,7 @@ public class AlertRulesControllerDisableTests
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(tracker.Object, handler.Object),
+            new AlertRuleRetirement(tracker.Object, handler.Object, Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         return (controller, excursionId, tracker, handler, () => ruleExistedAtClose);

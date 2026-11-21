@@ -54,9 +54,10 @@ internal sealed class ExcursionResolutionHandler(
 
         await repository.DeleteExcursionMutesAsync(excursionId, ct);
 
+        ExcursionRuleSnapshot? rule = null;
         try
         {
-            var rule = await repository.GetExcursionRuleAsync(excursionId, ct);
+            rule = await repository.GetExcursionRuleAsync(excursionId, ct);
             if (rule is null)
             {
                 // Only an excursion deleted with its rule (an FK cascade) has none.
@@ -65,7 +66,7 @@ internal sealed class ExcursionResolutionHandler(
             }
             else
             {
-                await broadcastService.BroadcastAlertResolvedAsync(new AlertResolvedEvent
+                var resolved = new AlertResolvedEvent
                 {
                     TenantId = tenantId,
                     ExcursionId = excursionId,
@@ -73,7 +74,14 @@ internal sealed class ExcursionResolutionHandler(
                     RuleName = rule.Name,
                     ResolvedAt = now,
                     Reason = transition.CloseReason,
-                });
+                };
+                // A notice reached only its rule's channels, so only a Home Assistant instance it
+                // was delivered to hears that it is resolved.
+                if (rule.IsUnevaluableNotice)
+                    await broadcastService.BroadcastAlertResolvedToHomeAssistantAsync(
+                        resolved, await repository.GetHomeAssistantInstancesSentExcursionAsync(excursionId, ct));
+                else
+                    await broadcastService.BroadcastAlertResolvedAsync(resolved);
             }
         }
         catch (Exception ex)
@@ -81,7 +89,12 @@ internal sealed class ExcursionResolutionHandler(
             logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
 
-        await ArchiveInAppNotificationsAsync(excursionId, ct);
+        // A rule that could not be read leaves the kind of excursion unknown, so both kinds of
+        // notification it may have made are archived.
+        IReadOnlyList<string> notificationTypes = rule is null
+            ? [InAppProvider.NotificationType, InAppProvider.UnevaluableNotificationType]
+            : [InAppProvider.NotificationTypeFor(rule.IsUnevaluableNotice)];
+        await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
 
         logger.LogInformation(
@@ -94,7 +107,8 @@ internal sealed class ExcursionResolutionHandler(
     /// excursion, so the bell/toast row clears once the alert is no longer firing.
     /// Iterates the unique InApp recipient userIds — one notification can exist per user.
     /// </summary>
-    private async Task ArchiveInAppNotificationsAsync(Guid excursionId, CancellationToken ct)
+    private async Task ArchiveInAppNotificationsAsync(
+        Guid excursionId, IReadOnlyList<string> notificationTypes, CancellationToken ct)
     {
         IReadOnlyList<string> destinations;
         try
@@ -114,13 +128,13 @@ internal sealed class ExcursionResolutionHandler(
         if (destinations.Count == 0) return;
 
         var sourceId = excursionId.ToString();
-        foreach (var userId in destinations)
+        foreach (var (userId, notificationType) in destinations.SelectMany(u => notificationTypes.Select(t => (u, t))))
         {
             try
             {
                 await notificationService.ArchiveBySourceAsync(
                     userId,
-                    InAppProvider.NotificationType,
+                    notificationType,
                     sourceId,
                     NotificationArchiveReason.ConditionMet,
                     ct);

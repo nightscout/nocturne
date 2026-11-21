@@ -2,7 +2,6 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Alerts.Native;
 
@@ -20,9 +19,10 @@ namespace Nocturne.API.Services.Alerts;
 /// channel list, info auto-ack, and close handling. The engine owns evaluation-state
 /// persistence (sustained timers, tracker state, excursion rows).
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
-/// the evaluation pass. A rule whose stored condition tree cannot be evaluated fails the same way
-/// on every pass, so that is logged once per version of the condition. Delayed escalation is a
-/// separate rule whose tree references the parent through an <c>alert_state</c> condition.
+/// the evaluation pass. A rule whose stored condition tree cannot be evaluated is logged once
+/// per version through <see cref="IUnevaluableRuleNotice.Report"/>; the sweep sends the notice,
+/// so evaluation never waits on it. Delayed escalation is a separate rule whose tree
+/// references the parent through an <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IAlertEvaluationEngine"/>
@@ -36,8 +36,7 @@ internal sealed class AlertOrchestrator(
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
-    ConditionVersionLog conditionLog,
-    IAlertRuleConditionValidator conditionValidator,
+    IUnevaluableRuleNotice unevaluableNotice,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -60,9 +59,8 @@ internal sealed class AlertOrchestrator(
         if (tenantId == Guid.Empty || rules.Count == 0) return;
 
         // Before the filter below, which drops a rule whose alert_state names no enabled rule:
-        // a malformed alert_state names none, and its rule is reported here or nowhere.
-        foreach (var rule in rules)
-            ReportConditionIssues(rule, tenantId);
+        // a malformed alert_state names none, and its rule is still reported.
+        unevaluableNotice.Report(rules);
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger, enabledRuleIds);
@@ -80,7 +78,7 @@ internal sealed class AlertOrchestrator(
             }
             catch (RustAlertEngineException ex) when (ex.IsConditionRejection)
             {
-                // The rule is skipped; ReportConditionIssues has logged why.
+                // The rule is skipped; IUnevaluableRuleNotice has reported why.
             }
             catch (Exception ex)
             {
@@ -88,40 +86,6 @@ internal sealed class AlertOrchestrator(
                     rule.Id, tenantId);
             }
         }
-    }
-
-    /// <summary>
-    /// Logs, once per version of a rule's condition, every problem that keeps one of its trees
-    /// from being evaluated (docs/alerts/engine-semantics.md §1.4): a body skips the rule, an
-    /// auto-resolve tree never resolves, and smart-snooze conditions clear the snooze. A failure
-    /// of the check itself is logged and never keeps the rule from evaluating.
-    /// </summary>
-    private void ReportConditionIssues(AlertRuleSnapshot rule, Guid tenantId)
-    {
-        IReadOnlyList<RustValidationIssue> issues;
-        try
-        {
-            if (!conditionLog.FirstIssueCheckFor(rule.Id, rule.ConditionType, rule.ConditionParams))
-                return;
-
-            issues = conditionValidator.Validate(
-                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
-                rule.AutoResolveParams, rule.ClientConfiguration);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "Checking the conditions of alert rule {AlertRuleId} for tenant {TenantId} failed",
-                rule.Id, tenantId);
-            return;
-        }
-        if (issues.Count == 0)
-            return;
-
-        logger.LogWarning(
-            "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated until it is edited: {Issues}",
-            rule.Id,
-            tenantId,
-            string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}{(i.Field is null ? "" : $" ({i.Field})")}")));
     }
 
     private async Task EvaluateRuleAsync(
@@ -192,25 +156,8 @@ internal sealed class AlertOrchestrator(
         var payload = AlertPayloads.Build(
             rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now);
 
-        // Scoped DND suppression (ADR 0004): when an active DND scope covers this rule's class,
-        // a non-Critical rule without an explicit "allow through DND" opt-in still gets a history
-        // row written (so Replay can show "would have fired but you were in DND"), but the
-        // dispatch is skipped. Critical rules implicitly bypass DND regardless of the per-rule
-        // flag. The suppressing scope is recorded on the instance (dnd:lows/highs/all).
-        var suppressingScope = DndSuppressionGate.SuppressingScope(rule, context.ActiveDndScopes);
-
-        if (suppressingScope is { } scope)
-        {
-            await repository.MarkInstanceSuppressedAsync(
-                instance.Id, DndSuppressionGate.SuppressionReason(scope), ct);
-            logger.LogInformation(
-                "Alert instance {InstanceId} for rule {RuleName} suppressed by DND (scope {Scope})",
-                instance.Id, rule.Name, scope);
-        }
-        else
-        {
-            await deliveryService.DispatchAsync(instance.Id, channels, payload, ct);
-        }
+        var suppressingScope = await DndGatedDispatch.DispatchAsync(
+            rule, context.ActiveDndScopes, instance.Id, channels, payload, repository, deliveryService, logger, ct);
 
         logger.LogInformation(
             "Alert instance {InstanceId} created for excursion {ExcursionId}, rule {RuleName}",

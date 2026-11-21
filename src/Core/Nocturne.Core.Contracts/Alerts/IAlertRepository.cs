@@ -159,6 +159,36 @@ public interface IAlertRepository
     Task MarkInstanceSuppressedAsync(Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
+    /// Records a notice that version <paramref name="conditionVersion"/> of
+    /// <paramref name="rule"/>'s condition cannot be evaluated, unless one already stands for
+    /// that version: an excursion row carrying the version, with no end until it is resolved, and
+    /// one instance, unresolved while the notice stands. Serialised per rule across processes, so
+    /// one version records one notice however many callers find it at once.
+    /// </summary>
+    /// <returns>
+    /// The notice standing for the version, new or not, and whether it was dispatched (it has a
+    /// delivery row, or Do Not Disturb suppressed it); null when the rule is not enabled, or its
+    /// stored condition is no longer the one in <paramref name="rule"/>.
+    /// </returns>
+    Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
+        AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct);
+
+    /// <summary>
+    /// The notices that a rule cannot be evaluated that still stand (their instance is
+    /// unresolved), of <paramref name="ruleId"/>, or of every rule of the tenant when null.
+    /// </summary>
+    Task<IReadOnlyList<StandingUnevaluableNotice>> GetStandingUnevaluableNoticesAsync(Guid? ruleId, CancellationToken ct);
+
+    /// <summary>Ends a notice that a rule cannot be evaluated at <paramref name="at"/>, as it is resolved.</summary>
+    Task EndUnevaluableNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
+
+    /// <summary>
+    /// The Home Assistant instances (OAuth client ids) that an excursion's instances were
+    /// delivered to.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetHomeAssistantInstancesSentExcursionAsync(Guid excursionId, CancellationToken ct);
+
+    /// <summary>
     /// Returns the tenant's snoozed alert instances whose snooze period has expired as of
     /// <paramref name="asOf"/>, so they can resume escalation.
     /// </summary>

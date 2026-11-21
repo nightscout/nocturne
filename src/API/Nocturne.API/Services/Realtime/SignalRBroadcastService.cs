@@ -133,6 +133,12 @@ public interface ISignalRBroadcastService
     Task BroadcastAlertResolvedAsync(AlertResolvedEvent resolved);
 
     /// <summary>
+    /// Send <c>alert_resolved</c> only to the named Home Assistant instances (OAuth client ids), for
+    /// an event that reached those instances alone.
+    /// </summary>
+    Task BroadcastAlertResolvedToHomeAssistantAsync(AlertResolvedEvent resolved, IReadOnlyCollection<string> instances);
+
+    /// <summary>
     /// Broadcast <c>alert_acknowledged</c> to the tenant's alert subscribers and Home Assistant instances.
     /// </summary>
     Task BroadcastAlertAcknowledgedAsync(AlertAcknowledgedEvent acknowledged);
@@ -704,6 +710,24 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     /// <inheritdoc />
     public Task BroadcastAlertResolvedAsync(AlertResolvedEvent resolved) =>
         BroadcastAlertEventWithHomeAssistantAsync("alert_resolved", resolved);
+
+    /// <inheritdoc />
+    public async Task BroadcastAlertResolvedToHomeAssistantAsync(
+        AlertResolvedEvent resolved, IReadOnlyCollection<string> instances)
+    {
+        if (instances.Count == 0) return;
+
+        try
+        {
+            await _homeAssistantHubContext
+                .Clients.Groups([.. instances.Select(instance => TenantGroup($"ha:{instance}"))])
+                .SendCoreAsync("alert_resolved", new object[] { resolved });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error relaying alert_resolved to {Count} HA instances", instances.Count);
+        }
+    }
 
     /// <inheritdoc />
     public Task BroadcastAlertAcknowledgedAsync(AlertAcknowledgedEvent acknowledged) =>

@@ -41,5 +41,6 @@ A connection that does not call `Subscribe` receives no `create`, `update` or `d
 
 - Call `Authorize` and `Subscribe` after each connect, and again after each reconnect.
 - On the alerts hub and the alarms hub, call `Subscribe` to start to receive events.
+- On the Home Assistant hub, `alert_dispatch` has a `kind` field: `excursion`, or `unevaluable` for a notice that a rule cannot run until it is edited. Such a notice has no glucose value, and only an instance that is a channel of the rule gets it. The alerts hub does not send notices.
 - A legacy Nightscout client that uses Socket.IO does not connect to the hubs. The web app of the instance runs a bridge that gives such a client the Socket.IO events it expects.
 - After a reconnect, read the records since the last one you have, so that nothing is missed.

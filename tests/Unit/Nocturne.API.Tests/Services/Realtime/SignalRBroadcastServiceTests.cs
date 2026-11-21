@@ -184,6 +184,34 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
+    public async Task BroadcastAlertResolvedToHomeAssistantAsync_SendsOnlyToTheNamedInstancesGroups()
+    {
+        IReadOnlyList<string>? groups = null;
+        _mockHaClients
+            .Setup(x => x.Groups(It.IsAny<IReadOnlyList<string>>()))
+            .Callback<IReadOnlyList<string>>(g => groups = g)
+            .Returns(_mockHaProxy.Object);
+        var resolved = new AlertResolvedEvent
+        {
+            TenantId = Guid.NewGuid(),
+            ExcursionId = Guid.NewGuid(),
+            AlertRuleId = Guid.NewGuid(),
+            RuleName = "Urgent Low",
+            ResolvedAt = DateTime.UtcNow,
+            Reason = Nocturne.Core.Models.Alerts.ExcursionCloseReason.Manual,
+        };
+
+        await _service.BroadcastAlertResolvedToHomeAssistantAsync(resolved, ["kitchen-ha"]);
+
+        groups.Should().Equal(TenantAwareHub.FormatTenantGroup("00000000-0000-0000-0000-000000000001", "ha:kitchen-ha"));
+        _mockHaClients.Verify(x => x.Group(It.IsAny<string>()), Times.Never, "no instance it did not reach hears of it");
+        _mockAlertClients.Verify(x => x.Group(It.IsAny<string>()), Times.Never);
+        _mockHaProxy.Verify(
+            x => x.SendCoreAsync("alert_resolved", It.Is<object[]>(a => ReferenceEquals(a[0], resolved)), default),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task BroadcastHomeAssistantGlucoseAsync_SendsGlucoseReadingToTenantHomeAssistantGroup()
     {
         var reading = new GlucoseReadingEvent { Readings = [new SensorGlucose { Mgdl = 120 }] };

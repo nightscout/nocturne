@@ -119,6 +119,26 @@ public class RecordDatasetPostgresTests(RecordDatasetPostgresTests.Database data
                     Id = Guid.CreateVersion7(), AlertExcursionId = open.Id, TriggeredAt = now.AddHours(-30), ResolvedAt = now.AddHours(-1), Status = "resolved",
                 });
 
+            // Neither a standing notice that the rule cannot be evaluated nor a test fire is a time the
+            // alert was raised, so neither changes any count below.
+            var notice = new AlertExcursionEntity
+            {
+                Id = Guid.CreateVersion7(), AlertRuleId = rule.Id, StartedAt = now.AddHours(-2),
+                EndedAt = AlertExcursionEntity.NoticeStandingEnd, UnevaluableConditionVersion = "v1",
+            };
+            var testFire = new AlertExcursionEntity
+            {
+                Id = Guid.CreateVersion7(), AlertRuleId = rule.Id, StartedAt = now.AddHours(-2), EndedAt = now.AddHours(-2),
+            };
+            db.AlertExcursions.AddRange(notice, testFire);
+            db.AlertInstances.AddRange(
+                new AlertInstanceEntity { Id = Guid.CreateVersion7(), AlertExcursionId = notice.Id, TriggeredAt = now.AddHours(-2) },
+                new AlertInstanceEntity
+                {
+                    Id = Guid.CreateVersion7(), AlertExcursionId = testFire.Id, TriggeredAt = now.AddHours(-2),
+                    ResolvedAt = now.AddHours(-2), Status = "test", IsTest = true,
+                });
+
             // A window on now, one that ran out three days ago, one turned off three days ago with no expiry (hidden from
             // a clamped member by its clearing alone), and one with neither set that is still on.
             db.DndWindows.AddRange(

@@ -1156,6 +1156,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<SensorContextEnricherDependencies>();
         services.AddScoped<ISensorContextEnricher, SensorContextEnricher>();
         services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
+        services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
         services.AddScoped<IAlertDeliveryService, AlertDeliveryService>();
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
         services.AddScoped<AlertReceiptService>();

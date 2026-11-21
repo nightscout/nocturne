@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -94,6 +95,7 @@ public class AlertsController : ControllerBase
             .AsNoTracking()
             .Include(e => e.AlertRule)
             .Include(e => e.Instances)
+            .OfCondition(includeTest: true)
             .Where(e => e.EndedAt == null)
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(ct);
@@ -179,15 +181,11 @@ public class AlertsController : ControllerBase
         var query = db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
+            .OfCondition(includeTest)
             .Where(e => e.EndedAt != null && e.EndedAt <= now);
 
         if (alertRuleId.HasValue)
             query = query.Where(e => e.AlertRuleId == alertRuleId.Value);
-
-        // A test-fire produces an excursion whose only instance is IsTest=true.
-        // Filter by absence of any non-test instance to drop them.
-        if (!includeTest)
-            query = query.Where(e => e.Instances.Any(i => !i.IsTest));
 
         var ordered = query.OrderByDescending(e => e.EndedAt);
 
@@ -299,6 +297,7 @@ public class AlertsController : ControllerBase
         await using (var db = await _contextFactory.CreateAsync(ct))
         {
             open = await db.AlertExcursions.AsNoTracking()
+                .OfCondition(includeTest: true)
                 .Where(e => e.EndedAt == null)
                 .Select(e => e.Id)
                 .ToListAsync(ct);
@@ -353,6 +352,7 @@ public class AlertsController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
         var exists = await db.AlertExcursions
             .AsNoTracking()
+            .OfCondition(includeTest: true)
             .AnyAsync(e => e.Id == excursionId, ct);
 
         if (!exists)

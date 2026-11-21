@@ -106,7 +106,21 @@ A tree that cannot be evaluated:
 - Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
   timer writes. The driver returns `skipped` and the `evaluate` envelope returns an error,
   which the host's per-rule catch treats as the same skip, so a live alert keeps its state
-  rather than resolving.
+  rather than resolving. The host tells the rule's recipients once per version of the body,
+  through the rule's channels at its severity and behind the Do Not Disturb gate its excursions
+  pass, that it cannot fire until it is edited (`UnevaluableRuleNotice`). Only the alert sweep
+  sends it, every run, so it does not wait for a reading and evaluation never waits on it; a
+  run that stops between recording the notice and dispatching it is made good by the next. Once
+  the delivery rows are written it behaves as an excursion's dispatch does: a channel whose
+  provider fails is recorded failed and is not retried. The notice is a payload of kind
+  `unevaluable`, with no glucose value, and is never raised on the Nightscout `/alarm`
+  namespace or broadcast to the alerts hub. It is resolved when the body can be evaluated
+  again, when it changes to another that cannot, and when the rule is disabled or deleted. Each
+  sweep run also resolves any notice whose rule is no longer enabled or no longer has that
+  broken version, whatever path missed it, so a rule enabled again while still broken is told
+  again. A standing notice's excursion ends at `infinity` (so the 24-hour history clamp never
+  hides it) and every query over `alert_excursions` and `alert_instances` excludes notices
+  through `AlertExcursionQueries` unless it states why it need not.
 - Auto-resolve tree: never resolves (§7 step 5, as for malformed JSON).
 - Snooze conditions: the snooze clears.
 

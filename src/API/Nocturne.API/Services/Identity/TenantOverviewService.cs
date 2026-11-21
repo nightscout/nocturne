@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -124,6 +125,7 @@ public class TenantOverviewService : ITenantOverviewService
         {
             var activeExcursions = await db.AlertExcursions.AsNoTracking()
                 .Include(e => e.AlertRule)
+                .OfCondition(includeTest: true)
                 .Where(e => e.EndedAt == null)
                 .ToListAsync(ct);
 

@@ -87,9 +87,23 @@ public record UpdateAlertInstanceRequest(Guid TenantId, Guid Id, string? Status 
 public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRuleId, DateTime? HysteresisStartedAt);
 
 /// <summary>
-/// The <see cref="AlertRule"/> an <see cref="AlertExcursion"/> belongs to.
+/// The <see cref="AlertRule"/> an <see cref="AlertExcursion"/> belongs to, and whether the
+/// excursion is the row of a notice that the rule cannot be evaluated rather than of its condition.
 /// </summary>
-public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name);
+public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name, bool IsUnevaluableNotice = false);
+
+/// <summary>
+/// The notice standing for a version of a rule's condition that cannot be evaluated, and whether
+/// it was dispatched.
+/// </summary>
+public record UnevaluableNoticeRecorded(Guid ExcursionId, Guid InstanceId, bool Dispatched);
+
+/// <summary>
+/// A notice that a rule cannot be evaluated that still stands: the rule, the version of its
+/// condition the notice was sent for, and whether it was dispatched.
+/// </summary>
+public record StandingUnevaluableNotice(
+    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, string ConditionVersion, bool Dispatched);
 
 /// <summary>
 /// Pairing of an open excursion with its owning rule, restricted to rules

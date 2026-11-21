@@ -27,6 +27,14 @@ public class DeviceNotificationMirrorTests
     }
 
     [Fact]
+    public void Qualifies_excludes_a_notice_that_an_alert_rule_cannot_be_evaluated()
+    {
+        DeviceNotificationMirror
+            .Qualifies(Dto("alert.unevaluable", NotificationUrgency.Urgent, NotificationCategory.Alert))
+            .Should().BeFalse("its subtitle is a label key only the web app resolves");
+    }
+
+    [Fact]
     public void Qualifies_excludes_bare_informational()
     {
         DeviceNotificationMirror
