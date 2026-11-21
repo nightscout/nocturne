@@ -34,6 +34,10 @@ public interface IAlertRuleConditionValidator
 public sealed class AlertRuleConditionValidator : IAlertRuleConditionValidator
 {
     private const string ConditionScope = "condition";
+
+    /// <summary>Whether no issue is in the rule's body tree, the one that decides whether the rule evaluates.</summary>
+    public static bool IsEvaluable(IEnumerable<RustValidationIssue> issues) =>
+        issues.All(i => i.Scope != ConditionScope);
     private const string AutoResolveScope = "auto_resolve";
     private const string SnoozeScope = "snooze";
 

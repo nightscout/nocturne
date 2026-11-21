@@ -232,6 +232,23 @@
       </div>
     {/if}
 
+    {#if rules.length > 0 && !rules.some((r) => r.coversLow)}
+      <div
+        role="status"
+        class="flex items-center gap-3 rounded-lg border px-4 py-3 {severity('warning', 'strip')}"
+      >
+        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <p class="flex-1 text-sm font-medium">
+          No alert is on for low glucose. Nocturne will not tell you when glucose is low.
+        </p>
+        {#if canManageAlerts}
+          <Button type="button" variant="outline" size="sm" onclick={newRule}>
+            <Plus class="h-4 w-4 mr-2" /> Add a low alert
+          </Button>
+        {/if}
+      </div>
+    {/if}
+
     {#if dnd && isDndInEffect(dnd)}
       <DndNoticeStrip
         onDisableDnd={canManageAlerts && isDndManualActive(dnd) ? () => handleDisableDnd(dnd) : undefined}

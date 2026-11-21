@@ -9,7 +9,7 @@ const RULE_ID = "11111111-1111-1111-1111-111111111111";
 
 // Module-level so every read hands back the same object; a fresh value per access
 // would re-run the effects that derive from it.
-const rule = {
+let rule = {
   id: RULE_ID,
   name: "Nighttime low",
   isEnabled: true,
@@ -18,6 +18,7 @@ const rule = {
   conditionParams: { direction: "below", value: 70 },
   channels: [],
 } as unknown as AlertRuleResponse;
+const lastCover = { ...rule, coversLow: true, isLastLowCover: true } as unknown as AlertRuleResponse;
 const rules = [rule];
 const history = { items: [], totalCount: 0 };
 
@@ -26,13 +27,15 @@ const refusal = vi.hoisted(() => ({
   /** When set, the test alert is sent instead of refused. */
   testSends: false,
   search: null as unknown,
+  update: (): Promise<unknown> => Promise.reject(refusal.error),
+  remove: (): Promise<unknown> => Promise.reject(refusal.error),
 }));
 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   getRule: () => remoteQuery(() => rule),
-  updateRule: remoteCommand(() => Promise.reject(refusal.error)),
-  deleteRule: remoteCommand(() => Promise.reject(refusal.error)),
+  updateRule: remoteCommand(() => refusal.update()),
+  deleteRule: remoteCommand(() => refusal.remove()),
   testFire: remoteCommand(() =>
     refusal.testSends ? Promise.resolve({ success: true }) : Promise.reject(refusal.error),
   ),
@@ -75,12 +78,17 @@ function openRule(id: string) {
   pageState.data = { effectivePermissions: ["alerts.readwrite"] };
 }
 
+const original = rule;
+
 describe("alert rule editor", () => {
   beforeEach(async () => {
     await page.viewport(1280, 900);
     refusal.error = new Error("network down");
     refusal.testSends = false;
     refusal.search = null;
+    refusal.update = () => Promise.reject(refusal.error);
+    refusal.remove = () => Promise.reject(refusal.error);
+    rule = original;
   });
 
   afterEach(() => {
@@ -89,12 +97,12 @@ describe("alert rule editor", () => {
 
   it("asks the user to try again when deleting the rule fails", async () => {
     openRule(RULE_ID);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(RuleEditorPage, {});
 
     await expect.element(page.getByRole("heading", { name: "Nighttime low" })).toBeVisible();
     await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).nth(1).click();
 
     await expect
       .element(page.getByText("Failed to delete the alert rule. Try again."))
@@ -167,5 +175,80 @@ describe("alert rule editor", () => {
 
     const row = page.getByTestId("alert-condition-card").getByTestId("alert-condition-row");
     await expect.element(row.getByRole("button", { name: "Direction" })).toHaveTextContent("below");
+  });
+
+  describe("the last rule that covers low glucose", () => {
+    const warning = () => page.getByText(/No alert for low glucose will remain/);
+
+    it("asks before deleting it", async () => {
+      rule = lastCover;
+      const removed = vi.fn(() => Promise.resolve());
+      refusal.remove = removed;
+      openRule(RULE_ID);
+
+      render(RuleEditorPage, {});
+
+      await expect.element(page.getByRole("heading", { name: "Nighttime low" })).toBeVisible();
+      await page.getByRole("button", { name: "Delete" }).click();
+
+      await expect.element(warning()).toBeVisible();
+      expect(removed).not.toHaveBeenCalled();
+
+      await page.getByRole("button", { name: "Delete", exact: true }).nth(1).click();
+      await vi.waitFor(() => expect(removed).toHaveBeenCalledOnce());
+    });
+
+    it("asks before saving it turned off", async () => {
+      rule = lastCover;
+      const saved = vi.fn(() => Promise.resolve());
+      refusal.update = saved;
+      openRule(RULE_ID);
+
+      render(RuleEditorPage, {});
+
+      const enabled = page.getByTestId("alert-enabled");
+      await expect.element(enabled).toBeVisible();
+      await enabled.click();
+      await page.getByRole("button", { name: "Save" }).click();
+
+      await expect.element(warning()).toBeVisible();
+      expect(saved).not.toHaveBeenCalled();
+
+      await page.getByRole("button", { name: "Disable", exact: true }).click();
+      await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    });
+
+    it("saves other changes to it without asking", async () => {
+      rule = lastCover;
+      const saved = vi.fn(() => Promise.resolve());
+      refusal.update = saved;
+      openRule(RULE_ID);
+
+      render(RuleEditorPage, {});
+
+      const name = page.getByLabelText("Name");
+      await expect.element(name).toBeVisible();
+      await name.fill("Night low");
+      await page.getByRole("button", { name: "Save" }).click();
+
+      await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+      await expect.element(warning()).not.toBeInTheDocument();
+    });
+
+    it("turns off a rule that is not the last cover without asking", async () => {
+      const saved = vi.fn(() => Promise.resolve());
+      refusal.update = saved;
+      openRule(RULE_ID);
+
+      render(RuleEditorPage, {});
+
+      const enabled = page.getByTestId("alert-enabled");
+      await expect.element(enabled).toBeVisible();
+      await enabled.click();
+      await page.getByRole("button", { name: "Save" }).click();
+
+      await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+      await expect.element(warning()).not.toBeInTheDocument();
+    });
   });
 });

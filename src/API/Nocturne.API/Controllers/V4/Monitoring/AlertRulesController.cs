@@ -458,7 +458,7 @@ public class AlertRulesController : ControllerBase
             : null;
 
     private async Task<AlertRuleResponse> ToResponseAsync(AlertRuleRecord rule, CancellationToken ct) =>
-        (await ToResponsesAsync([rule], ct))[0];
+        (await ToResponsesAsync([rule], ct, await _alerts.GetRulesAsync(ct)))[0];
 
     /// <summary>The response for a rule this request has just committed.</summary>
     private async Task<AlertRuleResponse> ReadBackAsync(Guid ruleId, CancellationToken ct) =>
@@ -469,9 +469,10 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// What a save of the stored rule would reject. A rule the engine cannot take at all is logged
-    /// and listed without issues, so one such rule does not fail the whole list.
+    /// and listed without issues, so one such rule does not fail the whole list. The result is null
+    /// then, which tells a rule that could not be checked from one with no issues.
     /// </summary>
-    private IReadOnlyList<RustValidationIssue> StoredIssues(AlertRuleSnapshot rule)
+    private IReadOnlyList<RustValidationIssue>? StoredIssues(AlertRuleSnapshot rule)
     {
         try
         {
@@ -482,7 +483,7 @@ public class AlertRulesController : ControllerBase
         catch (RustAlertEngineException ex)
         {
             _logger.LogError(ex, "The alert engine could not check the conditions of alert rule {AlertRuleId}", rule.Id);
-            return [];
+            return null;
         }
     }
 
@@ -492,9 +493,14 @@ public class AlertRulesController : ControllerBase
     /// This is not a privacy boundary: member names are readable more widely (issue #2359).
     /// </summary>
     private async Task<List<AlertRuleResponse>> ToResponsesAsync(
-        IEnumerable<AlertRuleRecord> rules, CancellationToken ct)
+        IReadOnlyList<AlertRuleRecord> rules, CancellationToken ct,
+        IReadOnlyList<AlertRuleRecord>? tenantRules = null)
     {
-        var responses = rules.Select(rule => MapToResponse(rule, StoredIssues(rule.Rule))).ToList();
+        var issues = (tenantRules ?? rules).ToDictionary(r => r.Rule.Id, r => StoredIssues(r.Rule));
+        var covering = LowCoverage.CoveringRuleIds((tenantRules ?? rules).Select(r => (r, issues[r.Rule.Id])));
+        var responses = rules
+            .Select(r => MapToResponse(r, issues.TryGetValue(r.Rule.Id, out var found) ? found : StoredIssues(r.Rule), covering))
+            .ToList();
         var inApp = responses
             .SelectMany(r => r.Channels)
             .Where(c => c.ChannelType == ChannelType.InApp)
@@ -538,8 +544,12 @@ public class AlertRulesController : ControllerBase
     }
 
     private static AlertRuleResponse MapToResponse(
-        AlertRuleRecord record, IReadOnlyList<RustValidationIssue> conditionIssues) => new()
+        AlertRuleRecord record,
+        IReadOnlyList<RustValidationIssue>? conditionIssues,
+        IReadOnlySet<Guid> lowCoveringRuleIds) => new()
     {
+        CoversLow = lowCoveringRuleIds.Contains(record.Rule.Id),
+        IsLastLowCover = lowCoveringRuleIds.Count == 1 && lowCoveringRuleIds.Contains(record.Rule.Id),
         Id = record.Rule.Id,
         Name = record.Rule.Name,
         Description = record.Description,
@@ -552,7 +562,7 @@ public class AlertRulesController : ControllerBase
         ScopeClass = record.Rule.ScopeClass,
         ManagedBy = record.ManagedBy,
         ReviewReason = record.ReviewReason,
-        ConditionIssues = [.. conditionIssues],
+        ConditionIssues = [.. conditionIssues ?? []],
         AutoResolveEnabled = record.Rule.AutoResolveEnabled,
         AutoResolveParams = record.Rule.AutoResolveParams is null
             ? null
@@ -719,6 +729,12 @@ public class AlertRuleResponse
     /// evaluated: with one in its body the rule is skipped, in its auto-resolve tree it never
     /// resolves, and in its smart-snooze conditions the snooze clears.</summary>
     public List<RustValidationIssue> ConditionIssues { get; set; } = [];
+    /// <summary>True when this rule alerts for low glucose: it is on, evaluates, is a low or
+    /// composite rule (<see cref="ScopeClass"/>), and has a delivery channel (<see cref="LowCoverage"/>).</summary>
+    public bool CoversLow { get; set; }
+    /// <summary>True when this is the only rule that covers low glucose, so turning it off or
+    /// deleting it leaves the tenant with no low alert.</summary>
+    public bool IsLastLowCover { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
     public object ClientConfiguration { get; set; } = new { };

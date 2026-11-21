@@ -34,6 +34,7 @@
   } from "#lib/components/ui/card/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Save from "@lucide/svelte/icons/save";
@@ -54,6 +55,7 @@
   import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
   import OpenOnlyWarning from "#lib/components/alerts/OpenOnlyWarning.svelte";
   import { severity } from "#lib/components/alerts/severity.js";
+  import { endsLowCover, lastLowCoverMessage } from "#lib/components/alerts/lastLowCover.js";
   import {
     severityDescription,
     severityLabel,
@@ -73,10 +75,13 @@
   let testingSaved = $state(false);
   let testSent = $state(false);
   let error = $state<string | null>(null);
+  let confirmingDisable = $state(false);
+  let confirmingDelete = $state(false);
 
   let editor = $state<RuleEditorState>(parseRule(null));
   let seededId = $state<string | null>(null);
   let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
+  let savedEnabled = $state(true);
   const isDirty = $derived(
     savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
   );
@@ -116,11 +121,22 @@
     untrack(() => {
       editor = parseRule(rule ?? null);
       savedBody = buildBody(editor);
+      savedEnabled = editor.isEnabled;
       seededId = ruleId;
     });
   });
 
   // ---- Save ------------------------------------------------------------
+
+  const lastLowCover = $derived(endsLowCover(ruleQuery.current));
+
+  function requestSave(): void {
+    if (lastLowCover && savedEnabled && !editor.isEnabled) {
+      confirmingDisable = true;
+    } else {
+      void save();
+    }
+  }
 
   async function save(): Promise<void> {
     const channelError = validateChannels(editor.channels);
@@ -133,6 +149,7 @@
     try {
       await updateRule({ id: ruleId, request: buildBody(editor) });
       savedBody = buildBody(editor);
+      savedEnabled = editor.isEnabled;
       toast.success("Alert saved");
     } catch (e) {
       const described = describeSubmitError(e, "Failed to save the alert rule. Try again.");
@@ -143,7 +160,6 @@
   }
 
   async function destroy(): Promise<void> {
-    if (!confirm(`Delete "${editor.name}"? This cannot be undone.`)) return;
     deleting = true;
     error = null;
     try {
@@ -296,7 +312,7 @@
         type="button"
         variant="outline"
         size="sm"
-        onclick={destroy}
+        onclick={() => (confirmingDelete = true)}
         disabled={deleting}
       >
         {#if deleting}
@@ -306,7 +322,7 @@
         {/if}
         Delete
       </Button>
-      <Button type="button" onclick={save} disabled={saving || loading || !isDirty}>
+      <Button type="button" onclick={requestSave} disabled={saving || loading || !isDirty}>
         {#if saving}
           <Loader2 class="h-4 w-4 mr-2 animate-spin" />
         {:else}
@@ -666,6 +682,35 @@
     </aside>
   </div>
 </div>
+
+<ConfirmDialog
+  bind:open={confirmingDisable}
+  title={`Disable "${editor.name}"?`}
+  confirmLabel="Disable"
+  destructive
+  busy={saving}
+  onConfirm={save}
+>
+  {#snippet description()}
+    {lastLowCoverMessage}
+  {/snippet}
+</ConfirmDialog>
+
+<ConfirmDialog
+  bind:open={confirmingDelete}
+  title={`Delete "${editor.name}"?`}
+  confirmLabel="Delete"
+  busy={deleting}
+  onConfirm={destroy}
+>
+  {#snippet description()}
+    {#if lastLowCover}
+      {lastLowCoverMessage}
+    {/if}
+    This rule will stop firing immediately. Existing alert history is preserved. This action
+    cannot be undone.
+  {/snippet}
+</ConfirmDialog>
 
 <Dialog.Root bind:open={replayOpen}>
   <!-- eslint-disable-next-line shadcn/no-restyle -- the replay workbench fills the viewport; its bordered header and scrolling body pad themselves, so the dialog cannot -->
