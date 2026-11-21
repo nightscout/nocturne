@@ -1814,6 +1814,39 @@ public class GoogleHealthTests : IDisposable
         Assert.True((await service.StatusAsync(default)).Connected);
     }
 
+    [Fact]
+    public async Task A_disconnect_whose_revocation_outlasts_the_timeout_advises_revoking_in_google()
+    {
+        var time = new FakeTimeProvider();
+        var revoking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, ct) =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/token": return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}""");
+                case "/v1/userinfo": return Json("""{"sub":"account"}""");
+                case "/revoke":
+                    revoking.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return Json("{}");
+                default: return Json("{}");
+            }
+        });
+        var patience = TimeSpan.FromSeconds(30);
+        var service = Service(new TestConnectorStore(), handler, Guid.NewGuid(), time: time, revokeTimeout: TimeSpan.FromMinutes(5));
+        await ConnectAsync(service);
+
+        var disconnect = service.DisconnectAsync(Guid.NewGuid(), default);
+        await revoking.Task.WaitAsync(patience);
+        Assert.False(disconnect.IsCompleted);
+        time.Advance(TimeSpan.FromMinutes(5));
+        await disconnect.WaitAsync(patience);
+
+        var status = await service.StatusAsync(default);
+        Assert.False(status.Connected);
+        Assert.Equal("revoke_in_google", status.ErrorCode);
+    }
+
     private sealed class ThrowingTokenCache(Func<Exception> failure) : IConnectorTokenCache
     {
         public Task<ConnectorSession?> GetAsync(string connectorName, Guid tenantId) => Task.FromResult<ConnectorSession?>(null);
@@ -1865,7 +1898,7 @@ public class GoogleHealthTests : IDisposable
             oauth,
             new GoogleHealthSessionStore(store.Configurations, oauth,
                 holders ?? new InMemoryGoogleHealthGrantHolders(), tenant.Object, platformOptions,
-                NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout),
+                NullLogger<GoogleHealthSessionStore>.Instance, time ?? TimeProvider.System, revokeTimeout),
             store.Configurations,
             store.Loader,
             tenant.Object,

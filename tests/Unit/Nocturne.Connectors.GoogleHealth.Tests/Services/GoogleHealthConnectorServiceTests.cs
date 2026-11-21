@@ -1016,7 +1016,7 @@ public class GoogleHealthConnectorServiceTests
                 new GoogleHealthClient(new HttpClient(handler, false)),
                 new GoogleHealthSessionStore(configurations.Object, oauth,
                     Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
-                    NullLogger<GoogleHealthSessionStore>.Instance),
+                    NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,

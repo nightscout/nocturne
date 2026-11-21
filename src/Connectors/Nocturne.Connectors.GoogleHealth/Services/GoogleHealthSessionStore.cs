@@ -21,6 +21,7 @@ public sealed class GoogleHealthSessionStore(
     ITenantAccessor tenants,
     IGoogleHealthPlatformSettings platform,
     ILogger<GoogleHealthSessionStore> logger,
+    TimeProvider time,
     TimeSpan? revokeTimeout = null)
 {
     private const string RefreshTokenKey = "refreshToken";
@@ -216,9 +217,9 @@ public sealed class GoogleHealthSessionStore(
     {
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(revokeTimeout ?? TimeSpan.FromSeconds(5));
-            return await oauth.RevokeAsync(refreshToken, timeout.Token);
+            using var deadline = new CancellationTokenSource(revokeTimeout ?? TimeSpan.FromSeconds(5), time);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+            return await oauth.RevokeAsync(refreshToken, linked.Token);
         }
         catch (HttpRequestException)
         {

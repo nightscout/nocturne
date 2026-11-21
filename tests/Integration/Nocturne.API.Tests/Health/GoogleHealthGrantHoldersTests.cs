@@ -176,7 +176,7 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
             accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
-            NullLogger<GoogleHealthSessionStore>.Instance);
+            NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System);
     }
 
     private IConnectorConfigurationService SecretsOf(Guid tenant)
