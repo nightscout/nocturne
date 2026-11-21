@@ -283,7 +283,7 @@ public sealed class TrackerService(
         DateTime? scheduledAt,
         CancellationToken ct)
     {
-        var succession = await TrackerSuccession.StartAsync(
+        return await TrackerSuccession.StartAsync(
             repository,
             broadcast,
             timeProvider,
@@ -301,18 +301,14 @@ public sealed class TrackerService(
                 scheduledAt,
                 token
             ),
-            ct
-        );
-
-        if (succession.Started is { } started)
-            await deviceEvents.WriteAsync(
+            ct,
+            afterCommit: started => deviceEvents.WriteAsync(
                 definition.StartEventType,
                 started.StartedAt,
                 startNotes,
                 $"{started.Id}:start",
-                CancellationToken.None);
-
-        return succession;
+                CancellationToken.None)
+        );
     }
 
     /// <inheritdoc />
