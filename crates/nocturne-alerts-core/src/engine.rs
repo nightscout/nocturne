@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use crate::context::SensorContext;
+use crate::context::{SensorContext, opt_ts};
 use crate::enums::{WireEnum, wire_enum};
 use crate::eval::{
     DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, eval_node, eval_payload,
@@ -59,6 +59,8 @@ pub struct Rule {
     /// How old a reading may be before the leaves that judge its freshness
     /// read it unknown (engine-semantics.md §3).
     pub glucose_freshness: TimeDelta,
+    /// When the rule was last enabled (engine-semantics.md §3).
+    pub enabled_at: Option<DateTime<Utc>>,
 }
 
 impl Rule {
@@ -109,14 +111,16 @@ pub struct WireRule {
     /// absent is [`DEFAULT_GLUCOSE_FRESHNESS`].
     #[serde(default)]
     pub glucose_freshness_minutes: Option<i64>,
+    #[serde(default)]
+    pub enabled_at: Option<DateTime<Utc>>,
 }
 
 fn one() -> i32 {
     1
 }
 
-/// Only the `condition_type`, `on_unknown` and `glucose_freshness_minutes`
-/// are checked, not the body.
+/// Only the `condition_type`, `on_unknown`, `glucose_freshness_minutes` and
+/// `enabled_at` are checked, not the body.
 impl TryFrom<WireRule> for Rule {
     type Error = String;
 
@@ -144,6 +148,7 @@ impl TryFrom<WireRule> for Rule {
                 );
             }
         };
+        let enabled_at = opt_ts(w.enabled_at, "enabled_at")?;
         Ok(Rule {
             id: w.id,
             condition_type,
@@ -154,6 +159,7 @@ impl TryFrom<WireRule> for Rule {
             auto_resolve_params: w.auto_resolve_params,
             on_unknown,
             glucose_freshness,
+            enabled_at,
         })
     }
 }
@@ -381,8 +387,7 @@ pub(crate) fn evaluate_body(
     log_leaves: bool,
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
-    let mut env =
-        Env::new(now, rule.id, ctx, timers).with_glucose_freshness(rule.glucose_freshness);
+    let mut env = rule_env(rule, ctx, now, timers);
     let root = eval_payload(body.payload(), wire, &mut env);
 
     // Leaves evaluate alone, at the rule's root path;
@@ -435,7 +440,17 @@ pub(crate) fn auto_resolve_truth(
     let Some(tree) = tree else {
         return Truth::False;
     };
-    let mut env =
-        Env::new(now, rule.id, ctx, timers).with_glucose_freshness(rule.glucose_freshness);
+    let mut env = rule_env(rule, ctx, now, timers);
     eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)
+}
+
+fn rule_env<'a>(
+    rule: &Rule,
+    ctx: &'a SensorContext,
+    now: DateTime<Utc>,
+    timers: &'a mut TimerStore,
+) -> Env<'a> {
+    Env::new(now, rule.id, ctx, timers)
+        .with_glucose_freshness(rule.glucose_freshness)
+        .with_enabled_at(rule.enabled_at)
 }

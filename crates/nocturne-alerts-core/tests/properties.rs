@@ -47,7 +47,7 @@ use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
 use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
-use clock::{clock_context, naming_the_context, word_or_unrecognised};
+use clock::{clock_context, enabled_at, naming_the_context, word_or_unrecognised};
 use generators::{
     RULE_ID, Tick, arbitrary_json, base, composite, glucose_freshness_minutes, is_container,
     mutated, mutations, node, node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree,
@@ -1123,6 +1123,108 @@ proptest! {
     }
 }
 
+/// What `signal_loss` and `staleness` read: a reading's time and timestamp
+/// and the rule's enablement, each present or not, as seconds before `now`.
+#[derive(Debug, Clone)]
+struct DataStoppedCase {
+    last_reading: Option<i64>,
+    latest: Option<i64>,
+    enabled: Option<i64>,
+    signal_loss: bool,
+    operator: &'static str,
+    minutes: i64,
+    negated: bool,
+}
+
+fn data_stopped_case() -> impl Strategy<Value = DataStoppedCase> {
+    let ago = || option::of(-3600..=7200i64);
+    (
+        (ago(), ago(), ago()),
+        any::<bool>(),
+        word::<nocturne_alerts_core::enums::CmpOp>(),
+        1..=60i64,
+        any::<bool>(),
+    )
+        .prop_map(
+            |((last_reading, latest, enabled), signal_loss, operator, minutes, negated)| {
+                DataStoppedCase {
+                    last_reading,
+                    latest,
+                    enabled,
+                    signal_loss,
+                    operator,
+                    minutes,
+                    negated,
+                }
+            },
+        )
+}
+
+/// §3 and §5: data stopped at the reading; a timestamp without a reading time
+/// is forever ago; with neither, at the rule's enablement; with none of them,
+/// unknown. `signal_loss` holds once its minutes have passed, `staleness`
+/// compares the minutes passed with its operator.
+fn model_data_stopped(case: &DataStoppedCase) -> Truth {
+    let passed = match (case.last_reading, case.latest, case.enabled) {
+        (Some(ago), _, _) | (None, None, Some(ago)) => Some(ago),
+        (None, Some(_), _) => None,
+        (None, None, None) => return Truth::Unknown,
+    };
+    let (op, value) = if case.signal_loss {
+        (">=", case.minutes * 60)
+    } else {
+        (case.operator, case.minutes * 60)
+    };
+    let Some(passed) = passed else {
+        return matches!(op, ">" | ">=").into();
+    };
+    match op {
+        ">" => passed > value,
+        ">=" => passed >= value,
+        "<" => passed < value,
+        "<=" => passed <= value,
+        "==" => passed == value,
+        other => panic!("the generators produce no operator {other}"),
+    }
+    .into()
+}
+
+proptest! {
+    /// §3 and §5: `signal_loss` and `staleness` with every combination of a
+    /// reading, a timestamp and the rule's enablement, alone and under `not`.
+    #[test]
+    fn data_stopped_leaves_measure_from_the_reading_else_the_enablement(
+        case in data_stopped_case(),
+    ) {
+        let now = base();
+        let at = |ago: Option<i64>| ago.map(|s| (now - TimeDelta::seconds(s)).to_rfc3339());
+        let leaf = if case.signal_loss {
+            node("signal_loss", json!({ "timeout_minutes": case.minutes }))
+        } else {
+            node("staleness", json!({ "operator": case.operator, "value": case.minutes }))
+        };
+        let body = if case.negated { node("not", json!({ "child": leaf })) } else { leaf };
+        let kind = body["type"].as_str().unwrap().to_owned();
+        let rule = rule_from_wire(json!({
+            "id": RULE_ID.to_string(),
+            "condition_type": kind,
+            "condition_params": body[&kind],
+            "enabled_at": at(case.enabled),
+        }));
+        let context: SensorContext = serde_json::from_value(json!({
+            "last_reading_at": at(case.last_reading),
+            "latest_timestamp": at(case.latest),
+        }))
+        .unwrap();
+        let root = evaluate_rule(&rule, &context, now, &mut EngineState::new(), false)
+            .evaluation
+            .expect("an evaluable rule")
+            .root;
+        let leaf = model_data_stopped(&case);
+        prop_assert_eq!(root, if case.negated { !leaf } else { leaf });
+    }
+}
+
 /// A tracker state a rule can be left in: each of the four, and idle
 /// awaiting re-arm.
 fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
@@ -1181,6 +1283,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
             vec(1..=3600i64, 0..=2),
             on_unknown(),
             glucose_freshness_minutes(),
+            enabled_at(now),
         )
             .prop_map(
                 move |(
@@ -1193,6 +1296,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                     mut earlier,
                     on_unknown,
                     glucose_freshness_minutes,
+                    enabled_at,
                 )| {
                     let body = naming_the_context(body);
                     let kind = body["type"].as_str().expect("a node type").to_owned();
@@ -1208,6 +1312,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                             "auto_resolve_params": resolve.map(naming_the_context),
                             "on_unknown": on_unknown,
                             "glucose_freshness_minutes": glucose_freshness_minutes,
+                            "enabled_at": enabled_at,
                         }),
                         context,
                         tracker,

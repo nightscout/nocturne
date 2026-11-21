@@ -66,6 +66,7 @@ internal static class RustEnvelopeMapper
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
         OnUnknown = rule.OnUnknown,
         GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
+        EnabledAt = rule.EnabledAt,
     };
 
     /// <summary>

@@ -1,10 +1,11 @@
 //! Glucose-fact leaves: threshold, rate_of_change, trend, predicted,
 //! glucose_bucket, staleness.
 
-use chrono::TimeDelta;
+use chrono::{DateTime, TimeDelta, Utc};
 
 use super::Env;
 use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
+use super::signal::{DataStopped, data_stopped};
 use crate::compare::Unit;
 use crate::context::SensorContext;
 use crate::enums::{CmpOp, RateDirection, ThresholdDirection, holds};
@@ -117,16 +118,18 @@ pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> Truth {
     Truth::of(fresh(env.ctx.glucose_bucket, env).map(|bucket| p.buckets.contains(&bucket)))
 }
 
-/// Minutes since the last reading vs a threshold. No reading history (both
-/// `last_reading_at` and `latest_timestamp` null) is unknown, taking
-/// precedence over the infinity convention; `last_reading_at` alone null
-/// means elapsed is +infinity (`>`/`>=` true, others false).
-pub(super) fn staleness(p: &StalenessPayload, ctx: &SensorContext) -> ClockLeaf {
-    if ctx.last_reading_at.is_none() && ctx.latest_timestamp.is_none() {
-        return ClockLeaf::Fixed(Truth::Unknown);
+/// Minutes since data stopped vs a threshold; infinitely stale is `>`/`>=`
+/// true, others false.
+pub(super) fn staleness(
+    p: &StalenessPayload,
+    ctx: &SensorContext,
+    enabled_at: Option<DateTime<Utc>>,
+) -> ClockLeaf {
+    match data_stopped(ctx, enabled_at) {
+        DataStopped::At(anchor) => decimal(anchor, Unit::Minutes, p.operator, p.value.get()),
+        DataStopped::Forever => {
+            ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into())
+        }
+        DataStopped::Unknown => ClockLeaf::Fixed(Truth::Unknown),
     }
-    let Some(last_reading_at) = ctx.last_reading_at else {
-        return ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into());
-    };
-    decimal(last_reading_at, Unit::Minutes, p.operator, p.value.get())
 }

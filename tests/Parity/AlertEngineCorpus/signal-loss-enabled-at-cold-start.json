@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "name": "signal-loss-enabled-at-cold-start",
+  "description": "with no reading history signal_loss measures from the rule's enabled_at: false before the bound, true exactly at it and after, under not and sustained as an ordinary leaf; without enabled_at it stays unknown; any reading history decides as before, and a reading with no last_reading_at is infinitely stale",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 20
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 20
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "signal_loss",
+          "signal_loss": {
+            "timeout_minutes": 20
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "signal_loss",
+          "signal_loss": {
+            "timeout_minutes": 20
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 20
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:25:00Z"
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:19:59Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:20:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:25:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:30:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:45:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:46:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-03-02T12:45:30Z",
+        "last_reading_at": "2026-03-02T12:45:30Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:47:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-03-02T12:45:30Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

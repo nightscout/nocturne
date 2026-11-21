@@ -47,6 +47,7 @@ pub(crate) fn next_change_at(
         now,
         rule_id: rule.id,
         glucose_freshness: rule.glucose_freshness,
+        enabled_at: rule.enabled_at,
         ctx,
         timers: &state.timers,
         earliest: None,
@@ -99,6 +100,7 @@ struct Scan<'a> {
     now: DateTime<Utc>,
     rule_id: Uuid,
     glucose_freshness: TimeDelta,
+    enabled_at: Option<DateTime<Utc>>,
     ctx: &'a SensorContext,
     timers: &'a TimerStore,
     earliest: Option<DateTime<Utc>>,
@@ -126,7 +128,9 @@ impl Scan<'_> {
                 }
                 Payload::DayOfWeek(_) => self.calendar(tenant_zone(self.ctx), &[NaiveTime::MIN]),
                 payload => {
-                    if let Some(e) = clock_leaf(payload, self.ctx).and_then(ClockLeaf::elapsed) {
+                    if let Some(e) =
+                        clock_leaf(payload, self.ctx, self.enabled_at).and_then(ClockLeaf::elapsed)
+                    {
                         self.elapsed(e);
                     }
                     if let Some(e) = freshness_expiry(payload, self.ctx, self.glucose_freshness) {

@@ -45,6 +45,7 @@ public static class ScenarioConversions
             AutoResolveParams = rule.AutoResolveParams?.GetRawText(),
             OnUnknown = rule.OnUnknown ?? AlertRuleOnUnknown.Hold,
             GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
+            EnabledAt = rule.EnabledAt,
         };
     }
 

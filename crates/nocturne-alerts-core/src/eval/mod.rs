@@ -24,18 +24,20 @@ use crate::truth::Truth;
 pub use glucose::{DEFAULT_GLUCOSE_FRESHNESS, MAX_GLUCOSE_FRESHNESS_MINUTES};
 
 /// Per-evaluation environment: the clock instant, the rule whose timers are
-/// keyed and its glucose freshness bound, the sensor context, and the mutable
-/// timer store.
+/// keyed with its glucose freshness bound and when it was enabled, the sensor
+/// context, and the mutable timer store.
 pub struct Env<'a> {
     pub(crate) now: DateTime<Utc>,
     pub(crate) rule_id: Uuid,
     pub(crate) glucose_freshness: TimeDelta,
+    pub(crate) enabled_at: Option<DateTime<Utc>>,
     pub(crate) ctx: &'a SensorContext,
     pub(crate) timers: &'a mut TimerStore,
 }
 
 impl<'a> Env<'a> {
-    /// With the default glucose freshness bound, [`DEFAULT_GLUCOSE_FRESHNESS`].
+    /// With the default glucose freshness bound, [`DEFAULT_GLUCOSE_FRESHNESS`],
+    /// and no enablement instant.
     pub fn new(
         now: DateTime<Utc>,
         rule_id: Uuid,
@@ -46,6 +48,7 @@ impl<'a> Env<'a> {
             now,
             rule_id,
             glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+            enabled_at: None,
             ctx,
             timers,
         }
@@ -57,6 +60,11 @@ impl<'a> Env<'a> {
             glucose_freshness,
             ..self
         }
+    }
+
+    #[must_use]
+    pub fn with_enabled_at(self, enabled_at: Option<DateTime<Utc>>) -> Self {
+        Self { enabled_at, ..self }
     }
 }
 
@@ -101,9 +109,8 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> Truth {
         | Payload::TimeSinceLastBolus(_)
         | Payload::PumpState(_)
         | Payload::StateSpanActive(_)
-        | Payload::TrackerAge(_) => {
-            elapsed::clock_leaf(payload, env.ctx).map_or(Truth::False, |leaf| leaf.holds(env.now))
-        }
+        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at)
+            .map_or(Truth::False, |leaf| leaf.holds(env.now)),
     }
 }
 

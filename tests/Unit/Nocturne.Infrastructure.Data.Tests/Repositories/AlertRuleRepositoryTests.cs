@@ -175,6 +175,68 @@ public class AlertRuleRepositoryTests
         (await check.AlertRules.SingleAsync(r => r.Id == id)).IsEnabled.Should().BeTrue();
     }
 
+    private async Task<DateTime?> EnabledAtAsync(Guid id)
+    {
+        await using var check = Db();
+        return (await check.AlertRules.SingleAsync(r => r.Id == id)).EnabledAt;
+    }
+
+    [Fact]
+    public async Task ARuleCreatedOnIsStampedEnabledAndOneCreatedOffIsNot()
+    {
+        await using var db = Db();
+        var repo = Repository(db);
+
+        var on = await repo.CreateAsync(new NewAlertRule(Low(), []), CancellationToken.None);
+        var off = await repo.CreateAsync(new NewAlertRule(Low() with { IsEnabled = false }, []), CancellationToken.None);
+        var seeded = await repo.CreateMissingByNameAsync(
+            [new NewAlertRule(Low() with { Name = "Seeded" }, [])], CancellationToken.None);
+
+        (await EnabledAtAsync(on)).Should().Be(Now.UtcDateTime);
+        (await EnabledAtAsync(off)).Should().BeNull();
+        (await EnabledAtAsync(seeded.RuleIdsByName["Seeded"])).Should().Be(Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task TogglingOnStampsTheInstantAndTogglingOffKeepsIt()
+    {
+        await using var db = Db();
+        var repo = Repository(db);
+        var id = await repo.CreateAsync(new NewAlertRule(Low() with { IsEnabled = false }, []), CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.ToggleEnabledAsync(id, CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(1));
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.ToggleEnabledAsync(id, CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(1));
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.ToggleEnabledAsync(id, CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(3));
+    }
+
+    [Fact]
+    public async Task AnUpdateThatTurnsTheRuleOnStampsItAndOneThatLeavesItOnDoesNot()
+    {
+        await using var db = Db();
+        var repo = Repository(db);
+        var id = await repo.CreateAsync(new NewAlertRule(Low() with { IsEnabled = false }, []), CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.UpdateAsync(id, Low(), CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(1));
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.UpdateAsync(id, Low() with { Name = "Lower" }, CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(1));
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        await repo.UpdateAsync(id, Low() with { IsEnabled = false }, CancellationToken.None);
+        (await EnabledAtAsync(id)).Should().Be(Now.UtcDateTime.AddHours(1));
+    }
+
     [Fact]
     public async Task ChannelsAreAddedAfterTheStoredOnesAndRemovedByIdWithinTheRule()
     {

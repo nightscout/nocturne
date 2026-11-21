@@ -97,6 +97,13 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
+    /// When the rule was last enabled (docs/alerts/engine-semantics.md §3). Read only while the
+    /// rule is enabled; null is not recorded.
+    /// </summary>
+    [Column("enabled_at")]
+    public DateTime? EnabledAt { get; set; }
+
+    /// <summary>
     /// When true, this rule still fires while the tenant is in Do Not Disturb mode (manual
     /// or scheduled). Critical-severity rules implicitly bypass DND regardless of this flag —
     /// the flag is only meaningful for non-critical rules the user wants to keep active.

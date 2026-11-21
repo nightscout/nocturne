@@ -130,12 +130,16 @@ impl Elapsed {
     }
 }
 
-/// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx`;
-/// `None` for any other kind.
-pub(crate) fn clock_leaf(payload: &Payload, ctx: &SensorContext) -> Option<ClockLeaf> {
+/// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx`, for
+/// a rule enabled at `enabled_at`; `None` for any other kind.
+pub(crate) fn clock_leaf(
+    payload: &Payload,
+    ctx: &SensorContext,
+    enabled_at: Option<DateTime<Utc>>,
+) -> Option<ClockLeaf> {
     let leaf = match payload {
-        Payload::SignalLoss(p) => super::signal::signal_loss(p, ctx),
-        Payload::Staleness(p) => super::glucose::staleness(p, ctx),
+        Payload::SignalLoss(p) => super::signal::signal_loss(p, ctx, enabled_at),
+        Payload::Staleness(p) => super::glucose::staleness(p, ctx, enabled_at),
         Payload::SiteAge(p) => super::device::site_age(p, ctx),
         Payload::SensorAge(p) => super::device::sensor_age(p, ctx),
         Payload::TrackerAge(p) => super::device::tracker_age(p, ctx),

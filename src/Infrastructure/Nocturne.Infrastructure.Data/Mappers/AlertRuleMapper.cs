@@ -10,7 +10,7 @@ public static class AlertRuleMapper
         r.Id, r.TenantId, r.Name, r.ConditionType,
         r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
         r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass, r.OnUnknown,
-        r.GlucoseFreshnessMinutes);
+        r.GlucoseFreshnessMinutes, r.EnabledAt);
 
     public static AlertRuleChannelSnapshot ToSnapshot(AlertRuleChannelEntity c) => new(
         c.Id, c.AlertRuleId, c.ChannelType,

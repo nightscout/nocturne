@@ -583,6 +583,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
+                    b.Property<DateTime?>("EnabledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enabled_at");
+
                     b.Property<int?>("GlucoseFreshnessMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("glucose_freshness_minutes");

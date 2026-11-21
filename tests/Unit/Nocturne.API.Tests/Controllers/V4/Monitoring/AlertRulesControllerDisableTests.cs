@@ -151,6 +151,19 @@ public class AlertRulesControllerDisableTests
     }
 
     [Fact]
+    public async Task Toggling_a_disabled_rule_on_reports_when_it_was_enabled()
+    {
+        var (controller, _, _, _, _) = await CreateAsync(enabled: false);
+
+        var result = await controller.ToggleRule(RuleId, CancellationToken.None);
+
+        var response = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+        response.IsEnabled.Should().BeTrue();
+        response.EnabledAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
     public async Task Updating_an_enabled_rule_to_disabled_closes()
     {
         var (controller, excursionId, tracker, handler, _) = await CreateAsync(enabled: true);

@@ -566,6 +566,7 @@ public class AlertRulesController : ControllerBase
         ConditionType = record.Rule.ConditionType,
         ConditionParams = AlertRuleResponses.Json(record.Rule.ConditionParams),
         IsEnabled = record.IsEnabled,
+        EnabledAt = record.Rule.EnabledAt,
         SortOrder = record.Rule.SortOrder,
         Severity = record.Rule.Severity,
         AllowThroughDnd = record.Rule.AllowThroughDnd,
@@ -719,6 +720,8 @@ public class AlertRuleResponse
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
     public object ConditionParams { get; set; } = new { };
     public bool IsEnabled { get; set; }
+    /// <summary>When the rule was last enabled; null when not recorded. Read-only.</summary>
+    public DateTime? EnabledAt { get; set; }
     public int SortOrder { get; set; }
     public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
     /// <summary>When true, this rule still fires while the tenant is in Do not disturb mode.

@@ -286,6 +286,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         Severity = entity.Severity,
         ClientConfiguration = entity.ClientConfiguration,
         IsEnabled = entity.IsEnabled,
+        EnabledAt = entity.EnabledAt,
         SortOrder = entity.SortOrder,
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams,

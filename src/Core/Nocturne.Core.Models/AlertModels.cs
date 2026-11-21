@@ -701,6 +701,9 @@ public class AlertRule
     /// <summary>Whether this rule is actively being evaluated.</summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>When the rule was last enabled; null when not recorded.</summary>
+    public DateTime? EnabledAt { get; set; }
+
     /// <summary>Display order among rules.</summary>
     public int SortOrder { get; set; }
 

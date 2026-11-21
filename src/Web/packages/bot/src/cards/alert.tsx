@@ -18,17 +18,27 @@ const SEVERITY_TITLES: Record<AlertSeverity, string> = {
   info: "Info",
 };
 
+/**
+ * The condition kinds that fire on readings stopping, so a payload of one with no glucose value
+ * is an alert about having no reading rather than a reading the card failed to get.
+ */
+const NO_READING_KINDS: ReadonlySet<string> = new Set(["signal_loss", "staleness"]);
+
 export function AlertCard(props: {
   payload: AlertPayload;
   unit?: "mg/dL" | "mmol/L";
 }) {
   const { payload, unit = "mg/dL" } = props;
   if (payload.kind === "unevaluable") return UnevaluableCard({ payload });
+  const noReading = payload.glucoseValue == null && NO_READING_KINDS.has(payload.alertType);
   const value =
     payload.glucoseValue != null
       ? formatGlucose(payload.glucoseValue, unit)
       : "N/A";
   const arrow = payload.trend ? trendArrow(payload.trend) : "";
+  const text = noReading
+    ? `There is no glucose reading for ${payload.subjectName}.`
+    : `${payload.subjectName} is ${value} ${arrow}`;
   const target = encodeActionValue({
     tenantId: payload.tenantId,
     excursionId: payload.excursionId,
@@ -40,13 +50,15 @@ export function AlertCard(props: {
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>
       <CardText style={severity === "critical" ? "bold" : "plain"}>
-        {`${payload.subjectName} is ${value} ${arrow}`}
+        {text}
       </CardText>
       <Fields>
-        <Field
-          label="Time"
-          value={new Date(payload.readingTimestamp).toLocaleTimeString()}
-        />
+        {!noReading && (
+          <Field
+            label="Time"
+            value={new Date(payload.readingTimestamp).toLocaleTimeString()}
+          />
+        )}
         {payload.trendRate != null && (
           <Field
             label="Rate"

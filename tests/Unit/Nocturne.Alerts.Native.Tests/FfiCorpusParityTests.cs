@@ -123,5 +123,6 @@ public class FfiCorpusParityTests
         AutoResolveParams = rule.AutoResolveParams,
         OnUnknown = rule.OnUnknown ?? "hold",
         GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
+        EnabledAt = rule.EnabledAt,
     };
 }

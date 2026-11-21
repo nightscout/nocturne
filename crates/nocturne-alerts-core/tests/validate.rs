@@ -282,6 +282,7 @@ fn rule(condition_params: Value) -> Rule {
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
         glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
+        enabled_at: None,
     }
 }
 

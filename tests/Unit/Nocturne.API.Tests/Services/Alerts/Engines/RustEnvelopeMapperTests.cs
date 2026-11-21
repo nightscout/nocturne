@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -94,6 +95,23 @@ public class RustEnvelopeMapperTests
             ? value.GetInt32()
             : null;
         sent.Should().Be(minutes);
+    }
+
+    [Fact]
+    public void BuildRule_sends_when_the_rule_was_enabled_and_omits_none()
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.EnabledAt = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule), AlertEnvelopeJson.Options);
+
+        wire.GetProperty("enabled_at").GetDateTimeOffset()
+            .Should().Be(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero));
+
+        rule.EnabledAt = null;
+        var unrecorded = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule), AlertEnvelopeJson.Options);
+        (unrecorded.TryGetProperty("enabled_at", out var value) && value.ValueKind != JsonValueKind.Null)
+            .Should().BeFalse();
     }
 
     [Fact]
