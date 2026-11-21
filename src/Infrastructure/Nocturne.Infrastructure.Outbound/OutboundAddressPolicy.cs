@@ -1,4 +1,4 @@
-namespace Nocturne.Core.Models.Net;
+namespace Nocturne.Infrastructure.Outbound;
 
 /// <summary>
 /// The address rules an outbound destination is held to.

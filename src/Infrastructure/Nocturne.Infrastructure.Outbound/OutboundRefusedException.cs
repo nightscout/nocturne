@@ -1,4 +1,4 @@
-namespace Nocturne.Core.Models.Net;
+namespace Nocturne.Infrastructure.Outbound;
 
 /// <summary>
 /// An outbound request the server declined to make: the host could not be found, or it resolves to

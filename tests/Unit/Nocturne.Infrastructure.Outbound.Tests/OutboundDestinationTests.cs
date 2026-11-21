@@ -1,9 +1,9 @@
 using System.Net;
 using FluentAssertions;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
-namespace Nocturne.Core.Models.Tests.Net;
+namespace Nocturne.Infrastructure.Outbound.Tests;
 
 /// <summary>
 /// The server sends these requests from inside the deployment's network and reports the outcome

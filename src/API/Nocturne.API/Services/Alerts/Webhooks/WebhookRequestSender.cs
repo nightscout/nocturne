@@ -1,5 +1,5 @@
 using System.Text;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.API.Services.Alerts.Webhooks;
 

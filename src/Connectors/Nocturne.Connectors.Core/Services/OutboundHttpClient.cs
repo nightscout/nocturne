@@ -1,5 +1,5 @@
 using System.Net;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.Connectors.Core.Services;
 
