@@ -31,7 +31,8 @@ public class SubjectServiceEmailConfirmationTests : IDisposable
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
             Mock.Of<IAuthAuditService>(),
             Mock.Of<IRecoveryCodeService>(),
-            NullLogger<SubjectService>.Instance);
+            NullLogger<SubjectService>.Instance,
+            TimeProvider.System);
     }
 
     public void Dispose() => _db.Dispose();
@@ -301,7 +302,8 @@ public class SubjectServiceEmailConfirmationTests : IDisposable
             .ReturnsAsync(new OidcIdentityMatch(identity, record));
         var service = new SubjectService(
             repository.Object, Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(),
-            NullLogger<SubjectService>.Instance);
+            NullLogger<SubjectService>.Instance,
+            TimeProvider.System);
 
         await service.FindOrCreateFromOidcAsync(Guid.NewGuid(), "ext-1", Issuer, asserted, emailVerified: true);
 

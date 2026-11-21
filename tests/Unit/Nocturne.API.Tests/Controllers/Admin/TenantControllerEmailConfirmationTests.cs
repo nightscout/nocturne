@@ -44,7 +44,8 @@ public class TenantControllerEmailConfirmationTests : IDisposable
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
-            NullLogger<SubjectService>.Instance);
+            NullLogger<SubjectService>.Instance,
+            TimeProvider.System);
 
         _tenantService
             .Setup(s => s.GetByIdAsync(_tenantId, It.IsAny<CancellationToken>()))

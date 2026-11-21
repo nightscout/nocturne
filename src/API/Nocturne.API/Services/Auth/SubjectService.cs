@@ -21,22 +21,26 @@ public class SubjectService : ISubjectService
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
+    private readonly TimeProvider _time;
 
     /// <param name="subjects">Repository for the stored subjects, their roles and their OIDC identities.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
     /// <param name="logger">Logger for subject and role changes.</param>
+    /// <param name="time">Clock for every timestamp the service stamps.</param>
     public SubjectService(
         ISubjectRepository subjects,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
-        ILogger<SubjectService> logger
+        ILogger<SubjectService> logger,
+        TimeProvider time
     )
     {
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
         _logger = logger;
+        _time = time;
     }
 
     /// <inheritdoc />
@@ -65,7 +69,7 @@ public class SubjectService : ISubjectService
     )
     {
         var verifiedEmail = emailVerified && !string.IsNullOrEmpty(email) ? email : null;
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
 
         var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
         if (match is not null)
@@ -236,7 +240,7 @@ public class SubjectService : ISubjectService
         Guid? assignedBy = null
     )
     {
-        var outcome = await _subjects.AssignRoleAsync(subjectId, roleName, assignedBy, DateTime.UtcNow, CancellationToken.None);
+        var outcome = await _subjects.AssignRoleAsync(subjectId, roleName, assignedBy, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
         switch (outcome)
         {
             case RoleAssignment.RoleNotFound:
@@ -342,7 +346,7 @@ public class SubjectService : ISubjectService
 
     /// <inheritdoc />
     public Task UpdateLastLoginAsync(Guid subjectId) =>
-        _subjects.UpdateAsync(subjectId, new SubjectEdit(LastLoginAt: DateTime.UtcNow), CancellationToken.None);
+        _subjects.UpdateAsync(subjectId, new SubjectEdit(LastLoginAt: _time.GetUtcNow().UtcDateTime), CancellationToken.None);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<SubjectOidcIdentity>> GetLinkedOidcIdentitiesAsync(Guid subjectId) =>
@@ -358,7 +362,7 @@ public class SubjectService : ISubjectService
         {
             if (existing.Identity.SubjectId == subjectId)
             {
-                await _subjects.TouchOidcIdentityAsync(existing.Identity.Id, DateTime.UtcNow, email, CancellationToken.None);
+                await _subjects.TouchOidcIdentityAsync(existing.Identity.Id, _time.GetUtcNow().UtcDateTime, email, CancellationToken.None);
                 await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
                 return (OidcLinkOutcome.AlreadyLinkedToSelf, existing.Identity.Id);
             }
@@ -366,7 +370,7 @@ public class SubjectService : ISubjectService
         }
 
         var identityId = await _subjects.AddOidcIdentityAsync(
-            new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, DateTime.UtcNow),
+            new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, _time.GetUtcNow().UtcDateTime),
             CancellationToken.None);
         await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
         return (OidcLinkOutcome.Created, identityId);
@@ -380,12 +384,12 @@ public class SubjectService : ISubjectService
     private async Task ConfirmAssertedEmailAsync(Guid subjectId, string? email, bool emailVerified)
     {
         if (emailVerified && !string.IsNullOrEmpty(email))
-            await _subjects.ConfirmEmailAsync(subjectId, email, DateTime.UtcNow, CancellationToken.None);
+            await _subjects.ConfirmEmailAsync(subjectId, email, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
     }
 
     /// <inheritdoc />
     public Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email) =>
-        _subjects.ConfirmEmailAsync(subjectId, email, DateTime.UtcNow, CancellationToken.None);
+        _subjects.ConfirmEmailAsync(subjectId, email, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId) =>
@@ -418,7 +422,7 @@ public class SubjectService : ISubjectService
 
     /// <inheritdoc />
     public Task UpdateOidcIdentityLastUsedAsync(Guid identityId) =>
-        _subjects.TouchOidcIdentityAsync(identityId, DateTime.UtcNow, email: null, CancellationToken.None);
+        _subjects.TouchOidcIdentityAsync(identityId, _time.GetUtcNow().UtcDateTime, email: null, CancellationToken.None);
 
     private static Subject MapToModel(SubjectRecord record)
     {
