@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
@@ -155,15 +156,17 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         NoCodeIssued();
     }
 
-    [Fact]
-    public async Task A_caller_without_member_management_is_refused()
+    [Theory]
+    [InlineData(nameof(MemberRecoveryController.IssueRecoveryCode))]
+    [InlineData(nameof(MemberRecoveryController.GetLockedOutMembers))]
+    public void A_caller_without_member_management_is_refused(string action)
     {
-        SignIn(AuthType.SessionCookie, Scope.GlucoseRead);
-
-        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        NoCodeIssued();
+        ActionGate.Evaluate(
+                typeof(MemberRecoveryController),
+                action,
+                new HashSet<string> { Scope.GlucoseRead },
+                new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie })
+            .ShouldBeScopeRefusal(Scope.MembersManage);
     }
 
     [Fact]

@@ -36,13 +36,11 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TherapyReview>> GetTherapyReview(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await therapy.GetReviewAsync(ct));
     }
 
     [DenyDemoSubject]
+    [RequireScope(Scope.FullAccess)]
     [RequireDeclaredWriteScope]
     [HttpPost("confirm")]
     [RemoteCommand(Invalidates = ["GetTherapyReview"])]
@@ -51,9 +49,6 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TherapyReview>> ConfirmTherapySettings(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         try
         {
             return Ok(await therapy.ConfirmAsync(ct));
@@ -65,6 +60,7 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     }
 
     [DenyDemoSubject]
+    [RequireScope(Scope.FullAccess)]
     [RequireDeclaredWriteScope]
     [HttpPost("entry")]
     [RemoteCommand(Invalidates = ["GetTherapyReview"])]
@@ -75,9 +71,6 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     public async Task<ActionResult<TherapyReview>> EnterTherapySettings(
         [FromBody] EnterTherapySettingsRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         try
         {
             return Ok(await therapy.EnterAsync(

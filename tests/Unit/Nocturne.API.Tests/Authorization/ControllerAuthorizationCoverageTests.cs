@@ -114,6 +114,181 @@ public class ControllerAuthorizationCoverageTests
             ["Nocturne.API.Controllers.Authentication.TotpController"] = "TOTP: login [AllowAnonymous], enrolment/management via fallback trie",
         };
 
+    /// <summary>Why an action outside the versioned planes names no scope.</summary>
+    private static class NoScope
+    {
+        /// <summary>Reads or changes only the caller's own credentials, sessions or sign-in links, keyed by their subject.</summary>
+        public const string OwnCredentials = "the caller's own credentials or sessions";
+
+        /// <summary>Hands part of the caller's own grant to a client or token, refused beyond the scopes the caller holds.</summary>
+        public const string OwnDelegation = "delegates the caller's own grant, no wider than it";
+
+        /// <summary>The row is found by a code the caller presents, so holding the code is the control.</summary>
+        public const string CapabilityCode = "row found by a code the caller presents";
+
+        /// <summary>Answers only for a token issued to the caller; any other reads as inactive.</summary>
+        public const string OwnTokens = "answers only for the caller's own tokens";
+
+        /// <summary>
+        /// Writes tenant state that no scope governs yet. Recorded so the decision is visible rather
+        /// than answered here.
+        /// </summary>
+        public const string Undecided = "tenant state, governing scope undecided";
+    }
+
+    /// <summary>
+    /// Actions outside the V1 to V4 planes that name no scope, keyed <c>Controller.Action</c>. Every
+    /// other action there declares its admission (<see cref="ControllerActionReflection.DeclaresAdmission"/>).
+    /// The versioned planes hold the same rule with their own lists:
+    /// <see cref="ReadEndpointScopeEnforcementTests"/>, <see cref="WriteEndpointScopeEnforcementTests"/>
+    /// and <see cref="V4WriteScopeGatingTests"/>.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> UnversionedScopeExemptActions =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["DirectGrantController.Create"] = NoScope.OwnDelegation,
+            ["OAuthController.ApproveConsent"] = NoScope.OwnDelegation,
+            ["OAuthController.DeviceApprove"] = NoScope.OwnDelegation,
+            ["OAuthController.UpdateGrant"] = NoScope.OwnDelegation,
+            ["OAuthController.GetGrants"] = NoScope.OwnCredentials,
+            ["OAuthController.DeleteGrant"] = NoScope.OwnCredentials,
+            ["OAuthController.GetDeviceInfo"] = NoScope.CapabilityCode,
+            ["OAuthController.Introspect"] = NoScope.OwnTokens,
+            ["OidcController.Link"] = NoScope.OwnCredentials,
+            ["OidcController.LinkCallback"] = NoScope.OwnCredentials,
+            ["OidcController.GetLinkedIdentities"] = NoScope.OwnCredentials,
+            ["OidcController.UnlinkIdentity"] = NoScope.OwnCredentials,
+            ["OidcController.Logout"] = NoScope.OwnCredentials,
+            ["OidcController.GetUserInfo"] = NoScope.OwnCredentials,
+            ["PasskeyController.ListCredentials"] = NoScope.OwnCredentials,
+            ["PasskeyController.RemoveCredential"] = NoScope.OwnCredentials,
+            ["PasskeyController.RegenerateRecoveryCodes"] = NoScope.OwnCredentials,
+            ["PasskeyController.GetRecoveryStatus"] = NoScope.OwnCredentials,
+            ["PasskeyController.CompleteOnboarding"] = NoScope.Undecided,
+            ["TotpController.Setup"] = NoScope.OwnCredentials,
+            ["TotpController.VerifySetup"] = NoScope.OwnCredentials,
+            ["TotpController.ListCredentials"] = NoScope.OwnCredentials,
+            ["TotpController.RemoveCredential"] = NoScope.OwnCredentials,
+            ["TrustedDevicesController.List"] = NoScope.OwnCredentials,
+            ["TrustedDevicesController.Revoke"] = NoScope.OwnCredentials,
+            ["TrustedDevicesController.RevokeAll"] = NoScope.OwnCredentials,
+        };
+
+    [Fact]
+    public void EveryUnversionedAction_DeclaresItsAdmissionOrIsListed()
+    {
+        var actions = UnversionedActions().ToList();
+
+        actions.Should().HaveCountGreaterThan(50,
+            "the scan should discover the authentication and discovery endpoints");
+
+        var undeclared = actions
+            .Where(a => !ControllerActionReflection.DeclaresAdmission(a.Action, a.Controller)
+                        && !UnversionedScopeExemptActions.ContainsKey(Key(a)))
+            .Select(Key)
+            .ToList();
+
+        undeclared.Should().BeEmpty(
+            "every action outside the V1 to V4 planes must declare its scope, the guard that decides "
+            + "it, or a credential that is not a scope, or be listed in UnversionedScopeExemptActions "
+            + "with the reason it needs none. Undeclared: " + string.Join("; ", undeclared));
+    }
+
+    [Fact]
+    public void UnversionedScopeExemptActions_NameAnUndeclaredAction()
+    {
+        var undeclared = UnversionedActions()
+            .Where(a => !ControllerActionReflection.DeclaresAdmission(a.Action, a.Controller))
+            .Select(Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        UnversionedScopeExemptActions.Keys.Should().BeSubsetOf(undeclared,
+            "an entry whose action is gone or now declares its admission would excuse a later action "
+            + "that reuses the name");
+    }
+
+    [Fact]
+    public void EveryScopeDecidedByMember_Exists()
+    {
+        var markers = ControllerActionReflection.GetControllers()
+            .SelectMany(c => GetActionMethods(c).Select(a => (Controller: c, Action: a)))
+            .SelectMany(x => x.Action.GetCustomAttributes<ScopeDecidedByAttribute>()
+                .Select(d => (Key: Key(x), Decided: d)))
+            .ToList();
+
+        markers.Should().Contain(m => m.Decided.Member != null,
+            "the scan must find a marker that names a member, or this test passes vacuously");
+
+        var missing = markers
+            .Where(m => m.Decided.Member is { } member
+                        && m.Decided.Type.GetMember(
+                            member,
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+                            .Length == 0)
+            .Select(m => $"{m.Key} names {m.Decided.Type.Name}.{m.Decided.Member}")
+            .ToList();
+
+        missing.Should().BeEmpty("a [ScopeDecidedBy] must name a member its type declares: "
+            + string.Join("; ", missing));
+    }
+
+    /// <summary>
+    /// A guard's call in a handler is invisible to every attribute sweep, so each type that can
+    /// refuse a caller for a missing scope must be named by at least one
+    /// <see cref="ScopeDecidedByAttribute"/>. A type refuses when it exposes
+    /// <c>FindMissingScope</c>, a <c>Required*Scope</c> naming the scope a refusal reports, or a
+    /// static <c>Refuse*</c> method that returns an action result.
+    /// </summary>
+    /// <remarks>
+    /// It cannot see a guard with one marked caller and one unmarked caller, which only reading the
+    /// handlers would find.
+    /// </remarks>
+    [Fact]
+    public void EveryRefusingScopeGuard_IsNamedByAScopeDecidedBy()
+    {
+        var refusing = ControllerActionReflection.ApiAssembly.GetTypes()
+            .Where(t => !typeof(ControllerBase).IsAssignableFrom(t) && RefusesForAMissingScope(t))
+            .ToList();
+
+        refusing.Select(t => t.Name).Should().Contain(
+            ["StateSpanWriteScopeGuard", "ActivityWriteScopeGuard", "StateSpanReadScopeGuard"],
+            "the scan must find the known refusing guards, or this test passes vacuously");
+
+        var named = ControllerActionReflection.GetControllers()
+            .SelectMany(c => GetActionMethods(c))
+            .SelectMany(a => a.GetCustomAttributes<ScopeDecidedByAttribute>())
+            .Select(d => d.Type)
+            .ToHashSet();
+
+        var unnamed = refusing.Where(t => !named.Contains(t)).Select(t => t.FullName).ToList();
+
+        unnamed.Should().BeEmpty(
+            "every type that refuses for a missing scope must be named by a [ScopeDecidedBy] on the "
+            + "actions that call it. Unnamed: " + string.Join("; ", unnamed));
+    }
+
+    private static bool RefusesForAMissingScope(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Any(m => m.Name == "FindMissingScope"
+                      || (m.Name.StartsWith("Required", StringComparison.Ordinal)
+                          && m.Name.EndsWith("Scope", StringComparison.Ordinal)
+                          && m.ReturnType == typeof(string))
+                      || (m.Name.StartsWith("Refuse", StringComparison.Ordinal)
+                          && typeof(IActionResult).IsAssignableFrom(m.ReturnType)));
+
+    private static IEnumerable<(Type Controller, MethodInfo Action)> UnversionedActions() =>
+        ControllerActionReflection.GetControllers()
+            .Where(c => !IsVersioned(c))
+            .SelectMany(c => GetActionMethods(c).Select(a => (c, a)));
+
+    private static bool IsVersioned(Type controller) =>
+        controller.Namespace is { } ns
+        && new[] { "V1", "V2", "V3", "V4" }.Any(v =>
+            ns == $"Nocturne.API.Controllers.{v}"
+            || ns.StartsWith($"Nocturne.API.Controllers.{v}.", StringComparison.Ordinal));
+
+    private static string Key((Type Controller, MethodInfo Action) a) => $"{a.Controller.Name}.{a.Action.Name}";
+
     [Fact]
     public void EveryControllerAction_HasAnExplicitAuthorizationDecision()
     {

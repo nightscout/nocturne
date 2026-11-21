@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -104,6 +105,29 @@ public class V3CredentialTests : IClassFixture<AuthenticationTestFactory>
         var body = await response.Content.ReadAsStringAsync();
         body.Should().NotContain(V3ChallengeMessage);
         body.Should().NotContain("\"status\":401");
+    }
+
+    /// <summary>
+    /// A member missing the scope a Nightscout read requires gets the bare 403 the pipeline writes for
+    /// a forbid, with no named scope: the body those clients have always parsed.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/v1/treatments")]
+    [InlineData("/api/v3/treatments")]
+    public async Task AMemberWithoutTheScope_IsRefusedWithTheBareForbiddenBody(string path)
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Cookie", await SessionCookieAsync(RoleSeeds.Viewer));
+
+        var response = await client.GetAsync(path);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.Content.Headers.ContentType!.ToString().Should().Be("application/problem+json; charset=utf-8");
+
+        var body = await response.Content.ReadAsStringAsync();
+        Regex.Replace(body, "\"traceId\":\"[^\"]+\"", "\"traceId\":\"*\"")
+            .Should().Be(
+                """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.4","title":"Forbidden","status":403,"traceId":"*"}""");
     }
 
     [Fact]

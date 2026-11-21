@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Connectors;
@@ -137,7 +138,7 @@ public class ConnectorConfigurationScopeTests
         foreach (var (controller, action) in GatedActions())
         {
             Evaluate(controller, action, authenticated: true, scopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"the {role} role holds no tenant.settings, so it must not reach "
                     + $"{controller.Name}.{action.Name}");
         }
@@ -149,7 +150,7 @@ public class ConnectorConfigurationScopeTests
         foreach (var (controller, action) in GatedActions())
         {
             Evaluate(controller, action, authenticated: true, GuestScopes())
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"a read-only guest session must not reach {controller.Name}.{action.Name}");
         }
     }
@@ -204,7 +205,7 @@ public class ConnectorConfigurationScopeTests
         foreach (var (controller, action) in GatedActions())
         {
             Evaluate(controller, action, authenticated: true, scopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"a consented OAuth grant must not reach {controller.Name}.{action.Name}");
         }
     }
@@ -219,9 +220,9 @@ public class ConnectorConfigurationScopeTests
         var controller = NewCareLinkController(SeedRoleScopes(role), credentialScopes: []);
 
         (await controller.Start(new CareLinkConnectStartRequest { Server = "EU" }, default))
-            .Result.Should().BeOfType<ForbidResult>();
+            .Result.Should().BeOfType<ScopeForbiddenResult>();
         (await controller.Complete(new CareLinkConnectCompleteRequest { Code = "c", State = "s" }, default))
-            .Result.Should().BeOfType<ForbidResult>();
+            .Result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -230,9 +231,9 @@ public class ConnectorConfigurationScopeTests
         var controller = NewCareLinkController(GuestScopes(), credentialScopes: []);
 
         (await controller.Start(new CareLinkConnectStartRequest { Server = "EU" }, default))
-            .Result.Should().BeOfType<ForbidResult>();
+            .Result.Should().BeOfType<ScopeForbiddenResult>();
         (await controller.Complete(new CareLinkConnectCompleteRequest { Code = "c", State = "s" }, default))
-            .Result.Should().BeOfType<ForbidResult>();
+            .Result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     /// <summary>

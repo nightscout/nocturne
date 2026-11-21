@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using System.Text.Json;
 using FluentAssertions;
@@ -373,7 +374,7 @@ public class ActivityControllerTests
 
         var result = await _controller.CreateActivities(jsonElement, CancellationToken.None);
 
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        var objectResult = result.Result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
@@ -419,7 +420,7 @@ public class ActivityControllerTests
         var result = await _controller.UpdateActivity(
             id, new Activity { Type = "exercise" }, CancellationToken.None);
 
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        var objectResult = result.Result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
@@ -724,7 +725,7 @@ public class ActivityControllerTests
             JsonSerializer.SerializeToElement(new { _id = id, type = "exercise" }),
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _mockActivityService.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),

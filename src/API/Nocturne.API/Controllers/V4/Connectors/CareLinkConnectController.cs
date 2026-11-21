@@ -98,6 +98,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// The client opens <c>AuthorizeUrl</c> in a new tab.
     /// </summary>
     [HttpPost("start")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand]
     [ProducesResponseType(typeof(CareLinkConnectStartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -106,7 +107,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectStartRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         var server = string.IsNullOrWhiteSpace(request.Server) ? "EU" : request.Server.Trim().ToUpperInvariant();
         if (server != "EU" && server != "US")
@@ -134,6 +135,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// connector secret. Returns the discovered username/country for auto-filling the config form.
     /// </summary>
     [HttpPost("complete")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand(Invalidates = ["Configuration_GetConfiguration", "Configuration_GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -142,7 +144,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectCompleteRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { message = "Both code and state are required." });

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Realtime;
@@ -199,7 +200,7 @@ public class ActivityStoredRecordScopeTests
 
     private static void Forbidden(object? result, string missingScope)
     {
-        var forbidden = result.Should().BeOfType<ObjectResult>().Subject;
+        var forbidden = result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         forbidden.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         System.Text.Json.JsonSerializer.Serialize(forbidden.Value).Should().Contain(missingScope);
     }

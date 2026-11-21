@@ -89,6 +89,27 @@ internal static class ControllerActionReflection
         action.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
         || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null;
 
+    /// <summary>
+    /// Whether the action or its controller names what admits a caller: the scope it requires
+    /// (<see cref="RequireScopeAttribute"/>, <see cref="RequireDeclaredWriteScopeAttribute"/>), the
+    /// guard that decides it (<see cref="ScopeDecidedByAttribute"/>), or a credential that is not a
+    /// scope: anonymous, a permission such as [RequireSuperuser], the instance key, or the
+    /// platform-admin role.
+    /// </summary>
+    public static bool DeclaresAdmission(MethodInfo action, Type controller) =>
+        action.GetCustomAttributes<ScopeDecidedByAttribute>().Any()
+        || NamesAdmission(action.GetCustomAttributes(inherit: true))
+        || NamesAdmission(controller.GetCustomAttributes(inherit: true));
+
+    private static bool NamesAdmission(IEnumerable<object> attributes) =>
+        attributes.Any(a => a is IAllowAnonymous
+                            or RequireScopeAttribute
+                            or RequireDeclaredWriteScopeAttribute
+                            or RequirePermissionAttribute
+                            or RequireInstanceKeyAuthAttribute
+                            || a is AuthorizeAttribute { Roles: { } roles }
+                                && roles.Contains("platform_admin", StringComparison.Ordinal));
+
     private static bool HasGate(IEnumerable<object> attributes) =>
         attributes.Any(a => a is IAuthorizeData
                             or RequirePermissionAttribute // covers [RequireSuperuser]

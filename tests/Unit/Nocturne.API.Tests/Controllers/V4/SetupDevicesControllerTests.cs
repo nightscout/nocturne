@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
@@ -58,21 +60,26 @@ public class SetupDevicesControllerTests
         };
     }
 
-    [Fact]
-    public async Task EveryEndpoint_RefusesAMemberWhoIsNotAnOwner()
+    [Theory]
+    [InlineData(nameof(SetupDevicesController.GetDeviceSetup))]
+    [InlineData(nameof(SetupDevicesController.GetInsulinActionTime))]
+    [InlineData(nameof(SetupDevicesController.ConfirmSetupDevice))]
+    [InlineData(nameof(SetupDevicesController.AddSetupInsulin))]
+    [InlineData(nameof(SetupDevicesController.SetTakesNoInsulin))]
+    [InlineData(nameof(SetupDevicesController.AddSetupTracker))]
+    [InlineData(nameof(SetupDevicesController.RemoveSetupInsulin))]
+    [InlineData(nameof(SetupDevicesController.RemoveSetupTracker))]
+    public void EveryEndpoint_RefusesAMemberWhoIsNotAnOwner(string action)
     {
-        var controller = Build(Scope.DevicesReadWrite, Scope.TherapyReadWrite, Scope.AlertsReadWrite);
+        var refusal = ActionGate.Evaluate(
+                typeof(SetupDevicesController),
+                action,
+                new HashSet<string>([Scope.DevicesReadWrite, Scope.TherapyReadWrite, Scope.AlertsReadWrite]),
+                new AuthContext { IsAuthenticated = true, SubjectId = Guid.CreateVersion7() })
+            .Should().BeOfType<ScopeForbiddenResult>().Subject;
 
-        (await controller.GetDeviceSetup(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.GetInsulinActionTime(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.ConfirmSetupDevice(new() { CatalogId = "dexcom-g7" }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        (await controller.AddSetupInsulin(new() { FormulationId = "humalog" }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        (await controller.SetTakesNoInsulin(new() { TakesNoInsulin = true }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        (await controller.AddSetupTracker(new() { Kind = TrackerOfferKind.Sensor, Name = "Sensor" }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Scopes.Should().Contain(Scope.FullAccess);
     }
 
     [Fact]

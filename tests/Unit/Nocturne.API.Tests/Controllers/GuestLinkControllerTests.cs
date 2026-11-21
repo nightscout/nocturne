@@ -10,6 +10,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -69,15 +70,14 @@ public class GuestLinkControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateGuestLink_WithoutSharingGuest_ForbidsEvenSelfOwned()
+    public void CreateGuestLink_WithoutSharingGuest_ForbidsEvenSelfOwned()
     {
-        BuildContext(new HashSet<string>(StringComparer.Ordinal) { Scope.GlucoseRead });
-
-        var result = await _controller.CreateGuestLink(
-            new CreateGuestLinkRequest("Self Owned"), CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        (await _dbContext.OAuthGrants.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        ActionGate.Evaluate(
+                typeof(GuestLinkController),
+                nameof(GuestLinkController.CreateGuestLink),
+                new HashSet<string>(StringComparer.Ordinal) { Scope.GlucoseRead },
+                new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = _subjectId })
+            .ShouldBeScopeRefusal(Scope.SharingGuest);
     }
 
     [Fact]

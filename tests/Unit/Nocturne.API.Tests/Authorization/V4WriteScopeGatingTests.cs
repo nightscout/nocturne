@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -116,16 +117,6 @@ public class V4WriteScopeGatingTests
         public const string PresentationState = "presentation state, no patient data";
 
         /// <summary>
-        /// The required scope depends on the record being written, so no attribute scan can see it.
-        /// The controller calls a per-record guard in the handler instead. Every action filed under
-        /// this reason must be covered by a test that drives the real gate, so the exemption is
-        /// asserted rather than trusted — see
-        /// <see cref="PerRecordGuardedActions_HaveABehaviouralTest"/>, which requires that of every
-        /// action calling a per-record guard, exempt or not.
-        /// </summary>
-        public const string PerRecordGuard = "per-record scope enforced in the handler";
-
-        /// <summary>
         /// Deliberately <c>[AllowAnonymous]</c>. There is no credential to scope, so a scope gate
         /// cannot apply; whether the endpoint should be anonymous at all is the anonymous-endpoint
         /// audit's question, not this taxonomy's.
@@ -142,6 +133,33 @@ public class V4WriteScopeGatingTests
 
         /// <summary>Sends to an external service and persists no tenant row.</summary>
         public const string OutboundOnly = "outbound call, persists no tenant data";
+
+        /// <summary>
+        /// Changes only the caller's own identity, sessions, links, avatar or app grants, keyed by
+        /// their subject; a row another subject holds matches nothing.
+        /// </summary>
+        public const string OwnIdentity = "the caller's own identity state, keyed by their subject";
+
+        /// <summary>The row is found by a token the caller presents, so holding the token is the control.</summary>
+        public const string CapabilityToken = "row found by a token the caller presents";
+
+        /// <summary>
+        /// Creates a tenant the caller will own. No scope in the tenant the request resolved to can
+        /// govern it; the instance's self-service setting or the creation invite does.
+        /// </summary>
+        public const string CreatesOwnTenant = "creates a tenant the caller owns, no tenant scope applies";
+
+        /// <summary>
+        /// Asks to join, or narrows the caller's own membership. Refused unless the result holds no
+        /// more than the caller already holds.
+        /// </summary>
+        public const string OwnMembership = "the caller's own membership, can only narrow or ask";
+
+        /// <summary>
+        /// Writes state that no scope governs yet. Recorded so the decision is visible rather than
+        /// answered here.
+        /// </summary>
+        public const string Undecided = "governing scope undecided";
 
         /// <summary>
         /// A record that the caller saw a firing alarm. Gated on <c>alerts.read</c> so a share or
@@ -238,16 +256,6 @@ public class V4WriteScopeGatingTests
     private static readonly IReadOnlyDictionary<string, string> GateExemptWriteActions =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // state_spans holds four data categories behind one table and the caller picks which by
-            // setting Category in the body, so StateSpanWriteScopeGuard resolves the scope per
-            // record. A flat controller scope under-gated three of the four — notably DataExclusion,
-            // which decides whether glucose readings count towards analytics and reports.
-            ["StateSpansController.CreateStateSpan"] = NotDataCategory.PerRecordGuard,
-            ["StateSpansController.UpdateStateSpan"] = NotDataCategory.PerRecordGuard,
-            ["StateSpansController.DeleteStateSpan"] = NotDataCategory.PerRecordGuard,
-            ["StateSpansController.RestoreStateSpan"] = NotDataCategory.PerRecordGuard,
-            ["StateSpansController.BulkRestoreStateSpans"] = NotDataCategory.PerRecordGuard,
-
             // The rest of DiscrepancyController is [RequireSuperuser]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
             ["DiscrepancyController.IngestDiscrepancy"] = NotDataCategory.AnonymousByDeclaration,
@@ -286,6 +294,48 @@ public class V4WriteScopeGatingTests
 
             // The clock face is the capability, and the face's owner turned acknowledging on.
             ["ClockFaceAlertsController.MarkClockAlertSeen"] = NotDataCategory.AnonymousByDeclaration,
+
+            // Actions in a controller of GateExemptControllers that declare no admission. The
+            // controller entry waives only the data-category mapping, so each is named here.
+            ["CoachMarkController.UpdateStatus"] = NotDataCategory.PresentationState,
+            ["CoachMarkController.DeleteAll"] = NotDataCategory.PresentationState,
+            ["UserPreferencesController.UpdatePreferences"] = NotDataCategory.PresentationState,
+            ["DebugController.PreviewEntries"] = NotDataCategory.ComputesAndReturns,
+            ["SupportController.CreateIssue"] = NotDataCategory.OutboundOnly,
+
+            ["AvatarController.Upload"] = NotDataCategory.OwnIdentity,
+            ["AvatarController.Delete"] = NotDataCategory.OwnIdentity,
+            ["ChatIdentityController.SetDefault"] = NotDataCategory.OwnIdentity,
+            ["ChatIdentityController.UpdateLink"] = NotDataCategory.OwnIdentity,
+            ["ChatIdentityController.RevokeLink"] = NotDataCategory.OwnIdentity,
+            ["ConnectedAppsController.Revoke"] = NotDataCategory.OwnIdentity,
+            ["SessionsController.Revoke"] = NotDataCategory.OwnIdentity,
+            ["SessionsController.RevokeOthers"] = NotDataCategory.OwnIdentity,
+            // GuestLinkService refuses a link the caller neither holds nor created.
+            ["GuestLinkController.RevokeGuestLink"] = NotDataCategory.OwnIdentity,
+            ["GuestLinkController.DismissGuestLink"] = NotDataCategory.OwnIdentity,
+
+            // Links the chat account the pending token names to the caller's own subject.
+            ["ChatIdentityController.ClaimLink"] = NotDataCategory.Undecided,
+            // [InviteTokenAuthorized]: the invite token admits an identity with no scopes at all.
+            ["MemberInviteController.AcceptInvite"] = NotDataCategory.CapabilityToken,
+
+            ["MembershipRequestController.CreateRequest"] = NotDataCategory.OwnMembership,
+            // Refused unless the caller could grant the caretaker role it steps down to.
+            ["MemberInviteController.StepDown"] = NotDataCategory.OwnMembership,
+
+            ["MyTenantsController.CreateTenant"] = NotDataCategory.CreatesOwnTenant,
+            ["PlatformController.CreateTenant"] = NotDataCategory.CreatesOwnTenant,
+            ["TenantCreationInviteController.Redeem"] = NotDataCategory.CreatesOwnTenant,
+
+            // Any authenticated credential may write these today.
+            ["ConnectorFoodEntriesController.ImportEntries"] = NotDataCategory.ConnectorFoodImport,
+            ["GlucoseProcessingSettingsController.SetPreference"] = NotDataCategory.TenantOperationalConfig,
+            ["GlucoseProcessingSettingsController.SetSourceDefaults"] = NotDataCategory.TenantOperationalConfig,
+            ["SystemEventsController.CreateSystemEvent"] = NotDataCategory.TenantOperationalConfig,
+            ["SystemEventsController.DeleteSystemEvent"] = NotDataCategory.TenantOperationalConfig,
+            // Sets the instance-wide chat-channel availability that GetChannelStatuses reports.
+            ["SystemController.Heartbeat"] = NotDataCategory.Undecided,
         };
 
     /// <summary>
@@ -384,7 +434,6 @@ public class V4WriteScopeGatingTests
             ["TenantAlertSettingsController"] = Scope.AlertsReadWrite,
             ["AlertCustomSoundsController"] = Scope.AlertsReadWrite,
             ["AlertInvitesController"] = Scope.AlertsReadWrite,
-            ["SetupAlertsController"] = Scope.AlertsReadWrite,
             ["NotificationsController"] = Scope.AlertsReadWrite,
 
             // devices: a reservoir report is stored as a manual-source pump_snapshots row, and a fill
@@ -406,6 +455,12 @@ public class V4WriteScopeGatingTests
             // setup_hub_items and the tenant's strip dismissal are the owner's onboarding state, not
             // a data category; the hub is owner-only like the onboarding answers it follows on from.
             ["SetupHubController"] = Scope.FullAccess,
+
+            // The setup hub's Alerts and Devices items write the tables the alert, patient-record and
+            // tracker controllers gate on their categories, and each action names that category, but
+            // setup is the owner's, so each also requires full access.
+            ["SetupAlertsController"] = Scope.FullAccess,
+            ["SetupDevicesController"] = Scope.FullAccess,
 
             // See the ClockFacesController remarks.
             ["ClockFacesController"] = Scope.SharingManage,
@@ -440,14 +495,10 @@ public class V4WriteScopeGatingTests
             ["MealMatchingController.AcceptMatch"] = Scope.TreatmentsReadWrite,
             ["MealMatchingController.DismissMatch"] = Scope.FoodReadWrite,
 
-            // The setup hub's Devices item writes the same tables as PatientRecordController above,
-            // plus a tracker definition, which TrackersController gates on alerts.readwrite.
-            ["SetupDevicesController.ConfirmSetupDevice"] = Scope.DevicesReadWrite,
-            ["SetupDevicesController.AddSetupInsulin"] = Scope.TherapyReadWrite,
-            ["SetupDevicesController.SetTakesNoInsulin"] = Scope.TherapyReadWrite,
-            ["SetupDevicesController.AddSetupTracker"] = Scope.AlertsReadWrite,
-            ["SetupDevicesController.RemoveSetupInsulin"] = Scope.TherapyReadWrite,
-            ["SetupDevicesController.RemoveSetupTracker"] = Scope.AlertsReadWrite,
+            // Setup is the owner's: entering or confirming therapy settings takes full access as
+            // well as the therapy.readwrite the controller declares.
+            ["SetupTherapyController.ConfirmTherapySettings"] = Scope.FullAccess,
+            ["SetupTherapyController.EnterTherapySettings"] = Scope.FullAccess,
 
             // The baseline admitting an activity write, underneath the per-record
             // ActivityWriteScopeGuard that gates the record's own category. Create and update also
@@ -465,7 +516,7 @@ public class V4WriteScopeGatingTests
 
         var result = Evaluate(NewSensorGlucoseController(), authenticated: true, guestScopes.ToArray());
 
-        result.Should().BeOfType<ForbidResult>(
+        result.Should().BeOfType<ScopeForbiddenResult>(
             "a read-only guest session must not be able to create, update, or delete a glucose reading");
     }
 
@@ -474,7 +525,7 @@ public class V4WriteScopeGatingTests
     {
         var result = Evaluate(NewBolusController(), authenticated: true, Scope.TreatmentsRead, Scope.GlucoseRead);
 
-        result.Should().BeOfType<ForbidResult>();
+        result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -490,7 +541,7 @@ public class V4WriteScopeGatingTests
     public void ReadWriteScopeForAnotherCategory_DoesNotUnlockWrites()
     {
         Evaluate(NewBolusController(), authenticated: true, Scope.GlucoseReadWrite)
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -585,13 +636,22 @@ public class V4WriteScopeGatingTests
             {
                 writeActionsChecked++;
 
-                if (IsGateExempt(controller, action))
+                if (GateExemptWriteActions.ContainsKey($"{controller.Name}.{action.Name}"))
                     continue;
+
+                // A controller-level exemption waives the data-category mapping, not the admission.
+                if (GateExemptControllers.ContainsKey(controller.Name))
+                {
+                    if (!ControllerActionReflection.DeclaresAdmission(action, controller))
+                        violations.Add($"{controller.Name}.{action.Name} [{string.Join(",", HttpVerbs(action))}]");
+                    continue;
+                }
 
                 var attributes = AppliedAttributes(controller, action);
                 var gated = attributes.Any(a => a is RequireDeclaredWriteScopeAttribute
                                                      or RequireScopeAttribute
-                                                     or RequirePermissionAttribute);
+                                                     or RequirePermissionAttribute
+                                                     or ScopeDecidedByAttribute);
 
                 if (!gated)
                 {
@@ -618,8 +678,11 @@ public class V4WriteScopeGatingTests
 
         violations.Should().BeEmpty(
             "every write action under " + V4Namespace + " must carry [RequireDeclaredWriteScope] "
-            + "(base CRUD actions and their overrides), a [RequireScope] on it or its controller, or an entry in "
-            + "GateExemptWriteActions stating why. Unprotected: " + string.Join("; ", violations));
+            + "(base CRUD actions and their overrides), a [RequireScope] on it or its controller, a "
+            + "[ScopeDecidedBy] naming the guard that decides it, or an entry in "
+            + "GateExemptWriteActions stating why. In a controller listed in GateExemptControllers "
+            + "any admission ControllerActionReflection.DeclaresAdmission recognises will do. "
+            + "Unprotected: " + string.Join("; ", violations));
 
         readSatisfiable.Should().BeEmpty(
             "a write action must require a readwrite (or full-access) scope: " + string.Join("; ", readSatisfiable));
@@ -642,21 +705,28 @@ public class V4WriteScopeGatingTests
             .Select(c => c.Name)
             .ToHashSet(StringComparer.Ordinal);
         GateExemptControllers.Keys.Should().BeSubsetOf(controllersWithWrites);
+
+        var declaredInExemptControllers = controllers
+            .Where(c => GateExemptControllers.ContainsKey(c.Name))
+            .SelectMany(c => WriteActions(c)
+                .Where(a => ControllerActionReflection.DeclaresAdmission(a, c))
+                .Select(a => $"{c.Name}.{a.Name}"))
+            .Intersect(GateExemptWriteActions.Keys)
+            .ToList();
+        declaredInExemptControllers.Should().BeEmpty(
+            "an entry for an action in an exempt controller excuses only a missing admission, so one "
+            + "whose action now declares it is stale");
     }
 
     /// <summary>
-    /// A per-record gate is a method call in the handler, which no attribute scan can see — delete
-    /// the call and every sweep here stays green. So each action making one must be covered by a
-    /// test that drives the real handler. The requirement holds whether or not the action also
-    /// carries a baseline scope attribute: a baseline narrows what a caller can reach, it does not
-    /// substitute for the record's own category.
+    /// A per-record gate is a method call in the handler, so deleting the call leaves every
+    /// attribute sweep here green. Each action whose scope a write guard decides
+    /// (<see cref="ScopeDecidedByAttribute"/>) must therefore be covered by a test that drives the
+    /// real handler. The requirement holds whether or not the action also carries a baseline scope
+    /// attribute: a baseline narrows what a caller can reach, it does not substitute for the
+    /// record's own category. The coverage side stays listed, so marking a new action without a
+    /// behavioural test fails.
     /// </summary>
-    /// <remarks>
-    /// The population is discovered from the call itself rather than from
-    /// <see cref="GateExemptWriteActions"/>, so an action that gains a baseline attribute — and with
-    /// it an exit from the exemption list — keeps its coverage requirement. The coverage side stays
-    /// listed, so adding a per-record gate without a behavioural test fails.
-    /// </remarks>
     [Fact]
     public void PerRecordGuardedActions_HaveABehaviouralTest()
     {
@@ -676,65 +746,16 @@ public class V4WriteScopeGatingTests
 
         var guarded = V4Controllers()
             .SelectMany(c => WriteActions(c)
-                .Where(CallsAPerRecordGuard)
+                .Where(a => a.GetCustomAttributes<ScopeDecidedByAttribute>()
+                    .Any(d => d.Type.Name.EndsWith("WriteScopeGuard", StringComparison.Ordinal)))
                 .Select(a => $"{c.Name}.{a.Name}"))
             .ToList();
 
         guarded.Should().NotBeEmpty(
-            "the scan must find the per-record guard calls, or this test passes vacuously");
+            "the scan must find the actions a write guard decides, or this test passes vacuously");
 
         guarded.Should().BeEquivalentTo(covered,
             "every per-record-guarded action needs a test that drives its handler");
-    }
-
-    /// <summary>
-    /// Whether the action's body calls a <c>*WriteScopeGuard.FindMissingScope</c>. Read from the
-    /// compiled IL because the call is the gate: a source-text or attribute check would not notice
-    /// the call being deleted, which is the failure this exists to catch.
-    /// </summary>
-    private static bool CallsAPerRecordGuard(MethodInfo action)
-    {
-        // An async action's body is the compiler-generated MoveNext; the action method itself only
-        // starts the state machine, so the call is not in its IL.
-        var body = action.GetCustomAttribute<AsyncStateMachineAttribute>() is { } asyncMachine
-            ? asyncMachine.StateMachineType.GetMethod(
-                "MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            : action;
-
-        var il = body?.GetMethodBody()?.GetILAsByteArray();
-        if (body is null || il is null)
-            return false;
-
-        const byte Call = 0x28;
-        const byte Callvirt = 0x6F;
-
-        // Every offset is probed rather than the instruction stream decoded: an operand byte that
-        // happens to look like a call yields a token that either fails to resolve or resolves to
-        // some unrelated member, and only the name match below counts.
-        for (var i = 0; i + 4 < il.Length; i++)
-        {
-            if (il[i] != Call && il[i] != Callvirt)
-                continue;
-
-            MethodBase? callee;
-            try
-            {
-                callee = body.Module.ResolveMethod(
-                    BitConverter.ToInt32(il, i + 1),
-                    body.DeclaringType?.GetGenericArguments(),
-                    body.IsGenericMethodDefinition ? body.GetGenericArguments() : null);
-            }
-            catch (ArgumentException)
-            {
-                continue;
-            }
-
-            if (callee?.Name == "FindMissingScope"
-                && callee.DeclaringType?.Name.EndsWith("WriteScopeGuard", StringComparison.Ordinal) == true)
-                return true;
-        }
-
-        return false;
     }
 
     /// <summary>
@@ -842,6 +863,15 @@ public class V4WriteScopeGatingTests
                 "every handler-guarded connector controller needs a test that drives its handler");
     }
 
+    /// <summary>
+    /// An action whose only declaration is the guard that decides its scope, so it has no static
+    /// scope to expect. <see cref="PerRecordGuardedActions_HaveABehaviouralTest"/> covers it instead.
+    /// </summary>
+    private static bool IsDecidedOnlyByAGuard(MethodInfo action) =>
+        action.GetCustomAttributes<ScopeDecidedByAttribute>().Any()
+        && !action.GetCustomAttributes(inherit: true)
+            .Any(a => a is RequireScopeAttribute or RequireDeclaredWriteScopeAttribute);
+
     private static bool IsGateExempt(Type controller, MethodInfo action) =>
         GateExemptControllers.ContainsKey(controller.Name)
         || GateExemptWriteActions.ContainsKey($"{controller.Name}.{action.Name}");
@@ -857,7 +887,7 @@ public class V4WriteScopeGatingTests
         var guestScopes = Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead, Scope.AlertsRead]);
 
         EvaluateAction(controller, actionName, authenticated: true, guestScopes.ToArray())
-            .Should().BeOfType<ForbidResult>("a read-only session must not reach this write action");
+            .Should().BeOfType<ScopeForbiddenResult>("a read-only session must not reach this write action");
 
         EvaluateAction(controller, actionName, authenticated: true, expectedScope)
             .Should().BeNull($"a credential holding {expectedScope} must keep writing here");
@@ -872,7 +902,7 @@ public class V4WriteScopeGatingTests
             ? Scope.FoodReadWrite
             : Scope.GlucoseReadWrite;
         EvaluateAction(controller, actionName, authenticated: true, otherCategory)
-            .Should().BeOfType<ForbidResult>("another category's readwrite scope must not unlock this write");
+            .Should().BeOfType<ScopeForbiddenResult>("another category's readwrite scope must not unlock this write");
     }
 
     /// <summary>
@@ -900,6 +930,7 @@ public class V4WriteScopeGatingTests
         var unmapped = NonBaseV4Controllers()
             .SelectMany(c => WriteActions(c).Select(a => (Controller: c, Action: a)))
             .Where(x => !IsGateExempt(x.Controller, x.Action)
+                        && !IsDecidedOnlyByAGuard(x.Action)
                         && !ExpectedActionScopes.ContainsKey($"{x.Controller.Name}.{x.Action.Name}")
                         && !ExpectedWriteScopes.ContainsKey(x.Controller.Name))
             .Select(x => $"{x.Controller.Name}.{x.Action.Name}")
@@ -921,7 +952,7 @@ public class V4WriteScopeGatingTests
         {
             foreach (var action in WriteActions(controller))
             {
-                if (IsGateExempt(controller, action))
+                if (IsGateExempt(controller, action) || IsDecidedOnlyByAGuard(action))
                     continue;
 
                 if (ExpectedActionScopes.TryGetValue($"{controller.Name}.{action.Name}", out var perAction))

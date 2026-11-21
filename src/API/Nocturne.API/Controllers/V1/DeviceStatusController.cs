@@ -200,6 +200,7 @@ public class DeviceStatusController : ControllerBase
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(403)]

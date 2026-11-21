@@ -1,4 +1,5 @@
 using Nocturne.API.Authorization;
+using Nocturne.API.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -104,6 +105,7 @@ public class DirectGrantController : ControllerBase
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DirectGrantDto>), StatusCodes.Status200OK)]
+    [ScopeDecidedBy(typeof(DirectGrantController), nameof(SiteTokenHolderAsync))]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<DirectGrantDto>>> List()
     {
@@ -139,6 +141,7 @@ public class DirectGrantController : ControllerBase
     /// <returns><c>204 No Content</c> on success (including when already revoked); <c>404 Not Found</c> if the grant does not belong to the current user.</returns>
     [HttpDelete("{id:guid}")]
     [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
+    [ScopeDecidedBy(typeof(DirectGrantController), nameof(SiteTokenHolderAsync))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

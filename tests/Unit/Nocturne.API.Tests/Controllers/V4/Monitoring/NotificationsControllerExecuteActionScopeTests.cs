@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Core.Contracts.Notifications;
@@ -80,7 +81,7 @@ public class NotificationsControllerExecuteActionScopeTests
 
         var result = await CreateController(DeviceNotifyOnly).ExecuteAction(id, "dismiss");
 
-        result.Should().BeOfType<ForbidResult>(
+        result.Should().BeOfType<ScopeForbiddenResult>(
             "device.notify buys the excursion acknowledgement, not the meal-match handler's dismiss");
         _notifications.Verify(
             s => s.ExecuteActionAsync(

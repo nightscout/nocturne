@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -65,14 +66,12 @@ public class MemberRecoveryController : ControllerBase
     /// The members of this tenant who cannot sign in (<see cref="OrphanedSubjectFilter"/>).
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.MembersManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<LockedOutMember>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetLockedOutMembers(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         await using var db = await _contexts.CreateAsync(ct);
         var subjects = await db.OrphanedSubjectsOf(_tenantAccessor.TenantId)
             .OrderBy(s => s.Name)
@@ -110,6 +109,7 @@ public class MemberRecoveryController : ControllerBase
     /// </remarks>
     [HttpPost("{subjectId:guid}/code")]
     [RequireInteractiveSession]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetLockedOutMembers"])]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
@@ -118,9 +118,8 @@ public class MemberRecoveryController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> IssueRecoveryCode(Guid subjectId, CancellationToken ct)
     {
-        var auth = HttpContext.GetAuthContext();
-        if (auth is null || !HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
+        // [RequireScope] answers 401 to a request with no auth context, as members.manage is not a read scope.
+        var auth = HttpContext.GetAuthContext()!;
 
         var tenantId = _tenantAccessor.TenantId;
         await using var db = await _contexts.CreateAsync(ct);

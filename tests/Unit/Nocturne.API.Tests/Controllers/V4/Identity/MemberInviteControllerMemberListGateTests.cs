@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -13,7 +14,7 @@ public class MemberInviteControllerMemberListGateTests
     [Fact]
     public void GetMembers_RefusesAnAlertsReadOnlyCaller()
     {
-        Authorize(new HashSet<string> { Scope.AlertsRead }).Should().BeOfType<ForbidResult>();
+        Authorize(new HashSet<string> { Scope.AlertsRead }).Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -23,7 +24,7 @@ public class MemberInviteControllerMemberListGateTests
             Scope.ValidateGrantScopes(Scope.AllowedGuestScopes, OAuthGrantTypes.Guest));
 
         guestScopes.Should().Contain(Scope.AlertsRead);
-        Authorize(guestScopes).Should().BeOfType<ForbidResult>();
+        Authorize(guestScopes).Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Theory]
