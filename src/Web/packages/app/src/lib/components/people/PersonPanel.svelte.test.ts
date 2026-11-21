@@ -26,9 +26,11 @@ const reads = vi.hoisted(() => ({
   refreshed: [] as string[],
 }));
 
+const nav = vi.hoisted(() => ({ address: new URL("http://localhost/") }));
+
 vi.mock("$app/navigation", () => ({
   replaceState: (url: string | URL) => {
-    pageState.url = new URL(url, pageState.url.href);
+    nav.address = new URL(url, nav.address.href);
   },
   afterNavigate: () => {},
 }));
@@ -80,6 +82,7 @@ const others = Array.from({ length: 3 }, (_, i) =>
 function openAt(search: string, people = [amy, bob, ...others]) {
   overview.data = { tenants: people };
   pageState.url = new URL(`http://localhost/${search}`);
+  nav.address = new URL(pageState.url.href);
   return render(PeoplePage);
 }
 
@@ -119,7 +122,7 @@ describe("selecting a person", () => {
 
     expect(row("amy").getAttribute("aria-current")).toBe("true");
     expect(row("bob").getAttribute("aria-current")).toBeNull();
-    expect(pageState.url.searchParams.get("person")).toBe("amy");
+    expect(nav.address.searchParams.get("person")).toBe("amy");
   });
 
   it("opens from the keyboard", async () => {
@@ -130,7 +133,7 @@ describe("selecting a person", () => {
     await userEvent.keyboard("{Enter}");
 
     await expect.element(panel()).toBeVisible();
-    expect(pageState.url.searchParams.get("person")).toBe("amy");
+    expect(nav.address.searchParams.get("person")).toBe("amy");
   });
 
   it("opens the person named in the URL", async () => {
@@ -148,7 +151,7 @@ describe("selecting a person", () => {
     await new Promise((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(resolve))
     );
-    await expect.poll(() => pageState.url.searchParams.has("person")).toBe(false);
+    await expect.poll(() => nav.address.searchParams.has("person")).toBe(false);
     expect(panel().elements()).toHaveLength(0);
     expect(reads.opened).toHaveLength(0);
   });
@@ -162,7 +165,7 @@ describe("selecting a person", () => {
     overview.data = { tenants: [bob, ...others] };
 
     await expect.poll(() => panel().elements().length).toBe(0);
-    expect(pageState.url.searchParams.has("person")).toBe(false);
+    expect(nav.address.searchParams.has("person")).toBe(false);
     expect(document.activeElement).toBe(
       page.getByRole("heading", { level: 1 }).element()
     );
@@ -181,7 +184,7 @@ describe("closing the panel", () => {
     await userEvent.keyboard("{Escape}");
 
     await expect.poll(() => panel().elements().length).toBe(0);
-    expect(pageState.url.searchParams.has("person")).toBe(false);
+    expect(nav.address.searchParams.has("person")).toBe(false);
     expect(document.activeElement).toBe(row("amy"));
   });
 
@@ -215,12 +218,12 @@ describe("the URL", () => {
     openAt("?lens=review&days=30");
 
     await page.getByRole("link", { name: /Amy/ }).first().click();
-    expect(pageState.url.searchParams.get("lens")).toBe("review");
-    expect(pageState.url.searchParams.get("days")).toBe("30");
+    expect(nav.address.searchParams.get("lens")).toBe("review");
+    expect(nav.address.searchParams.get("days")).toBe("30");
 
     await page.getByRole("button", { name: "Close" }).click();
-    expect(pageState.url.searchParams.get("lens")).toBe("review");
-    expect(pageState.url.searchParams.get("days")).toBe("30");
+    expect(nav.address.searchParams.get("lens")).toBe("review");
+    expect(nav.address.searchParams.get("days")).toBe("30");
   });
 
   it("keeps the person through a lens change", async () => {
@@ -229,8 +232,8 @@ describe("the URL", () => {
 
     await page.getByRole("radio", { name: "Review" }).click();
 
-    expect(pageState.url.searchParams.get("person")).toBe("amy");
-    expect(pageState.url.searchParams.get("lens")).toBe("review");
+    expect(nav.address.searchParams.get("person")).toBe("amy");
+    expect(nav.address.searchParams.get("lens")).toBe("review");
     await expect.element(panel()).toBeVisible();
   });
 });

@@ -28,7 +28,7 @@ function ready(
   entries: TenantReviewPerson[],
   days: ReviewDays = 14
 ): ReviewState {
-  return { status: "ready", response: makeReview(entries), days };
+  return { status: "ready", response: makeReview(entries), days, refreshing: false };
 }
 
 function renderReview(people: TenantOverviewItem[], review: ReviewState) {
@@ -175,6 +175,20 @@ describe("Review rows", () => {
     await expect.element(page.getByTestId("review-gmi").first()).toBeVisible();
     expect(rowOf("Person0").querySelector('[data-testid="review-gmi"]')?.textContent?.trim()).toBe("6.0%");
     expect(rowOf("Person4").querySelector('[data-testid="review-gmi"]')?.textContent?.trim()).toBe("10.0%");
+  });
+});
+
+describe("Review rows while the review is read again", () => {
+  it("shows the placeholder for a person with no entry, and the figures of everyone else", async () => {
+    const people = crowd(5);
+    const state = ready(people.slice(1).map((p) => makeReviewEntry(p)));
+    if (state.status !== "ready") throw new Error("not ready");
+    renderReview(people, { ...state, refreshing: true });
+
+    await expect.element(page.getByTestId("review-gmi").first()).toBeVisible();
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(1);
+    expect(rowOf("Person0").querySelector('[data-testid="review-loading"]')).not.toBeNull();
+    expect(page.getByTestId("review-notice").elements()).toHaveLength(0);
   });
 });
 

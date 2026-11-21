@@ -18,17 +18,14 @@
   import PeopleRoster from "./PeopleRoster.svelte";
   import { followOverview } from "./live-overview.svelte.js";
   import PersonPanel from "./PersonPanel.svelte";
-  import {
-    PERSON_PANEL_HEADING_ID,
-    PERSON_POLL_MS,
-    personUrl,
-  } from "./person.js";
+  import { PERSON_PANEL_HEADING_ID, PERSON_POLL_MS } from "./person.js";
   import {
     REVIEW_DAYS,
-    lensUrl,
+    pageUrl,
     parseDays,
     parseLens,
     type Lens,
+    type PageView,
     type ReviewDays,
     type ReviewState,
   } from "./review-lens.js";
@@ -51,24 +48,33 @@
   let lastOpen: string | null = null;
   let roster = $state<ReturnType<typeof PeopleRoster>>();
 
-  // A navigation to this same route reuses the page: the URL it lands on names the lens.
+  // A navigation to this same route reuses the page: the address it lands on names the lens. Back
+  // to an entry written by replaceState lands on the entry's old page.url, and the address shown is
+  // page.shallow.url.
   afterNavigate(() => {
-    lens = parseLens(page.url.searchParams.get("lens"));
-    days = parseDays(page.url.searchParams.get("days"));
-    personSlug = page.url.searchParams.get("person");
+    const { searchParams } = page.shallow?.url ?? page.url;
+    lens = parseLens(searchParams.get("lens"));
+    days = parseDays(searchParams.get("days"));
+    personSlug = searchParams.get("person");
   });
+
+  // page.url keeps the address of the last navigation, not of a replaceState, so the address is
+  // built from what the page holds.
+  function addressOf(view: Partial<PageView> = {}) {
+    return pageUrl(page.url, { lens, days, person: personSlug, ...view });
+  }
 
   function show(nextLens: Lens, nextDays: ReviewDays) {
     lens = nextLens;
     days = nextDays;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its query changed, already resolved
-    replaceState(lensUrl(page.url, nextLens, nextDays), {});
+    replaceState(addressOf(), {});
   }
 
   function open(slug: string | null) {
     personSlug = slug;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its query changed, already resolved
-    replaceState(personUrl(page.url, slug), {});
+    replaceState(addressOf(), {});
   }
 
   const selected = $derived(people.find((person) => person.slug === personSlug));
@@ -102,7 +108,7 @@
   }
 
   function personLocation(person: TenantOverviewItem) {
-    const url = personUrl(page.url, person.slug ?? null);
+    const url = addressOf({ person: person.slug ?? null });
     return url.pathname + url.search;
   }
 
@@ -110,6 +116,8 @@
     if (person.slug) open(person.slug);
   }
 
+  const rereads = $state<Partial<Record<ReviewDays, number>>>({});
+  const refreshing = $derived((rereads[days] ?? 0) > 0);
   // The review read is not polled: the API caches it, and a period does not move by the minute.
   const reviewQuery = $derived(lens === "review" ? getReview({ days }) : null);
   const reviewData = $derived(reviewQuery?.current);
@@ -120,9 +128,36 @@
       : reviewFailed
         ? { status: "failed" }
         : reviewData
-          ? { status: "ready", response: reviewData, days }
+          ? { status: "ready", response: reviewData, days, refreshing }
           : { status: "loading" }
   );
+
+  // The review read is not polled, so it ages behind the list: a person who gave access since
+  // is missing from it. Each person is read for once per period; the API may still omit them.
+  const missingIds = $derived.by(() => {
+    if (!reviewData) return [];
+    const reviewed = new Set((reviewData.people ?? []).map((entry) => entry.tenantId));
+    return people.flatMap((person) =>
+      person.tenantId && !reviewed.has(person.tenantId) ? [person.tenantId] : []
+    );
+  });
+  const rereadIds: Partial<Record<ReviewDays, Set<string>>> = {};
+
+  $effect(() => {
+    const period = days;
+    const missing = missingIds;
+    const done = rereadIds[period] ?? new Set<string>();
+    if (missing.every((id) => done.has(id))) return;
+    rereadIds[period] = new Set([...done, ...missing]);
+    untrack(() => {
+      rereads[period] = (rereads[period] ?? 0) + 1;
+      // A failed read shows through the query's error.
+      void reviewQuery
+        ?.refresh()
+        .catch(() => {})
+        .finally(() => (rereads[period] = (rereads[period] ?? 1) - 1));
+    });
+  });
 
   // A bare await would answer with the value this page already holds.
   pollWhileVisible(() => overviewQuery.refresh(), PERSON_POLL_MS);
