@@ -12,6 +12,11 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// The actions themselves stay declared on the derived controllers: NSwag names every operation
 /// <c>{Controller}_{ActionMethod}</c>, and the TypeScript client method and SvelteKit remote
 /// function are named from that, so an action inherited from here would rename all three.
+/// <para>
+/// These records keep their own contract and do not use <see cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>:
+/// <c>count</c>/<c>skip</c> paging, a plain array, and <c>200</c> with a message on delete. SDK
+/// consumers read that shape, and moving it to the record contract would change the wire.
+/// </para>
 /// </remarks>
 /// <typeparam name="TModel">The domain model the controller reads and writes.</typeparam>
 public abstract class HealthRecordControllerBase<TModel> : ControllerBase
