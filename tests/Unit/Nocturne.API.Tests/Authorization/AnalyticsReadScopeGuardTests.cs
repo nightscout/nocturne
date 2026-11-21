@@ -11,6 +11,7 @@ using Moq;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.TestDoubles;
