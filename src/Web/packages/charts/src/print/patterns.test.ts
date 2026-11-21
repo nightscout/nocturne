@@ -56,3 +56,23 @@ describe("categoryKey", () => {
 		expect(categoryKey(-1)).toBe("cat-5");
 	});
 });
+
+describe("limited-data texture", () => {
+	it("is worn by no other key", () => {
+		const own = JSON.stringify(CHART_TEXTURES["limited-data"].texture);
+		const sharing = keys.filter(
+			(key) => key !== "limited-data" && JSON.stringify(CHART_TEXTURES[key].texture) === own
+		);
+		expect(sharing).toEqual([]);
+	});
+
+	it("runs in a direction no other line texture uses", () => {
+		const own = CHART_TEXTURES["limited-data"].texture;
+		if (own.kind !== "lines") throw new Error("limited-data is a line texture");
+		const sameDirection = keys.filter((key) => {
+			const texture = CHART_TEXTURES[key].texture;
+			return key !== "limited-data" && texture.kind === "lines" && texture.angle === own.angle;
+		});
+		expect(sameDirection).toEqual([]);
+	});
+});

@@ -2,6 +2,9 @@ import {
   GlucoseDirection,
   GlucoseStatus,
   type TenantOverviewItem,
+  type TenantReviewPerson,
+  type TenantReviewResponse,
+  type TenantReviewStatistics,
 } from "#lib/api/generated/nocturne-api-client.js";
 
 const MINUTE_MS = 60_000;
@@ -37,5 +40,53 @@ export function makePerson(
     devices: { reservoirUnits: 120, pumpBatteryPercent: 80 },
     attention: [],
     ...overrides,
+  };
+}
+
+export function makeStatistics(
+  overrides: Partial<TenantReviewStatistics> = {}
+): TenantReviewStatistics {
+  return {
+    timeInRange: {
+      veryLow: 1,
+      low: 3,
+      target: 62,
+      tightTarget: 40,
+      high: 24,
+      veryHigh: 10,
+      belowRange: 4,
+      aboveRange: 34,
+    },
+    gmi: 7.1,
+    coefficientOfVariation: 34,
+    cgmActivePercent: 91,
+    reliability: { meetsReliabilityCriteria: true, daysOfData: 14 },
+    timeInRangeChange: 4,
+    ...overrides,
+  };
+}
+
+export function makeReviewEntry(
+  person: TenantOverviewItem,
+  overrides: Partial<TenantReviewPerson> = {}
+): TenantReviewPerson {
+  return {
+    tenantId: person.tenantId,
+    slug: person.slug,
+    displayName: person.displayName,
+    statistics: makeStatistics(),
+    ...overrides,
+  };
+}
+
+export function makeReview(
+  people: TenantReviewPerson[]
+): TenantReviewResponse {
+  return {
+    from: "2026-11-07T00:00:00Z",
+    to: "2026-11-21T00:00:00Z",
+    previousFrom: "2026-10-24T00:00:00Z",
+    previousTo: "2026-11-07T00:00:00Z",
+    people,
   };
 }

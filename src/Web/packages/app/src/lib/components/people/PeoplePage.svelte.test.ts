@@ -26,6 +26,9 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
     },
     refresh: () => refresh.run(),
   }),
+  getReview: () => {
+    throw new Error("The Now lens reads no statistics");
+  },
 }));
 
 import PeoplePage from "./PeoplePage.svelte";

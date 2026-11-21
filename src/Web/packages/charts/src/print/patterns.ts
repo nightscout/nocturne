@@ -76,6 +76,12 @@ export const CHART_TEXTURES = {
 	/** Basal the pump never reported, hatched rather than drawn as a rate. */
 	"basal-unreported": { texture: lines(45, 4) },
 
+	/**
+	 * A figure drawn from a period that does not meet the reliability criteria: shallow diagonal
+	 * strokes over the mark's own colour, at an angle no other key uses.
+	 */
+	"limited-data": { texture: lines(20, 3) },
+
 	/** A glucose trace drawn as a plain line under another series (the actograms). */
 	"glucose-trace": { color: "var(--muted-foreground)", texture: solid },
 	steps: { color: "var(--primary)", texture: solid },
