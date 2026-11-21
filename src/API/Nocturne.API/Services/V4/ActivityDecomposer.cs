@@ -411,18 +411,6 @@ public class ActivityDecomposer : IActivityDecomposer
         };
     }
 
-    private static string? GetStringValue(Dictionary<string, object> props, string key)
-    {
-        if (!props.TryGetValue(key, out var value))
-            return null;
-
-        return value switch
-        {
-            string s => s,
-            System.Text.Json.JsonElement je
-                when je.ValueKind == System.Text.Json.JsonValueKind.String
-                => je.GetString(),
-            _ => value?.ToString(),
-        };
-    }
+    private static string? GetStringValue(Dictionary<string, object> props, string key) =>
+        props.TryGetValue(key, out var value) ? KeptField.LenientString(value) : null;
 }

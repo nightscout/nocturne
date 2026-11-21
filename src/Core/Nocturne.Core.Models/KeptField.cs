@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Nocturne.Core.Models;
@@ -5,7 +6,8 @@ namespace Nocturne.Core.Models;
 /// <summary>
 /// Reads and writes a value kept under a key in a record's additional properties. A value read
 /// back from the database is a <see cref="JsonElement"/>, one not yet persisted is the CLR value,
-/// and each typed reader accepts both and rejects any other kind.
+/// and each typed reader accepts both and rejects any other kind. The lenient and any-kind readers
+/// instead turn a value of any kind into text, for fields an uploader may send as a string or a number.
 /// </summary>
 public static class KeptField
 {
@@ -44,6 +46,39 @@ public static class KeptField
             JsonElement { ValueKind: JsonValueKind.False } => false,
             _ => null,
         };
+
+    /// <summary>
+    /// A string or JSON string as itself, null as null, and any other value as its invariant text
+    /// (a JSON number as its literal, JSON <c>true</c> as <c>True</c>, JSON null as empty).
+    /// </summary>
+    public static string? LenientString(object? value) => value switch
+    {
+        string text => text,
+        JsonElement { ValueKind: JsonValueKind.String } text => text.GetString(),
+        null => null,
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>
+    /// The value under <paramref name="key"/> as text whatever its kind: a string as itself, a JSON
+    /// value of any other kind as its raw JSON text, any other CLR value by <c>ToString</c>.
+    /// Null when absent or JSON null.
+    /// </summary>
+    public static string? AnyKindAsText(IReadOnlyDictionary<string, object?>? record, string key) =>
+        AnyKindAsText(Value(record, key));
+
+    /// <inheritdoc cref="AnyKindAsText(IReadOnlyDictionary{string, object?}?, string)"/>
+    public static string? AnyKindAsText(object? value) => Present(value) switch
+    {
+        JsonElement { ValueKind: JsonValueKind.String } text => text.GetString(),
+        JsonElement element => element.GetRawText(),
+        { } other => other.ToString(),
+        null => null,
+    };
+
+    /// <summary>The value under <paramref name="key"/> as stored, or null when the record or key is absent or the value is JSON null.</summary>
+    public static object? Value(IReadOnlyDictionary<string, object?>? record, string key) =>
+        Present(record?.GetValueOrDefault(key));
 
     /// <summary>The value as stored, whatever its kind, or null when absent or JSON null.</summary>
     public static object? Present(object? value) =>
