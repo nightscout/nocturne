@@ -772,7 +772,11 @@ public record AlertPayload
     /// </summary>
     public Alerts.AlertPayloadKind Kind { get; init; } = Alerts.AlertPayloadKind.Excursion;
 
-    public required AlertConditionType AlertType { get; init; }
+    /// <summary>
+    /// The rule's condition type; null in the notice for a rule whose stored condition type is not
+    /// one the engine knows.
+    /// </summary>
+    public required AlertConditionType? AlertType { get; init; }
 
     /// <summary>Human-readable name of the <see cref="AlertRule"/> that fired.</summary>
     public required string RuleName { get; init; }

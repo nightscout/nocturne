@@ -361,11 +361,11 @@ public class AlertSweepJobSnoozeTests
     {
         _readings = [Reading(7, 82), Reading(2, 72)];
         _repository
-            .Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([
+            .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnabledAlertRules([
                 new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "Signal loss", AlertConditionType.SignalLoss,
                     """{"timeout_minutes": 15}""", AlertRuleSeverity.Warning, "{}", 0, false, null),
-            ]);
+            ], []));
         SensorContext? wallClock = null;
         _orchestrator
             .Setup(o => o.EvaluateRulesAsync(

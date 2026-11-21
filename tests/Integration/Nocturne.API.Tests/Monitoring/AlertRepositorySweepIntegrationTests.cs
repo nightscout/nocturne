@@ -138,7 +138,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 
         var read = await repo.ReadEnabledRulesAsync(stale, CancellationToken.None);
         read.Rules.Select(r => r.Name).Should().Equal("Readable");
-        read.UnreadableRuleIds.Should().BeEquivalentTo([legacyType, legacySeverity]);
+        read.Unreadable.Select(r => r.Id).Should().BeEquivalentTo([legacyType, legacySeverity]);
 
         logger.Errors.Should().Contain(m => m.Contains(legacyType.ToString()) && m.Contains("threshold_low"));
         logger.Errors.Should().Contain(m => m.Contains(legacySeverity.ToString()) && m.Contains("normal"));

@@ -87,6 +87,13 @@ describe("AlertCard for a rule that cannot run", () => {
     expect(cardFields(card)).toHaveLength(0);
     expect(cardButtons(card)).toHaveLength(0);
   });
+
+  it("renders the notice for a rule whose condition type the engine does not know", () => {
+    const card = AlertCard({ payload: { ...notice, alertType: null } });
+
+    expect(cardTitle(card)).toBe("CRITICAL: Urgent low");
+    expect(cardButtons(card)).toHaveLength(0);
+  });
 });
 
 describe("AlertCard with no glucose reading", () => {

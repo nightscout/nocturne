@@ -61,7 +61,33 @@ public sealed record AlertRuleRecord(
 /// </summary>
 public sealed record EnabledAlertRules(
     IReadOnlyList<AlertRuleSnapshot> Rules,
-    IReadOnlyList<Guid> UnreadableRuleIds);
+    IReadOnlyList<UnreadableAlertRule> Unreadable);
+
+/// <summary>
+/// An enabled rule that cannot be read into an <see cref="AlertRuleSnapshot"/> because its stored
+/// condition type, severity or scope class names no member the engine has, with the columns that
+/// can be read.
+/// </summary>
+/// <param name="StoredConditionType">The stored condition type, whether or not it names a member.</param>
+/// <param name="StoredSeverity">The stored severity, whether or not it names a member.</param>
+/// <param name="Severity">
+/// The stored severity when it names a member, else <see cref="AlertRuleSeverity.Critical"/>, so
+/// that a rule the engine cannot read is not silenced by Do Not Disturb.
+/// </param>
+/// <param name="StoredScopeClass">The stored scope class, whether or not it names a member.</param>
+/// <param name="ScopeClass">
+/// The stored scope class when it names a member, else <see cref="RuleScopeClass.Undirected"/>.
+/// </param>
+public sealed record UnreadableAlertRule(
+    Guid Id,
+    string Name,
+    string StoredConditionType,
+    string ConditionParams,
+    string StoredSeverity,
+    AlertRuleSeverity Severity,
+    string StoredScopeClass,
+    RuleScopeClass ScopeClass,
+    bool AllowThroughDnd);
 
 /// <summary>
 /// Immutable snapshot of a live alert instance.

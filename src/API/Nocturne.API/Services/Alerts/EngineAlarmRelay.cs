@@ -192,10 +192,10 @@ internal sealed class EngineAlarmRelay(
     /// </summary>
     internal static EngineAlarm? Map(AlertPayload payload, bool useMmol, DateTimeOffset now)
     {
-        if (!RaisesAlarm(payload.Severity)) return null;
+        if (payload.AlertType is not { } type || !RaisesAlarm(payload.Severity)) return null;
 
         var critical = payload.Severity == AlertRuleSeverity.Critical;
-        var condition = AlertConditionTypeNames.ToWireString(payload.AlertType);
+        var condition = AlertConditionTypeNames.ToWireString(type);
 
         // NIGHTSCOUT-COMPAT: Nightscout clients show an alarm's title and message as sent, so the
         // backend renders them, in the tenant's units.

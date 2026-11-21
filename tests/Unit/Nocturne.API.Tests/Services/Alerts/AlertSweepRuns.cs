@@ -28,8 +28,8 @@ internal static class AlertSweepRuns
             .Setup(r => r.GetExpiredSnoozedInstancesAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         repository
-            .Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+            .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnabledAlertRules([], []));
         repository
             .Setup(r => r.GetAutoResolveExcursionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);

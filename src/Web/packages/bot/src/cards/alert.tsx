@@ -30,7 +30,7 @@ export function AlertCard(props: {
 }) {
   const { payload, unit = "mg/dL" } = props;
   if (payload.kind === "unevaluable") return UnevaluableCard({ payload });
-  const noReading = payload.glucoseValue == null && NO_READING_KINDS.has(payload.alertType);
+  const noReading = payload.glucoseValue == null && payload.alertType != null && NO_READING_KINDS.has(payload.alertType);
   const value =
     payload.glucoseValue != null
       ? formatGlucose(payload.glucoseValue, unit)

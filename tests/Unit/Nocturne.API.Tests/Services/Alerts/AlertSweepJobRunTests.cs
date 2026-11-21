@@ -40,7 +40,7 @@ public class AlertSweepJobRunTests
 
         (await run.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(first);
         _repository.Verify(r => r.GetExpiredSnoozedInstancesAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
-        _repository.Verify(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _repository.Verify(r => r.GetAutoResolveExcursionsAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -73,15 +73,15 @@ public class AlertSweepJobRunTests
                 """{"direction": "above", "value": 250}""", AlertRuleSeverity.Warning, "{}", 1, false, null),
         };
         _repository
-            .Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(rules);
+            .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnabledAlertRules(rules, []));
 
         await RunAsync(active: true);
 
         _notice.Verify(n => n.CheckAsync(
-            It.Is<IReadOnlyList<AlertRuleSnapshot>>(checkedRules => checkedRules.SequenceEqual(rules)),
+            It.Is<EnabledAlertRules>(checkedRules => checkedRules.Rules.SequenceEqual(rules)),
             It.IsAny<CancellationToken>()), Times.Once);
-        _repository.Verify(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

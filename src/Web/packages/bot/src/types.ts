@@ -165,7 +165,8 @@ export interface AlertPayload {
    * edited: it has no glucose value and nothing to acknowledge. Absent means `excursion`.
    */
   kind?: "excursion" | "unevaluable";
-  alertType: string;
+  /** Null on the notice for a rule whose stored condition type the engine does not know. */
+  alertType: string | null;
   ruleName: string;
   glucoseValue: number | null;
   trend: string | null;

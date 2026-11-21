@@ -29,9 +29,14 @@ internal static class AlertPayloads
         Severity = rule.Severity,
     };
 
-    /// <summary>The notice that <paramref name="rule"/> cannot be evaluated: no glucose value or trend.</summary>
+    /// <summary>
+    /// The notice that a rule cannot be evaluated: no glucose value or trend. The condition type is
+    /// null for a rule whose stored one is not a member.
+    /// </summary>
     public static AlertPayload Unevaluable(
-        AlertRuleSnapshot rule,
+        string ruleName,
+        AlertConditionType? conditionType,
+        AlertRuleSeverity severity,
         Guid tenantId,
         Guid excursionId,
         Guid instanceId,
@@ -40,8 +45,8 @@ internal static class AlertPayloads
         DateTime now) => new()
     {
         Kind = AlertPayloadKind.Unevaluable,
-        AlertType = rule.ConditionType,
-        RuleName = rule.Name,
+        AlertType = conditionType,
+        RuleName = ruleName,
         GlucoseValue = null,
         Trend = null,
         TrendRate = null,
@@ -51,7 +56,7 @@ internal static class AlertPayloads
         TenantId = tenantId,
         SubjectName = SubjectNameOf(tenant),
         ActiveExcursionCount = activeExcursionCount,
-        Severity = rule.Severity,
+        Severity = severity,
     };
 
     private static string SubjectNameOf(TenantAlertContext? tenant) => tenant?.AlertSubjectName ?? "Unknown";

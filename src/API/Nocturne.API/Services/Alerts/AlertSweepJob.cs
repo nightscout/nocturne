@@ -130,7 +130,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private sealed class Sweep(IServiceProvider services, IAlertRepository repository, Guid tenantId, DateTime now)
     {
         private TenantAlertContext? _tenant;
-        private IReadOnlyList<AlertRuleSnapshot>? _enabledRules;
+        private EnabledAlertRules? _enabledRules;
         private (Guid ReadingId, DateTime At, ReadingTrend Trend)? _trend;
 
         public IServiceProvider Services => services;
@@ -146,9 +146,13 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             _tenant ??= await repository.GetTenantAlertContextAsync(tenantId, ct)
                         ?? throw new InvalidOperationException($"Tenant {tenantId} has no alert context.");
 
-        /// <summary>The tenant's enabled rules, read once per run.</summary>
+        /// <summary>The tenant's enabled rules and those it cannot read, read once per run.</summary>
+        public async Task<EnabledAlertRules> ReadEnabledRulesAsync(CancellationToken ct) =>
+            _enabledRules ??= await repository.ReadEnabledRulesAsync(ct);
+
+        /// <summary>The tenant's enabled rules that can be read, read once per run.</summary>
         public async Task<IReadOnlyList<AlertRuleSnapshot>> EnabledRulesAsync(CancellationToken ct) =>
-            _enabledRules ??= await repository.GetEnabledRulesAsync(ct);
+            (await ReadEnabledRulesAsync(ct)).Rules;
 
         /// <summary>
         /// The trend of <paramref name="reading"/>, read once per run: the snooze and wall-clock
@@ -501,7 +505,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// </summary>
     private static async Task CheckRuleConditionsAsync(Sweep sweep, CancellationToken ct) =>
         await sweep.Services.GetRequiredService<IUnevaluableRuleNotice>()
-            .CheckAsync(await sweep.EnabledRulesAsync(ct), ct);
+            .CheckAsync(await sweep.ReadEnabledRulesAsync(ct), ct);
 
     private static Task CheckClockAnomaliesAsync(Sweep sweep, CancellationToken ct) =>
         sweep.Services.GetRequiredService<IClockAnomalyNotice>().RefreshAsync(sweep.Now, ct);

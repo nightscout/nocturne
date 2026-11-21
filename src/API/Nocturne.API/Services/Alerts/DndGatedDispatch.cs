@@ -14,8 +14,26 @@ namespace Nocturne.API.Services.Alerts;
 internal static class DndGatedDispatch
 {
     /// <returns>The scope that silenced the instance, or null when it was dispatched.</returns>
-    public static async Task<DndScope?> DispatchAsync(
+    public static Task<DndScope?> DispatchAsync(
         AlertRuleSnapshot rule,
+        IReadOnlySet<DndScope> activeScopes,
+        Guid instanceId,
+        IReadOnlyList<AlertRuleChannelSnapshot> channels,
+        AlertPayload payload,
+        IAlertRepository repository,
+        IAlertDeliveryService deliveryService,
+        ILogger logger,
+        CancellationToken ct) =>
+        DispatchAsync(
+            rule.Name, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass, activeScopes, instanceId, channels,
+            payload, repository, deliveryService, logger, ct);
+
+    /// <returns>The scope that silenced the instance, or null when it was dispatched.</returns>
+    public static async Task<DndScope?> DispatchAsync(
+        string ruleName,
+        AlertRuleSeverity severity,
+        bool allowThroughDnd,
+        RuleScopeClass scopeClass,
         IReadOnlySet<DndScope> activeScopes,
         Guid instanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
@@ -25,7 +43,7 @@ internal static class DndGatedDispatch
         ILogger logger,
         CancellationToken ct)
     {
-        if (DndSuppressionGate.SuppressingScope(rule, activeScopes) is not { } scope)
+        if (DndSuppressionGate.SuppressingScope(severity, allowThroughDnd, scopeClass, activeScopes) is not { } scope)
         {
             await deliveryService.DispatchAsync(instanceId, channels, payload, ct);
             return null;
@@ -34,7 +52,7 @@ internal static class DndGatedDispatch
         await repository.MarkInstanceSuppressedAsync(instanceId, DndSuppressionGate.SuppressionReason(scope), ct);
         logger.LogInformation(
             "Alert instance {InstanceId} for rule {RuleName} suppressed by DND (scope {Scope})",
-            instanceId, rule.Name, scope);
+            instanceId, ruleName, scope);
         return scope;
     }
 }
