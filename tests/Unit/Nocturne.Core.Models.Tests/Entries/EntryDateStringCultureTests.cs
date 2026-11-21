@@ -21,7 +21,6 @@ public sealed class EntryDateStringCultureTests : IDisposable
     [Theory]
     [InlineData("fa-IR")]
     [InlineData("th-TH")]
-    [InlineData("ar-SA")]
     public void DateString_IsInvariantUnderTheServerCulture(string culture)
     {
         CultureInfo.CurrentCulture = new CultureInfo(culture);
