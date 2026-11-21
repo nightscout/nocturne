@@ -169,4 +169,34 @@ public class DataHubAuthorizeTests
             g => g.AddToGroupAsync(It.IsAny<string>(), $"{Tenant}:subjects", It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [Theory]
+    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    public async Task Authorize_answers_a_failed_credential_check_as_unsuccessful(Exception failure)
+    {
+        var (hub, groups, authorizer) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("oauth-jwt", Tenant, Scope.GlucoseRead))
+            .ThrowsAsync(failure);
+
+        var result = await hub.Authorize(new AuthorizeRequest { Token = "oauth-jwt" });
+
+        System.Text.Json.JsonSerializer.Serialize(result).Should().Contain("\"success\":false");
+        groups.Verify(
+            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Authorize_does_not_swallow_a_failure_it_has_no_answer_for()
+    {
+        var (hub, _, authorizer) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("oauth-jwt", Tenant, Scope.GlucoseRead))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => hub.Authorize(new AuthorizeRequest { Token = "oauth-jwt" });
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
+    }
 }

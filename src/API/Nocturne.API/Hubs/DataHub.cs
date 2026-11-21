@@ -146,7 +146,7 @@ public class DataHub : TenantAwareHub
                 success = true,
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
@@ -255,7 +255,7 @@ public class DataHub : TenantAwareHub
                 deviceStatuses.Count()
             );
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
@@ -312,7 +312,7 @@ public class DataHub : TenantAwareHub
 
             return new { success = true, collections = subscribed };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (HubStoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex,
