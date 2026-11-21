@@ -40821,6 +40821,7 @@ msgstr ""
 msgid "Add at least one place for the alert to go."
 msgstr ""
 
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Enter a name."
