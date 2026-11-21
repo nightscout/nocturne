@@ -505,4 +505,51 @@ public class OidcAuthServiceLoginGateTests
             s => s.IssueSessionAsync(subject.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForADeactivatedMember_FailsWithoutASessionOrAStepUpToken()
+    {
+        var subject = SetupResolvedSubject();
+        subject.IsActive = false;
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.IsAccessDenied.Should().BeFalse("a deactivated account is not offered the membership request");
+        result.Error.Should().Be("callback_failed");
+        result.StepUpToken.Should().BeNull();
+        _totpService.Verify(
+            t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForADeactivatedSubjectWithNoTenantResolved_Fails()
+    {
+        var subject = SetupResolvedSubject();
+        subject.IsActive = false;
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

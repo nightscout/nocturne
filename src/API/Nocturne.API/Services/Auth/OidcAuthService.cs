@@ -296,10 +296,11 @@ public class OidcAuthService : IOidcAuthService
 
     /// <summary>
     /// Completes a login after the OIDC callback has been validated and the ID token parsed:
-    /// resolves the subject from the external identity, enforces tenant membership, and issues
-    /// a session. Because an OIDC identity resolves to a <em>global</em> subject, a valid external
-    /// identity must still be a member of <paramref name="currentTenantId"/> before a session is
-    /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
+    /// resolves the subject from the external identity, refuses it when deactivated, enforces
+    /// tenant membership, and issues a session. Because an OIDC identity resolves to a
+    /// <em>global</em> subject, a valid external identity must still be a member of
+    /// <paramref name="currentTenantId"/> before a session is issued; otherwise any external
+    /// identity could mint a session on any tenant's subdomain.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
     /// </summary>
@@ -322,6 +323,14 @@ public class OidcAuthService : IOidcAuthService
             idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
             provider.DefaultRoles
         );
+
+        // A failed callback rather than NotAMember, which would offer a deactivated account the
+        // membership request.
+        if (!subject.IsActive)
+        {
+            _logger.LogWarning("OIDC login denied: subject {SubjectId} is deactivated", subject.Id);
+            return OidcCallbackResult.Failed("callback_failed", "Authentication failed");
+        }
 
         // Cross-tenant guard: deny — without issuing a session — when the authenticated
         // identity is not a member of the tenant being logged into, and holds no invite to it.

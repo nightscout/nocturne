@@ -85,7 +85,11 @@ public interface ISubjectRepository
 
     /// <summary>
     /// The subjects part-way through an anonymous enrolment that <paramref name="match"/> names:
-    /// not a system subject, holding no passkey and no working OIDC identity. Newest first, by id,
+    /// not a system subject, and holding no way to sign in: no passkey, no identity-provider link,
+    /// no authenticator and no unexpired session. An enrolment gives the subject to whoever names
+    /// it, and an invite enrolment signs them in without asking for a code, so a subject holding
+    /// any of these is an account, not an enrolment. Any provider link counts, not only one to an enabled provider,
+    /// for the reason <see cref="FindSetupOwnerCandidateAsync"/> gives. Newest first, by id,
     /// which for UUID v7 ids is creation order. Membership is not consulted here; the caller asks
     /// it per candidate under that subject's own pin.
     /// </summary>

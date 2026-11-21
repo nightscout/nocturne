@@ -215,7 +215,7 @@ public class SubjectRepositoryTests : IDisposable
         (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.AccessRequest("Ann"), CancellationToken.None))
             .Should().Equal(newer, older);
         (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.Invite("inv"), CancellationToken.None))
-            .Should().Equal(linkedToDisabled, invitee);
+            .Should().Equal(invitee);
     }
 
     [Fact]

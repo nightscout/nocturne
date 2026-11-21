@@ -767,6 +767,135 @@ public class PasskeyControllerTests : IDisposable
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
         inviteService.Verify(s => s.AcceptInviteAsync("invite-token", inviteeId, _tenantId), Times.Once);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(inviteeId), Times.Once);
+    }
+
+    [Fact]
+    public async Task InviteComplete_WhenTheInviteIsRefused_RemovesThePasskeyAndIssuesNoSession()
+    {
+        var inviteeId = await SeedEnrollingSubjectAsync("invitee");
+        var inviteService = StubValidInvite();
+        inviteService.Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new AcceptMemberInviteResult(false, "invite_exhausted", "This invite has no uses left."));
+        var credentialId = StubRegistrationChallengeMintedFor(inviteeId);
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-invitee",
+            },
+            inviteService.Object);
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.RemoveCredentialAsync(credentialId, inviteeId, _tenantId), Times.Once,
+            "a refused invite joins no one, so the passkey must not outlive it");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task TenantInviteComplete_RecordsTheSignInTime()
+    {
+        var newOwnerId = await SeedEnrollingSubjectAsync("founder");
+        StubRegistrationChallengeMintedFor(newOwnerId);
+        var inviteId = Guid.CreateVersion7();
+        _tenantService.Setup(s => s.ValidateSlugAsync("founder-site", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+        var tenantInvites = new Mock<ITenantCreationInviteService>();
+        tenantInvites.Setup(s => s.ClaimAsync("tenant-invite-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<Guid>.Ok(inviteId));
+        tenantInvites
+            .Setup(s => s.CreateTenantAsync(
+                inviteId, "founder-site", "Founder", newOwnerId, "founder", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteRedeemed>.Ok(
+                new TenantCreationInviteRedeemed(Guid.CreateVersion7(), "founder-site", "Founder", "https://founder-site.example")));
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(newOwnerId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, newOwnerId));
+
+        var result = await _controller.TenantInviteComplete(
+            new TenantInviteCompleteRequest
+            {
+                Token = "tenant-invite-token",
+                Slug = "founder-site",
+                SiteName = "Founder",
+                Username = "founder",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-founder",
+            },
+            tenantInvites.Object);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(newOwnerId), Times.Once);
+    }
+
+    [Fact]
+    public async Task InviteComplete_WhenTheSignInTimeCannotBeRecorded_IssuesNoSessionAndSetsNoCookie()
+    {
+        var inviteeId = await SeedEnrollingSubjectAsync("invitee");
+        var inviteService = StubValidInvite();
+        StubRegistrationChallengeMintedFor(inviteeId);
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(inviteeId))
+            .ThrowsAsync(new DbUpdateException("the update failed"));
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-invitee",
+            },
+            inviteService.Object);
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TenantInviteComplete_WhenTheSignInTimeCannotBeRecorded_IssuesNoSessionAndSetsNoCookie()
+    {
+        var newOwnerId = await SeedEnrollingSubjectAsync("founder");
+        StubRegistrationChallengeMintedFor(newOwnerId);
+        var inviteId = Guid.CreateVersion7();
+        _tenantService.Setup(s => s.ValidateSlugAsync("founder-site", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SlugValidationResult(true));
+        var tenantInvites = new Mock<ITenantCreationInviteService>();
+        tenantInvites.Setup(s => s.ClaimAsync("tenant-invite-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<Guid>.Ok(inviteId));
+        tenantInvites
+            .Setup(s => s.CreateTenantAsync(
+                inviteId, "founder-site", "Founder", newOwnerId, "founder", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteRedeemed>.Ok(
+                new TenantCreationInviteRedeemed(Guid.CreateVersion7(), "founder-site", "Founder", "https://founder-site.example")));
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(newOwnerId))
+            .ThrowsAsync(new DbUpdateException("the update failed"));
+
+        var complete = () => _controller.TenantInviteComplete(
+            new TenantInviteCompleteRequest
+            {
+                Token = "tenant-invite-token",
+                Slug = "founder-site",
+                SiteName = "Founder",
+                Username = "founder",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-founder",
+            },
+            tenantInvites.Object);
+
+        await complete.Should().ThrowAsync<DbUpdateException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
     [Fact]
@@ -1601,6 +1730,37 @@ public class PasskeyControllerTests : IDisposable
             s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenItIssuesTheSession_RecordsTheSignInTime()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+
+        await LoginCompleteAsync();
+
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(subjectId), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenACodeIsStillRequired_LeavesTheSignInTimeAlone()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
+
+        await LoginCompleteAsync();
+
+        _subjectService.Verify(
+            s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never,
+            "the sign-in completes at the code step, which records the time itself");
     }
 
     [Fact]

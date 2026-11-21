@@ -39,7 +39,11 @@ public interface IPasskeyService
     /// <summary>Generates assertion options for a username-based login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateAssertionOptionsAsync(string username, Guid tenantId);
 
-    /// <summary>Validates the assertion response and returns the authenticated subject.</summary>
+    /// <summary>
+    /// Validates the assertion response and returns the authenticated subject. The credential's
+    /// holder must be an active member of <paramref name="tenantId"/>; any other holder is refused
+    /// with <see cref="InvalidOperationException"/>, as an unknown credential is.
+    /// </summary>
     Task<PasskeyAssertionResult> CompleteAssertionAsync(string assertionResponseJson, string challengeToken, Guid tenantId);
 
     Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId);

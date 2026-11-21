@@ -212,10 +212,13 @@ public class SubjectRepository : ISubjectRepository
             _ => throw new ArgumentOutOfRangeException(nameof(match)),
         };
 
+        var now = Now;
         return await candidates
             .Where(s => !s.IsSystemSubject
                 && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !db.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
+                && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id)
+                && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
+                && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now))
             .OrderByDescending(s => s.Id)
             .Select(s => s.Id)
             .ToListAsync(ct);

@@ -378,6 +378,49 @@ public class PasskeyServiceTests
 
     #endregion
 
+    #region Assertion admits only an active member
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteAssertionAsync_ForADeactivatedMember_IsRefusedAndTheCredentialIsNotUsed()
+    {
+        var credential = CreateCredentialEntity(_subjectId);
+        _dbContext.Subjects.Add(new SubjectEntity { Id = _subjectId, Name = "rhys", Username = "rhys", IsActive = false });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _subjectId });
+        _dbContext.PasskeyCredentials.Add(credential);
+        await _dbContext.SaveChangesAsync();
+
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+
+        var act = () => service.CompleteAssertionAsync(
+            AssertionNaming(credential.CredentialId), options.ChallengeToken, _tenantId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not active*");
+        (await _dbContext.PasskeyCredentials.AsNoTracking().SingleAsync(c => c.Id == credential.Id))
+            .LastUsedAt.Should().BeNull();
+    }
+
+    /// <summary>
+    /// An assertion naming <paramref name="rawId"/> whose signature is never valid: it reaches every
+    /// check made before the signature, and no further.
+    /// </summary>
+    private static string AssertionNaming(byte[] rawId) =>
+        System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAssertionRawResponse
+        {
+            Id = Convert.ToBase64String(rawId).TrimEnd('=').Replace('+', '-').Replace('/', '_'),
+            RawId = rawId,
+            Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+            Response = new AuthenticatorAssertionRawResponse.AssertionResponse
+            {
+                AuthenticatorData = [0],
+                Signature = [0],
+                ClientDataJson = System.Text.Encoding.UTF8.GetBytes("{}"),
+            },
+        });
+
+    #endregion
+
     #region DescribeRpIdMismatch
 
     [Fact]

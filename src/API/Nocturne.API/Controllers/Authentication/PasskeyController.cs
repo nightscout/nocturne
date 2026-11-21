@@ -104,13 +104,13 @@ public class PasskeyController : ControllerBase
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
 
-    /// <param name="passkeyService">Generates each ceremony's options, verifies its response, and lists a subject's passkeys.</param>
+    /// <param name="passkeyService">Generates each ceremony's options, verifies its response, lists a subject's passkeys, and removes the passkey of a refused invite.</param>
     /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
     /// <param name="trustedDevices">Forgets a subject's trusted devices when a recovery code is spent.</param>
     /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
     /// <param name="jwtService">Issues and validates the recovery session's token.</param>
     /// <param name="sessionService">Issues the session a completed login or invite acceptance signs in with.</param>
-    /// <param name="subjectService">Counts a subject's sign-in factors and removes a passkey under the last-factor check.</param>
+    /// <param name="subjectService">Counts a subject's sign-in factors, removes a passkey under the last-factor check, and records when a sign-in completes.</param>
     /// <param name="auditService">Records the login and recovery outcomes in the auth audit log.</param>
     /// <param name="tenantAccessor">For the id of the request's tenant.</param>
     /// <param name="tenantService">Stored, and read by no action.</param>
@@ -417,8 +417,9 @@ public class PasskeyController : ControllerBase
 
     /// <summary>
     /// Returns the id of the most recently created subject matching <paramref name="match"/> that is
-    /// still part-way through an anonymous enrolment — no passkey, no linked provider, and no
-    /// membership in any tenant — or <see langword="null"/> when nothing matches.
+    /// still part-way through an anonymous enrolment (no way to sign in, see
+    /// <see cref="ISubjectRepository.FindCredentiallessSubjectIdsAsync"/>, and no membership in any
+    /// tenant), or <see langword="null"/> when nothing matches.
     /// </summary>
     /// <remarks>
     /// The invite and access-request options steps create the subject, so the complete step has to
@@ -440,7 +441,7 @@ public class PasskeyController : ControllerBase
     /// an older build of the options step) every one of them is an empty shell and the newest, which
     /// the caller's ceremony was minted against, wins. Walking the candidates newest-first and
     /// taking the first with no membership is the same answer as the newest candidate satisfying
-    /// all four conditions at once.
+    /// every condition at once.
     /// </remarks>
     private async Task<Guid?> FindEnrollingSubjectIdAsync(EnrolmentMatch match)
     {
@@ -573,6 +574,8 @@ public class PasskeyController : ControllerBase
             Response.SetLastSignInCookie(
                 SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
+            await _subjectService.UpdateLastLoginAsync(assertionResult.SubjectId);
+
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
@@ -620,9 +623,10 @@ public class PasskeyController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
 
-        // Look up subject by username within the current tenant
+        // A deactivated member is looked up as no member, so it is refused as an unknown username
+        // is and its code is not spent.
         var subject = await _subjects.FindMemberByUsernameAsync(
-            tenantId, request.Username, activeOnly: false, HttpContext.RequestAborted);
+            tenantId, request.Username, activeOnly: true, HttpContext.RequestAborted);
 
         // Unknown usernames go through the same verification; see IRecoveryCodeService.VerifyAndConsumeAsync.
         var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subject?.Id, request.Code);
@@ -1117,8 +1121,13 @@ public class PasskeyController : ControllerBase
                 request.Token, credResult.SubjectId, tenantId);
             if (!acceptResult.Success)
             {
+                // A refused invite joins no one, so the passkey would leave a subject that signs in
+                // nowhere and that no later enrolment can resume.
+                await _passkeyService.RemoveCredentialAsync(credResult.CredentialId, credResult.SubjectId, tenantId);
                 return Problem(detail: acceptResult.ErrorDescription ?? "Failed to accept invite", statusCode: 400, title: "Invite Error");
             }
+
+            await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
 
             // Generate recovery codes
             var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
@@ -1301,6 +1310,8 @@ public class PasskeyController : ControllerBase
             created = TenantInviteOutcome<TenantCreationInviteRedeemed>.Refused(
                 TenantInviteRefusalCode.InvalidRequest, "We could not make your site.");
         }
+
+        await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
 
         var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 
