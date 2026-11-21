@@ -924,12 +924,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
     private static string? UploadedString(Treatment treatment, string key) =>
-        treatment.AdditionalProperties?.GetValueOrDefault(key) switch
-        {
-            string s => s,
-            JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
-            _ => null
-        };
+        KeptField.String(treatment.AdditionalProperties, key);
 
     /// <summary>
     /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in

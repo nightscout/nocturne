@@ -56,12 +56,7 @@ public sealed record TransmitterStatus
             VoltageB = Number(reported, "voltageb"),
             Resistance = Number(reported, "resistance"),
             Days = Number(reported, "days"),
-            Status = reported?.GetValueOrDefault("status") switch
-            {
-                JsonElement { ValueKind: JsonValueKind.String } text => text.GetString(),
-                string text => text,
-                _ => null,
-            },
+            Status = KeptField.String(reported, "status"),
             Temperature = snapshot.Temperature,
         };
     }

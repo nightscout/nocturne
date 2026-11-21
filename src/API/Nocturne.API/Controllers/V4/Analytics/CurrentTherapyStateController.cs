@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -86,12 +85,7 @@ public class CurrentTherapyStateController : ControllerBase
     internal const string LinkBatteryVoltageKey = "RileyLinkBatteryVoltage";
 
     private static double? LinkBatteryVoltage(Nocturne.Core.Models.V4.PumpSnapshot? snapshot) =>
-        snapshot?.AdditionalProperties?.GetValueOrDefault(LinkBatteryVoltageKey) switch
-        {
-            JsonElement { ValueKind: JsonValueKind.Number } number => number.GetDouble(),
-            double voltage => voltage,
-            _ => null,
-        };
+        KeptField.Double(snapshot?.AdditionalProperties, LinkBatteryVoltageKey);
 }
 
 /// <summary>

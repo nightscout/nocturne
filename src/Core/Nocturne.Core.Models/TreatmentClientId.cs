@@ -90,6 +90,5 @@ public static class TreatmentClientId
         && stored is not null
         && !string.Equals(incoming, stored, StringComparison.Ordinal);
 
-    private static object? Present(object? id) =>
-        id is null or JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : id;
+    private static object? Present(object? id) => KeptField.Present(id);
 }

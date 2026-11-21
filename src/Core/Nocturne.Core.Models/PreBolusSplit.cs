@@ -148,24 +148,12 @@ public static class PreBolusSplit
     /// <paramref name="record"/> with the <see cref="Treatment.PreBolusMealId"/> of
     /// <paramref name="treatment"/> added, or unchanged when it carries none.
     /// </summary>
-    public static Dictionary<string, object?>? AddMealId(Dictionary<string, object?>? record, Treatment treatment)
-    {
-        if (treatment.PreBolusMealId is not { Length: > 0 } mealId)
-            return record;
-
-        record ??= new();
-        record[MealIdField] = mealId;
-        return record;
-    }
+    public static Dictionary<string, object?>? AddMealId(Dictionary<string, object?>? record, Treatment treatment) =>
+        KeptField.Add(record, MealIdField, treatment.PreBolusMealId is { Length: > 0 } mealId ? mealId : null);
 
     /// <summary>The meal's legacy id a record's additional properties hold, or null.</summary>
     public static string? MealIdOf(IReadOnlyDictionary<string, object?>? record) =>
-        record?.GetValueOrDefault(MealIdField) switch
-        {
-            string mealId => mealId,
-            JsonElement { ValueKind: JsonValueKind.String } mealId => mealId.GetString(),
-            _ => null,
-        };
+        KeptField.String(record, MealIdField);
 
     private static string Derived(string prefix, string id) =>
         prefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..48];
