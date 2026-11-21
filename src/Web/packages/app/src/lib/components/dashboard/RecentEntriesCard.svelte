@@ -12,6 +12,7 @@
     time,
   } from "#lib/utils/formatting.js";
   import { getDirectionInfo } from "#lib/utils/index.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -63,7 +64,7 @@
               {:else}
                 —
               {/if}
-              <Icon class="h-4 w-4 {directionInfo.css}" />
+              <Icon class="h-4 w-4 {deltaColorClass(entry.direction)}" />
             </div>
           </li>
         {/each}

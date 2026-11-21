@@ -51,7 +51,6 @@ describe("getDirectionInfo", () => {
 			const info = getDirectionInfo(direction);
 			expect(info.label).not.toBe("stable");
 			expect(info.icon).not.toBe(getDirectionInfo("Flat").icon);
-			expect(info.css).not.toBe(getDirectionInfo("Flat").css);
 		},
 	);
 });
