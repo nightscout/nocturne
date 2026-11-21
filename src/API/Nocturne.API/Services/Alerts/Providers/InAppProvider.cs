@@ -1,7 +1,6 @@
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Core.Models.ClientDevices;
 
 namespace Nocturne.API.Services.Alerts.Providers;
 
@@ -36,7 +35,7 @@ internal sealed class InAppProvider(
     /// subtitle the label key <see cref="UnevaluableSubtitle"/>, which the web app renders. It has
     /// no actions: there is no excursion to acknowledge.
     /// </summary>
-    public const string UnevaluableNotificationType = DeviceNotificationMirror.AlertUnevaluableType;
+    public const string UnevaluableNotificationType = "alert.unevaluable";
 
     public const string UnevaluableSubtitle = "alert_unevaluable_subtitle";
 
