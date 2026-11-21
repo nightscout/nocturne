@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -22,6 +23,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
     private readonly NocturneDbContext _db;
     private readonly SubjectService _service;
     private readonly Mock<IAuthAuditService> _audit = new();
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2031, 4, 5, 6, 7, 8, TimeSpan.Zero));
 
     public SubjectServiceOidcIdentityTests()
     {
@@ -30,7 +32,8 @@ public class SubjectServiceOidcIdentityTests : IDisposable
             new SubjectRepository(_db.AsFactory()),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
-            NullLogger<SubjectService>.Instance
+            NullLogger<SubjectService>.Instance,
+            _time
         );
     }
 
@@ -83,6 +86,20 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         });
         await _db.SaveChangesAsync();
         return id;
+    }
+
+    // -- UpdateLastLoginAsync ----------------------------------------------------
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UpdateLastLoginAsync_StampsTheClockTime()
+    {
+        var subjectId = await SeedSubjectAsync();
+
+        await _service.UpdateLastLoginAsync(subjectId);
+
+        var stored = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subjectId);
+        stored.LastLoginAt.Should().Be(_time.GetUtcNow().UtcDateTime);
     }
 
     // -- AttachOidcIdentityAsync -------------------------------------------------

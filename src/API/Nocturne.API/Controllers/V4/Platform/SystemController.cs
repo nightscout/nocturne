@@ -13,7 +13,8 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// <remarks>
 /// <c>POST /heartbeat</c> is called by the <c>@nocturne/bot</c> process on each polling cycle
 /// to report which platforms (Discord, Telegram, etc.) are currently online. The
-/// <see cref="BotHealthService"/> records these timestamps for health-check display in the admin UI.
+/// <see cref="BotHealthService"/> records the time of the last heartbeat, and <c>GET /channels</c>
+/// derives each channel's status from it for the alert channel components.
 /// </remarks>
 /// <seealso cref="BotHealthService"/>
 [ApiController]

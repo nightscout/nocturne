@@ -131,7 +131,7 @@ public class SubjectServiceDeleteTests : IDisposable
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            new SubjectRepository(dbContext.AsFactory()), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+            new SubjectRepository(dbContext.AsFactory()), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
 
         (await service.DeleteSubjectAsync(_deletedId)).Should().BeOfType<SubjectChange.Changed>();
     }
