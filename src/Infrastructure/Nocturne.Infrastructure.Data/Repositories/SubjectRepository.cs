@@ -582,7 +582,7 @@ public class SubjectRepository : ISubjectRepository
             .Where(sr => sr.SubjectId == subjectId)
             .Select(sr => sr.Role!)
             .ToListAsync(ct);
-        return roles.Select(ToRole).ToList();
+        return roles.Select(RoleMapper.ToDomainModel).ToList();
     }
 
     /// <inheritdoc/>
@@ -784,18 +784,7 @@ public class SubjectRepository : ISubjectRepository
     private static SubjectRecord? ToRecord(SubjectEntity? subject) =>
         subject is null ? null : SubjectMapper.ToRecord(
             subject,
-            subject.SubjectRoles.Where(sr => sr.Role is not null).Select(sr => ToRole(sr.Role!)).ToList());
-
-    private static Role ToRole(RoleEntity role) => new()
-    {
-        Id = role.Id,
-        Name = role.Name,
-        Description = role.Description,
-        Permissions = role.Permissions is null ? [] : [.. role.Permissions],
-        IsSystemRole = role.IsSystemRole,
-        CreatedAt = role.CreatedAt,
-        UpdatedAt = role.UpdatedAt,
-    };
+            subject.SubjectRoles.Where(sr => sr.Role is not null).Select(sr => RoleMapper.ToDomainModel(sr.Role!)).ToList());
 
     private static SubjectOidcIdentity ToIdentity(SubjectOidcIdentityEntity identity) => new()
     {
