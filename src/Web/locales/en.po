@@ -94,7 +94,6 @@ msgstr "Never"
 
 #: src/lib/components/ConnectionStatus.svelte
 #: src/lib/components/clock/ClockFacePreview.svelte
-#: src/lib/components/tenants/TenantsOverview.svelte
 #: src/routes/(authenticated)/+layout.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -235,6 +234,7 @@ msgstr "UrgentHigh"
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
@@ -256,6 +256,7 @@ msgstr "Low"
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
@@ -1803,6 +1804,7 @@ msgstr "Avg TDD"
 
 #: src/lib/components/calendar/DayGlucoseProfile.svelte
 #: src/lib/components/command-palette/CommandPaletteVitals.svelte
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
@@ -1926,6 +1928,7 @@ msgstr "Preview"
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock/ClockFaceRenderer.svelte
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "Tracker"
@@ -2016,12 +2019,14 @@ msgstr "{0}m"
 #. 0: m
 #. 0: bolusCalc.preBolus
 #. 0: minutes
+#. 0: minutes
 #. 0: minutesBefore ?? "–"
 #. 0: Math.round(value)
 #. 0: min
 #. 0: therapy.delay ?? "-"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
@@ -3242,6 +3247,7 @@ msgid "Insulins"
 msgstr "Insulins"
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -5458,6 +5464,7 @@ msgstr "Total carbs:"
 #. 0: cob.toFixed(0)
 #. 0: bolusCalc.carbInput
 #. 0: carbs.toFixed(0)
+#. 0: Math.round(therapy.cob ?? 0)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.carbs)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.fat)
@@ -5467,6 +5474,7 @@ msgstr "Total carbs:"
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/people/PersonSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -5543,6 +5551,7 @@ msgstr "GRI"
 #. 0: auto.toFixed(1)
 #. 0: bolus.toFixed(1)
 #. 0: basal.toFixed(1)
+#. 0: Math.round(reservoirUnits)
 #. 0: d.totalDailyDose.toFixed(1)
 #. 0: insulinStats?.avgBolus?.toFixed(1) ?? "--"
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -5555,6 +5564,7 @@ msgstr "GRI"
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/people/PersonRow.svelte
 #: src/lib/components/reports/GlycemicRiskIndexChart.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "{0} U"
@@ -5719,6 +5729,7 @@ msgstr "<0/> Try again"
 
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/alerts/HistoryCheck.svelte
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -6988,6 +6999,7 @@ msgstr "Cannula"
 
 #: src/lib/components/alerts/factText.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/PersonSummary.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
@@ -9420,7 +9432,9 @@ msgstr "Counts"
 msgid "<0/> Loading {0} data..."
 msgstr "<0/> Loading {0} data..."
 
+#. 0: durationText(reason.minutesSinceReading)
 #. 0: year
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 msgid "No data for {0}"
 msgstr "No data for {0}"
@@ -11210,6 +11224,7 @@ msgstr "Automated insulin delivery system metrics"
 msgid "CGM"
 msgstr "CGM"
 
+#: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/reports/AidSystemUseCard.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Pump"
@@ -14003,7 +14018,7 @@ msgstr "Severity: {0}"
 #~ msgstr "Do Not Disturb"
 
 #: src/lib/components/alerts/DndPanel.svelte
-#: src/lib/components/tenants/TenantsOverview.svelte
+#: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/+page.svelte
 msgid "Loading…"
@@ -16667,9 +16682,11 @@ msgstr "Windows where readings oscillate in a way that is unlikely to be physiol
 msgid "{0} pp"
 msgstr "{0} pp"
 
+#. 0: hours
 #. 0: minutes / 60
 #. 0: minutesAfter == null ? "–" \\: minutesAfter / 60
 #. 0: e.event.timeToNadirHours.toFixed(1)
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
@@ -19701,6 +19718,7 @@ msgstr "standardised summary for your care team"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/people/PersonRow.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/trackers/TrackerCoversField.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
@@ -20147,34 +20165,26 @@ msgstr "Widget names could not be loaded, so widgets are listed by their interna
 #~ msgid "<0/> Syncing"
 #~ msgstr "<0/> Syncing"
 
-#. 0: relativeAge(lastReadingAt)
-#: src/lib/components/tenants/TenantOverviewTile.svelte
-msgid "Last reading {0}"
-msgstr "Last reading {0}"
+#~ msgid "Last reading {0}"
+#~ msgstr "Last reading {0}"
 
-#: src/lib/components/tenants/TenantOverviewTile.svelte
-msgid "No recent data"
-msgstr "No recent data"
+#~ msgid "No recent data"
+#~ msgstr "No recent data"
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "Tenants overview - Nocturne"
-msgstr "Tenants overview - Nocturne"
+#~ msgid "Tenants overview - Nocturne"
+#~ msgstr "Tenants overview - Nocturne"
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "Tenants overview"
-msgstr "Tenants overview"
+#~ msgid "Tenants overview"
+#~ msgstr "Tenants overview"
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "Latest glucose across the tenants you have access to. Refreshes every minute."
-msgstr "Latest glucose across the tenants you have access to. Refreshes every minute."
+#~ msgid "Latest glucose across the tenants you have access to. Refreshes every minute."
+#~ msgstr "Latest glucose across the tenants you have access to. Refreshes every minute."
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "Failed to load the tenants overview."
-msgstr "Failed to load the tenants overview."
+#~ msgid "Failed to load the tenants overview."
+#~ msgstr "Failed to load the tenants overview."
 
-#: src/lib/components/tenants/TenantsOverview.svelte
-msgid "No tenants with glucose access."
-msgstr "No tenants with glucose access."
+#~ msgid "No tenants with glucose access."
+#~ msgstr "No tenants with glucose access."
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 msgid "Failed to complete tracker"
@@ -21272,6 +21282,7 @@ msgstr "Elevated"
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -23214,6 +23225,7 @@ msgstr "No lows lasting 15 minutes or more during this session"
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -23673,7 +23685,6 @@ msgstr "<0/> Group"
 msgid "<0/> Condition"
 msgstr "<0/> Condition"
 
-#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Tenants"
 msgstr "Tenants"
@@ -26411,6 +26422,7 @@ msgstr "Time not used: {0}."
 
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/wizard/templates.svelte.ts
+#: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
@@ -45138,3 +45150,193 @@ msgstr "You do not have permission to do this."
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Only members who can manage this site's settings can change glucose processing."
 msgstr "Only members who can manage this site's settings can change glucose processing."
+
+#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "People"
+msgstr "People"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "People - Nocturne"
+msgstr "People - Nocturne"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "# person."
+msgid_plural "# people."
+msgstr[0] "# person."
+msgstr[1] "# people."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "<0/> Readings refresh every minute."
+msgstr "<0/> Readings refresh every minute."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "The list of people did not load."
+msgstr "The list of people did not load."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You follow no other people"
+msgstr "You follow no other people"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "When a person gives you access to their data, they show here."
+msgstr "When a person gives you access to their data, they show here."
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Person"
+msgstr "Person"
+
+#. 0: bgLabel()
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Glucose, {0}"
+msgstr "Glucose, {0}"
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Reading age"
+msgstr "Reading age"
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Last 3 hours"
+msgstr "Last 3 hours"
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Flagged"
+msgstr "Flagged"
+
+#: src/lib/components/people/PeopleRoster.svelte
+msgid "Other people"
+msgstr "Other people"
+
+#: src/lib/components/people/PersonAlerts.svelte
+#: src/lib/components/people/PersonAlerts.svelte
+msgid "You do not have access to this person's alerts"
+msgstr "You do not have access to this person's alerts"
+
+#: src/lib/components/people/PersonAlerts.svelte
+msgid "Active alerts:"
+msgstr "Active alerts:"
+
+#: src/lib/components/people/PersonSummary.svelte
+msgid "3 h ago"
+msgstr "3 h ago"
+
+#: src/lib/components/people/PersonSummary.svelte
+msgid "Now"
+msgstr "Now"
+
+#: src/lib/components/people/PersonTrace.svelte
+msgid "Glucose over the last 3 hours"
+msgstr "Glucose over the last 3 hours"
+
+#: src/lib/components/people/ReadingAge.svelte
+msgid "No reading"
+msgstr "No reading"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very low, rising fast"
+msgstr "Very low, rising fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very low, rising"
+msgstr "Very low, rising"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very low, steady"
+msgstr "Very low, steady"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very low, falling"
+msgstr "Very low, falling"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very low, falling fast"
+msgstr "Very low, falling fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Low, rising fast"
+msgstr "Low, rising fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Low, rising"
+msgstr "Low, rising"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Low, steady"
+msgstr "Low, steady"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Low, falling"
+msgstr "Low, falling"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Low, falling fast"
+msgstr "Low, falling fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "High, rising fast"
+msgstr "High, rising fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "High, rising"
+msgstr "High, rising"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "High, steady"
+msgstr "High, steady"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "High, falling"
+msgstr "High, falling"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "High, falling fast"
+msgstr "High, falling fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very high, rising fast"
+msgstr "Very high, rising fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very high, rising"
+msgstr "Very high, rising"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very high, steady"
+msgstr "Very high, steady"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very high, falling"
+msgstr "Very high, falling"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Very high, falling fast"
+msgstr "Very high, falling fast"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Out of range"
+msgstr "Out of range"
+
+#. 0: name
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "{0} due"
+msgstr "{0} due"
+
+#. 0: name
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "{0} overdue"
+msgstr "{0} overdue"
+
+#. 0: name; 1: durationText(Math.max(1, Math.round(hours * 60)))
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "{0} due in {1}"
+msgstr "{0} due in {1}"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "Active alert"
+msgstr "Active alert"
+
+#: src/lib/components/people/attention-phrases.svelte.ts
+msgid "# active alert"
+msgid_plural "# active alerts"
+msgstr[0] "# active alert"
+msgstr[1] "# active alerts"
