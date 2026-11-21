@@ -5,7 +5,8 @@ alert evaluation engine exposed as JSON-in/JSON-out functions for non-Rust
 hosts. The .NET bindings live in `src/Core/Nocturne.Core.Alerts.Native/`
 (`AlertsInterop` + `RustAlertEngine`); the Kotlin bindings (Prelude, Android)
 are generated with UniFFI behind the optional `uniffi` cargo feature (see
-["Kotlin (UniFFI)"](#kotlin-uniffi)) and consume the same contract.
+["Kotlin (UniFFI)"](#kotlin-uniffi)), as are the Swift bindings for iOS hosts
+(see ["Swift (UniFFI)"](#swift-uniffi)); all consume the same contract.
 
 ```bash
 # from crates/
@@ -688,6 +689,82 @@ cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o jniLibs build --release \
 CI must generate the Kotlin bindings from the **same build** (same crate
 revision, same uniffi version) as the `.so` files it packages — the bindings
 checksum the API at load time and refuse a mismatched library.
+
+## Swift (UniFFI)
+
+The same `uniffi` surface generates Swift bindings, so an iOS host (Trio, Loop)
+consumes the engine as a Swift package with the envelope contract of the Kotlin
+section. The functions keep their Kotlin names and shapes, as Swift free
+functions with labelled arguments:
+
+```swift
+func evaluate(requestJson: String) -> String
+func evaluateNode(requestJson: String) -> String
+func replay(requestJson: String) -> String
+func version() -> String
+// ... one per Kotlin function above; the module is `NocturneAlerts`
+```
+
+Thread `timers` and `tracker` from each response into the next request as
+described in "State threading". The package test replays a corpus scenario that
+way.
+
+### Building the package
+
+macOS only (it needs `xcodebuild`, `lipo` and the Apple SDKs). From the repository root:
+
+```bash
+crates/nocturne-alerts-ffi/scripts/build-xcframework.sh
+(cd crates/nocturne-alerts-ffi/swift && swift test)
+```
+
+The script adds the Rust targets, builds the static library with
+`--features uniffi` for iOS (device, and simulator on arm64 and x86_64), macOS
+(arm64 and x86_64), generates the Swift source with the in-crate
+`uniffi-bindgen` in library mode from the macOS arm64 library (the bindings
+depend on the crate revision and features, which every slice shares), and
+assembles `crates/target/swift/NocturneAlertsFFI.xcframework` with
+`xcodebuild -create-xcframework`. It then copies the xcframework and the
+generated `nocturne_alerts.swift` into `swift/`, the package that
+`swift test` builds.
+
+The static library is built with `cargo rustc --crate-type staticlib` for the
+iOS targets, so the cdylib the .NET build packs is not built for
+them. The crate already lists `staticlib` in `crate-type`; the macOS targets use
+a plain `cargo build`, which also yields the `.dylib` the bindings are read from.
+
+The xcframework and the generated Swift are build outputs and are not
+committed. The job `alerts-swift` in `.github/workflows/tests.yml` runs
+the script and `swift test` on macOS when `crates/`, the corpus or the workflow
+changes. It also links the test bundle against the iOS Simulator slice, and
+compiles the package against the iOS device slice without linking it. Nothing
+runs the XCTest in a simulator.
+
+### Adding the package to a host
+
+CI or the host's build runs the script, then depends on the package by path:
+
+```swift
+.package(path: "path/to/crates/nocturne-alerts-ffi/swift")
+```
+
+and adds the `NocturneAlerts` product to its target. The bindings checksum the
+API at load time and refuse a mismatched library, so the Swift source and the
+xcframework must come from the same crate revision and the same uniffi version
+(pinned exactly in this crate's `Cargo.toml`). Do not mix the output of two builds.
+
+### Not supported
+
+- Publishing: there is no released xcframework or hosted Swift package; a host
+  builds it from a checkout.
+- Supported slices: iOS device (arm64), iOS Simulator (arm64 and x86_64) and
+  macOS (arm64 and x86_64). The package declares iOS 15 and macOS 13.
+- watchOS: not built. The pinned toolchain ships a prebuilt standard library
+  for `aarch64-apple-watchos` only, and Apple Watch models before Series 9 and
+  Ultra 2 need `arm64_32-apple-watchos`, which has none (it needs nightly
+  `-Zbuild-std`). A half-supported watch slice is left out.
+- tvOS, visionOS and Mac Catalyst.
+- Linux Swift: the package links the Apple xcframework only.
 
 ## Browser (WebAssembly)
 

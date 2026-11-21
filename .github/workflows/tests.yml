@@ -31,6 +31,7 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e == 'true' || github.event_name != 'pull_request' }}
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
+      alertsSwift: ${{ steps.filter.outputs.alertsSwift == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
       composeBundle: ${{ steps.filter.outputs.composeBundle == 'true' || github.event_name != 'pull_request' }}
       sdk: ${{ steps.filter.outputs.sdk == 'true' || github.event_name != 'pull_request' }}
@@ -90,6 +91,10 @@ jobs:
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
+            alertsSwift:
+              - '.github/workflows/tests.yml'
+              - 'crates/**'
+              - 'tests/Parity/AlertEngineCorpus/**'
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
@@ -320,6 +325,42 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy --workspace --all-targets --all-features -- -D warnings
           cargo fmt --check -p nocturne-alerts-core -p nocturne-alerts-ffi
+
+  # The alert engine as a Swift package: the UniFFI bindings and static libraries for the Apple
+  # targets, assembled into an xcframework, then one corpus scenario replayed through the generated
+  # Swift. macOS, because xcodebuild and the Apple SDKs exist nowhere else.
+  alerts-swift:
+    needs: changes
+    if: needs.changes.outputs.alertsSwift == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+            !crates/target/swift
+          # Sources, not just the lockfile: see the alerts-ffi-parity job. The script rebuilds
+          # crates/target/swift, which would only duplicate every static library in the cache.
+          key: cargo-swift-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/**/Cargo.toml', 'crates/nocturne-alerts-ffi/scripts/build-xcframework.sh') }}
+      - name: Build the xcframework and Swift bindings
+        run: crates/nocturne-alerts-ffi/scripts/build-xcframework.sh
+      - name: Swift package tests
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: swift test
+      - name: Link the iOS Simulator slice
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: xcodebuild build-for-testing -scheme NocturneAlerts -destination 'generic/platform=iOS Simulator'
+      - name: Build against the iOS device slice
+        working-directory: crates/nocturne-alerts-ffi/swift
+        run: xcodebuild build -scheme NocturneAlerts -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 
   # The desktop Companion's Tauri crate. Windows only: tauri-winrt-notification's `windows`
   # dependency does not compile elsewhere (see desktop-release.yml). generate_context! embeds
@@ -964,6 +1005,7 @@ jobs:
       - build
       - unit
       - alerts-ffi-parity
+      - alerts-swift
       - desktop-rust
       - web-static
       - web-app-tests
