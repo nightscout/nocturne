@@ -18,7 +18,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "#lib/api/index.js";
-  import { errorMessage } from "#lib/forms/submit-error.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { platformCategoryName } from "#lib/utils/platform-categories.js";
 
   const TELEGRAM_SET_WEBHOOK =
@@ -89,10 +89,10 @@
       "The callback URL must be an https address that ends in /api/v4/google-health/oauth/callback.",
   };
 
-  /** The server's error with each known field code written out. */
-  function saveErrorMessage(err: unknown): string | undefined {
-    return errorMessage(err)
-      ?.split("; ")
+  /** The save's refusal, with each known field code written out. */
+  function saveErrorMessage(err: unknown): string {
+    return describeSubmitError(err)
+      .split("; ")
       .map((part) => fieldErrorMessages[part] ?? part)
       .join(" ");
   }

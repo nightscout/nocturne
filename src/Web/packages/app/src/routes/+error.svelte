@@ -6,7 +6,15 @@
     CardTitle,
   } from "#lib/components/ui/card/index.js";
 
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+
   import { page } from "$app/state";
+
+  const reason = $derived(
+    page.error
+      ? describeSubmitError({ status: page.status, body: page.error }, page.error.message)
+      : undefined
+  );
 </script>
 
 <div class="px-4">
@@ -17,7 +25,7 @@
     <CardContent>
       <p class="text-lg">An error occurred while processing your request.</p>
       {#if page.error}
-        <p class="text-sm text-muted-foreground mt-2 break-words">{page.error.message}</p>
+        <p class="text-sm text-muted-foreground mt-2 break-words">{reason}</p>
         {#if page.error.details}
           <p class="text-sm text-muted-foreground mt-2 p-2 bg-muted rounded break-words">
             <strong>Details:</strong>

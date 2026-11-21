@@ -3,6 +3,13 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import IntegrationsTabContent from "./integrations-tab-content-test-wrapper.svelte";
 import type { PlatformSettingsSummary } from "#lib/api/index.js";
+import { missingScopeError } from "#lib/forms/submit-messages.svelte.js";
+
+const toastError = vi.hoisted(() => vi.fn());
+
+vi.mock("svelte-sonner", () => ({
+  toast: { error: toastError, success: vi.fn() },
+}));
 
 const callback = "https://nocturne.example/api/v4/google-health/oauth/callback";
 const platform: PlatformSettingsSummary = {
@@ -92,5 +99,24 @@ describe("Google Health instance settings", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Callback URL" }))
       .toHaveValue(stored);
+  });
+});
+
+describe("a refused save", () => {
+  it("describes a missing_scope refusal in the app's sentence, never the scope", async () => {
+    const onSave = vi.fn().mockRejectedValue({
+      status: 403,
+      body: {
+        message: "This operation requires the 'tenant.settings' scope.",
+        code: "missing_scope",
+      },
+    });
+    render(IntegrationsTabContent, { platforms: [platform], onSave, onDelete: vi.fn() });
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    await expect.poll(() => toastError.mock.calls.length).toBe(1);
+    const [, options] = toastError.mock.calls[0];
+    expect(options.description).toBe(missingScopeError());
+    expect(options.description).not.toContain("tenant.settings");
   });
 });
