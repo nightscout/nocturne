@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -89,19 +90,25 @@ public sealed class RoleControllerGetRolesGateTests
     [Theory]
     [InlineData(Scope.SharingManage)]
     [InlineData("glucose.read")]
-    public async Task GetRoles_withoutAnyOfTheThreeScopes_isForbidden(string scope)
+    public void GetRoles_withoutAnyOfTheThreeScopes_isForbidden(string scope)
     {
-        var result = await BuildController(scope).GetRoles(CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(RoleController.GetRoles), scope)
+            .ShouldBeScopeRefusal(Scope.RolesManage, Scope.MembersInvite, Scope.MembersManage)
+            .Detail.Should().Be(
+                "This operation requires one of these scopes: 'roles.manage', 'members.invite', 'members.manage'.");
     }
 
     [Fact]
-    public async Task CreateRole_asInviteOnlyCaller_isForbidden()
+    public void CreateRole_asInviteOnlyCaller_isForbidden()
     {
-        var result = await BuildController(Scope.MembersInvite, Scope.MembersManage)
-            .CreateRole(new CreateRoleRequest("x", null, []), CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(RoleController.CreateRole), Scope.MembersInvite, Scope.MembersManage)
+            .ShouldBeScopeRefusal(Scope.RolesManage);
     }
+
+    private static IActionResult? Gate(string action, params string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(RoleController),
+            action,
+            new HashSet<string>(grantedScopes),
+            new AuthContext { IsAuthenticated = true });
 }

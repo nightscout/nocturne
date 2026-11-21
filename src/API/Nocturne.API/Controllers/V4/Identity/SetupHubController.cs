@@ -31,9 +31,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<SetupHubStatus>> GetSetupHub(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await setupHub.GetAsync(HttpContext.GetSubjectId(), ct));
     }
 
@@ -53,9 +50,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     public async Task<ActionResult<SetupHubStatus>> SetSetupHubItemState(
         [FromRoute] SetupHubItemKey key, [FromBody] SetSetupHubItemStateRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         if (request.State == SetupHubItemState.Done)
             return Problem(detail: "An item is done when it works; it cannot be marked done.", statusCode: 400, title: "Bad Request");
 
@@ -84,9 +78,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SetupHubStatus>> ConfirmAboutSetupItem(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         try
         {
             return Ok(await setupHub.ConfirmAboutAsync(HttpContext.GetSubjectId(), ct));
@@ -110,9 +101,6 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     public async Task<ActionResult<SetupHubStatus>> DismissSetupStrip(
         [FromBody] DismissSetupStripRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await setupHub.DismissStripAsync(HttpContext.GetSubjectId(), request.Revision, ct));
     }
 }

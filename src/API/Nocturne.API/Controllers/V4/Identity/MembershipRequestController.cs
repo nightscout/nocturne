@@ -1,6 +1,7 @@
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Identity;
@@ -79,14 +80,12 @@ public class MembershipRequestController(
     /// </summary>
     [HttpGet]
     [Authorize]
+    [RequireScope(Scope.MembersManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<MembershipRequestDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPendingRequests(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = tenantAccessor.TenantId;
         var result = await membershipRequestService.GetPendingRequestsAsync(tenantId, ct);
 
@@ -98,6 +97,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetPendingRequests", "MemberInvite_GetMembers"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -107,9 +107,6 @@ public class MembershipRequestController(
         [FromBody] ApproveMembershipRequestRequest request,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = tenantAccessor.TenantId;
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
@@ -130,15 +127,13 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/deny")]
     [Authorize]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DenyRequest(Guid id, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = tenantAccessor.TenantId;
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
@@ -158,14 +153,12 @@ public class MembershipRequestController(
     /// </summary>
     [HttpGet("settings")]
     [Authorize]
+    [RequireScope(Scope.MembersManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(MembershipRequestSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMembershipRequestSettings(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var allow = await membershipRequestService.GetAllowRequestsAsync(tenantAccessor.TenantId, ct);
         return Ok(new MembershipRequestSettingsDto(allow));
     }
@@ -175,6 +168,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPut("settings")]
     [Authorize]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetMembershipRequestSettings"])]
     [ProducesResponseType(typeof(MembershipRequestSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -182,9 +176,6 @@ public class MembershipRequestController(
         [FromBody] UpdateMembershipRequestSettingsRequest request,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var allow = await membershipRequestService.SetAllowRequestsAsync(
             tenantAccessor.TenantId, request.AllowRequests, ct);
         return Ok(new MembershipRequestSettingsDto(allow));

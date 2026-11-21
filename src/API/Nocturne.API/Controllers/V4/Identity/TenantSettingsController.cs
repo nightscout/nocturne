@@ -60,14 +60,12 @@ public class TenantSettingsController : ControllerBase
     }
 
     [HttpGet]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TenantSettingsDto>> GetTenantSettings(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.TenantSettings))
-            return Forbid();
-
         return Ok(await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct));
     }
 
@@ -76,21 +74,20 @@ public class TenantSettingsController : ControllerBase
     // reference down for everyone until the next reset.
     [DenyDemoSubject]
     [HttpPut("public-docs")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteCommand(Invalidates = ["GetTenantSettings"])]
     [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TenantSettingsDto>> SetPublicDocs(
         [FromBody] SetPublicDocsRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.TenantSettings))
-            return Forbid();
-
         return Ok(await _tenantService.SetAllowPublicDocsAsync(
             _tenantAccessor.TenantId, request.Enabled, ct));
     }
 
     [DenyDemoSubject]
     [HttpPut("display-name")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteCommand(Invalidates = ["GetTenantSettings"])]
     [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -98,9 +95,6 @@ public class TenantSettingsController : ControllerBase
     public async Task<ActionResult<TenantSettingsDto>> SetDisplayName(
         [FromBody] SetDisplayNameRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.TenantSettings))
-            return Forbid();
-
         var name = request.DisplayName.Trim();
         if (name.Length == 0)
             return Problem(detail: "The display name must not be blank.", statusCode: 400, title: "Bad Request");
@@ -113,20 +107,19 @@ public class TenantSettingsController : ControllerBase
     /// the platform policy allows owners to, and an owner who is a platform admin always may.
     /// </summary>
     [HttpGet("subdomain")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TenantSubdomainDto>> GetSubdomain(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.TenantSettings))
-            return Forbid();
-
         return Ok(await ReadSubdomainAsync(ct));
     }
 
     /// <inheritdoc cref="ITenantService.ChangeSlugAsync"/>
     [DenyDemoSubject]
     [HttpPut("subdomain")]
+    [RequireScope(Scope.FullAccess)]
     [RemoteCommand(Invalidates = ["GetSubdomain", "GetTenantSettings"])]
     [ProducesResponseType(typeof(TenantSubdomainDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -175,9 +168,6 @@ public class TenantSettingsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<PatientRelationshipDto>> GetPatientRelationship(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         return Ok(await ReadPatientRelationshipAsync(ct));
     }
 
@@ -188,6 +178,7 @@ public class TenantSettingsController : ControllerBase
     /// </summary>
     [DenyDemoSubject]
     [HttpPut("patient-relationship")]
+    [RequireScope(Scope.FullAccess)]
     [RemoteCommand(Invalidates = ["GetPatientRelationship", "PatientRecord_GetPatientRecord", "SetupHub_GetSetupHub"])]
     [ProducesResponseType(typeof(PatientRelationshipDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -195,9 +186,6 @@ public class TenantSettingsController : ControllerBase
     public async Task<ActionResult<PatientRelationshipDto>> SetPatientRelationship(
         [FromBody] SetPatientRelationshipRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess))
-            return Forbid();
-
         await _tenantService.SetPatientRelationshipAsync(
             _tenantAccessor.TenantId, request.Relationship, HttpContext.GetSubjectId(), ct);
 
@@ -228,7 +216,7 @@ public class TenantSettingsController : ControllerBase
     public async Task<ActionResult<UnitsAndTimezoneDto>> GetUnitsAndTimezone(
         [FromQuery] string? locale = null, [FromQuery] bool fromNightscout = false, CancellationToken ct = default)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
+        if (HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
             return Forbid();
 
         return Ok(await _unitsAndTimezone.GetAsync(subjectId, locale, fromNightscout, ct));
@@ -245,13 +233,14 @@ public class TenantSettingsController : ControllerBase
         "PatientRecord_GetPatientRecord",
         "UserPreferences_GetPreferences",
     ])]
+    [RequireScope(Scope.FullAccess)]
     [ProducesResponseType(typeof(UnitsAndTimezoneDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<UnitsAndTimezoneDto>> SetUnitsAndTimezone(
         [FromBody] SetUnitsAndTimezoneRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
+        if (HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
             return Forbid();
 
         if (TimeZoneHelper.ToIanaIdOrNull(request.Timezone) is not { } timezone)

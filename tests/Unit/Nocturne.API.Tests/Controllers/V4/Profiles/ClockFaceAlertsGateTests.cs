@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
@@ -40,7 +41,7 @@ public class ClockFaceAlertsGateTests
             Config = WithAlerts(showAlerts, allowMarkSeen),
         });
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _faces.Verify(f => f.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -74,7 +75,7 @@ public class ClockFaceAlertsGateTests
         var widened = await Faces(Scope.GlucoseRead).Update(id, new UpdateClockFaceRequest { Config = WithAlerts(true, true) });
 
         kept.Result.Should().BeOfType<OkObjectResult>();
-        widened.Result.Should().BeOfType<ObjectResult>()
+        widened.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 

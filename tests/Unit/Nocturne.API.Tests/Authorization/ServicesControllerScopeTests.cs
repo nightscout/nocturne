@@ -71,7 +71,7 @@ public class ServicesControllerScopeTests
         foreach (var actionName in AdministeringActions)
         {
             Evaluate(actionName, authenticated: true, scopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"the {role} role holds no tenant.settings, so it must not reach {actionName}");
         }
     }

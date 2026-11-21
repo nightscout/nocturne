@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Responses;
@@ -49,6 +50,7 @@ public class AuditController : ControllerBase
     /// Query mutation audit log entries for the current tenant.
     /// </summary>
     [HttpGet("mutations")]
+    [RequireScope(Scope.AuditRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<MutationAuditDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -64,9 +66,6 @@ public class AuditController : ControllerBase
         [FromQuery] Guid? entityId = null,
         CancellationToken ct = default)
     {
-        if (!HttpContext.HasScope(Scope.AuditRead))
-            return Forbid();
-
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
@@ -99,6 +98,7 @@ public class AuditController : ControllerBase
     /// Query read access audit log entries for the current tenant.
     /// </summary>
     [HttpGet("reads")]
+    [RequireScope(Scope.AuditRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<ReadAccessAuditDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -114,9 +114,6 @@ public class AuditController : ControllerBase
         [FromQuery] int? statusCode = null,
         CancellationToken ct = default)
     {
-        if (!HttpContext.HasScope(Scope.AuditRead))
-            return Forbid();
-
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
@@ -150,14 +147,12 @@ public class AuditController : ControllerBase
     /// Get the audit configuration for the current tenant.
     /// </summary>
     [HttpGet("config")]
+    [RequireScope(Scope.AuditRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(AuditConfigDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAuditConfig(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.AuditRead))
-            return Forbid();
-
         var config = await _configCache.GetConfigAsync(_tenantAccessor.TenantId, ct);
 
         return Ok(new AuditConfigDto
@@ -172,6 +167,7 @@ public class AuditController : ControllerBase
     /// Create or update the audit configuration for the current tenant.
     /// </summary>
     [HttpPut("config")]
+    [RequireScope(Scope.AuditManage)]
     [RemoteCommand(Invalidates = ["GetAuditConfig"])]
     [ProducesResponseType(typeof(AuditConfigDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -180,9 +176,6 @@ public class AuditController : ControllerBase
         [FromBody] AuditConfigDto request,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.AuditManage))
-            return Forbid();
-
         var tenantId = _tenantAccessor.TenantId;
 
         // Mutation audit must outlive any soft-deleted entity it describes, so a user-delete's

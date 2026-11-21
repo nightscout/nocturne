@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -43,6 +44,7 @@ public class RoleController : ControllerBase
     /// <c>CanGrant</c> on each role says whether the caller may confer it.
     /// </remarks>
     [HttpGet]
+    [RequireScope(Scope.RolesManage, Scope.MembersInvite, Scope.MembersManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantRoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -50,9 +52,6 @@ public class RoleController : ControllerBase
     {
         if (HttpContext.HasScope(Scope.RolesManage))
             return Ok(await _roleService.GetRolesAsync(_tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct));
-
-        if (!HttpContext.HasScope(Scope.MembersInvite) && !HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
 
         var assignable = await _roleService.GetAssignableRolesAsync(
             _tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct);
@@ -64,15 +63,13 @@ public class RoleController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.CreateRoleAsync"/>
     [HttpPost]
+    [RequireScope(Scope.RolesManage)]
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.RolesManage))
-            return Forbid();
-
         var grantedScopes = HttpContext.GetGrantedScopes();
         var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
@@ -88,6 +85,7 @@ public class RoleController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.UpdateRoleAsync"/>
     [HttpPut("{id:guid}")]
+    [RequireScope(Scope.RolesManage)]
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -95,9 +93,6 @@ public class RoleController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.RolesManage))
-            return Forbid();
-
         var grantedScopes = HttpContext.GetGrantedScopes();
         var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
@@ -123,15 +118,13 @@ public class RoleController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.DeleteRoleAsync"/>
     [HttpDelete("{id:guid}")]
+    [RequireScope(Scope.RolesManage)]
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteRole(Guid id, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.RolesManage))
-            return Forbid();
-
         var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
         if (!result.Success)
             return Problem(detail: result.ErrorDescription, statusCode: 400, title: result.ErrorCode);

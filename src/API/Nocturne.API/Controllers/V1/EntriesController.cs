@@ -704,6 +704,7 @@ public class EntriesController : ControllerBase
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]

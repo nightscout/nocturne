@@ -55,7 +55,7 @@ public class AlertReplayReadScopeTests
         ViewerScopes().Should().NotContain(Scope.AlertsRead);
 
         Evaluate(action, authenticated: true, ViewerScopes())
-            .Should().BeOfType<ForbidResult>("a Viewer holds no alerts scope");
+            .Should().BeOfType<ScopeForbiddenResult>("a Viewer holds no alerts scope");
     }
 
     [Theory]
@@ -65,7 +65,7 @@ public class AlertReplayReadScopeTests
     public void GuestSessionWithoutTheAlertsCategory_IsRefused(string action)
     {
         Evaluate(action, authenticated: true, GuestScopesWithoutAlerts())
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     /// <summary>

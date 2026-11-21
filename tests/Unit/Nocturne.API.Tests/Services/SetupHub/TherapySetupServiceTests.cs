@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
@@ -342,16 +343,21 @@ public class TherapySetupServiceTests : IDisposable
         };
     }
 
-    [Fact]
-    public async Task TheController_RefusesAMemberWhoIsNotAnOwner()
+    [Theory]
+    [InlineData(nameof(SetupTherapyController.GetTherapyReview))]
+    [InlineData(nameof(SetupTherapyController.ConfirmTherapySettings))]
+    [InlineData(nameof(SetupTherapyController.EnterTherapySettings))]
+    public void TheController_RefusesAMemberWhoIsNotAnOwner(string action)
     {
-        var controller = Controller(Scope.TherapyReadWrite);
-        var request = new EnterTherapySettingsRequest { GlucoseUnits = "mg/dl", Basal = One(0.8) };
+        var refusal = ActionGate.Evaluate(
+                typeof(SetupTherapyController),
+                action,
+                new HashSet<string>([Scope.TherapyReadWrite]),
+                new AuthContext { IsAuthenticated = true, SubjectId = Guid.CreateVersion7() })
+            .Should().BeOfType<ScopeForbiddenResult>().Subject;
 
-        (await controller.GetTherapyReview(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.ConfirmTherapySettings(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.EnterTherapySettings(request, CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await _db.TherapySettings.AnyAsync()).Should().BeFalse();
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Scopes.Should().Contain(Scope.FullAccess);
     }
 
     [Fact]

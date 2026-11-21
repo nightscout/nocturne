@@ -312,6 +312,7 @@ public class TreatmentsController : ControllerBase
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]

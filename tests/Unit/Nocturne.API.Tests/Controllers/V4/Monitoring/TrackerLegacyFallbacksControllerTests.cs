@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Tests.Infrastructure;
@@ -148,7 +149,7 @@ public class TrackerLegacyFallbacksControllerTests
             new HashSet<string> { Scope.AlertsReadWrite, Scope.DevicesRead },
             authContext);
 
-        refused.Should().BeOfType<ForbidResult>();
+        refused.Should().BeOfType<ScopeForbiddenResult>();
         admitted.Should().BeNull();
     }
 }

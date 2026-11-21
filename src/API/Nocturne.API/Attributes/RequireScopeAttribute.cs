@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 
@@ -23,6 +24,9 @@ namespace Nocturne.API.Attributes;
 /// <see cref="Scope.PublicShareScopes"/>. A requirement naming anything other than
 /// read also requires an authenticated caller, so no anonymous principal can pass a write gate
 /// however its scopes are resolved. An empty scope set is rejected either way.
+/// </para>
+/// <para>
+/// A refused caller reads <see cref="ScopeForbiddenResult.For"/>.
 /// </para>
 /// </remarks>
 /// <seealso cref="RequirePermissionAttribute"/>
@@ -101,7 +105,7 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
         if (grantedScopes.Count == 0)
         {
             context.Result = httpContext.IsAuthenticated()
-                ? new ForbidResult()
+                ? ScopeForbiddenResult.For(httpContext, _requiredScopes, _requireAll)
                 : new UnauthorizedResult();
             return;
         }
@@ -112,7 +116,7 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
 
         if (!hasSufficientScope)
         {
-            context.Result = new ForbidResult();
+            context.Result = ScopeForbiddenResult.For(httpContext, _requiredScopes, _requireAll);
         }
     }
 }

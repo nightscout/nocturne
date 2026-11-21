@@ -42,26 +42,21 @@ public sealed class ShareLinkControllerTests
         };
     }
 
-    [Fact]
-    public async Task GetShareLink_without_sharing_manage_is_forbidden_and_does_not_read_the_link()
+    [Theory]
+    [InlineData(nameof(ShareLinkController.GetShareLink))]
+    [InlineData(nameof(ShareLinkController.RevealShareLink))]
+    [InlineData(nameof(ShareLinkController.RotateShareLink))]
+    [InlineData(nameof(ShareLinkController.DisableShareLink))]
+    [InlineData(nameof(ShareLinkController.SetShareLinkFullHistory))]
+    [InlineData(nameof(ShareLinkController.SetShareLinkScopes))]
+    public void Every_action_without_sharing_manage_is_forbidden_before_the_handler(string action)
     {
-        var controller = BuildController(/* no scopes */);
-
-        var result = await controller.GetShareLink(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _service.Verify(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task RevealShareLink_without_sharing_manage_is_forbidden_and_does_not_read_the_link()
-    {
-        var controller = BuildController(/* no scopes */);
-
-        var result = await controller.RevealShareLink(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _service.Verify(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        ActionGate.Evaluate(
+                typeof(ShareLinkController),
+                action,
+                new HashSet<string> { Scope.GlucoseRead },
+                new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie })
+            .ShouldBeScopeRefusal(Scope.SharingManage);
     }
 
     private static void ShouldRefuseTheHistoryCeiling(IActionResult? result)
@@ -158,28 +153,6 @@ public sealed class ShareLinkControllerTests
     }
 
     [Fact]
-    public async Task RotateShareLink_without_sharing_manage_is_forbidden()
-    {
-        var controller = BuildController(/* no scopes */);
-
-        var result = await controller.RotateShareLink(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _service.Verify(s => s.RotateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DisableShareLink_without_sharing_manage_is_forbidden()
-    {
-        var controller = BuildController(/* no scopes */);
-
-        var result = await controller.DisableShareLink(CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _service.Verify(s => s.DisableAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
     public async Task GetShareLink_with_sharing_manage_returns_the_link_state()
     {
         _service.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -190,19 +163,6 @@ public sealed class ShareLinkControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>();
         _service.Verify(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task SetShareLinkScopes_without_sharing_manage_is_forbidden()
-    {
-        var controller = BuildController(/* no scopes */);
-
-        var result = await controller.SetShareLinkScopes(
-            new SetShareScopesRequest([Scope.GlucoseRead]), CancellationToken.None);
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _service.Verify(s => s.SetScopesAsync(
-            It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

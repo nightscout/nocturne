@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
@@ -396,7 +397,7 @@ public class TrackersControllerTenantAccessTests
         };
 
         ActionGate.Evaluate(typeof(TrackersController), action, new HashSet<string> { Scope.AlertsRead }, member)
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
         ActionGate.Evaluate(typeof(TrackersController), action, new HashSet<string> { Scope.AlertsReadWrite }, member)
             .Should().BeNull();
     }

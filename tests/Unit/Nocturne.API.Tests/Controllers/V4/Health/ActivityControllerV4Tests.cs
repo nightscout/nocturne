@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using System.Reflection;
 using FluentAssertions;
@@ -131,7 +132,7 @@ public class ActivityControllerV4Tests
         var result = await _controller.CreateActivities(
             [new UpsertActivityRequest { Type = "sleep", Mills = 1700000000000 }], CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(
             x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
@@ -157,7 +158,7 @@ public class ActivityControllerV4Tests
             new UpsertActivityRequest { Type = "exercise", Mills = 1700000000000 },
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(
             x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
@@ -183,7 +184,7 @@ public class ActivityControllerV4Tests
             [new UpsertActivityRequest { Type = type, Mills = 1700000000000 }],
             CancellationToken.None);
 
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode
+        result.Result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode
             .Should().Be(allowed ? StatusCodes.Status201Created : StatusCodes.Status403Forbidden);
     }
 
@@ -198,7 +199,7 @@ public class ActivityControllerV4Tests
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
+        result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         _service.Verify(x => x.DeleteActivityAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }

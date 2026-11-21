@@ -194,6 +194,7 @@ public class CountController : ControllerBase
     /// <c>IActivityService</c>.
     /// </remarks>
     [HttpGet("activity/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     public async Task<ActionResult<LegacyCountResult[]>> CountActivity(
@@ -236,6 +237,8 @@ public class CountController : ControllerBase
     /// for another. <c>activity</c> merges four categories and keeps the AND below.
     /// </remarks>
     [HttpGet("{storage}/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [ProducesResponseType(400)]

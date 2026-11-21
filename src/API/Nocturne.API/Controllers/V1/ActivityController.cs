@@ -185,6 +185,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -240,6 +241,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -275,6 +277,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

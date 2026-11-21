@@ -156,6 +156,7 @@ public class ProfileWriteRoutesTests
     {
         var attribute = typeof(ProfileController).GetMethod(action)!.GetCustomAttribute<RequireScopeAttribute>()!;
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/api/v1/profile";
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
         httpContext.Items["GrantedScopes"] = Scope.Normalize([granted]);
         var filterContext = new AuthorizationFilterContext(

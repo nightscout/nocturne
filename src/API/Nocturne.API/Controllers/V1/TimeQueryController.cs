@@ -185,6 +185,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -209,6 +210,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo/{prefix}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo/{prefix}")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -235,6 +237,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="field">Field name to match patterns against</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     [HttpGet("times/echo/{prefix}/{regex}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/times/echo/{prefix}/{regex}")]
     [ProducesResponseType(typeof(TimeQueryEcho), 200)]
     [ProducesResponseType(400)]
@@ -308,6 +311,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -346,6 +350,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -386,6 +391,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}/{prefix}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}/{prefix}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
@@ -428,6 +434,7 @@ public class TimeQueryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     [HttpGet("slice/{storage}/{field}/{type}/{prefix}/{regex}")]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/slice/{storage}/{field}/{type}/{prefix}/{regex}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]

@@ -46,6 +46,20 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _dbContext.TenantId = _tenantId;
     }
 
+    /// <summary>The gate a signed-in caller holding <paramref name="grantedScopes"/> meets on <paramref name="action"/>.</summary>
+    private IActionResult? Gate(string action, params string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(MemberInviteController),
+            action,
+            new HashSet<string>(grantedScopes),
+            new AuthContext
+            {
+                IsAuthenticated = true,
+                AuthType = AuthType.SessionCookie,
+                SubjectId = _callerSubjectId,
+                TenantId = _tenantId,
+            });
+
     /// <summary>
     /// Builds the controller for a caller holding <paramref name="grantedScopes"/>, as
     /// <c>MemberScopeMiddleware</c> leaves the request.
@@ -138,14 +152,10 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     /// so the permission gate is pinned in both directions.
     /// </summary>
     [Fact]
-    public async Task RemoveMember_withoutMembersManage_isForbidden()
+    public void RemoveMember_withoutMembersManage_isForbidden()
     {
-        var controller = BuildController(Scope.MembersInvite);
-
-        var result = await controller.RemoveMember(Guid.CreateVersion7(), CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        _tenantService.VerifyNoOtherCalls();
+        Gate(nameof(MemberInviteController.RemoveMember), Scope.MembersInvite)
+            .ShouldBeScopeRefusal(Scope.MembersManage);
     }
 
     [Fact]
@@ -397,25 +407,17 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     /// new invite. Keeping the two atoms distinct is what makes the members page's own gate honest.
     /// </summary>
     [Fact]
-    public async Task CreateInvite_withMembersManageAlone_isForbidden()
+    public void CreateInvite_withMembersManageAlone_isForbidden()
     {
-        var controller = BuildController(Scope.MembersManage);
-
-        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
-
-        result.Should().BeOfType<ForbidResult>();
-        _inviteService.VerifyNoOtherCalls();
+        Gate(nameof(MemberInviteController.CreateInvite), Scope.MembersManage)
+            .ShouldBeScopeRefusal(Scope.MembersInvite);
     }
 
     [Fact]
-    public async Task CreateInvite_withoutMembersInvite_isForbidden()
+    public void CreateInvite_withoutMembersInvite_isForbidden()
     {
-        var controller = BuildController(CaretakerScopes);
-
-        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
-
-        result.Should().BeOfType<ForbidResult>();
-        _inviteService.VerifyNoOtherCalls();
+        Gate(nameof(MemberInviteController.CreateInvite), CaretakerScopes)
+            .ShouldBeScopeRefusal(Scope.MembersInvite);
     }
 
     /// <summary>
@@ -479,25 +481,17 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     [Fact]
-    public async Task ListInvites_withoutMembersInvite_isForbidden()
+    public void ListInvites_withoutMembersInvite_isForbidden()
     {
-        var controller = BuildController(CaretakerScopes);
-
-        var result = await controller.ListInvites();
-
-        result.Should().BeOfType<ForbidResult>();
-        _inviteService.VerifyNoOtherCalls();
+        Gate(nameof(MemberInviteController.ListInvites), CaretakerScopes)
+            .ShouldBeScopeRefusal(Scope.MembersInvite);
     }
 
     [Fact]
-    public async Task RevokeInvite_withoutMembersInvite_isForbidden()
+    public void RevokeInvite_withoutMembersInvite_isForbidden()
     {
-        var controller = BuildController(CaretakerScopes);
-
-        var result = await controller.RevokeInvite(Guid.CreateVersion7());
-
-        result.Should().BeOfType<ForbidResult>();
-        _inviteService.VerifyNoOtherCalls();
+        Gate(nameof(MemberInviteController.RevokeInvite), CaretakerScopes)
+            .ShouldBeScopeRefusal(Scope.MembersInvite);
     }
 
     /// <summary>

@@ -146,6 +146,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Settings for the specified section</returns>
     [HttpGet("{section}")]
+    [ScopeDecidedBy(typeof(UISettingsController), nameof(CanRead))]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

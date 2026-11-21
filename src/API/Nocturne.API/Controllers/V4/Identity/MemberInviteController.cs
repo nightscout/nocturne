@@ -67,15 +67,13 @@ public class MemberInviteController : ControllerBase
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
     [HttpPost]
     [RequireInteractiveSession]
+    [RequireScope(Scope.MembersInvite)]
     [RemoteCommand(Invalidates = ["ListInvites"])]
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateInvite([FromBody] CreateMemberInviteRequest request)
     {
-        if (!HttpContext.HasScope(Scope.MembersInvite))
-            return Forbid();
-
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
             return Unauthorized();
@@ -115,29 +113,25 @@ public class MemberInviteController : ControllerBase
 
     /// <inheritdoc cref="IMemberInviteService.GetInvitesForTenantAsync"/>
     [HttpGet]
+    [RequireScope(Scope.MembersInvite)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<MemberInviteInfo>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListInvites()
     {
-        if (!HttpContext.HasScope(Scope.MembersInvite))
-            return Forbid();
-
         var invites = await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId);
         return Ok(invites);
     }
 
     /// <inheritdoc cref="IMemberInviteService.RevokeInviteAsync"/>
     [HttpDelete("{inviteId:guid}")]
+    [RequireScope(Scope.MembersInvite)]
     [RemoteCommand(Invalidates = ["ListInvites"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvite(Guid inviteId)
     {
-        if (!HttpContext.HasScope(Scope.MembersInvite))
-            return Forbid();
-
         var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, _tenantAccessor.TenantId);
         return revoked ? NoContent() : NotFound();
     }
@@ -149,15 +143,13 @@ public class MemberInviteController : ControllerBase
     /// as the member list — knows the subject rather than the membership.
     /// </remarks>
     [HttpDelete("members/{subjectId:guid}")]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveMember(Guid subjectId, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         if (IsCallersOwnMembership(subjectId))
             return Problem(detail: SelfRemovalDetail, statusCode: 400);
 
@@ -292,6 +284,7 @@ public class MemberInviteController : ControllerBase
     /// must stay in the set: removing it is refused like adding it.
     /// </remarks>
     [HttpPut("members/{id:guid}/roles")]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -303,9 +296,6 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -397,6 +387,7 @@ public class MemberInviteController : ControllerBase
     /// Set direct permissions for a member.
     /// </summary>
     [HttpPut("members/{id:guid}/permissions")]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -408,9 +399,6 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -471,15 +459,13 @@ public class MemberInviteController : ControllerBase
     /// Get effective permissions for a member (union of role permissions + direct permissions).
     /// </summary>
     [HttpGet("members/{id:guid}/effective-permissions")]
+    [RequireScope(Scope.SharingManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetEffectivePermissions(Guid id, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
-
         var tenantId = _tenantAccessor.TenantId;
         if (await _members.GetMemberAsync(tenantId, id, ct) == null)
             return NotFound();
@@ -492,6 +478,7 @@ public class MemberInviteController : ControllerBase
     /// Update the 24-hour data limit for a member.
     /// </summary>
     [HttpPut("members/{id:guid}/limit-to-24-hours")]
+    [RequireScope(Scope.MembersManage)]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -502,9 +489,6 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.MembersManage))
-            return Forbid();
-
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 

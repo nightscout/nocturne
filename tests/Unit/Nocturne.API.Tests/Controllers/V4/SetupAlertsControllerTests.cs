@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.Core.Models.Authorization;
@@ -11,25 +13,22 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class SetupAlertsControllerTests
 {
     [Theory]
-    [InlineData(Scope.TenantSettings)]
-    [InlineData(Scope.AlertsReadWrite)]
-    public async Task EveryEndpoint_RefusesAMemberWhoIsNotAnOwner(string scope)
+    [InlineData(nameof(SetupAlertsController.GetAlertSetup))]
+    [InlineData(nameof(SetupAlertsController.SaveAlertSetup))]
+    [InlineData(nameof(SetupAlertsController.SendSetupTestAlert))]
+    [InlineData(nameof(SetupAlertsController.GetSetupTestAlert))]
+    [InlineData(nameof(SetupAlertsController.ConfirmSetupTestAlertReceived))]
+    [InlineData(nameof(SetupAlertsController.SetUrgentLowRecipient))]
+    public void EveryEndpoint_RefusesAMemberWhoIsNotAnOwner(string action)
     {
-        var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { scope };
-        // Never reached: the gate refuses before the service is asked anything.
-        var controller = new SetupAlertsController(null!)
-        {
-            ControllerContext = new ControllerContext { HttpContext = httpContext },
-        };
-        var id = Guid.CreateVersion7();
+        var refusal = ActionGate.Evaluate(
+                typeof(SetupAlertsController),
+                action,
+                new HashSet<string> { Scope.AlertsReadWrite, Scope.TenantSettings },
+                new AuthContext { IsAuthenticated = true, SubjectId = Guid.CreateVersion7() })
+            .Should().BeOfType<ScopeForbiddenResult>().Subject;
 
-        (await controller.GetAlertSetup(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.SaveAlertSetup(new SaveAlertSetupRequest(), CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.SendSetupTestAlert(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.GetSetupTestAlert(id, CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.ConfirmSetupTestAlertReceived(id, new ConfirmSetupTestAlertRequest(), CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.SetUrgentLowRecipient(id, new SetUrgentLowRecipientRequest { Alerted = true }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Scopes.Should().Contain(Scope.FullAccess);
     }
 }

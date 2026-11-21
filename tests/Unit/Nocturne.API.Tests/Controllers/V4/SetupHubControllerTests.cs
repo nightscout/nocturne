@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.Authorization;
@@ -27,20 +29,23 @@ public class SetupHubControllerTests
     }
 
     [Theory]
-    [InlineData(Scope.TenantSettings)]
-    [InlineData(Scope.GlucoseRead)]
-    public async Task EveryEndpoint_RefusesAMemberWhoIsNotAnOwner(string scope)
+    [InlineData(nameof(SetupHubController.GetSetupHub), Scope.TenantSettings)]
+    [InlineData(nameof(SetupHubController.SetSetupHubItemState), Scope.TenantSettings)]
+    [InlineData(nameof(SetupHubController.ConfirmAboutSetupItem), Scope.TenantSettings)]
+    [InlineData(nameof(SetupHubController.DismissSetupStrip), Scope.TenantSettings)]
+    [InlineData(nameof(SetupHubController.GetSetupHub), Scope.GlucoseRead)]
+    [InlineData(nameof(SetupHubController.DismissSetupStrip), Scope.GlucoseRead)]
+    public void EveryEndpoint_RefusesAMemberWhoIsNotAnOwner(string action, string scope)
     {
-        var (controller, _) = Build(scope);
+        var refusal = ActionGate.Evaluate(
+                typeof(SetupHubController),
+                action,
+                new HashSet<string>([scope]),
+                new AuthContext { IsAuthenticated = true, SubjectId = Guid.CreateVersion7() })
+            .Should().BeOfType<ScopeForbiddenResult>().Subject;
 
-        (await controller.GetSetupHub(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.SetSetupHubItemState(
-                SetupHubItemKey.Alerts,
-                new SetSetupHubItemStateRequest { State = SetupHubItemState.NotForMe },
-                CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
-        (await controller.DismissSetupStrip(new DismissSetupStripRequest { Revision = "rev" }, CancellationToken.None))
-            .Result.Should().BeOfType<ForbidResult>();
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Scopes.Should().Contain(Scope.FullAccess);
     }
 
     [Fact]

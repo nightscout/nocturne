@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -172,6 +173,7 @@ public class NotificationsController : ControllerBase
     [RemoteCommand(Invalidates = ["GetNotifications"])]
     [Authorize]
     [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
+    [ScopeDecidedBy(typeof(InAppProvider), nameof(InAppProvider.NotificationType))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -207,7 +209,7 @@ public class NotificationsController : ControllerBase
                     type,
                     id
                 );
-                return Forbid();
+                return this.ForbiddenForScope(Scope.AlertsReadWrite);
             }
         }
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -73,7 +74,7 @@ public class RequireScopeAttributeTests
         var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
             authenticated: true, Scope.GlucoseRead, Scope.TreatmentsRead);
 
-        result.Should().BeOfType<ForbidResult>();
+        result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public class RequireScopeAttributeTests
         var result = Evaluate(new RequireScopeAttribute(Scope.GlucoseReadWrite),
             authenticated: true, Scope.TreatmentsReadWrite);
 
-        result.Should().BeOfType<ForbidResult>();
+        result.Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -114,6 +115,6 @@ public class RequireScopeAttributeTests
         var result = Evaluate(new RequireScopeAttribute(Scope.FullAccess),
             authenticated: true, [.. Scope.HealthReadWriteExpansion]);
 
-        result.Should().BeOfType<ForbidResult>();
+        result.Should().BeOfType<ScopeForbiddenResult>();
     }
 }

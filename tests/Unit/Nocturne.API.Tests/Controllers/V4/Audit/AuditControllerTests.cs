@@ -14,6 +14,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -74,17 +75,16 @@ public class AuditControllerTests : IDisposable
     private static IReadOnlySet<string> Scopes(params string[] permissions)
         => new HashSet<string>(permissions);
 
+    private static IActionResult? Gate(string action, IReadOnlySet<string> scopes) =>
+        ActionGate.Evaluate(typeof(AuditController), action, scopes, new AuthContext { IsAuthenticated = true });
+
     // ── Permission tests ────────────────────────────────────────────
 
     [Fact]
-    public async Task GetMutations_WithoutAuditRead_Returns403()
+    public void GetMutations_WithoutAuditRead_Returns403()
     {
-        var controller = CreateController(Scopes("glucose.read"));
-
-        var result = await controller.GetMutationAuditLog(
-            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(AuditController.GetMutationAuditLog), Scopes("glucose.read"))
+            .ShouldBeScopeRefusal(Scope.AuditRead);
     }
 
     [Fact]
@@ -111,25 +111,17 @@ public class AuditControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetMutations_WithNoScopes_Returns403()
+    public void GetMutations_WithNoScopes_Returns403()
     {
-        var controller = CreateController(); // no scopes at all
-
-        var result = await controller.GetMutationAuditLog(
-            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(AuditController.GetMutationAuditLog), Scopes())
+            .ShouldBeScopeRefusal(Scope.AuditRead);
     }
 
     [Fact]
-    public async Task GetReads_WithoutPermission_Returns403()
+    public void GetReads_WithoutPermission_Returns403()
     {
-        var controller = CreateController(Scopes("glucose.read"));
-
-        var result = await controller.GetReadAccessAuditLog(
-            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(AuditController.GetReadAccessAuditLog), Scopes("glucose.read"))
+            .ShouldBeScopeRefusal(Scope.AuditRead);
     }
 
     [Fact]
@@ -144,13 +136,10 @@ public class AuditControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetConfig_WithoutAuditRead_Returns403()
+    public void GetConfig_WithoutAuditRead_Returns403()
     {
-        var controller = CreateController(Scopes("glucose.read"));
-
-        var result = await controller.GetAuditConfig(CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(AuditController.GetAuditConfig), Scopes("glucose.read"))
+            .ShouldBeScopeRefusal(Scope.AuditRead);
     }
 
     [Fact]
@@ -168,18 +157,10 @@ public class AuditControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateConfig_WithoutAuditManage_Returns403()
+    public void UpdateConfig_WithoutAuditManage_Returns403()
     {
-        var controller = CreateController(Scopes(Scope.AuditRead));
-
-        var result = await controller.UpdateAuditConfig(new AuditConfigDto
-        {
-            ReadAuditEnabled = true,
-            ReadAuditRetentionDays = 90,
-            MutationAuditRetentionDays = 365,
-        }, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
+        Gate(nameof(AuditController.UpdateAuditConfig), Scopes(Scope.AuditRead))
+            .ShouldBeScopeRefusal(Scope.AuditManage);
     }
 
     [Fact]

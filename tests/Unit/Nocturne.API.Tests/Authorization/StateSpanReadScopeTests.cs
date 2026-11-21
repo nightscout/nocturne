@@ -88,7 +88,7 @@ public class StateSpanReadScopeTests
 
         var result = await controller.GetStateSpans(category: StateSpanCategory.PumpMode);
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Controllers.V4.Platform;
@@ -116,7 +117,7 @@ public class AlertDeliveryEndpointTests
     [Fact]
     public void GetPendingDeliveries_RefusesAnAlertsReadOnlyCaller()
     {
-        Authorize(new HashSet<string> { Scope.AlertsRead }).Should().BeOfType<ForbidResult>();
+        Authorize(new HashSet<string> { Scope.AlertsRead }).Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Fact]
@@ -126,7 +127,7 @@ public class AlertDeliveryEndpointTests
             Scope.ValidateGrantScopes(Scope.AllowedGuestScopes, OAuthGrantTypes.Guest));
 
         guestScopes.Should().Contain(Scope.AlertsRead);
-        Authorize(guestScopes).Should().BeOfType<ForbidResult>();
+        Authorize(guestScopes).Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Theory]

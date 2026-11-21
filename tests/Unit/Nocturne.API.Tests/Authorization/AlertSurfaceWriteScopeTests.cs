@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Tests.Infrastructure;
@@ -235,7 +236,7 @@ public class AlertSurfaceWriteScopeTests
             }
             else
             {
-                result.Should().BeOfType<ForbidResult>(
+                result.Should().BeOfType<ScopeForbiddenResult>(
                     $"the {role} role holds no alerts.readwrite, so it must not reach {key}");
             }
         }
@@ -269,7 +270,7 @@ public class AlertSurfaceWriteScopeTests
         foreach (var (controller, action) in GatedWriteActions())
         {
             Evaluate(controller, action, authenticated: true, guestScopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"a read-only guest session must not reach {controller.Name}.{action.Name}");
         }
     }
@@ -328,7 +329,7 @@ public class AlertSurfaceWriteScopeTests
             }
             else
             {
-                result.Should().BeOfType<ForbidResult>(
+                result.Should().BeOfType<ScopeForbiddenResult>(
                     $"a device capability grant must not reach {key}");
             }
         }

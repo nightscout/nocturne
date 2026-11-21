@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
@@ -39,6 +40,13 @@ public class MemberScopeFilterPipelineTests
     /// </summary>
     private sealed record GatedAction(
         string Controller, string Action, RequireScopeAttribute[] Filters, bool RequiresFullAccess);
+
+    /// <summary>
+    /// The actions the Administrator seed role is not granted: the "*"-gated ones, and the audit
+    /// configuration, whose audit.manage no seed role but the owner's holds.
+    /// </summary>
+    private static bool OutsideTheAdministratorRole(GatedAction gated) =>
+        gated.RequiresFullAccess || RequiredScopesOf(gated.Filters).Contains(Scope.AuditManage);
 
     private static IEnumerable<GatedAction> DiscoverGatedActions()
     {
@@ -126,9 +134,9 @@ public class MemberScopeFilterPipelineTests
             var result = RunAuthorizationFilters(gated, grantedScopes);
             (result is null ? reached : forbidden).Add($"{gated.Controller}.{gated.Action}");
 
-            if (gated.RequiresFullAccess)
-                result.Should().BeOfType<ForbidResult>(
-                    $"{gated.Controller}.{gated.Action} requires '*', which an Administrator does not hold");
+            if (OutsideTheAdministratorRole(gated))
+                result.Should().BeOfType<ScopeForbiddenResult>(
+                    $"{gated.Controller}.{gated.Action} requires '*' or audit.manage, which an Administrator does not hold");
             else
                 result.Should().BeNull(
                     $"{gated.Controller}.{gated.Action} is gated on a scope the Administrator role grants");
@@ -136,10 +144,10 @@ public class MemberScopeFilterPipelineTests
 
         reached.Should().NotBeEmpty();
 
-        // Nothing is refused except the "*"-gated actions — the Administrator role covers the whole
-        // rest of the gated surface.
+        // Nothing is refused outside OutsideTheAdministratorRole: the Administrator role covers the
+        // whole rest of the gated surface.
         forbidden.Should().BeEquivalentTo(DiscoverGatedActions()
-            .Where(g => g.RequiresFullAccess)
+            .Where(OutsideTheAdministratorRole)
             .Select(g => $"{g.Controller}.{g.Action}"));
     }
 
@@ -154,12 +162,12 @@ public class MemberScopeFilterPipelineTests
         RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepRead), grantedScopes)
             .Should().BeNull("a Clinician holds sleep.read");
         RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepReadWrite), grantedScopes)
-            .Should().BeOfType<ForbidResult>("a Clinician does not hold sleep.readwrite");
+            .Should().BeOfType<ScopeForbiddenResult>("a Clinician does not hold sleep.readwrite");
 
         RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateRead), grantedScopes)
             .Should().BeNull("a Clinician holds heartrate.read");
         RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateReadWrite), grantedScopes)
-            .Should().BeOfType<ForbidResult>("a Clinician does not hold heartrate.readwrite");
+            .Should().BeOfType<ScopeForbiddenResult>("a Clinician does not hold heartrate.readwrite");
     }
 
     [Fact]
@@ -170,9 +178,9 @@ public class MemberScopeFilterPipelineTests
             RoleSeeds.Viewer, AuthType.SessionCookie);
 
         RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepRead), grantedScopes)
-            .Should().BeOfType<ForbidResult>("a Viewer does not hold sleep.read");
+            .Should().BeOfType<ScopeForbiddenResult>("a Viewer does not hold sleep.read");
         RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateRead), grantedScopes)
-            .Should().BeOfType<ForbidResult>("a Viewer does not hold heartrate.read");
+            .Should().BeOfType<ScopeForbiddenResult>("a Viewer does not hold heartrate.read");
 
         // device.notify / device.actuate are member-personal capabilities every role holds.
         RunAuthorizationFilters(
@@ -244,7 +252,7 @@ public class MemberScopeFilterPipelineTests
         foreach (var gated in DiscoverGatedActions())
         {
             RunAuthorizationFilters(gated, grantedScopes)
-                .Should().BeOfType<ForbidResult>($"{gated.Controller}.{gated.Action} must stay closed");
+                .Should().BeOfType<ScopeForbiddenResult>($"{gated.Controller}.{gated.Action} must stay closed");
         }
     }
 
@@ -263,7 +271,7 @@ public class MemberScopeFilterPipelineTests
                          or "ClientDevicesController" or "SleepReportController"))
         {
             RunAuthorizationFilters(gated, grantedScopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"{gated.Controller}.{gated.Action} was never consented to");
         }
     }
