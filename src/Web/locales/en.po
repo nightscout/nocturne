@@ -5756,6 +5756,7 @@ msgstr "<0/> Try again"
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
@@ -25451,15 +25452,19 @@ msgid "Shortened from {0} bytes."
 msgstr "Shortened from {0} bytes."
 
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "<0/> Newer"
 msgstr "<0/> Newer"
 
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "Older <0/>"
 msgstr "Older <0/>"
 
 #. 0: formatNumber(offset + 1); 1: formatNumber(offset + rows.length); 2: formatNumber(total)
+#. 0: formatNumber(offset + 1); 1: formatNumber(offset + entries.length); 2: formatNumber(total)
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "{0}–{1} of {2}"
 msgstr "{0}–{1} of {2}"
 
@@ -46405,3 +46410,174 @@ msgstr "only while {0} was active"
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "disjunction"
 msgstr "disjunction"
+
+#. 0: member.name
+#: src/lib/components/members/MemberCard.svelte
+msgid "View history for {0}"
+msgstr "View history for {0}"
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "View history for this member"
+msgstr "View history for this member"
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "<0/> View history"
+msgstr "<0/> View history"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A deleted member"
+msgstr "A deleted member"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The system"
+msgstr "The system"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A caller who was not signed in"
+msgstr "A caller who was not signed in"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "An API key"
+msgstr "An API key"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "An access token"
+msgstr "An access token"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "An instance key"
+msgstr "An instance key"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A guest link"
+msgstr "A guest link"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "A platform administrator"
+msgstr "A platform administrator"
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "Someone unknown"
+msgstr "Someone unknown"
+
+#. 0: actor; 1: member; 2: role
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave {1} the role {2}."
+msgstr "{0} gave {1} the role {2}."
+
+#. 0: actor; 1: role; 2: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} removed the role {1} from {2}."
+msgstr "{0} removed the role {1} from {2}."
+
+#. 0: actor; 1: member; 2: permission
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave {1} the permission {2}."
+msgstr "{0} gave {1} the permission {2}."
+
+#. 0: actor; 1: permission; 2: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} removed the permission {1} from {2}."
+msgstr "{0} removed the permission {1} from {2}."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave {1} a role or a permission. The detail is no longer stored."
+msgstr "{0} gave {1} a role or a permission. The detail is no longer stored."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} removed a role or a permission from {1}. The detail is no longer stored."
+msgstr "{0} removed a role or a permission from {1}. The detail is no longer stored."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} limited {1} to the last 24 hours."
+msgstr "{0} limited {1} to the last 24 hours."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave {1} full history."
+msgstr "{0} gave {1} full history."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed the history limit of {1}. The detail is no longer stored."
+msgstr "{0} changed the history limit of {1}. The detail is no longer stored."
+
+#. 0: actor; 1: role
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed the permissions of the role {1}."
+msgstr "{0} changed the permissions of the role {1}."
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed the permissions of a role. The detail is no longer stored."
+msgstr "{0} changed the permissions of a role. The detail is no longer stored."
+
+#. 0: gained
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "Permissions added: {0}"
+msgstr "Permissions added: {0}"
+
+#. 0: lost
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "Permissions removed: {0}"
+msgstr "Permissions removed: {0}"
+
+#. 0: entry.inviteLabel
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "Through the invite {0}."
+msgstr "Through the invite {0}."
+
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "Through an invite."
+msgstr "Through an invite."
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/members/+page.svelte
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Member history"
+msgstr "Member history"
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "Review who gave or took access to your data, and when."
+msgstr "Review who gave or took access to your data, and when."
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Member history - Settings - Nocturne"
+msgstr "Member history - Settings - Nocturne"
+
+#. 0: memberName
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Changes to {0}"
+msgstr "Changes to {0}"
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Changes to a deleted member"
+msgstr "Changes to a deleted member"
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Changes to one member"
+msgstr "Changes to one member"
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Who gave or took access to your data, and when."
+msgstr "Who gave or took access to your data, and when."
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "Show all changes"
+msgstr "Show all changes"
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "You do not have access to the member history."
+msgstr "You do not have access to the member history."
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "The member history did not load."
+msgstr "The member history did not load."
+
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "No member changes are recorded."
+msgstr "No member changes are recorded."
