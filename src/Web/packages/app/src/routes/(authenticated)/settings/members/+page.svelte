@@ -14,6 +14,7 @@
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import History from "@lucide/svelte/icons/history";
   import { EmptyState } from "#lib/components/shared/index.js";
   import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
   import { getShareLink } from "#lib/api/generated/shareLinks.generated.remote.js";
@@ -63,6 +64,7 @@
   );
   const canManageRoles = $derived(satisfiesScope(granted, "roles.manage"));
   const canViewAudit = $derived(satisfiesScope(granted, "audit.read"));
+  const canViewMemberHistory = $derived(satisfiesScope(granted, "members.manage"));
   // GuestLinksSection self-gates on this; mirror it so the access-denied card isn't shown to a
   // guest-link-only user who can still use the guest-links section.
   const canCreateGuestLinks = $derived(
@@ -280,6 +282,7 @@
               roles={allRoles}
               canEditRoles={canEditMemberRoles}
               canManage={true}
+              canViewHistory={canViewMemberHistory}
               currentSubjectId={page.data.user?.subjectId}
               isExpanded={expandedMember === member.subjectId}
               isSaving={isSavingMember}
@@ -358,6 +361,17 @@
   <!-- Roles & permissions -->
   {#if canManageRoles}
     <RolesSection />
+  {/if}
+
+  {#if canViewMemberHistory}
+    <SettingsLinkCard
+      link={{
+        title: "Member history",
+        description: "Review who gave or took access to your data, and when.",
+        href: "/settings/members/history",
+        icon: History,
+      }}
+    />
   {/if}
 
   <!-- Lives here because who reached the data, and when, is the question this page answers. -->
