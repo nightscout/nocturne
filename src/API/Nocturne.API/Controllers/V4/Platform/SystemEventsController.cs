@@ -77,6 +77,7 @@ public class SystemEventsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ISystemEventRepository.UpsertSystemEventAsync"/>
     [HttpPost]
+    [RequireScope(Scope.DevicesReadWrite)]
     [ProducesResponseType(typeof(SystemEvent), StatusCodes.Status201Created)]
     public async Task<ActionResult<SystemEvent>> CreateSystemEvent(
         [FromBody] CreateSystemEventRequest request,
@@ -103,6 +104,7 @@ public class SystemEventsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ISystemEventRepository.DeleteSystemEventAsync"/>
     [HttpDelete("{id}")]
+    [RequireScope(Scope.DevicesReadWrite)]
     public async Task<IActionResult> DeleteSystemEvent(
         string id,
         CancellationToken cancellationToken = default)
