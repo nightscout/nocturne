@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -68,7 +69,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
 
     private GoogleHealthSessionStore Store(
         out Mock<IConnectorConfigurationService> configurations, HttpMessageHandler? handler = null,
-        TimeSpan? revokeTimeout = null)
+        TimeSpan? revokeTimeout = null, TimeProvider? time = null)
     {
         holders.Setup(value => value.HoldAsync(tenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Callback(() => tokenStoredWhenHeld.Add(secrets.ContainsKey("refreshToken")))
@@ -105,7 +106,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
             Mock.Of<IRetryDelayStrategy>());
         return new GoogleHealthSessionStore(
             configurations.Object, oauth, holders.Object, tenant.Object, TestPlatform.Options(),
-            NullLogger<GoogleHealthSessionStore>.Instance, revokeTimeout);
+            NullLogger<GoogleHealthSessionStore>.Instance, time ?? TimeProvider.System, revokeTimeout);
     }
 
     [Fact]
@@ -220,7 +221,7 @@ public class GoogleHealthSessionStoreTests : IDisposable
         holders.Verify(value => value.HoldAsync(tenantId, "account", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    public static TheoryData<string> RevokeOutcomes => ["ok", "refused", "unreachable", "hanging"];
+    public static TheoryData<string> RevokeOutcomes => ["ok", "refused", "unreachable"];
 
     [Theory]
     [MemberData(nameof(RevokeOutcomes))]
@@ -232,9 +233,6 @@ public class GoogleHealthSessionStoreTests : IDisposable
             {
                 case "unreachable":
                     throw new HttpRequestException("unreachable");
-                case "hanging":
-                    await Task.Delay(Timeout.Infinite, ct);
-                    break;
             }
             return new HttpResponseMessage(outcome == "ok"
                 ? System.Net.HttpStatusCode.OK
@@ -248,13 +246,54 @@ public class GoogleHealthSessionStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task A_revocation_Google_does_not_answer_in_time_fails_when_fake_time_passes_the_timeout()
+    {
+        var time = new FakeTimeProvider();
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = Store(out _, new RecordingHandler(async (_, ct) =>
+        {
+            asked.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }), revokeTimeout: TimeSpan.FromSeconds(30), time: time);
+
+        var revoke = store.RevokeAsync("refresh", "account", default);
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        revoke.IsCompleted.Should().BeFalse();
+        time.Advance(TimeSpan.FromSeconds(29));
+        revoke.IsCompleted.Should().BeFalse();
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(GoogleHealthRevocation.Failed);
+    }
+
+    [Fact]
+    public async Task A_default_revocation_times_out_after_five_seconds()
+    {
+        var time = new FakeTimeProvider();
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = Store(out _, new RecordingHandler(async (_, ct) =>
+        {
+            asked.SetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }), time: time);
+
+        var revoke = store.RevokeAsync("refresh", "account", default);
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        (await revoke.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(GoogleHealthRevocation.Failed);
+    }
+
+    [Fact]
     public async Task Revocation_stops_when_the_caller_cancels()
     {
         var store = Store(out _, new RecordingHandler(async (_, ct) =>
         {
             await Task.Delay(Timeout.Infinite, ct);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
-        }), revokeTimeout: TimeSpan.FromMinutes(5));
+        }), revokeTimeout: TimeSpan.FromMinutes(5), time: new FakeTimeProvider());
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
