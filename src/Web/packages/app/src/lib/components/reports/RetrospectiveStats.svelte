@@ -13,6 +13,7 @@
   import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatClock,
+    formatGlucoseDelta,
     formatGlucoseValue,
     getUnitLabel,
   } from "#lib/utils/formatting.js";
@@ -125,12 +126,7 @@
             <div class="flex items-center gap-1 text-sm {deltaColorClass(data.glucose.direction)}">
               <TrendIcon class="h-4 w-4" aria-label={trend.label} />
               {#if data.glucose.delta !== null && data.glucose.delta !== undefined}
-                <span class="tabular-nums">
-                  {data.glucose.delta > 0 ? "+" : ""}{formatGlucoseValue(
-                    Math.abs(data.glucose.delta),
-                    units
-                  )}
-                </span>
+                <span class="tabular-nums">{formatGlucoseDelta(data.glucose.delta, units)}</span>
               {/if}
             </div>
           {:else}
