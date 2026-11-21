@@ -14,6 +14,14 @@ public interface ISubjectService
     /// <returns>Subject if found, null otherwise</returns>
     Task<Subject?> GetSubjectByIdAsync(Guid subjectId);
 
+    /// <summary>
+    /// The subject an OIDC identity is linked to, or null. Reads only, so a sign-in can decide
+    /// admission before <see cref="FindOrCreateFromOidcAsync"/> writes anything.
+    /// </summary>
+    /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
+    /// <param name="issuer">OIDC issuer URL</param>
+    Task<Subject?> FindFromOidcAsync(string oidcSubjectId, string issuer);
+
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
     /// <param name="issuer">OIDC issuer URL</param>
     /// <param name="email">

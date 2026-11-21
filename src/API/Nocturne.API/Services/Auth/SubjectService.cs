@@ -47,6 +47,13 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
+    public async Task<Subject?> FindFromOidcAsync(string oidcSubjectId, string issuer)
+    {
+        var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        return match is null ? null : MapToModel(match.Subject);
+    }
+
+    /// <inheritdoc />
     public async Task<Subject> FindOrCreateFromOidcAsync(
         Guid providerId,
         string oidcSubjectId,
