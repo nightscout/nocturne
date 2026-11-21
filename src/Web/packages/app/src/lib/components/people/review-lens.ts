@@ -23,22 +23,37 @@ export function parseDays(value: string | null): ReviewDays {
   return REVIEW_DAYS.find((allowed) => allowed === days) ?? DEFAULT_REVIEW_DAYS;
 }
 
-/** The page's URL with the lens and the period set. The Now lens carries neither. */
-export function lensUrl(current: { href: string }, lens: Lens, days: ReviewDays): URL {
+/** What the page shows, which is everything its address states. */
+export interface PageView {
+  lens: Lens;
+  days: ReviewDays;
+  person: string | null;
+}
+
+/** The page's address for a view. The Now lens carries no period. */
+export function pageUrl(current: { href: string }, view: PageView): URL {
   const url = new URL(current.href);
   url.searchParams.delete("lens");
   url.searchParams.delete("days");
-  if (lens === "review") {
-    url.searchParams.set("lens", lens);
-    url.searchParams.set("days", String(days));
+  url.searchParams.delete("person");
+  if (view.lens === "review") {
+    url.searchParams.set("lens", view.lens);
+    url.searchParams.set("days", String(view.days));
   }
+  if (view.person) url.searchParams.set("person", view.person);
   return url;
 }
 
 export type ReviewState =
   | { status: "loading" }
   | { status: "failed" }
-  | { status: "ready"; response: TenantReviewResponse; days: ReviewDays };
+  | {
+      status: "ready";
+      response: TenantReviewResponse;
+      days: ReviewDays;
+      /** The response is being read again, so a person it lacks may be in the next one. */
+      refreshing: boolean;
+    };
 
 /** What one person's data cells show in the Review lens. */
 export type ReviewCell =
@@ -65,7 +80,7 @@ export function reviewCell(
 ): ReviewCell {
   if (review.status === "loading") return { kind: "loading" };
   if (review.status === "failed") return { kind: "read-failed" };
-  if (!entry) return { kind: "missing" };
+  if (!entry) return review.refreshing ? { kind: "loading" } : { kind: "missing" };
   if (entry.unavailable) {
     return { kind: "unavailable", reason: entry.unavailable };
   }

@@ -1,13 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import type {
-  TenantOverviewResponse,
-  TenantReviewResponse,
+import {
+  TenantReviewUnavailable,
+  type TenantOverviewResponse,
+  type TenantReviewResponse,
 } from "#lib/api/generated/nocturne-api-client.js";
 import { formatMediumDateRange } from "#lib/utils/formatting.js";
+import { OVERVIEW_PING_DEBOUNCE_MS } from "./live-overview.svelte.js";
+import { overviewSockets } from "./people-socket-fixture.svelte.js";
 import {
+  makeDetail,
   makePerson,
   makeReview,
   makeReviewEntry,
@@ -30,11 +34,14 @@ const overviewRefresh = vi.hoisted(() => ({ run: () => {} }));
 const reviewRefresh = vi.hoisted(() => ({ run: async () => {} }));
 const reviewCalls = vi.hoisted(() => ({ args: [] as unknown[] }));
 const poll = vi.hoisted(() => ({ tick: () => {} }));
-const nav = vi.hoisted(() => ({ afterNavigate: () => {} }));
+const nav = vi.hoisted(() => ({
+  afterNavigate: () => {},
+  address: new URL("http://localhost/"),
+}));
 
 vi.mock("$app/navigation", () => ({
   replaceState: (url: string | URL) => {
-    pageState.url = new URL(url, pageState.url.href);
+    nav.address = new URL(url, nav.address.href);
   },
   afterNavigate: (callback: () => void) => {
     nav.afterNavigate = callback;
@@ -50,9 +57,15 @@ vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
-  getPerson: () => {
-    throw new Error("No person is selected");
-  },
+  getPerson: ({ tenantId }: { tenantId: string }) => ({
+    get current() {
+      const person = overview.data?.tenants?.find((p) => p.tenantId === tenantId);
+      return person ? makeDetail(person) : undefined;
+    },
+    error: undefined,
+    loading: false,
+    refresh: async () => {},
+  }),
   getOverview: () => ({
     get current() {
       return overview.data;
@@ -104,13 +117,22 @@ function checked(name: string) {
 
 function openAt(search: string) {
   pageState.url = new URL(`http://localhost/${search}`);
-  render(PeoplePage);
+  nav.address = new URL(pageState.url.href);
+  return render(PeoplePage);
+}
+
+function rowHrefs() {
+  return page
+    .getByTestId("person-row")
+    .elements()
+    .map((link) => link.getAttribute("href"));
 }
 
 beforeEach(async () => {
   await page.viewport(1100, 900);
   pageState.data = { baseDomain: "example.com" };
   pageState.url = new URL("http://localhost/");
+  nav.address = new URL(pageState.url.href);
   overview.data = undefined;
   review.data = undefined;
   for (const key of Object.keys(byDays)) delete byDays[Number(key)];
@@ -119,6 +141,12 @@ beforeEach(async () => {
   overviewRefresh.run = () => {};
   reviewRefresh.run = async () => {};
   reviewCalls.args = [];
+  overviewSockets.length = 0;
+  pageState.shallow = null;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("PeoplePage lens", () => {
@@ -163,13 +191,13 @@ describe("PeoplePage lens", () => {
     await expect.element(page.getByText("Reading age")).toBeVisible();
 
     await page.getByRole("radio", { name: "Review" }).click();
-    await expect.poll(() => pageState.url.search).toBe("?lens=review&days=14");
+    await expect.poll(() => nav.address.search).toBe("?lens=review&days=14");
 
     await page.getByRole("radio", { name: "90 days" }).click();
-    await expect.poll(() => pageState.url.search).toBe("?lens=review&days=90");
+    await expect.poll(() => nav.address.search).toBe("?lens=review&days=90");
 
     await page.getByRole("radio", { name: "Now" }).click();
-    await expect.poll(() => pageState.url.search).toBe("");
+    await expect.poll(() => nav.address.search).toBe("");
   });
 
   it("opens in the lens and period the URL names", async () => {
@@ -358,6 +386,24 @@ describe("PeoplePage lens", () => {
     expect(checked("90 days")).toBe("true");
   });
 
+  it("follows the address a shallow rewrite shows when Back returns to the page", async () => {
+    const people = crowd(5);
+    overview.data = { tenants: people };
+    review.data = reviewOf(people);
+    openAt("");
+    await expect.element(page.getByText("Reading age")).toBeVisible();
+
+    pageState.url = new URL("http://localhost/");
+    Object.assign(pageState, {
+      shallow: { url: new URL("http://localhost/?lens=review&days=30&person=person1") },
+    });
+    nav.afterNavigate();
+
+    await expect.element(page.getByTestId("person-panel")).toBeVisible();
+    expect(checked("30 days")).toBe("true");
+    expect(page.getByTestId("person-row").elements().find((row) => row.getAttribute("aria-current") === "true")?.getAttribute("data-person")).toBe("person1");
+  });
+
   it.each([320, 390])(
     "keeps the title at full width and puts both controls on their own row at %ipx",
     async (width) => {
@@ -383,4 +429,279 @@ describe("PeoplePage lens", () => {
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
     }
   );
+});
+
+describe("PeoplePage address", () => {
+  const people = crowd(5);
+
+  function setUp() {
+    overview.data = { tenants: people };
+    review.data = reviewOf(people);
+  }
+
+  function hrefs(search: (slug: string) => string) {
+    return people.map((p) => `/${search(p.slug!)}`);
+  }
+
+  it("states what the page shows after each step of Review, Now, select, close", async () => {
+    setUp();
+    openAt("");
+    await expect.element(page.getByText("Reading age")).toBeVisible();
+
+    await page.getByRole("radio", { name: "Review" }).click();
+    await expect.poll(() => nav.address.search).toBe("?lens=review&days=14");
+    expect(rowHrefs()).toEqual(hrefs((slug) => `?lens=review&days=14&person=${slug}`));
+
+    await page.getByRole("radio", { name: "Now" }).click();
+    await expect.poll(() => nav.address.search).toBe("");
+    expect(rowHrefs()).toEqual(hrefs((slug) => `?person=${slug}`));
+
+    await page.getByTestId("person-row").nth(1).click();
+    await expect.element(page.getByTestId("person-panel")).toBeVisible();
+    expect(nav.address.search).toBe("?person=person1");
+    expect(checked("Now")).toBe("true");
+    expect(rowHrefs()).toEqual(hrefs((slug) => `?person=${slug}`));
+
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect.poll(() => page.getByTestId("person-panel").elements().length).toBe(0);
+    expect(nav.address.search).toBe("");
+    expect(checked("Now")).toBe("true");
+    expect(rowHrefs()).toEqual(hrefs((slug) => `?person=${slug}`));
+  });
+
+  it("keeps the lens and the period through Now, Review with 30 days, select", async () => {
+    setUp();
+    openAt("");
+    await expect.element(page.getByText("Reading age")).toBeVisible();
+
+    await page.getByRole("radio", { name: "Review" }).click();
+    await page.getByRole("radio", { name: "30 days" }).click();
+    await expect.poll(() => nav.address.search).toBe("?lens=review&days=30");
+    expect(rowHrefs()).toEqual(hrefs((slug) => `?lens=review&days=30&person=${slug}`));
+
+    await page.getByTestId("person-row").nth(2).click();
+    await expect.element(page.getByTestId("person-panel")).toBeVisible();
+    expect(nav.address.search).toBe("?lens=review&days=30&person=person2");
+    expect(checked("30 days")).toBe("true");
+
+    await page.getByRole("radio", { name: "Now" }).click();
+    await expect.poll(() => nav.address.search).toBe("?person=person2");
+    await page.getByRole("radio", { name: "Review" }).click();
+    await expect.poll(() => nav.address.search).toBe("?lens=review&days=30&person=person2");
+  });
+
+  it("drops a person who leaves the list from the address and keeps the lens", async () => {
+    setUp();
+    openAt("");
+    await page.getByRole("radio", { name: "Review" }).click();
+    await page.getByTestId("person-row").nth(1).click();
+    await expect.element(page.getByTestId("person-panel")).toBeVisible();
+    await page.getByRole("radio", { name: "Now" }).click();
+    await expect.poll(() => nav.address.search).toBe("?person=person1");
+
+    overview.data = { tenants: people.filter((p) => p.slug !== "person1") };
+
+    await expect.poll(() => nav.address.search).toBe("");
+    expect(checked("Now")).toBe("true");
+  });
+
+  it.each([
+    ["", "Now", null],
+    ["?person=person1", "Now", "person1"],
+    ["?lens=review&days=14", "14 days", null],
+    ["?lens=review&days=30&person=person1", "30 days", "person1"],
+  ])("shows the lens, period and person that %s names on a reload", async (search, control, person) => {
+    setUp();
+    openAt(search);
+
+    await expect.element(page.getByTestId("person-row").first()).toBeVisible();
+    expect(checked(control)).toBe("true");
+    const open = page
+      .getByTestId("person-row")
+      .elements()
+      .filter((row) => row.getAttribute("aria-current") === "true")
+      .map((row) => row.getAttribute("data-person"));
+    expect(open).toEqual(person ? [person] : []);
+    expect(page.getByTestId("person-panel").elements().length).toBe(person ? 1 : 0);
+  });
+});
+
+describe("PeoplePage review read for people the response lacks", () => {
+  const people = crowd(5);
+
+  function countReads() {
+    const reads = { count: 0, release: () => {} };
+    reviewRefresh.run = async () => {
+      reads.count += 1;
+    };
+    return reads;
+  }
+
+  it("reads once more, shows the placeholder meanwhile, then shows the figures", async () => {
+    overview.data = { tenants: people };
+    review.data = reviewOf(people.slice(1));
+    const reads = countReads();
+    const gate = new Promise<void>((resolve) => (reads.release = resolve));
+    reviewRefresh.run = async () => {
+      reads.count += 1;
+      await gate;
+      review.data = reviewOf(people);
+    };
+    openAt("?lens=review&days=14");
+
+    await expect.element(page.getByTestId("review-loading")).toBeVisible();
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(1);
+    expect(page.getByText("The statistics did not load.").elements()).toHaveLength(0);
+    expect(reads.count).toBe(1);
+
+    reads.release();
+
+    await expect.poll(() => page.getByTestId("review-gmi").elements().length).toBe(5);
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(0);
+    expect(page.getByText("The statistics did not load.").elements()).toHaveLength(0);
+    expect(reads.count).toBe(1);
+  });
+
+  it("states that the statistics did not load for a person still absent, and reads no more", async () => {
+    overview.data = { tenants: people };
+    review.data = reviewOf(people.slice(1));
+    const reads = countReads();
+    openAt("?lens=review&days=14");
+
+    await expect.element(page.getByTestId("review-notice")).toHaveTextContent("The statistics did not load.");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(0);
+    expect(page.getByTestId("review-notice").elements()).toHaveLength(1);
+    expect(reads.count).toBe(1);
+  });
+
+  it("reads once for a person who joins the list after the review was read", async () => {
+    const joined = [...people, makePerson({ slug: "person5" })];
+    overview.data = { tenants: people };
+    review.data = reviewOf(people);
+    const reads = countReads();
+    openAt("?lens=review&days=14");
+    await expect.element(page.getByTestId("review-gmi").first()).toBeVisible();
+    expect(reads.count).toBe(0);
+
+    overview.data = { tenants: joined };
+
+    await expect.element(page.getByTestId("review-notice")).toHaveTextContent("The statistics did not load.");
+    expect(reads.count).toBe(1);
+  });
+
+  it("states that the statistics did not load for a person the API marked failed, with no extra read", async () => {
+    overview.data = { tenants: people };
+    review.data = makeReview(
+      people.map((p, i) =>
+        makeReviewEntry(
+          p,
+          i === 0 ? { unavailable: TenantReviewUnavailable.Failed, statistics: undefined } : {}
+        )
+      )
+    );
+    const reads = countReads();
+    openAt("?lens=review&days=14");
+
+    await expect.element(page.getByTestId("review-notice")).toHaveTextContent("The statistics did not load.");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(page.getByTestId("review-notice").elements()).toHaveLength(1);
+    expect(reads.count).toBe(0);
+  });
+
+  function gatedReads() {
+    const reads = { count: 0, gates: [] as Array<() => void> };
+    reviewRefresh.run = () => {
+      reads.count += 1;
+      return new Promise<void>((resolve) => reads.gates.push(resolve));
+    };
+    return reads;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+
+  it("keeps the placeholder for a person whose read is in flight when an earlier read ends", async () => {
+    const joined = [...people, makePerson({ slug: "person5" })];
+    overview.data = { tenants: people };
+    review.data = reviewOf(people.slice(0, 4));
+    const reads = gatedReads();
+    openAt("?lens=review&days=14");
+    await expect.element(page.getByTestId("review-loading")).toBeVisible();
+
+    overview.data = { tenants: joined };
+    await expect.poll(() => reads.count).toBe(2);
+    await expect.poll(() => page.getByTestId("review-loading").elements().length).toBe(2);
+
+    reads.gates[0]();
+    await settle();
+
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(2);
+    expect(page.getByText("The statistics did not load.").elements()).toHaveLength(0);
+
+    reads.gates[1]();
+
+    await expect.poll(() => page.getByTestId("review-notice").elements().length).toBe(2);
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(0);
+    expect(reads.count).toBe(2);
+  });
+
+  it("keeps the placeholder under a new period while the earlier period's read ends", async () => {
+    overview.data = { tenants: people };
+    review.data = reviewOf(people.slice(1));
+    const reads = gatedReads();
+    openAt("?lens=review&days=14");
+    await expect.element(page.getByTestId("review-loading")).toBeVisible();
+
+    await page.getByRole("radio", { name: "30 days" }).click();
+    await expect.poll(() => reads.count).toBe(2);
+
+    reads.gates[0]();
+    await settle();
+
+    expect(page.getByTestId("review-loading").elements()).toHaveLength(1);
+    expect(page.getByText("The statistics did not load.").elements()).toHaveLength(0);
+  });
+
+  it("reads once for each person: not again for a reorder, a smaller list, or a period shown again", async () => {
+    const joined = [...people, makePerson({ slug: "person5" })];
+    overview.data = { tenants: joined };
+    review.data = reviewOf(people.slice(0, 4));
+    const reads = gatedReads();
+    openAt("?lens=review&days=14");
+    await expect.poll(() => reads.count).toBe(1);
+    reads.gates[0]();
+    await expect.element(page.getByTestId("review-notice").first()).toBeVisible();
+    expect(page.getByTestId("review-notice").elements()).toHaveLength(2);
+
+    overview.data = { tenants: [...joined].reverse() };
+    await settle();
+    overview.data = { tenants: joined.slice(0, 5) };
+    await settle();
+    expect(reads.count).toBe(1);
+
+    overview.data = { tenants: joined };
+    await page.getByRole("radio", { name: "30 days" }).click();
+    await expect.poll(() => reads.count).toBe(2);
+    await page.getByRole("radio", { name: "14 days" }).click();
+    await settle();
+
+    expect(reads.count).toBe(2);
+  });
+
+  it("does not read the review on the overview poll tick or on a ping", async () => {
+    overview.data = { tenants: people };
+    review.data = reviewOf(people);
+    const reads = countReads();
+    openAt("?lens=review&days=14");
+    await expect.element(page.getByTestId("review-gmi").first()).toBeVisible();
+    const callsBefore = reviewCalls.args.length;
+
+    vi.useFakeTimers();
+    poll.tick();
+    overviewSockets[0].handlers.overviewUpdate?.();
+    await vi.advanceTimersByTimeAsync(OVERVIEW_PING_DEBOUNCE_MS);
+
+    expect(reads.count).toBe(0);
+    expect(reviewCalls.args).toHaveLength(callsBefore);
+  });
 });
