@@ -42,15 +42,22 @@ public interface ISubjectRepository
 
     /// <summary>
     /// The first-run owner candidate: the earliest active subject that is neither a system subject
-    /// nor the demo visitor, roles not read. Setup only runs while no member of the tenant holds a
-    /// credential, so this is the account the owner options step created or reused, and the
-    /// ordering is what lets the options and complete steps resolve the same row.
+    /// nor the demo visitor and holds no passkey and no identity-provider link, roles not read.
+    /// That is normally the account an earlier owner options step created and whose ceremony was abandoned,
+    /// and the ordering is what lets the options and complete steps resolve the same row.
     /// </summary>
     /// <remarks>
     /// Pinned to <paramref name="tenantId"/>: setup runs on the apex host, where the scope has no
     /// tenant, and the flow pins the one it is setting up. <c>subjects</c> is not tenant-scoped, so
     /// the read sees every subject on the instance, the demo visitor included, which is why the
     /// demo exclusion is part of the predicate.
+    /// <para>
+    /// A subject that holds a sign-in factor is someone who can already sign in, and setup makes
+    /// owner only the subject that completes it. An identity-provider sign-in creates a subject for
+    /// a first-time identity whether or not setup is complete, and the factor test keeps that
+    /// subject out. Any link counts, not only one to an enabled provider: a provider enabled again
+    /// signs that identity in again.
+    /// </para>
     /// </remarks>
     Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct);
 
