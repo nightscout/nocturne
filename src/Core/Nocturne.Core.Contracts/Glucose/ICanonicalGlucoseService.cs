@@ -28,6 +28,13 @@ public interface ICanonicalGlucoseService
     Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default);
 
     /// <summary>
+    /// Every canonical reading timestamped in [<paramref name="since"/>, <paramref name="to"/>], newest first, under the
+    /// same source filtering as <see cref="GetLatestAsync"/>. Unlike <see cref="GetRecentAsync"/> it is
+    /// not capped, so it serves windows of hours or days.
+    /// </summary>
+    Task<IReadOnlyList<SensorGlucose>> GetWindowAsync(DateTime since, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
     /// The newest reading of <paramref name="reading"/>'s stream and data source in [<paramref name="since"/>, the
     /// reading's timestamp], hidden copies included
     /// (<see cref="V4.Repositories.ISensorGlucoseRepository.GetStreamPredecessorAsync"/>).

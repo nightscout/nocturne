@@ -131,6 +131,37 @@ public class MyTenantsController : ControllerBase
         return Ok(review);
     }
 
+    /// <inheritdoc cref="ITenantOverviewService.GetPersonAsync"/>
+    /// <param name="tenantId">The person's tenant.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("overview/person")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantPersonDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TenantPersonDetail>> GetPerson(
+        [FromQuery] Guid tenantId, CancellationToken ct = default)
+    {
+        var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
+        if (!caller.IsAuthenticated)
+            return Unauthorized();
+
+        if (tenantId == Guid.Empty)
+            return Problem(
+                detail: "A tenant id is required.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request");
+
+        var person = await _overviewService.GetPersonAsync(
+            caller.SubjectId, tenantId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
+        return person is null
+            ? Problem(
+                detail: "No such person.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not Found")
+            : Ok(person);
+    }
+
     /// <summary>
     /// The scopes the credential's grant allows. These endpoints are tenantless, so
     /// MemberScopeMiddleware has not applied the membership restriction: the service resolves it

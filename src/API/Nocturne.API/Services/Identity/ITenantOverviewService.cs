@@ -42,6 +42,19 @@ public interface ITenantOverviewService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the last 24 hours of one person: the item <see cref="GetOverviewAsync"/> builds for
+    /// <paramref name="tenantId"/>, its readings at one per 5-minute bucket, and its newest manual
+    /// boluses and carb intakes. Null when <paramref name="tenantId"/> is not a tenant
+    /// <see cref="GetGlucoseReadTenantsAsync"/> returns, whether it does not exist or the caller may not
+    /// read it, and then nothing of the tenant is read. A caller with no subject of its own has no
+    /// memberships, so it gets null. The read runs under the same history clamp as the overview's.
+    /// </summary>
+    Task<TenantPersonDetail?> GetPersonAsync(
+        Guid? subjectId, Guid tenantId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Returns every active tenant the subject may read glucose for: active memberships
     /// (revoked ones are excluded by the global query filter) whose scopes, as resolved by
     /// <see cref="MemberScopeResolver"/> from <paramref name="authType"/> and

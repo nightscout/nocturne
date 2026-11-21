@@ -18,6 +18,8 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
     /// </summary>
     private const int RecentFetchLimit = 500;
 
+    private const int WindowPageSize = 1000;
+
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IDemoModeService _demoMode;
 
@@ -35,26 +37,42 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
         // No time window: delayed-sync sources (hours-late connector chunks) must still surface
         // a latest value, matching the pre-canonical behaviour of using a write batch's newest
         // reading however old it was.
-        var latest = await ReadAsync(from: null, limit: 1, ct);
+        var latest = await ReadAsync(from: null, to: null, limit: 1, after: null, ct);
         return latest.Count > 0 ? latest[0] : null;
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default)
-        => ReadAsync(since, RecentFetchLimit, ct);
+        => ReadAsync(since, to: null, RecentFetchLimit, after: null, ct);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> GetWindowAsync(
+        DateTime since, DateTime to, CancellationToken ct = default)
+    {
+        var window = new List<SensorGlucose>();
+        while (true)
+        {
+            var page = await ReadAsync(since, to, WindowPageSize, window.Count == 0 ? null : window[^1], ct);
+            window.AddRange(page);
+            if (page.Count < WindowPageSize)
+                return window;
+        }
+    }
 
     /// <inheritdoc />
     public Task<SensorGlucose?> GetStreamPredecessorAsync(
         SensorGlucose reading, DateTime since, CancellationToken ct = default)
         => _sensorGlucoseRepository.GetStreamPredecessorAsync(reading, since, ct);
 
-    private async Task<IReadOnlyList<SensorGlucose>> ReadAsync(DateTime? from, int limit, CancellationToken ct)
+    private async Task<IReadOnlyList<SensorGlucose>> ReadAsync(
+        DateTime? from, DateTime? to, int limit, SensorGlucose? after, CancellationToken ct)
     {
         var (source, streams) = _demoMode.IsEnabled
             ? (DataSources.DemoService, GlucoseStreams.Canonical)
             : ((string?)null, GlucoseStreams.CanonicalExcludingEphemeral);
         return (await _sensorGlucoseRepository.GetAsync(
-            from: from, to: null, device: null, source: source,
-            limit: limit, offset: 0, descending: true, ct: ct, streams: streams)).ToList();
+            from: from, to: to, device: null, source: source,
+            limit: limit, offset: 0, descending: true,
+            afterTimestamp: after?.Timestamp, afterId: after?.Id, ct: ct, streams: streams)).ToList();
     }
 }
