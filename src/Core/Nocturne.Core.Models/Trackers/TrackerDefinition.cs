@@ -84,6 +84,8 @@ public sealed record TrackerDefinition
     /// <returns>The definition, or the first rule the draft breaks, checked in <see cref="TrackerDefinitionRule"/> order.</returns>
     public static TrackerDefinitionResult Create(TrackerDefinitionDraft draft, string createdBy, DateTime createdAt)
     {
+        if (CheckName(draft.Name) is { } nameError)
+            return nameError;
         var thresholds = draft.NotificationThresholds ?? [];
         if (CheckThresholds(thresholds, draft.LifespanHours, draft.Mode) is { } thresholdError)
             return thresholdError;
@@ -134,8 +136,8 @@ public sealed record TrackerDefinition
     /// <returns>The revised definition, or the first rule it breaks, checked in <see cref="TrackerDefinitionRule"/> order.</returns>
     public TrackerDefinitionResult Revise(TrackerDefinitionEdit edit)
     {
-        if (edit.Name is not null && string.IsNullOrWhiteSpace(edit.Name))
-            return Broken(TrackerDefinitionRule.Name, "Name is required");
+        if (edit.Name is not null && CheckName(edit.Name) is { } nameError)
+            return nameError;
         var mode = edit.Mode ?? Mode;
         var lifespan = mode == TrackerMode.Event ? edit.LifespanHours : edit.LifespanHours ?? LifespanHours;
         var thresholds = edit.NotificationThresholds ?? NotificationThresholds;
@@ -249,6 +251,9 @@ public sealed record TrackerDefinition
         UpdatedAt = updatedAt,
         NotificationThresholds = notificationThresholds ?? [],
     };
+
+    private static TrackerDefinitionResult? CheckName(string name) =>
+        string.IsNullOrWhiteSpace(name) ? Broken(TrackerDefinitionRule.Name, "Name is required") : null;
 
     /// <summary>
     /// A Duration tracker's negative threshold counts back from the end of its lifespan, so it needs
@@ -416,7 +421,7 @@ public sealed record TrackerDefinitionEdit
 /// <summary>The rules a <see cref="TrackerDefinition"/> keeps, in the order they are checked.</summary>
 public enum TrackerDefinitionRule
 {
-    /// <summary>A revision does not name a definition nothing.</summary>
+    /// <summary>A definition has a name that is not blank.</summary>
     Name,
 
     /// <summary>A Duration tracker's negative threshold needs a lifespan and falls inside it.</summary>

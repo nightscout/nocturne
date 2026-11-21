@@ -22,6 +22,21 @@ public class TrackerDefinitionTests
         result.Error.Should().Be(new TrackerDefinitionError(rule, message));
     }
 
+    // Name
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void ADraftNamedNothing_IsRefused(string name) =>
+        ShouldBreak(
+            Create(new() { Name = name, Category = TrackerCategory.Custom }),
+            TrackerDefinitionRule.Name,
+            "Name is required");
+
+    [Fact]
+    public void ANamelessDraftBreakingAnotherRule_ReportsTheName() =>
+        Create(new() { Mode = TrackerMode.Event, LifespanHours = 24 }).Error!.Rule.Should().Be(TrackerDefinitionRule.Name);
+
     // Thresholds
 
     [Fact]
