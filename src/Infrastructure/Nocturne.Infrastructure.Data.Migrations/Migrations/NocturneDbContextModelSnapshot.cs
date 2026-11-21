@@ -244,6 +244,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<string>("UnevaluableConditionVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("unevaluable_condition_version");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AlertRuleId", "EndedAt")

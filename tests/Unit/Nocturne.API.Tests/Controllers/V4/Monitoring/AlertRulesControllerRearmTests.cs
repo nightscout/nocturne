@@ -79,7 +79,7 @@ public class AlertRulesControllerRearmTests
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>());
         return (controller, db);
     }

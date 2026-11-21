@@ -113,6 +113,7 @@ public class AlertSweepJobSnoozeTests
         services.AddSingleton(_canonical.Object);
         services.AddSingleton(enricher.Object);
         services.AddSingleton(_orchestrator.Object);
+        services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
         services.AddSingleton<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(
             new InMemoryTrackerRepository(instances.Select(i => new AlertRule
             {

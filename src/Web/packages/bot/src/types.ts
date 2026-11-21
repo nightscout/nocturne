@@ -160,6 +160,11 @@ export interface HeartbeatRequest {
 export type AlertSeverity = "critical" | "warning" | "info";
 
 export interface AlertPayload {
+  /**
+   * `unevaluable` is the notice that the rule cannot run until its conditions are
+   * edited: it has no glucose value and nothing to acknowledge. Absent means `excursion`.
+   */
+  kind?: "excursion" | "unevaluable";
   alertType: string;
   ruleName: string;
   glucoseValue: number | null;

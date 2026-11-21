@@ -182,9 +182,9 @@ internal static class ReportDataSources
             [BodyFat] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.BodyFat, ct),
             [LeanMass] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.LeanMass, ct),
             [AlertExcursions] = (db, r, from, to, _, ct) =>
-                db.AlertExcursions.AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
+                db.AlertExcursions.OfCondition().AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
             [AlertInstances] = (db, r, from, to, _, ct) =>
-                db.AlertInstances.AnyAsync(e => !e.IsTest && e.TriggeredAt >= from && e.TriggeredAt < to, ct),
+                db.AlertInstances.OfCondition().AnyAsync(e => e.TriggeredAt >= from && e.TriggeredAt < to, ct),
             [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyTouchingAsync(from, to, ct),
             [SensorTrendRates] = (db, r, from, to, _, ct) =>
                 Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),

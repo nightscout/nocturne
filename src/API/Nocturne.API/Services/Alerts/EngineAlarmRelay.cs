@@ -11,6 +11,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -65,9 +66,15 @@ internal sealed class EngineAlarmRelay(
     ILogger<EngineAlarmRelay> logger)
     : IEngineAlarmRelay
 {
+    /// <remarks>
+    /// A notice that a rule cannot be evaluated (<see cref="AlertPayloadKind.Unevaluable"/>) is not
+    /// raised: every <c>/alarm</c> client (AAPS, the web overlay) would sound it as a glucose alarm.
+    /// Its excursion has no null end, so it is never alarming, and the all-clear reads only
+    /// excursions of a condition.
+    /// </remarks>
     public async Task RaiseAsync(AlertPayload payload, CancellationToken ct)
     {
-        if (!RaisesAlarm(payload.Severity)) return;
+        if (payload.Kind != AlertPayloadKind.Excursion || !RaisesAlarm(payload.Severity)) return;
 
         try
         {
@@ -91,8 +98,8 @@ internal sealed class EngineAlarmRelay(
 
             var raisedAnAlarm = await db.AlertInstances
                 .AsNoTracking()
+                .OfCondition()
                 .AnyAsync(i => changedExcursionIds.Contains(i.AlertExcursionId)
-                               && !i.IsTest
                                && i.AlertExcursion!.AlertRule!.Severity != AlertRuleSeverity.Info, ct);
             if (!raisedAnAlarm) return;
 
@@ -169,8 +176,8 @@ internal sealed class EngineAlarmRelay(
     private static IQueryable<AlertInstanceEntity> Alarming(NocturneDbContext db, DateTime now) =>
         db.AlertInstances
             .AsNoTracking()
+            .OfCondition()
             .Where(i => i.ResolvedAt == null
-                        && !i.IsTest
                         && i.SuppressionReason == null
                         && (i.SnoozedUntil == null || i.SnoozedUntil <= now)
                         && i.AlertExcursion!.EndedAt == null

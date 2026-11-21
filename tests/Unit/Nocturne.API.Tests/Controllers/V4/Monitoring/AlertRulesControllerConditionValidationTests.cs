@@ -47,7 +47,7 @@ public class AlertRulesControllerConditionValidationTests
             validator,
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             logger ?? Mock.Of<ILogger<AlertRulesController>>());
         return (controller, ctx);
     }

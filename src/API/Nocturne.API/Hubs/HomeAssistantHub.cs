@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Hubs;
 
@@ -125,8 +126,13 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
         await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
         var now = DateTime.UtcNow;
 
-        // Find failed HA deliveries for this instance that belong to open excursions and are
-        // not under an AlertSnooze (the resume dispatch re-sends those once it lapses)
+        // Find failed HA deliveries for this instance that belong to open excursions, or to a
+        // notice that a rule cannot be evaluated while it stands, and are not under an AlertSnooze
+        // (the resume dispatch re-sends those once it lapses)
+        var ofOpenExcursions = db.AlertInstances.OfCondition(includeTest: true)
+            .Where(i => i.AlertExcursion!.EndedAt == null)
+            .Select(i => i.Id);
+        var ofStandingNotices = db.AlertInstances.OfStandingNotices().Select(i => i.Id);
         var failedDeliveries = await db.AlertDeliveries
             .Include(d => d.AlertInstance)
                 .ThenInclude(i => i!.AlertExcursion)
@@ -135,8 +141,7 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
                         && d.Destination == instanceId
                         && d.Status == "failed"
                         && d.AlertInstance != null
-                        && d.AlertInstance.AlertExcursion != null
-                        && d.AlertInstance.AlertExcursion.EndedAt == null
+                        && (ofOpenExcursions.Contains(d.AlertInstanceId) || ofStandingNotices.Contains(d.AlertInstanceId))
                         && (d.AlertInstance.SnoozedUntil == null || d.AlertInstance.SnoozedUntil <= now))
             .ToListAsync(ct);
 

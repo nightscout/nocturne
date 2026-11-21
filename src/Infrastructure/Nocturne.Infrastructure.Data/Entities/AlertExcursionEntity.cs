@@ -59,6 +59,24 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     [Column("hysteresis_started_at")]
     public DateTime? HysteresisStartedAt { get; set; }
 
+    /// <summary>
+    /// Set only on the row of a notice that the rule's stored condition cannot be evaluated: the
+    /// version of the condition the notice was sent for (<c>UnevaluableRuleNotice.VersionOf</c>).
+    /// Its instance stays unresolved while the notice stands. Null on every excursion of a
+    /// condition; <see cref="Extensions.AlertExcursionQueries"/> tells the two apart.
+    /// </summary>
+    [Column("unevaluable_condition_version")]
+    [MaxLength(64)]
+    public string? UnevaluableConditionVersion { get; set; }
+
+    /// <summary>
+    /// The <see cref="EndedAt"/> of a notice that stands (PostgreSQL <c>infinity</c>), set to the
+    /// time it is resolved. A null end would make it an open excursion to every reader of one. An
+    /// end in the past would let the 24-hour history clamp, which shows an excursion while its end
+    /// is null or within the last day, hide a notice that still stands from a clamped member.
+    /// </summary>
+    public static readonly DateTime NoticeStandingEnd = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+
     // Navigation
 
     /// <summary>

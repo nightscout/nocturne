@@ -66,25 +66,38 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
-        // Always emit the alert_dispatch broadcast so SignalR-connected web clients render
+        // Every fire emits the alert_dispatch broadcast so SignalR-connected web clients render
         // the toast even when there are zero configured channels (the user explicitly opted
-        // out of every push/sound/in-app delivery surface).
-        try
+        // out of every push/sound/in-app delivery surface). A notice reaches only its channels:
+        // the hub's subscribers are not its recipients.
+        var notice = payload.Kind == AlertPayloadKind.Unevaluable;
+        if (!notice)
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
+            try
+            {
+                await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
+            }
         }
 
         await alarmRelay.RaiseAsync(payload, ct);
 
         var payloadJson = JsonSerializer.Serialize(payload);
 
+        var configured = channels.Count;
+        if (notice)
+            channels = [.. channels.Where(c => c.ChannelType != ChannelType.DeviceAction)];
+
         if (channels.Count == 0)
         {
-            db.AlertDeliveries.Add(NoChannelAnchor(tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false));
+            var anchor = NoChannelAnchor(
+                tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false);
+            if (configured > 0)
+                anchor.LastError = "No channel of the rule carries a notice that it cannot be evaluated";
+            db.AlertDeliveries.Add(anchor);
             await db.SaveChangesAsync(ct);
             return;
         }
@@ -325,7 +338,9 @@ internal sealed class AlertDeliveryService(
     /// <summary>
     /// The delivery row a fire of a rule with no channels leaves behind. Without it History cannot
     /// tell "every provider is broken" from "no channels were chosen", and the <c>alert_dispatch</c>
-    /// broadcast would be the fire's only trace. It reached no one, so it is recorded failed.
+    /// broadcast would be the fire's only trace. It reached no one, so it is recorded failed. A
+    /// notice that a rule cannot be evaluated is not carried by a <c>device_action</c> channel (an
+    /// actuation is a glucose alarm on the device), so a rule with only those leaves this row too.
     /// </summary>
     private static AlertDeliveryEntity NoChannelAnchor(
         Guid tenantId, Guid alertInstanceId, string payloadJson, DateTime now, bool isTest) => new()

@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.ClientDevices;
 
 namespace Nocturne.API.Services.Alerts.Providers;
 
@@ -30,6 +31,19 @@ internal sealed class InAppProvider(
     /// </summary>
     public const string NotificationType = "alert.firing";
 
+    /// <summary>
+    /// The type of the notice that a rule cannot be evaluated. Its title is the rule's name and its
+    /// subtitle the label key <see cref="UnevaluableSubtitle"/>, which the web app renders. It has
+    /// no actions: there is no excursion to acknowledge.
+    /// </summary>
+    public const string UnevaluableNotificationType = DeviceNotificationMirror.AlertUnevaluableType;
+
+    public const string UnevaluableSubtitle = "alert_unevaluable_subtitle";
+
+    /// <summary>The type of the notifications an excursion, or a notice, created.</summary>
+    public static string NotificationTypeFor(bool isUnevaluableNotice) =>
+        isUnevaluableNotice ? UnevaluableNotificationType : NotificationType;
+
     public const string AckActionId = "ack";
     public const string DismissActionId = "dismiss";
 
@@ -53,20 +67,20 @@ internal sealed class InAppProvider(
 
         var userId = subjectId.ToString();
 
-        var subtitle = BuildSubtitle(payload);
+        var notice = payload.Kind == AlertPayloadKind.Unevaluable;
         var urgency = MapSeverity(payload);
 
         try
         {
             await notificationService.CreateNotificationAsync(
                 userId: userId,
-                type: NotificationType,
+                type: NotificationTypeFor(notice),
                 title: payload.RuleName,
                 category: NotificationCategory.Alert,
                 urgency: urgency,
-                subtitle: subtitle,
+                subtitle: notice ? UnevaluableSubtitle : BuildSubtitle(payload),
                 sourceId: payload.ExcursionId.ToString(),
-                actions: AlertActions,
+                actions: notice ? null : AlertActions,
                 cancellationToken: ct);
 
             logger.LogDebug(

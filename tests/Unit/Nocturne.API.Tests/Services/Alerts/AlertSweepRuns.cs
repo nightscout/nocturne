@@ -33,6 +33,9 @@ internal static class AlertSweepRuns
         repository
             .Setup(r => r.GetAutoResolveExcursionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        repository
+            .Setup(r => r.GetStandingUnevaluableNoticesAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         return repository;
     }
 

@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -40,6 +41,7 @@ internal sealed class AlertSnoozeService(
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
                 .ThenInclude(e => e!.AlertRule)
+            .OfCondition(includeTest: true)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
 
         if (instance is null)
@@ -97,6 +99,7 @@ internal sealed class AlertSnoozeService(
                 .AsNoTracking()
                 .Include(i => i.AlertExcursion)
                     .ThenInclude(e => e!.AlertRule)
+                .OfCondition(includeTest: true)
                 .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
         }
 

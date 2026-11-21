@@ -67,6 +67,28 @@ describe("AlertCard button values", () => {
   });
 });
 
+describe("AlertCard for a rule that cannot run", () => {
+  const notice = {
+    ...payload,
+    kind: "unevaluable",
+    glucoseValue: null,
+    trend: null,
+    trendRate: null,
+    severity: "critical",
+  } as AlertPayload;
+
+  it("names the rule, says it cannot run, and shows no reading or action", () => {
+    const card = AlertCard({ payload: notice });
+
+    expect(cardTitle(card)).toBe("CRITICAL: Urgent low");
+    expect(cardTexts(card)).toEqual([
+      "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+    ]);
+    expect(cardFields(card)).toHaveLength(0);
+    expect(cardButtons(card)).toHaveLength(0);
+  });
+});
+
 describe("AcknowledgedCard", () => {
   it("states the outcome and offers no action", () => {
     const card = AcknowledgedCard({ detail: "By Sam Tester." });

@@ -130,6 +130,30 @@ recorded in alert history; it just does not notify anyone.
 The channels on offer depend on what your site has set up. A chat channel only
 appears once that chat app is connected.
 
+### When a rule cannot run
+
+If Nocturne cannot evaluate the condition of an enabled rule, the rule cannot
+fire until you edit it. Nocturne then sends one notice through the rule's
+channels to tell its recipients. It sends the notice again only when the
+condition changes, or when you disable the rule and enable it again. A
+**Device** channel does not get the notice. The notice clears when you fix the
+condition, disable the rule or delete it.
+
+### Webhook messages
+
+A webhook channel sends each message as a JSON object. The `Kind` field tells
+you what the message is:
+
+| `Kind` | Meaning |
+|--------|---------|
+| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. |
+| `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
+
+The other fields are the same for both kinds: `RuleName`, `Severity`,
+`AlertType`, `ExcursionId`, `InstanceId`, `TenantId`, `SubjectName` and
+`ActiveExcursionCount`. A receiver that does not know a value of `Kind` must
+not show the message as a glucose alert.
+
 ## Auto-resolve
 
 Auto-resolve closes an alert when a second condition becomes true, even if the
