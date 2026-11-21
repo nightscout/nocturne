@@ -4,11 +4,12 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Monitoring;
 
 /// <summary>
-/// A ready-made tracker: an unsaved definition the tracker wizard starts from. A template is where a
-/// definition starts and nothing ties a definition to it afterwards.
+/// A ready-made tracker: the draft the tracker wizard starts from. A template is where a definition
+/// starts and nothing ties a definition to it afterwards. It is a draft, not a definition, since the
+/// person names the tracker and a definition always has a name.
 /// </summary>
 /// <param name="Id">The template's stable key; the wizard has its name and description under it.</param>
-public sealed record TrackerTemplate(string Id, TrackerDefinition Definition);
+public sealed record TrackerTemplate(string Id, TrackerDefinitionDraft Draft);
 
 /// <summary>The trackers the wizard offers, in the order they are offered.</summary>
 public static class TrackerTemplates
@@ -29,23 +30,19 @@ public static class TrackerTemplates
     public const int ReminderLifespanHours = 30 * 24;
 
     /// <summary>
-    /// The templates for a tenant with <paramref name="devices"/>, as of <paramref name="now"/>. A
+    /// The templates for a tenant with <paramref name="devices"/>. A
     /// consumable is the one its registered device calls for (<see cref="ConsumableTrackerSpecs.For"/>),
     /// so a pod stands in for the infusion site and no reservoir or pump battery is offered beside it.
     /// </summary>
-    public static IReadOnlyList<TrackerTemplate> For(IReadOnlyCollection<PatientDevice> devices, DateTime now)
+    public static IReadOnlyList<TrackerTemplate> For(IReadOnlyCollection<PatientDevice> devices)
     {
         var templates = new List<TrackerTemplate>();
 
         void Add(string id, ConsumableTrackerSpec? spec)
         {
             if (spec is not null)
-                templates.Add(new(id, ConsumableTrackerSpecs.ToDefinition(spec, string.Empty, now)));
+                templates.Add(new(id, ConsumableTrackerSpecs.ToDraft(spec)));
         }
-
-        TrackerDefinition Made(TrackerDefinitionDraft draft) =>
-            TrackerDefinition.Create(draft, string.Empty, now).Definition
-            ?? throw new InvalidOperationException("A tracker template is not a valid definition");
 
         Add(Sensor, ConsumableTrackerSpecs.For(LegacyConsumableKind.Sensor, devices));
 
@@ -58,7 +55,7 @@ public static class TrackerTemplates
         Add(Reservoir, ConsumableTrackerSpecs.For(LegacyConsumableKind.Reservoir, devices));
         Add(PumpBattery, ConsumableTrackerSpecs.For(LegacyConsumableKind.PumpBattery, devices));
 
-        templates.Add(new(Appointment, Made(new TrackerDefinitionDraft
+        templates.Add(new(Appointment, new TrackerDefinitionDraft
         {
             Category = TrackerCategory.Appointment,
             Icon = "calendar",
@@ -67,8 +64,8 @@ public static class TrackerTemplates
             [
                 new(Guid.Empty, NotificationUrgency.Info, -AppointmentReminderHours, null, DisplayOrder: 0),
             ],
-        })));
-        templates.Add(new(Reminder, Made(new TrackerDefinitionDraft
+        }));
+        templates.Add(new(Reminder, new TrackerDefinitionDraft
         {
             Category = TrackerCategory.Reminder,
             Icon = "bell",
@@ -78,12 +75,12 @@ public static class TrackerTemplates
             [
                 new(Guid.Empty, NotificationUrgency.Warn, ReminderLifespanHours, null, DisplayOrder: 0),
             ],
-        })));
-        templates.Add(new(Custom, Made(new TrackerDefinitionDraft
+        }));
+        templates.Add(new(Custom, new TrackerDefinitionDraft
         {
             Category = TrackerCategory.Custom,
             Mode = TrackerMode.Duration,
-        })));
+        }));
 
         return templates;
     }
