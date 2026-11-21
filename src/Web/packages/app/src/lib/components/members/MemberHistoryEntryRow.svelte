@@ -6,7 +6,7 @@
     type MemberHistoryActor,
     type MemberHistoryEntry,
     type TenantRoleDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { scopeLabels } from "#lib/constants/scope-labels.svelte.js";
   import { formatDateTime } from "#lib/utils/formatting.js";
 
