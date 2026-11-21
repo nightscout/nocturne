@@ -297,8 +297,9 @@ public class TenantController : ControllerBase
         Guid id, Guid subjectId,
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] ISubjectRepository subjects,
         CancellationToken ct) =>
-        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, null, ct);
+        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, null, subjects, ct);
 
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
@@ -324,7 +325,7 @@ public class TenantController : ControllerBase
         [FromServices] MemberRecoveryEligibility eligibility,
         CancellationToken ct) =>
         IssueCodeAsync(
-            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
+            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, null, ct);
 
     /// <param name="id">The tenant the member belongs to; the caller must own it.</param>
     /// <param name="subjectId">The member the code is issued for.</param>
@@ -332,12 +333,14 @@ public class TenantController : ControllerBase
     /// <param name="dbContextFactory">Opens the context pinned to the tenant that the code is written through.</param>
     /// <param name="loginCodeService">Issues the code.</param>
     /// <param name="eligibility">For a recovery code: refuses a member who can still sign in.</param>
+    /// <param name="activeSubjects">For a login code: refuses a member who is not active, as it refuses a non-member.</param>
     /// <param name="ct">Cancels the operation.</param>
     private async Task<IActionResult> IssueCodeAsync(
         Guid id, Guid subjectId, LoginCodePurpose purpose,
         INocturneDbContextFactory dbContextFactory,
         ILoginCodeService loginCodeService,
         MemberRecoveryEligibility? eligibility,
+        ISubjectRepository? activeSubjects,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
@@ -345,6 +348,10 @@ public class TenantController : ControllerBase
 
         var tenant = await _tenantService.GetByIdAsync(id, ct);
         if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+            return NotFound();
+
+        if (activeSubjects is not null
+            && await activeSubjects.GetSignInStateAsync(subjectId, ct) is not { IsActive: true })
             return NotFound();
 
         if (!tenant.IsActive)

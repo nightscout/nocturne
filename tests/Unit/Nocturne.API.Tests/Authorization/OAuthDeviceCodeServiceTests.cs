@@ -722,6 +722,30 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_ForADeactivatedSubject_IsAnsweredAsAnUnknownCodeIsAndStoresNoToken()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: grantId,
+            subjectId: _testSubjectId);
+        _mockSubjectService.Setup(s => s.GetSubjectByIdAsync(_testSubjectId))
+            .ReturnsAsync(new Core.Models.Authorization.Subject { Id = _testSubjectId, Name = "Test User", IsActive = false });
+
+        var unknown = await CreateService(db).ExchangeDeviceCodeAsync("unknown-device-code", TestClientId);
+
+        var result = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.False(result.Success);
+        Assert.Equal((unknown.Error, unknown.ErrorDescription), (result.Error, result.ErrorDescription));
+        Assert.Null(result.AccessToken);
+        Assert.False(await db.OAuthRefreshTokens.AnyAsync());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

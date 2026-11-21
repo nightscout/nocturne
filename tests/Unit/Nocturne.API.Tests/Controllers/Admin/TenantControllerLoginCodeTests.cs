@@ -130,6 +130,20 @@ public class TenantControllerLoginCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task IssueLoginCode_ForADeactivatedMember_ReturnsNotFoundAndMintsNothing()
+    {
+        await _tenantContext.Subjects.Where(s => s.Id == _memberSubjectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+
+        var result = await InvokeAsync(_tenantId, _memberSubjectId);
+
+        result.Should().BeOfType<NotFoundResult>();
+        (await _tenantContext.LoginCodes.AnyAsync()).Should().BeFalse();
+        (await _auditContext.AuthAuditLog.AnyAsync(a => a.EventType == AuthAuditEventType.LoginCodeIssued))
+            .Should().BeFalse();
+    }
+
+    [Fact]
     public async Task IssueLoginCode_OnAnInactiveTenant_IsRefusedAndMintsNothing()
     {
         _tenantService
@@ -296,7 +310,8 @@ public class TenantControllerLoginCodeTests : IDisposable
 
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>
         await _controller.IssueLoginCode(
-            tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService, CancellationToken.None);
+            tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService,
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()), CancellationToken.None);
 
     private async Task<LoginCode> IssueAsync(Guid subjectId)
     {

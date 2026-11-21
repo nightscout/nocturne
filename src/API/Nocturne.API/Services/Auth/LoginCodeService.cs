@@ -39,9 +39,10 @@ public interface ILoginCodeService
     /// <summary>
     /// Redeems <paramref name="code"/> and returns the member and purpose it was minted for, or
     /// <see langword="null"/> when it is unknown, expired, already consumed, minted for a purpose
-    /// outside <paramref name="purposes"/>, belongs to another tenant, or is refused by
-    /// <paramref name="admits"/>. A code is spent only by a redemption that returns it: the claim
-    /// is conditional on the code being unspent, so two concurrent callers cannot both succeed.
+    /// outside <paramref name="purposes"/>, belongs to another tenant, is a login code whose member
+    /// is no longer active, or is refused by <paramref name="admits"/>. A code is spent only by a
+    /// redemption that returns it: the claim is conditional on the code being unspent, so two
+    /// concurrent callers cannot both succeed.
     /// </summary>
     /// <param name="dbContext">The context the redemption runs on, in one transaction.</param>
     /// <param name="code">The code as presented.</param>
@@ -170,6 +171,7 @@ public class LoginCodeService : ILoginCodeService
         {
             var live = await dbContext.LoginCodes.AsNoTracking()
                 .Where(c => c.CodeHash == codeHash && purposes.Contains(c.Purpose) && c.ConsumedAt == null && c.ExpiresAt > now)
+                .Where(c => c.Purpose != LoginCodePurpose.Login || c.Subject!.IsActive)
                 .Select(c => new { c.Id, c.SubjectId, c.Purpose })
                 .FirstOrDefaultAsync(token);
             if (live is null)
@@ -184,6 +186,7 @@ public class LoginCodeService : ILoginCodeService
             // one through.
             var claimed = await dbContext.LoginCodes
                 .Where(c => c.Id == live.Id && c.ConsumedAt == null)
+                .Where(c => c.Purpose != LoginCodePurpose.Login || c.Subject!.IsActive)
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), token);
             if (claimed == 0)
                 return null;

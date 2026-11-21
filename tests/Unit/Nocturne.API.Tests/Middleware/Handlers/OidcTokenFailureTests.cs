@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -45,19 +46,18 @@ public class OidcTokenFailureTests
         new OperationCanceledException(),
     };
 
-    private static string TokenFrom(string issuer)
-    {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("oidc-token-failure-test-signing-key-32+chars"));
-        return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+    private static string TokenFrom(string issuer, SigningCredentials? credentials = null) =>
+        new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
             issuer: issuer,
             audience: "client",
             claims: [new System.Security.Claims.Claim("sub", "external-subject")],
             expires: DateTime.UtcNow.AddMinutes(5),
-            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)));
-    }
+            signingCredentials: credentials ?? new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes("oidc-token-failure-test-signing-key-32+chars")),
+                SecurityAlgorithms.HmacSha256)));
 
     private static (OidcTokenHandler Handler, DefaultHttpContext Context) Build(
-        string issuer, Func<Task<OidcProvider?>> lookup, HttpMessageHandler idp)
+        string issuer, Func<Task<OidcProvider?>> lookup, HttpMessageHandler idp, ISubjectService? subjects = null)
     {
         var providers = new Mock<IOidcProviderService>();
         providers.Setup(p => p.GetProviderByIssuerAsync(issuer)).Returns(lookup);
@@ -65,7 +65,10 @@ public class OidcTokenFailureTests
         var http = new Mock<IHttpClientFactory>();
         http.Setup(f => f.CreateClient("OidcProvider")).Returns(() => new HttpClient(idp, disposeHandler: false));
 
-        var services = new ServiceCollection().AddSingleton(providers.Object).BuildServiceProvider();
+        var collection = new ServiceCollection().AddSingleton(providers.Object);
+        if (subjects is not null)
+            collection.AddSingleton(subjects);
+        var services = collection.BuildServiceProvider();
 
         var handler = new OidcTokenHandler(
             services.GetRequiredService<IServiceScopeFactory>(),
@@ -118,20 +121,55 @@ public class OidcTokenFailureTests
     public async Task A_token_the_providers_keys_do_not_vouch_for_is_not_authenticated()
     {
         const string issuer = "https://empty-keys.idp.test";
-        var idp = new StubHttp(request => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(
-                request.RequestUri!.AbsolutePath.EndsWith("openid-configuration", StringComparison.Ordinal)
-                    ? "{\"issuer\":\"" + issuer + "\",\"jwks_uri\":\"" + issuer + "/jwks\"}"
-                    : "{\"keys\":[]}",
-                Encoding.UTF8,
-                "application/json"),
-        });
-        var (handler, context) = Build(issuer, () => Task.FromResult<OidcProvider?>(ProviderFor(issuer)), idp);
+        var (handler, context) = Build(
+            issuer, () => Task.FromResult<OidcProvider?>(ProviderFor(issuer)), Idp(issuer, "{\"keys\":[]}"));
 
         var result = await handler.AuthenticateAsync(context);
 
         result.Succeeded.Should().BeFalse();
         result.ShouldSkip.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_valid_token_authenticates_only_while_its_subject_is_active(bool isActive)
+    {
+        var issuer = $"https://subject-state-{isActive}.idp.test";
+        var subjectId = Guid.CreateVersion7();
+        var subjects = new Mock<ISubjectService>();
+        subjects.Setup(s => s.FindOrCreateFromOidcAsync(
+                It.IsAny<Guid>(), "external-subject", issuer, It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
+            .ReturnsAsync(new Nocturne.Core.Models.Authorization.Subject { Id = subjectId, Name = "External", IsActive = isActive });
+        subjects.Setup(s => s.GetSubjectPermissionsAsync(subjectId)).ReturnsAsync(new List<string>());
+        subjects.Setup(s => s.GetSubjectRolesAsync(subjectId)).ReturnsAsync(new List<string>());
+        using var rsa = RSA.Create(2048);
+        var key = new RsaSecurityKey(rsa) { KeyId = "idp-key" };
+        var parameters = rsa.ExportParameters(includePrivateParameters: false);
+        var keys = "{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\",\"kid\":\"idp-key\",\"n\":\""
+                   + Base64UrlEncoder.Encode(parameters.Modulus) + "\",\"e\":\""
+                   + Base64UrlEncoder.Encode(parameters.Exponent) + "\"}]}";
+        var (handler, context) = Build(
+            issuer, () => Task.FromResult<OidcProvider?>(ProviderFor(issuer)), Idp(issuer, keys), subjects.Object);
+        context.Request.Headers.Authorization =
+            $"Bearer {TokenFrom(issuer, new SigningCredentials(key, SecurityAlgorithms.RsaSha256))}";
+
+        var result = await handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().Be(isActive);
+        result.ShouldSkip.Should().BeFalse();
+        if (!isActive)
+            subjects.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    private static StubHttp Idp(string issuer, string keys) => new(request => new HttpResponseMessage(HttpStatusCode.OK)
+    {
+        Content = new StringContent(
+            request.RequestUri!.AbsolutePath.EndsWith("openid-configuration", StringComparison.Ordinal)
+                ? "{\"issuer\":\"" + issuer + "\",\"jwks_uri\":\"" + issuer + "/jwks\"}"
+                : keys,
+            Encoding.UTF8,
+            "application/json"),
+    });
 }

@@ -212,6 +212,26 @@ public class LoginHandoffControllerTests : IDisposable
         row.TenantId.Should().Be(_tenantId);
     }
 
+    [Fact]
+    public async Task Exchange_ACodeWhoseMemberWasDeactivated_FailsAsARefusalAndIssuesNoSession()
+    {
+        SeedCode();
+        await _tenantContext.Subjects.Where(s => s.Id == _memberSubjectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+
+        var result = await InvokeAsync();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        SetCookies().Should().BeEmpty();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        var row = await _auditContext.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.EventType.Should().Be(AuthAuditEventType.LoginHandoffFailed);
+        row.TargetSubjectId.Should().BeNull();
+    }
+
     private void SeedCode(DateTime? expiresAt = null, LoginCodePurpose purpose = LoginCodePurpose.Login)
     {
         _tenantContext.LoginCodes.Add(new LoginCodeEntity
