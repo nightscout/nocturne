@@ -174,6 +174,20 @@ public class SubjectRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task TheSetupOwnerCandidateHoldsNoSignInFactor()
+    {
+        var withPasskey = await CreateAsync(new NewSubject("Passkey", Id: Ordered(1)));
+        AddPasskey(withPasskey);
+        var linked = await CreateAsync(new NewSubject("Linked", Id: Ordered(2)));
+        await LinkAsync(linked, _provider, "ext");
+        var linkedToDisabled = await CreateAsync(new NewSubject("Linked elsewhere", Id: Ordered(3)));
+        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
+        var owner = await CreateAsync(new NewSubject("Owner", Id: Ordered(4)));
+
+        (await Subjects().FindSetupOwnerCandidateAsync(_tenant, CancellationToken.None))!.Id.Should().Be(owner);
+    }
+
+    [Fact]
     public async Task AccessRequestsAreListedNewestFirstAndEnrolmentCandidatesHoldNoFactor()
     {
         // Explicit ids: the candidate order is by id, and v7 ids minted in one millisecond do not order.

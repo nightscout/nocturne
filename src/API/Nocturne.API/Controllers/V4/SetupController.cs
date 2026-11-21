@@ -490,10 +490,9 @@ public partial class SetupController : ControllerBase
         (await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct))?.Id;
 
     /// <summary>
-    /// Find or create the first non-system subject, ensure it is a member of the
-    /// given tenant with the owner role, and assign the global admin role.
-    /// Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony,
-    /// and when reusing a subject created for a previously deleted tenant.
+    /// Find (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>) or create the owner
+    /// subject, ensure it is a member of the given tenant with the owner role, and assign the
+    /// global admin role. Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony.
     /// </summary>
     private async Task<Guid> EnsureOwnerSubjectAsync(
         TenantRecord tenant, string displayName, string username, CancellationToken ct)

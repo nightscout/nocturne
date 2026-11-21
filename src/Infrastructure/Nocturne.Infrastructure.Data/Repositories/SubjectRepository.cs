@@ -166,7 +166,9 @@ public class SubjectRepository : ISubjectRepository
         await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
         return ToRecord(await db.Subjects.AsNoTracking()
             .ExcludeDemo()
-            .Where(s => !s.IsSystemSubject && s.IsActive)
+            .Where(s => !s.IsSystemSubject && s.IsActive
+                && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
+                && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id))
             .OrderBy(s => s.Id)
             .FirstOrDefaultAsync(ct));
     }
