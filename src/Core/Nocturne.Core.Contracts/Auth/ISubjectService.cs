@@ -62,6 +62,23 @@ public interface ISubjectService
         bool emailVerified);
 
     /// <summary>
+    /// For a setup caller who has just proved the identity: makes the subject holding it the one
+    /// setup completes, in place of <paramref name="createdSubjectId"/>, the owner the setup run for
+    /// tenant <paramref name="tenantSlug"/> created, and returns its id; null when either does not
+    /// qualify (<see cref="ISubjectRepository.AdoptForSetupAsync"/>).
+    /// </summary>
+    Task<Guid?> AdoptForSetupAsync(Guid createdSubjectId, string oidcSubjectId, string issuer, string tenantSlug);
+
+    /// <summary>
+    /// For a caller who has just proved the identity as <paramref name="subjectId"/>: links it to
+    /// that subject and deletes the unclaimed subject holding it, returning the new link's id; null
+    /// when the holder is not unclaimed (<see cref="ISubjectRepository.TakeUnclaimedOidcIdentityAsync"/>).
+    /// </summary>
+    /// <remarks>The address is handled as <see cref="AttachOidcIdentityAsync"/> handles it.</remarks>
+    Task<Guid?> TakeUnclaimedOidcIdentityAsync(
+        Guid subjectId, string oidcSubjectId, string issuer, string? email, bool emailVerified);
+
+    /// <summary>
     /// Confirms the subject's address when <paramref name="email"/> is the one it holds, by the rule of
     /// <see cref="ISubjectRepository.ConfirmEmailAsync"/>.
     /// </summary>

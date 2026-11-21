@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -685,6 +686,187 @@ public class SubjectRepository : ISubjectRepository
             entity.Email = email;
         await SaveAsync(db, ct);
         return true;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> AdoptForSetupAsync(
+        Guid createdId, Guid holderId, Guid identityId, string tenantSlug, CancellationToken ct)
+    {
+        await using var db = await Transactional.CreateAsync(ct);
+        if (db.HistoryClamped || db.IsShareContext || createdId == holderId)
+            return false;
+
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+            var tenantId = await db.Tenants.AsNoTracking()
+                .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
+            var holder = await AdoptableBySetup(db, identityId).FirstOrDefaultAsync(s => s.Id == holderId, ct);
+            var memberships = await db.TenantMembers.Where(m => m.SubjectId == createdId).Take(2).ToListAsync(ct);
+            if (tenantId is null || holder is null || memberships.Count != 1)
+                return false;
+
+            var created = await Unclaimed(db, identityId: null, ownerOf: tenantId)
+                .FirstOrDefaultAsync(s => s.Id == createdId, ct);
+            if (created is null || await NamedByTenantRowsAsync(db, createdId, ct))
+                return false;
+
+            var now = Now;
+            memberships[0].SubjectId = holderId;
+            holder.Name = created.Name;
+            holder.Username = created.Username;
+            var heldRoleIds = db.SubjectRoles.Where(r => r.SubjectId == holderId).Select(r => r.RoleId);
+            var passedRoles = await db.SubjectRoles.AsNoTracking()
+                .Where(r => r.SubjectId == createdId && !heldRoleIds.Contains(r.RoleId))
+                .ToListAsync(ct);
+            foreach (var role in passedRoles)
+            {
+                db.SubjectRoles.Add(new SubjectRoleEntity
+                {
+                    SubjectId = holderId,
+                    RoleId = role.RoleId,
+                    AssignedAt = now,
+                    AssignedById = role.AssignedById,
+                });
+            }
+            await EfFirstPartyTokenRepository.StageRevokeAllForSubjectAsync(
+                db, holderId, "Adopted as the setup owner", ct);
+            await db.SaveChangesAsync(ct);
+
+            db.Subjects.Remove(created);
+            await db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+            return true;
+        });
+    }
+
+    /// <summary>The subjects <see cref="ISubjectRepository.AdoptForSetupAsync"/> may adopt for <paramref name="identityId"/>.</summary>
+    private static IQueryable<SubjectEntity> AdoptableBySetup(NocturneDbContext db, Guid identityId) =>
+        db.Subjects.Where(s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject && !s.IsPlatformAdmin
+            && !db.TenantMembers.Any(m => m.SubjectId == s.Id)
+            && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
+            && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
+            && db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id && o.Id == identityId)
+            && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id && o.Id != identityId));
+
+    /// <inheritdoc/>
+    public virtual async Task<Guid?> TakeUnclaimedOidcIdentityAsync(Guid identityId, Guid subjectId, string? email, CancellationToken ct)
+    {
+        await using var db = await Transactional.CreateAsync(ct);
+        if (db.HistoryClamped || db.IsShareContext)
+            return null;
+
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+            var identity = await db.SubjectOidcIdentities.AsNoTracking()
+                .FirstOrDefaultAsync(o => o.Id == identityId && o.SubjectId != subjectId, ct);
+            if (identity is null)
+                return (Guid?)null;
+
+            var holder = await Unclaimed(db, identityId, ownerOf: null)
+                .FirstOrDefaultAsync(s => s.Id == identity.SubjectId, ct);
+            if (holder is null || await NamedByTenantRowsAsync(db, holder.Id, ct))
+                return null;
+
+            db.Subjects.Remove(holder);
+            await db.SaveChangesAsync(ct);
+
+            var taken = new SubjectOidcIdentityEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                ProviderId = identity.ProviderId,
+                OidcSubjectId = identity.OidcSubjectId,
+                Issuer = identity.Issuer,
+                Email = email,
+                LinkedAt = Now,
+            };
+            db.SubjectOidcIdentities.Add(taken);
+            await db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+            return taken.Id;
+        });
+    }
+
+    /// <summary>
+    /// The subjects that may be deleted because nothing names them but their own global roles, the
+    /// provider identity <paramref name="identityId"/> and a membership of tenant
+    /// <paramref name="ownerOf"/> (each only when given), as far as the tables without a tenant
+    /// show, by the rule <see cref="ISubjectRepository.TakeUnclaimedOidcIdentityAsync"/> states.
+    /// With <paramref name="ownerOf"/>, only what the setup owner step writes: that membership
+    /// holds the owner role, and no global role but <see cref="GlobalRoles.Admin"/>.
+    /// Every table with a foreign key to <c>subjects</c> is named here or in
+    /// <see cref="NamedByTenantRowsAsync"/>, and a caller reads both in one transaction.
+    /// </summary>
+    private static IQueryable<SubjectEntity> Unclaimed(NocturneDbContext db, Guid? identityId, Guid? ownerOf)
+    {
+        var otherIdentities = identityId is { } kept
+            ? db.SubjectOidcIdentities.Where(o => o.Id != kept)
+            : db.SubjectOidcIdentities;
+        var otherMemberships = ownerOf is { } tenantId
+            ? db.TenantMembers.Where(m => m.TenantId != tenantId)
+            : db.TenantMembers;
+
+        var unclaimed = db.Subjects.Where(s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject && !s.IsPlatformAdmin
+            && s.LastLoginAt == null
+            && !otherIdentities.Any(o => o.SubjectId == s.Id)
+            && !otherMemberships.Any(m => m.SubjectId == s.Id)
+            && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
+            && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
+            && !db.RecoveryCodes.Any(c => c.SubjectId == s.Id)
+            && !db.RefreshTokens.Any(t => t.SubjectId == s.Id)
+            && !db.TrustedDevices.Any(d => d.SubjectId == s.Id)
+            && !db.TotpStepUpTokens.Any(t => t.SubjectId == s.Id)
+            && !db.SubjectAvatars.Any(a => a.SubjectId == s.Id)
+            && !db.ChatIdentityDirectory.Any(c => c.NocturneUserId == s.Id)
+            && !db.TenantCreationInvites.Any(i => i.CreatedBySubjectId == s.Id)
+            && !db.SubjectRoles.Any(r => r.AssignedById == s.Id));
+
+        return ownerOf is { } ownedTenantId
+            ? unclaimed.Where(s => db.TenantMemberRoles.Any(r => r.TenantMember.SubjectId == s.Id
+                    && r.TenantMember.TenantId == ownedTenantId && r.TenantRole.Slug == RoleSeeds.Owner)
+                && !db.SubjectRoles.Any(r => r.SubjectId == s.Id && r.Role!.Name != GlobalRoles.Admin))
+            : unclaimed;
+    }
+
+    /// <summary>
+    /// Whether a row of a tenant-scoped table names the subject, in any tenant: of every table with a
+    /// foreign key to <c>subjects</c>, and of the subject-id columns without one that a single lookup
+    /// checks. Each tenant's reads run with its id set local to the transaction, as
+    /// <see cref="ScrubTenantRowsAsync"/> does; the statements after them touch no tenant-scoped table.
+    /// </summary>
+    private static async Task<bool> NamedByTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    {
+        var tenantIds = await db.Tenants.AsNoTracking().Select(t => t.Id).ToListAsync(ct);
+        foreach (var tenantId in tenantIds)
+        {
+            if (db.Database.IsNpgsql())
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "SELECT set_config('app.current_tenant_id', {0}, true)", [tenantId.ToString()], ct);
+            }
+
+            if (await db.LoginCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
+                || await db.MemberInvites.IgnoreQueryFilters().AnyAsync(i => i.TenantId == tenantId && i.CreatedBySubjectId == subjectId, ct)
+                || await db.OAuthGrants.IgnoreQueryFilters().AnyAsync(g => g.TenantId == tenantId && (g.SubjectId == subjectId || g.CreatedBySubjectId == subjectId), ct)
+                || await db.OAuthAuthorizationCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
+                || await db.AlertExcursionMutes.IgnoreQueryFilters().AnyAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct)
+                || await db.MembershipRequests.IgnoreQueryFilters().AnyAsync(r => r.TenantId == tenantId && (r.SubjectId == subjectId || r.DecidedBySubjectId == subjectId), ct)
+                || await db.ClientDevices.IgnoreQueryFilters().AnyAsync(d => d.TenantId == tenantId && d.SubjectId == subjectId, ct)
+                || await db.OAuthDeviceCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
+                || await db.AlertInvites.IgnoreQueryFilters().AnyAsync(i => i.TenantId == tenantId && (i.CreatedBy == subjectId || i.UsedBy == subjectId), ct)
+                || await db.AlertExcursionReceipts.IgnoreQueryFilters().AnyAsync(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId, ct))
+                return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>

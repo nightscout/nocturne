@@ -219,6 +219,18 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
+        var revoked = await StageRevokeAllForSubjectAsync(db, subjectId, reason, ct);
+        await db.SaveChangesAsync(ct);
+        return revoked;
+    }
+
+    /// <summary>
+    /// Marks every active token of the subject revoked on <paramref name="db"/>, unsaved, so a
+    /// caller can commit the revocation with its own writes.
+    /// </summary>
+    internal static async Task<int> StageRevokeAllForSubjectAsync(
+        NocturneDbContext db, Guid subjectId, string reason, CancellationToken ct)
+    {
         var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
@@ -229,8 +241,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             token.RevokedAt = now;
             token.RevokedReason = reason;
         }
-
-        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }

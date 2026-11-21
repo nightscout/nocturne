@@ -216,6 +216,47 @@ public interface ISubjectRepository
     Task<Guid> AddOidcIdentityAsync(NewSubjectOidcIdentity identity, CancellationToken ct);
 
     /// <summary>
+    /// Makes <paramref name="holderId"/> the subject first-run setup completes, in place of the
+    /// subject <paramref name="createdId"/> the owner step created: the created subject's membership,
+    /// username, display name and global roles pass to the holder and the created subject is deleted.
+    /// False, with nothing written, unless both qualify, checked and written in one serializable
+    /// transaction.
+    /// </summary>
+    /// <remarks>
+    /// The caller has just proved <paramref name="identityId"/>, so the holder qualifies only when
+    /// nothing else could make someone else the owner: it is active, neither a system nor a demo
+    /// subject, not a platform admin, a member of no tenant, holds no passkey and no authenticator,
+    /// and <paramref name="identityId"/> is the only provider identity it holds. A session and a last
+    /// login are allowed, and the holder's refresh tokens are revoked in the same transaction. The
+    /// owner step can resume an earlier subject, so the created subject is deleted only when it holds
+    /// what that step writes and is otherwise unclaimed, by the same rule as
+    /// <see cref="TakeUnclaimedOidcIdentityAsync"/>: its one membership is of the tenant
+    /// <paramref name="tenantSlug"/> names, the tenant this setup run is for, and holds the owner role;
+    /// it holds no global role but admin; nothing else names it, and it holds no provider identity.
+    /// </remarks>
+    Task<bool> AdoptForSetupAsync(Guid createdId, Guid holderId, Guid identityId, string tenantSlug, CancellationToken ct);
+
+    /// <summary>
+    /// Links identity <paramref name="identityId"/> to <paramref name="subjectId"/>, with the address
+    /// <paramref name="email"/> the provider now asserts, when the subject
+    /// holding it is unclaimed, deleting that subject, and returns the new link's id. Null, with
+    /// nothing written, when it is not, checked and written in one serializable transaction. The
+    /// rows removed are the holder's <c>subjects</c> row and, by cascade, its
+    /// <c>subject_oidc_identities</c> and <c>subject_roles</c>; audit rows naming it are kept.
+    /// </summary>
+    /// <remarks>
+    /// Unclaimed: it is active, neither a system nor a demo subject, not a platform admin, has never
+    /// signed in (no last login and no refresh token row), holds no other provider identity, and no
+    /// row of any other table with a foreign key to <c>subjects</c> names it, so the cascade removes
+    /// nothing else. Of the columns that hold a subject id with no foreign key, membership requests,
+    /// client devices, device codes, alert invites and alert receipts are checked too; the rest are
+    /// written only by a signed-in subject, so the never-signed-in clause is what keeps them empty.
+    /// The tenant-scoped tables are read tenant by tenant. A reader whose history is clamped could
+    /// not see every row, so for one the answer is always null.
+    /// </remarks>
+    Task<Guid?> TakeUnclaimedOidcIdentityAsync(Guid identityId, Guid subjectId, string? email, CancellationToken ct);
+
+    /// <summary>
     /// Records a sign-in with identity <paramref name="identityId"/> at <paramref name="now"/>, and
     /// when <paramref name="email"/> is given the address the provider now asserts. False when
     /// there is no such identity.

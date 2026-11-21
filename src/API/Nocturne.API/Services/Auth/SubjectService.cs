@@ -368,6 +368,41 @@ public class SubjectService : ISubjectService
         return (OidcLinkOutcome.Created, identityId);
     }
 
+    /// <inheritdoc />
+    public async Task<Guid?> AdoptForSetupAsync(Guid createdSubjectId, string oidcSubjectId, string issuer, string tenantSlug)
+    {
+        var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        if (match is null
+            || !await _subjects.AdoptForSetupAsync(
+                createdSubjectId, match.Subject.Id, match.Identity.Id, tenantSlug, CancellationToken.None))
+            return null;
+
+        _logger.LogInformation(
+            "Setup adopted subject {SubjectId} in place of {CreatedSubjectId}", match.Subject.Id, createdSubjectId);
+        await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, createdSubjectId, success: true,
+            actor: new AuthAuditActor(match.Subject.Id, null));
+        return match.Subject.Id;
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid?> TakeUnclaimedOidcIdentityAsync(
+        Guid subjectId, string oidcSubjectId, string issuer, string? email, bool emailVerified)
+    {
+        var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        if (match is null
+            || await _subjects.TakeUnclaimedOidcIdentityAsync(match.Identity.Id, subjectId, email, CancellationToken.None)
+                is not { } identityId)
+            return null;
+
+        _logger.LogInformation(
+            "Subject {SubjectId} took an identity from unclaimed subject {UnclaimedSubjectId}, which was deleted",
+            subjectId, match.Subject.Id);
+        await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, match.Subject.Id, success: true,
+            actor: new AuthAuditActor(subjectId, null));
+        await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
+        return identityId;
+    }
+
     /// <summary>
     /// Confirms the subject's address when the provider asserted <paramref name="email"/> as
     /// verified and it is the address the subject holds. Linking never changes the address, and an

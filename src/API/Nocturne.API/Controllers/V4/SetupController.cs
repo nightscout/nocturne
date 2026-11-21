@@ -182,8 +182,9 @@ public partial class SetupController : ControllerBase
         if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
             return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
-        var subjectId = await EnsureOwnerSubjectAsync(
-            tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct)
+            is not { } subjectId)
+            return UsernameTaken();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
             subjectId, normalizedUsername);
@@ -292,8 +293,9 @@ public partial class SetupController : ControllerBase
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");
 
-        var subjectId = await EnsureOwnerSubjectAsync(
-            tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct)
+            is not { } subjectId)
+            return UsernameTaken();
 
         try
         {
@@ -479,11 +481,18 @@ public partial class SetupController : ControllerBase
     /// Find (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>) or create the owner
     /// subject, ensure it is a member of the given tenant with the owner role, and assign the
     /// global admin role. Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony.
+    /// Null, with nothing written, when another member of the tenant holds <paramref name="username"/>:
+    /// setup reopens while former members still hold their usernames.
     /// </summary>
-    private async Task<Guid> EnsureOwnerSubjectAsync(
+    private async Task<Guid?> EnsureOwnerSubjectAsync(
         TenantRecord tenant, string displayName, string username, CancellationToken ct)
     {
         var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
+
+        if (await _members.UsernameExistsAsync(tenant.Id, username, ct)
+            && (existingSubject is null
+                || (await _members.FindMemberAsync(tenant.Id, existingSubject.Id, ct))?.Username != username))
+            return null;
 
         Guid subjectId;
         if (existingSubject != null)
@@ -515,7 +524,7 @@ public partial class SetupController : ControllerBase
         if (await _members.FindMemberAsync(tenant.Id, subjectId, ct) is { } membership)
             await _members.SetUsernameAsync(tenant.Id, membership.Id, username, ct);
 
-        await _subjectService.AssignRoleAsync(subjectId, "admin");
+        await _subjectService.AssignRoleAsync(subjectId, GlobalRoles.Admin);
 
         return subjectId;
     }
@@ -538,6 +547,9 @@ public partial class SetupController : ControllerBase
         await _platformAdminBootstrap.EnsureFirstOwnerIsPlatformAdminAsync(
             subjectId, CancellationToken.None);
     }
+
+    private ObjectResult UsernameTaken() =>
+        Problem(detail: "This username is already taken", statusCode: 400, title: "Bad Request");
 
     // Through the shared writer: the setup flow reuses the login flow's state-cookie name, so a
     // scope of its own would leave two same-named cookies the callback cannot tell apart.
