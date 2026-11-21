@@ -25743,28 +25743,28 @@ msgstr "Sign in with your own recovery code instead"
 #~ msgid "Members who can't sign in"
 #~ msgstr "Members who can't sign in"
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Send a member a one-time recovery link so they can register a new passkey. It works once and expires after 24 hours."
 msgstr "Send a member a one-time recovery link so they can register a new passkey. It works once and expires after 24 hours."
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Only the operator can recover this account"
 msgstr "Only the operator can recover this account"
 
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "<0/> Create link"
 msgstr "<0/> Create link"
 
 #~ msgid "They still have recovery codes of their own. If they've lost them, a link cancels those codes once it is used."
 #~ msgstr "They still have recovery codes of their own. If they've lost them, a link cancels those codes once it is used."
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Recovery link"
 msgstr "Recovery link"
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Copy recovery link"
 msgstr "Copy recovery link"
 
@@ -29729,15 +29729,15 @@ msgstr "Sign in - Nocturne"
 msgid "Enter the code you were given to view health data. The code works once. This device stays signed in for 48 hours."
 msgstr "Enter the code you were given to view health data. The code works once. This device stays signed in for 48 hours."
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Could not create a recovery link."
 msgstr "Could not create a recovery link."
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "Members who cannot sign in"
 msgstr "Members who cannot sign in"
 
-#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+#: src/lib/components/members/LockedOutMembers.svelte
 msgid "They still have recovery codes of their own. If they lost them, a link cancels those codes once it is used."
 msgstr "They still have recovery codes of their own. If they lost them, a link cancels those codes once it is used."
 
