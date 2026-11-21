@@ -4,8 +4,16 @@ import { recordApiFailure } from "#lib/support/api-failure-log.js";
 import {
   genericSubmitError,
   missingItemError,
+  missingScopeError,
   rateLimitedError,
 } from "./submit-messages.svelte";
+
+/**
+ * The code of the API's scope refusal. Its detail names the scope, so it is never
+ * shown. A writer answers it with {@link missingScopeError} unless its policy
+ * sets `ownRefusalSentence`.
+ */
+const MISSING_SCOPE_CODE = "missing_scope";
 
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
@@ -80,8 +88,8 @@ export type ProblemCodeMessages = Readonly<Record<string, string>>;
 /**
  * The bodies the client wrote itself rather than carried from the server.
  *
- * A scope refusal is usually a bare `ForbidResult`, which NSwag reports with one
- * of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
+ * A refusal by the demo-subject guard is a bare `ForbidResult`, which NSwag
+ * reports with one of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
  * `detail` reaches the 403 arm as its `title` — the status phrase. A query
  * refused on a share host carries the codegen's own 401 phrase. Only a
  * `Problem(detail: …)` refusal — the per-record scope guards — puts a sentence
@@ -162,9 +170,11 @@ function serverWrittenReason(err: unknown): string | undefined {
  *   server worded, so the writer takes a server-written body when there is one
  *   — see {@link CLIENT_WRITTEN_REASONS}. A reader's fallback names the exact
  *   permission and beats any body the server could send, so the reader always
- *   takes the fallback. A bare `ForbidResult` — what `[RequireScope]` produces,
- *   and so the common refusal — is client-written either way, so both halves
- *   answer it with the caller's sentence.
+ *   takes the fallback. A bare `ForbidResult` (the demo-subject guard) is
+ *   client-written either way, so both halves answer it with the caller's
+ *   sentence. A `missing_scope` refusal is coded rather than server-worded: a
+ *   writer answers it with {@link missingScopeError} ahead of its fallback,
+ *   unless `ownRefusalSentence` is set.
  * - `serverError` (5xx, a network failure, a thrown `Error` — anything that is
  *   not a 4xx). A person mid-task must not be shown a server's internal text,
  *   so the writer suppresses it; for a reader the body is the only clue why a
@@ -191,6 +201,11 @@ export interface RemoteErrorPolicy {
   readonly missing?: () => string;
   /** Whether a 403 the server worded itself outranks the caller's fallback. */
   readonly forbiddenReason: boolean;
+  /**
+   * Whether the caller's fallback is a refusal sentence of its own, which a
+   * `missing_scope` 403 leaves in place of {@link missingScopeError}.
+   */
+  readonly ownRefusalSentence?: boolean;
   /**
    * Whether a server-written body that did not come with a 4xx outranks the
    * caller's fallback.
@@ -221,6 +236,7 @@ const WRITE_SURFACE: RemoteErrorPolicy = {
 export const PERMISSION_GATED_MUTATION: RemoteErrorPolicy = {
   missing: missingItemError,
   forbiddenReason: true,
+  ownRefusalSentence: true,
   serverError: false,
   fault: genericSubmitError,
 };
@@ -275,6 +291,9 @@ function describe(
 
   if (status === 404) return policy.missing?.() ?? fallback;
   if (status === 403) {
+    if (policy.forbiddenReason && code === MISSING_SCOPE_CODE) {
+      return policy.ownRefusalSentence ? fallback : missingScopeError();
+    }
     return (
       (policy.forbiddenReason ? serverWrittenReason(err) : undefined) ??
       fallback

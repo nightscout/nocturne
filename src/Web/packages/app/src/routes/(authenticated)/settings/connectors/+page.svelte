@@ -58,7 +58,7 @@
   import { toast } from "svelte-sonner";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
@@ -83,7 +83,7 @@
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )

@@ -9,7 +9,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { deleteDemoData as deleteDemoDataRemote } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { page } from "$app/state";
 
   interface Props {
@@ -20,7 +20,7 @@
   let { open = $bindable(false), onDeleteComplete }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )

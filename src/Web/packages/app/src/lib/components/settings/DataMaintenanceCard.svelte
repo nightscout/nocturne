@@ -15,7 +15,7 @@
   import DemoDataSection from "#lib/components/connectors/DemoDataSection.svelte";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
 
   // The two tools answer to different gates: deduplication is RequireSuperuser, so it resolves to
   // the wildcard; deleting demo data is tenant.settings and refuses the demo visitor. Data
@@ -24,7 +24,7 @@
   const effectivePermissions = $derived(page.data.effectivePermissions ?? []);
 
   const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
-  const canManageData = $derived(canManageConnectors(effectivePermissions, page.data.refusedAsDemoSubject));
+  const canManageData = $derived(canChangeTenantSettings(effectivePermissions, page.data.refusedAsDemoSubject));
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
   let showDemoDataDialog = $state(false);

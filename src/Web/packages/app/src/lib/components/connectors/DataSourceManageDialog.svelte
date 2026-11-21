@@ -4,7 +4,7 @@
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { page } from "$app/state";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import { formatNumber } from "#lib/utils/formatting.js";
@@ -32,7 +32,7 @@
   }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )

@@ -13,7 +13,7 @@
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
   import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
@@ -26,7 +26,7 @@
   const isOura = $derived(connectorName?.toLowerCase() === "oura");
   const permissionsQuery = getMyPermissions();
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       permissionsQuery.current?.scopes,
       permissionsQuery.current?.refusedAsDemoSubject
     )

@@ -15,7 +15,7 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import { DangerZoneDialog } from "#lib/components/ui/danger-zone-dialog/index.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -43,7 +43,7 @@
   }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )

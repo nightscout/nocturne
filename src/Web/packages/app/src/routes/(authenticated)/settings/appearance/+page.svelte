@@ -102,6 +102,8 @@
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
 
   const realtimeStore = getRealtimeStore();
 
@@ -164,11 +166,31 @@
   // Glucose processing settings
   const preferenceQuery = tenantless ? null : getPreference();
   const sourceDefaultsQuery = tenantless ? null : getSourceDefaults();
-  let glucoseProcessingPreference: string | null = $derived(
+  const glucoseProcessingPreference: string | null = $derived(
     preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
-  let sourceDefaults = $derived(sourceDefaultsQuery?.current?.rules ?? []);
+  const sourceDefaults = $derived(sourceDefaultsQuery?.current?.rules ?? []);
+  // The dialog drafts from the rules it opens with and saves the whole list, so it opens only
+  // once the stored rules are known.
+  const sourceDefaultsLoaded = $derived(sourceDefaultsQuery?.current !== undefined);
   let sourceDefaultsDialogOpen = $state(false);
+  const canChangeGlucoseProcessing = $derived(
+    canChangeTenantSettings(page.data.effectivePermissions, page.data.refusedAsDemoSubject),
+  );
+
+  async function saveGlucoseProcessing(save: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await save();
+      return true;
+    } catch (err) {
+      toast.error(
+        describeSubmitError(err, "Could not save. Check your connection and try again.")
+      );
+      return false;
+    } finally {
+      await Promise.allSettled([preferenceQuery?.refresh(), sourceDefaultsQuery?.refresh()]);
+    }
+  }
 
   // Chart range and tracker pills persist server-side. They used to only mutate
   // the in-memory settings store, which nothing ever saved, so the dashboard
@@ -1021,17 +1043,26 @@
         </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
+          {#if !canChangeGlucoseProcessing}
+            <ReadOnlyNotice data-testid="glucose-processing-read-only">
+              Only members who can manage this site's settings can change glucose processing.
+            </ReadOnlyNotice>
+          {/if}
           <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Label>Display preference</Label>
               <Select
                 type="single"
-                value={glucoseProcessingPreference ?? "default"}
-                onValueChange={async (value) => {
-                  const newValue = value === "default" ? null : value;
-                  glucoseProcessingPreference = newValue;
-                  await setPreference({ preferredGlucoseProcessing: newValue });
-                }}
+                bind:value={
+                  () => glucoseProcessingPreference ?? "default",
+                  (value) =>
+                    void saveGlucoseProcessing(() =>
+                      setPreference({
+                        preferredGlucoseProcessing: value === "default" ? null : value,
+                      }),
+                    )
+                }
+                disabled={!canChangeGlucoseProcessing}
               >
                 <SelectTrigger>
                   <span>
@@ -1074,6 +1105,7 @@
             <Button
               variant="outline"
               size="sm"
+              disabled={!canChangeGlucoseProcessing || !sourceDefaultsLoaded}
               onclick={() => sourceDefaultsDialogOpen = true}
             >Configure</Button>
           </div>
@@ -1082,9 +1114,9 @@
             bind:open={sourceDefaultsDialogOpen}
             rules={sourceDefaults}
             onSave={async (rules) => {
-              sourceDefaults = rules;
-              sourceDefaultsDialogOpen = false;
-              await setSourceDefaults({ rules });
+              if (await saveGlucoseProcessing(() => setSourceDefaults({ rules }))) {
+                sourceDefaultsDialogOpen = false;
+              }
             }}
             onCancel={() => sourceDefaultsDialogOpen = false}
           />
