@@ -3,7 +3,7 @@ import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import { DEFAULT_STARRED, MAX_RECENT, SignalPicks } from "./signal-picks.svelte.js";
 import { searchSignals } from "./signal-search.js";
-import { searchWords, sectionLabel, signalDescription, signalGroupLabel, signalLabel } from "./vocabulary-words.svelte.js";
+import { searchTermWords, searchWords, sectionLabel, signalDescription, signalGroupLabel, signalLabel } from "./vocabulary-words.svelte.js";
 import { vocabularyOf } from "./workspace.svelte.js";
 
 const vocab = vocabularyOf(liveCatalogue);
@@ -48,6 +48,23 @@ describe("searching the signal catalogue", () => {
     expect(search("cob")).toContain("cob");
     expect(search("blood sugar")).toContain("glucose");
     expect(search("pod")).toEqual(expect.arrayContaining(["reservoir", "pumpBattery"]));
+  });
+
+  it("finds a signal by a translated word and still by the English one", () => {
+    const translated = { bloodSugar: ["Blutzucker"], tempBasal: ["temporaere Basalrate"] };
+    const find = (query: string) =>
+      searchSignals(query, ids, (id) => {
+        const s = vocab.signal(id)!;
+        return { name: signalLabel(id), other: searchWords(s.searchKeys, translated) };
+      });
+    expect(find("blutzucker")).toContain("glucose");
+    expect(find("temporaere basalrate")).toContain("tempBasals");
+    expect(find("blood sugar")).toContain("glucose");
+    expect(find("temp basal")).toContain("tempBasals");
+  });
+
+  it("keeps an English word for every translated one", () => {
+    for (const [key, words] of Object.entries(searchTermWords())) expect(searchWords([key], {})).toEqual(expect.arrayContaining(words));
   });
 
   it("finds a signal by its section", () => {

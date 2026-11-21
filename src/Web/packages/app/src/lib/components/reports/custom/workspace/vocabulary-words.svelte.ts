@@ -232,90 +232,235 @@ export function signalGroupLabel(id: string): string {
   return wordOf(signalGroupLabels(), id);
 }
 
+const ENGLISH_SEARCH_TERMS: Record<string, string[]> = {
+  bg: ["BG"],
+  bloodSugar: ["blood sugar"],
+  sensor: ["sensor"],
+  cgm: ["CGM"],
+  targetRange: ["target"],
+  percentile: ["percentile"],
+  meter: ["meter"],
+  fingerstick: ["fingerstick"],
+  tir: ["TIR"],
+  tbr: ["TBR"],
+  tar: ["TAR"],
+  range: ["range"],
+  low: ["low", "hypo"],
+  high: ["high", "hyper"],
+  average: ["average"],
+  iob: ["IOB"],
+  insulin: ["insulin"],
+  bolus: ["bolus"],
+  dose: ["dose"],
+  rate: ["rate"],
+  tempBasal: ["temp basal"],
+  profile: ["profile"],
+  mdi: ["MDI"],
+  pen: ["pen"],
+  tdd: ["TDD"],
+  cob: ["COB"],
+  meal: ["meal"],
+  food: ["food"],
+  loop: ["loop"],
+  automation: ["automation", "closed loop"],
+  pump: ["pump"],
+  pod: ["pod"],
+  battery: ["battery"],
+  phone: ["phone", "uploader"],
+  night: ["night"],
+  bed: ["bed"],
+  hr: ["HR"],
+  pulse: ["pulse"],
+  exercise: ["exercise"],
+  walking: ["walking"],
+  isf: ["ISF"],
+  sensitivity: ["sensitivity"],
+  icr: ["ICR", "carb ratio"],
+  override: ["override"],
+  illness: ["illness"],
+  gaps: ["gaps", "missing data"],
+  sage: ["SAGE", "sensor age"],
+  site: ["site", "infusion set"],
+  cannula: ["cannula"],
+  cage: ["CAGE", "site age"],
+  suspend: ["suspend"],
+  alarm: ["alarm"],
+  bluetooth: ["Bluetooth", "disconnected"],
+  compression: ["compression"],
+  hypnogram: ["hypnogram", "stages"],
+  rem: ["REM", "deep sleep"],
+  a1c: ["A1c", "HbA1c"],
+  lab: ["lab"],
+  weight: ["weight", "body fat"],
+  alert: ["alert"],
+  snooze: ["snooze"],
+  dnd: ["DND", "do not disturb", "mute"],
+  roc: ["rate of change", "ROC"],
+  trend: ["trend", "arrow"],
+  noise: ["noise"],
+  consumable: ["consumable", "supplies"],
+  hrv: ["HRV", "heart rate variability"],
+  spo2: ["SpO2", "blood oxygen", "oxygen"],
+  breathing: ["breathing", "respiration"],
+  score: ["score"],
+  episode: ["episode", "hypo", "hyper"],
+};
+
 /**
  * The other words a search finds a signal by, keyed by the catalogue's search keys: abbreviations and the names
- * people use.
+ * people use, in the current locale. A search also matches the English words, which `ENGLISH_SEARCH_TERMS` keeps
+ * in step with these; "blood sugar" is only there, since the interface names that term glucose.
  */
 export function searchTermWords(): Record<string, string[]> {
   return {
+    // @wc-include
     bg: ["BG"],
-    bloodSugar: ["blood sugar"],
+    bloodSugar: [],
+    // @wc-include
     sensor: ["sensor"],
+    // @wc-include
     cgm: ["CGM"],
+    // @wc-include
     targetRange: ["target"],
+    // @wc-include
     percentile: ["percentile"],
+    // @wc-include
     meter: ["meter"],
+    // @wc-include
     fingerstick: ["fingerstick"],
+    // @wc-include
     tir: ["TIR"],
+    // @wc-include
     tbr: ["TBR"],
+    // @wc-include
     tar: ["TAR"],
+    // @wc-include
     range: ["range"],
+    // @wc-include
     low: ["low", "hypo"],
+    // @wc-include
     high: ["high", "hyper"],
+    // @wc-include
     average: ["average"],
+    // @wc-include
     iob: ["IOB"],
+    // @wc-include
     insulin: ["insulin"],
+    // @wc-include
     bolus: ["bolus"],
+    // @wc-include
     dose: ["dose"],
+    // @wc-include
     rate: ["rate"],
+    // @wc-include
     tempBasal: ["temp basal"],
+    // @wc-include
     profile: ["profile"],
+    // @wc-include
     mdi: ["MDI"],
+    // @wc-include
     pen: ["pen"],
+    // @wc-include
     tdd: ["TDD"],
+    // @wc-include
     cob: ["COB"],
+    // @wc-include
     meal: ["meal"],
+    // @wc-include
     food: ["food"],
+    // @wc-include
     loop: ["loop"],
+    // @wc-include
     automation: ["automation", "closed loop"],
+    // @wc-include
     pump: ["pump"],
+    // @wc-include
     pod: ["pod"],
+    // @wc-include
     battery: ["battery"],
+    // @wc-include
     phone: ["phone", "uploader"],
+    // @wc-include
     night: ["night"],
+    // @wc-include
     bed: ["bed"],
+    // @wc-include
     hr: ["HR"],
+    // @wc-include
     pulse: ["pulse"],
+    // @wc-include
     exercise: ["exercise"],
+    // @wc-include
     walking: ["walking"],
+    // @wc-include
     isf: ["ISF"],
+    // @wc-include
     sensitivity: ["sensitivity"],
+    // @wc-include
     icr: ["ICR", "carb ratio"],
+    // @wc-include
     override: ["override"],
+    // @wc-include
     illness: ["illness"],
+    // @wc-include
     gaps: ["gaps", "missing data"],
+    // @wc-include
     sage: ["SAGE", "sensor age"],
+    // @wc-include
     site: ["site", "infusion set"],
+    // @wc-include
     cannula: ["cannula"],
+    // @wc-include
     cage: ["CAGE", "site age"],
+    // @wc-include
     suspend: ["suspend"],
+    // @wc-include
     alarm: ["alarm"],
+    // @wc-include
     bluetooth: ["Bluetooth", "disconnected"],
+    // @wc-include
     compression: ["compression"],
+    // @wc-include
     hypnogram: ["hypnogram", "stages"],
+    // @wc-include
     rem: ["REM", "deep sleep"],
+    // @wc-include
     a1c: ["A1c", "HbA1c"],
+    // @wc-include
     lab: ["lab"],
+    // @wc-include
     weight: ["weight", "body fat"],
+    // @wc-include
     alert: ["alert"],
+    // @wc-include
     snooze: ["snooze"],
+    // @wc-include
     dnd: ["DND", "do not disturb", "mute"],
+    // @wc-include
     roc: ["rate of change", "ROC"],
+    // @wc-include
     trend: ["trend", "arrow"],
+    // @wc-include
     noise: ["noise"],
+    // @wc-include
     consumable: ["consumable", "supplies"],
+    // @wc-include
     hrv: ["HRV", "heart rate variability"],
+    // @wc-include
     spo2: ["SpO2", "blood oxygen", "oxygen"],
+    // @wc-include
     breathing: ["breathing", "respiration"],
+    // @wc-include
     score: ["score"],
+    // @wc-include
     episode: ["episode", "hypo", "hyper"],
   };
 }
 
 /** The words of a signal's search keys. */
-export function searchWords(keys: readonly string[]): string[] {
-  const words = searchTermWords();
-  return keys.flatMap((k) => (Object.hasOwn(words, k) ? words[k] : []));
+export function searchWords(keys: readonly string[], translated: Record<string, string[]> = searchTermWords()): string[] {
+  const found = keys.flatMap((k) => [...(Object.hasOwn(translated, k) ? translated[k] : []), ...(Object.hasOwn(ENGLISH_SEARCH_TERMS, k) ? ENGLISH_SEARCH_TERMS[k] : [])]);
+  return found.filter((word, i) => found.indexOf(word) === i);
 }
 
 /** Each lens's name. */
