@@ -758,6 +758,30 @@ public class SetupControllerTests : IDisposable
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeOfType<SetupOwnerCompleteResponse>().Subject.Success.Should().BeTrue();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(ownerSubjectId), Times.Once);
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenTheSignInTimeCannotBeRecorded_IssuesNoSessionAndSetsNoCookie()
+    {
+        var ownerSubjectId = await SeedOwnerlessTenantWithOwnerSubjectAsync();
+        StubRegistrationChallengeMintedFor(ownerSubjectId);
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(ownerSubjectId))
+            .ThrowsAsync(new DbUpdateException("the update failed"));
+
+        var result = await _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-owner",
+            },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Subject.StatusCode.Should().Be(400);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
     [Fact]

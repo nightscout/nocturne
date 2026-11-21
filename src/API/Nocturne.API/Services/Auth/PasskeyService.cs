@@ -283,6 +283,9 @@ public class PasskeyService : IPasskeyService
         if (!await _members.IsMemberAsync(stored.Credential.SubjectId, tenantId))
             throw new InvalidOperationException("Credential owner is not a member of this tenant.");
 
+        if (!stored.Holder.IsActive)
+            throw new InvalidOperationException("Credential owner is not active.");
+
         AllowOriginFromClientData(assertionResponse.Response.ClientDataJson);
         var result = await _fido2.MakeAssertionAsync(new MakeAssertionParams
         {

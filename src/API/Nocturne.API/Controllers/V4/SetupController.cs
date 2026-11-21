@@ -232,6 +232,8 @@ public partial class SetupController : ControllerBase
 
             await GrantFirstOwnerPlatformAdminAsync(credResult.SubjectId);
 
+            await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
+
             // Generate recovery codes
             var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 
