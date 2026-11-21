@@ -37,7 +37,7 @@ public class V4ListDateSpanTests
         nameof(StateSpansController.GetActivities),
         nameof(StateSpansController.GetTravel),
         nameof(SleepController.GetSessions),
-        nameof(NutritionController.GetCarbIntakes),
+        $"{nameof(CarbIntakeController)}.{nameof(CarbIntakeController.GetAll)}",
         nameof(TempBasalController.GetAll),
         nameof(ProfileController.GetTherapySettings),
     ];
@@ -127,7 +127,7 @@ public class V4ListDateSpanTests
     {
         var spans = new StateSpansController(Mock.Of<IStateSpanService>(), Mock.Of<ISignalRBroadcastService>());
         var sleep = new SleepController(Mock.Of<ISleepService>());
-        var nutrition = NewNutrition();
+        var carbIntakes = new CarbIntakeController(Mock.Of<ICarbIntakeRepository>(), Mock.Of<ITreatmentFoodService>());
         var tempBasal = new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>());
         var profile = new ProfileController(
             Mock.Of<ITherapySettingsRepository>(),
@@ -139,7 +139,7 @@ public class V4ListDateSpanTests
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
             Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
-        foreach (var controller in new ControllerBase[] { spans, sleep, nutrition, tempBasal, profile })
+        foreach (var controller in new ControllerBase[] { spans, sleep, carbIntakes, tempBasal, profile })
             controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
 
         return list switch
@@ -149,7 +149,7 @@ public class V4ListDateSpanTests
             nameof(StateSpansController.GetActivities) => (await spans.GetActivities(from, to)).Result!,
             nameof(StateSpansController.GetTravel) => (await spans.GetTravel(from, to)).Result!,
             nameof(SleepController.GetSessions) => (await sleep.GetSessions(from, to)).Result!,
-            nameof(NutritionController.GetCarbIntakes) => (await nutrition.GetCarbIntakes(from, to)).Result!,
+            $"{nameof(CarbIntakeController)}.{nameof(CarbIntakeController.GetAll)}" => (await carbIntakes.GetAll(from, to)).Result!,
             nameof(TempBasalController.GetAll) => (await tempBasal.GetAll(from, to)).Result!,
             nameof(ProfileController.GetTherapySettings) => (await profile.GetTherapySettings(from, to)).Result!,
             _ => throw new ArgumentOutOfRangeException(nameof(list), list, null),

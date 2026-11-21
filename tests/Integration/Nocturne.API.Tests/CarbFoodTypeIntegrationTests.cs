@@ -97,6 +97,54 @@ public class CarbFoodTypeIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task DeletedCarb_KeepsItsFoodTypeOnTheDeletedListAndAfterRestore()
+    {
+        var time = Anchor(2034);
+        await PostCarbAsync(time, "🌮");
+        var carbId = (await ReadV4CarbsAsync(time)).Single().GetProperty("id").GetGuid();
+        var client = CreateAuthenticatedClient();
+
+        (await client.DeleteAsync($"/api/v4/nutrition/carbs/{carbId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await ReadV4CarbsAsync(time)).Should().BeEmpty();
+
+        var deleted = await client.GetAsync("/api/v4/nutrition/carbs/deleted?limit=1000");
+        deleted.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await deleted.Content.ReadAsStringAsync()))
+        {
+            doc.RootElement.GetProperty("data").EnumerateArray()
+                .Should().ContainSingle(e => e.GetProperty("id").GetGuid() == carbId)
+                .Which.GetProperty("foodType").GetString().Should().Be("🌮");
+        }
+
+        var restored = await client.PostAsync($"/api/v4/nutrition/carbs/{carbId}/restore", null);
+        restored.StatusCode.Should().Be(HttpStatusCode.OK);
+        using (var doc = JsonDocument.Parse(await restored.Content.ReadAsStringAsync()))
+            doc.RootElement.GetProperty("foodType").GetString().Should().Be("🌮");
+
+        (await ReadV4CarbsAsync(time)).Should().ContainSingle()
+            .Which.GetProperty("foodType").GetString().Should().Be("🌮");
+    }
+
+    [Fact]
+    public async Task BulkRestore_BringsDeletedCarbsBackWithTheirFoodType()
+    {
+        var time = Anchor(2035);
+        await PostCarbAsync(time, "🌮");
+        var carbId = (await ReadV4CarbsAsync(time)).Single().GetProperty("id").GetGuid();
+        var client = CreateAuthenticatedClient();
+        (await client.DeleteAsync($"/api/v4/nutrition/carbs/{carbId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await client.PostAsJsonAsync("/api/v4/nutrition/carbs/restore", new[] { carbId, Guid.NewGuid() });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("restored").EnumerateArray().Should().ContainSingle()
+            .Which.GetProperty("foodType").GetString().Should().Be("🌮");
+        doc.RootElement.GetProperty("conflicts").EnumerateArray().Should().BeEmpty();
+        (await ReadV4CarbsAsync(time)).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task CarbWithNoFoodType_HasNullFoodTypeOnV4()
     {
         var time = Anchor(2032);

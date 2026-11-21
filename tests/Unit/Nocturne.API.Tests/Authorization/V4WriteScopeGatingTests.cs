@@ -380,6 +380,7 @@ public class V4WriteScopeGatingTests
 
             // treatments: carb_intakes sits under treatments.read, POST /meals also writes a bolus,
             // and treatment_foods is keyed by carb intake (the food catalog is only read).
+            ["CarbIntakeController"] = Scope.TreatmentsReadWrite,
             ["NutritionController"] = Scope.TreatmentsReadWrite,
 
             // food: foods sits under food.read and user_food_favorites is the same category;

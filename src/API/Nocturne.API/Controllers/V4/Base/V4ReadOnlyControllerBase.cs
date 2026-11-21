@@ -68,6 +68,7 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
             return error;
 
         var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
+        await OnBeforeReturnAsync(data, ct);
         var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, device, source, ct));
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = pagination });
     }
@@ -101,6 +102,20 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     public virtual async Task<ActionResult<TModel>> GetById(Guid id, CancellationToken ct = default)
     {
         var result = await Repository.GetByIdAsync(id, ct);
-        return result is null ? NotFound() : Ok(result);
+        if (result is null)
+            return NotFound();
+
+        await OnBeforeReturnAsync([result], ct);
+        return Ok(result);
     }
+
+    /// <summary>
+    /// Hook called with the records an action is about to return, by every action of the record base
+    /// that returns records except create, which answers with the row as stored. Override to fill
+    /// fields the stored row does not carry, mutating <paramref name="records"/> in place.
+    /// </summary>
+    /// <param name="records">The records the action returns.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected virtual Task OnBeforeReturnAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)
+        => Task.CompletedTask;
 }

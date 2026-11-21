@@ -182,6 +182,7 @@ public class ErrorEnvelopeCoverageTests
         "V4.Treatments.BasalInjectionController",
         "V4.Treatments.BolusCalculationController",
         "V4.Treatments.BolusController",
+        "V4.Treatments.CarbIntakeController",
         "V4.Treatments.ConnectorFoodEntriesController",
         "V4.Treatments.FoodsController",
         "V4.Treatments.NoteController",

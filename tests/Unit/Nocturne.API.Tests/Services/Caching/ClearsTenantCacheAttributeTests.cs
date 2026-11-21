@@ -56,6 +56,7 @@ public class ClearsTenantCacheAttributeTests
         { typeof(DeviceEventController), [TenantCacheFamily.Statistics] },
         { typeof(BolusController), [TenantCacheFamily.Statistics] },
         { typeof(BasalInjectionController), [TenantCacheFamily.Statistics] },
+        { typeof(CarbIntakeController), [TenantCacheFamily.Statistics] },
         { typeof(NutritionController), [TenantCacheFamily.Statistics] },
         { typeof(TempBasalController), [TenantCacheFamily.Statistics] },
     };

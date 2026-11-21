@@ -41,11 +41,10 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// <c>V4ReadOnlyControllerBaseTests</c> and <c>V4CrudControllerBaseTests</c>.
 /// </summary>
 /// <remarks>
-/// Grouped rather than split per controller because only four of these controllers have a test
-/// class of their own; those four are covered in place, next to their existing fixtures
-/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>NutritionControllerTests</c>,
-/// <c>ActivityControllerV4Tests</c>). <c>V4ReadLimitCoverageTests</c> guards that the whole
-/// surface stays covered.
+/// Grouped rather than split per controller because only three of these controllers have a test
+/// class of their own; those three are covered in place, next to their existing fixtures
+/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>ActivityControllerV4Tests</c>).
+/// <c>V4ReadLimitCoverageTests</c> guards that the whole surface stays covered.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class V4ReadLimitClampTests

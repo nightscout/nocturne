@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// The record is identified by the route-level ID parameter.
 /// </summary>
 /// <seealso cref="Validators.V4.UpdateCarbIntakeRequestValidator"/>
-/// <seealso cref="Nocturne.API.Controllers.V4.Treatments.NutritionController"/>
+/// <seealso cref="Nocturne.API.Controllers.V4.Treatments.CarbIntakeController"/>
 public class UpdateCarbIntakeRequest
 {
     /// <summary>
