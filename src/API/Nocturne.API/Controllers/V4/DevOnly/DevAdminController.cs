@@ -20,6 +20,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -432,12 +433,11 @@ public class DevAdminController : ControllerBase
             foreach (var s in allSubjectDtos)
             {
                 if (!addedSubjectIds.Add(s.Id)) continue;
-                db.Subjects.Add(new()
+                var restored = new SubjectEntity()
                 {
                     Id = s.Id,
                     Name = s.Name,
                     Username = s.Username,
-                    Email = s.Email,
                     Notes = s.Notes,
                     IsActive = s.IsActive,
                     IsSystemSubject = s.IsSystemSubject,
@@ -447,7 +447,9 @@ public class DevAdminController : ControllerBase
                     ApprovalStatus = s.ApprovalStatus,
                     AccessRequestMessage = s.AccessRequestMessage,
                     IsPlatformAdmin = s.IsPlatformAdmin,
-                });
+                };
+                restored.SetEmail(s.Email);
+                db.Subjects.Add(restored);
             }
             await db.SaveChangesAsync(token);
 
@@ -867,7 +869,7 @@ public class DevAdminController : ControllerBase
 
                 subject.Name = s.Name;
                 subject.Username = s.Username;
-                subject.Email = s.Email;
+                subject.SetEmail(s.Email);
                 subject.Notes = s.Notes;
                 subject.IsActive = s.IsActive;
                 subject.IsSystemSubject = s.IsSystemSubject;

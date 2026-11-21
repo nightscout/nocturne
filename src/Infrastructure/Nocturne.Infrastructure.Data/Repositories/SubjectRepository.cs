@@ -75,7 +75,6 @@ public class SubjectRepository : ISubjectRepository
             Id = subject.Id ?? Guid.CreateVersion7(),
             Name = subject.Name,
             Username = subject.Username,
-            Email = subject.Email,
             Notes = subject.Notes,
             IsActive = subject.IsActive,
             IsSystemSubject = subject.IsSystemSubject,
@@ -83,6 +82,9 @@ public class SubjectRepository : ISubjectRepository
             ApprovalStatus = subject.ApprovalStatus,
             AccessRequestMessage = subject.AccessRequestMessage,
         };
+        entity.SetEmail(subject.Email);
+        if (subject.EmailConfirmedAt is { } confirmedAt)
+            entity.ConfirmEmail(subject.Email, NocturneDbContext.AtStoredPrecision(confirmedAt));
         db.Subjects.Add(entity);
 
         if (subject.RoleNames is { Count: > 0 } names)
@@ -275,7 +277,7 @@ public class SubjectRepository : ISubjectRepository
         if (edit.Username is not null)
             entity.Username = edit.Username;
         if (edit.Email is not null)
-            entity.Email = edit.Email;
+            StageEmail(db, entity, edit.Email, edit.EmailConfirmedAt);
         if (edit.IsActive is { } active)
             entity.IsActive = active;
         if (edit.IsPlatformAdmin is { } platformAdmin)
@@ -304,11 +306,88 @@ public class SubjectRepository : ISubjectRepository
             return null;
 
         entity.Name = profile.Name;
-        entity.Email = profile.Email;
+        StageEmail(db, entity, profile.Email, confirmedAt: null);
         entity.Notes = profile.Notes;
 
         await SaveAsync(db, ct);
         return ToRecord(entity);
+    }
+
+    /// <summary>
+    /// Stages <paramref name="email"/> on the subject, confirmed at <paramref name="confirmedAt"/>
+    /// when one is given. A save writes only the columns the tracker saw change, so a changed
+    /// address whose confirmation was already null would write the address alone, and a
+    /// confirmation that committed in between would then outlive it. Both columns are marked
+    /// modified whenever the address changed or a confirmation rides with it, so the row always
+    /// takes the pair this edit holds. See <see cref="SubjectEntity.SetEmail"/> for the rule.
+    /// </summary>
+    private static void StageEmail(NocturneDbContext db, SubjectEntity entity, string? email, DateTime? confirmedAt)
+    {
+        var changed = entity.SetEmail(email);
+        var confirmed = confirmedAt is { } at && entity.ConfirmEmail(email, NocturneDbContext.AtStoredPrecision(at));
+        if (!changed && !confirmed)
+            return;
+
+        var entry = db.Entry(entity);
+        entry.Property(s => s.Email).IsModified = true;
+        entry.Property(s => s.EmailConfirmedAt).IsModified = true;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<EmailConfirmation> ConfirmEmailAsync(
+        Guid subjectId, string email, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var at = NocturneDbContext.AtStoredPrecision(now);
+
+        // The rule is decided in .NET on the row just read. The statement is an exact
+        // compare-and-set on that string, so it states no comparison of its own and still
+        // confirms nothing for an address that changed in between. One more attempt covers a
+        // row that changed underneath; a second change is refused.
+        for (var attempt = 0; ; attempt++)
+        {
+            var stored = await db.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.Id == subjectId, ct);
+            if (stored is null)
+                return new EmailConfirmation.NotFound();
+            if (!EmailAddresses.AreSame(stored.Email, email))
+                return new EmailConfirmation.AddressMismatch();
+            if (stored.EmailConfirmedAt is { } first)
+                return new EmailConfirmation.Confirmed(first);
+            if (attempt == 2)
+                return new EmailConfirmation.AddressMismatch();
+
+            var storedEmail = stored.Email;
+            var updated = await db.Subjects
+                .Where(s => s.Id == subjectId && s.EmailConfirmedAt == null && s.Email == storedEmail)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.EmailConfirmedAt, at)
+                    .SetProperty(x => x.UpdatedAt, NocturneDbContext.UtcNowAtStoredPrecision()), ct);
+            if (updated == 1)
+            {
+                RefreshTrackedConfirmation(db, subjectId, at);
+                return new EmailConfirmation.Confirmed(at);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The confirmation statement bypasses the tracker, so a copy a unit of work holds would
+    /// otherwise be written back stale. A reload would drop the unit's staged edits, so only the
+    /// confirmation is brought up to date, unless the unit stages a pair of its own, which
+    /// overwrites it.
+    /// </summary>
+    private void RefreshTrackedConfirmation(NocturneDbContext db, Guid subjectId, DateTime at)
+    {
+        if (_unit is null
+            || db.ChangeTracker.Entries<SubjectEntity>().FirstOrDefault(e => e.Entity.Id == subjectId) is not { } tracked
+            || tracked.Property(s => s.EmailConfirmedAt).IsModified)
+            return;
+
+        var confirmation = tracked.Property(s => s.EmailConfirmedAt);
+        confirmation.OriginalValue = at;
+        confirmation.CurrentValue = at;
+        confirmation.IsModified = false;
     }
 
     /// <inheritdoc/>
@@ -692,6 +771,7 @@ public class SubjectRepository : ISubjectRepository
             subject.Name,
             subject.Username,
             subject.Email,
+            subject.EmailConfirmedAt,
             subject.Notes,
             subject.IsActive,
             subject.IsSystemSubject,

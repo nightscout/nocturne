@@ -115,6 +115,17 @@ public interface ISubjectRepository
     /// </summary>
     Task<SubjectRecord?> UpdateProfileAsync(Guid subjectId, SubjectProfile profile, CancellationToken ct);
 
+    /// <summary>
+    /// Confirms the subject's address at <paramref name="now"/> when <paramref name="email"/> is the
+    /// address it holds, compared trimmed and without regard to case. The address the proof was for
+    /// is named, so a proof for an address the account has since left confirms nothing, including
+    /// when the change commits while this call runs: it is one statement conditional on the stored
+    /// address. An address already confirmed keeps its first time. Besides a provider's verified
+    /// assertion at creation or sign-in (<see cref="NewSubject.EmailConfirmedAt"/>,
+    /// <see cref="SubjectEdit.EmailConfirmedAt"/>), this is the only way an address becomes confirmed.
+    /// </summary>
+    Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email, DateTime now, CancellationToken ct);
+
     /// <summary>Sets, or with null clears, the message a subject submitted with its access request.</summary>
     Task<bool> SetAccessRequestMessageAsync(Guid subjectId, string? message, CancellationToken ct);
 

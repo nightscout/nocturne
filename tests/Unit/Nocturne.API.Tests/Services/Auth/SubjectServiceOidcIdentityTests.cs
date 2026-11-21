@@ -95,7 +95,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         var providerId = await SeedProviderAsync();
 
         var (outcome, identityId) = await _service.AttachOidcIdentityAsync(
-            subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com");
+            subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
 
         outcome.Should().Be(OidcLinkOutcome.Created);
         identityId.Should().NotBeNull();
@@ -120,7 +120,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         var existingId = await SeedIdentityAsync(subjectId, providerId, "ext-sub-1", email: "old@x");
 
         var (outcome, identityId) = await _service.AttachOidcIdentityAsync(
-            subjectId, providerId, "ext-sub-1", "https://issuer.example", "new@x");
+            subjectId, providerId, "ext-sub-1", "https://issuer.example", "new@x", emailVerified: false);
 
         outcome.Should().Be(OidcLinkOutcome.AlreadyLinkedToSelf);
         identityId.Should().Be(existingId);
@@ -143,7 +143,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         await SeedIdentityAsync(subjectA, providerId, "ext-sub-1");
 
         var (outcome, identityId) = await _service.AttachOidcIdentityAsync(
-            subjectB, providerId, "ext-sub-1", "https://issuer.example", "x@y");
+            subjectB, providerId, "ext-sub-1", "https://issuer.example", "x@y", emailVerified: false);
 
         outcome.Should().Be(OidcLinkOutcome.AlreadyLinkedToOther);
         identityId.Should().BeNull();
@@ -296,22 +296,6 @@ public class SubjectServiceOidcIdentityTests : IDisposable
 
         var row = await _db.SubjectOidcIdentities.AsNoTracking().SingleAsync(x => x.Id == identityId);
         row.LastUsedAt.Should().NotBeNull();
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task FindOrCreateFromOidcAsync_OnFind_UpdatesSubjectEmailAndNameIfChanged()
-    {
-        var subjectId = await SeedSubjectAsync("old-name");
-        var providerId = await SeedProviderAsync();
-        await SeedIdentityAsync(subjectId, providerId, "ext-1");
-
-        await _service.FindOrCreateFromOidcAsync(
-            providerId, "ext-1", "https://issuer.example", "new@e", emailVerified: true, "New Name");
-
-        var sRow = await _db.Subjects.AsNoTracking().SingleAsync(s => s.Id == subjectId);
-        sRow.Email.Should().Be("new@e");
-        sRow.Name.Should().Be("New Name");
     }
 
     [Fact]

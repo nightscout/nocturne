@@ -222,7 +222,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var (outcome, _) = await subjectService.AttachOidcIdentityAsync(
-            subjectId, request.ProviderId, request.OidcSubjectId, request.Issuer, request.Email);
+            subjectId, request.ProviderId, request.OidcSubjectId, request.Issuer, request.Email, emailVerified: false);
 
         return outcome switch
         {
@@ -326,6 +326,60 @@ public class TenantController : ControllerBase
         IssueCodeAsync(
             id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
 
+    /// <summary>
+    /// Marks the address a member holds as confirmed. For an operator that has its own evidence the
+    /// person controls the inbox. Never sets or changes the address: it confirms only the one
+    /// already on the account, and refuses with 409 when <see cref="AdminConfirmEmailRequest.Email"/>
+    /// is not that address. Confirming an address already confirmed answers the same and keeps the
+    /// first time.
+    /// </summary>
+    /// <remarks>
+    /// The refusal never names the address the account holds. Returns 404 when the subject is not a
+    /// member of the tenant.
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/email-confirmation")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(EmailConfirmedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmMemberEmail(
+        Guid id, Guid subjectId,
+        [FromBody] AdminConfirmEmailRequest request,
+        [FromServices] ISubjectService subjectService,
+        [FromServices] IAuthAuditService auditService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var tenant = await _tenantService.GetByIdAsync(id, ct);
+        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+            return NotFound();
+
+        var result = await subjectService.ConfirmEmailAsync(subjectId, request.Email);
+        switch (result)
+        {
+            case EmailConfirmation.Confirmed confirmed:
+                await auditService.LogAsync(
+                    AuthAuditEventType.EmailConfirmedByOperator, subjectId, success: true,
+                    ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    userAgent: Request.Headers.UserAgent.ToString(),
+                    actor: AuthAuditActor.From(HttpContext.GetAuthContext()),
+                    tenantId: id);
+                return Ok(new EmailConfirmedDto(confirmed.At));
+            case EmailConfirmation.NotFound:
+                return NotFound();
+            default:
+                // An external client branches on this code.
+                return Problem(
+                    detail: "The address named is not the address on this account.",
+                    statusCode: 409,
+                    title: "Conflict",
+                    extensions: new Dictionary<string, object?> { ["error"] = nameof(EmailConfirmation.AddressMismatch) });
+        }
+    }
+
     /// <param name="id">The tenant the member belongs to; the caller must own it.</param>
     /// <param name="subjectId">The member the code is issued for.</param>
     /// <param name="purpose">What the code may be redeemed for.</param>
@@ -408,4 +462,6 @@ public record ProvisionRequest(
 public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<OidcIdentityDto> OidcIdentities);
 public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);
 public record OidcIdentityDto(Guid Id, string Provider, string? Email);
+public record AdminConfirmEmailRequest(string Email);
+public record EmailConfirmedDto(DateTime ConfirmedAt);
 public record AdminAttachOidcRequest(Guid ProviderId, string OidcSubjectId, string Issuer, string? Email);

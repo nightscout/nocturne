@@ -11,6 +11,10 @@ namespace Nocturne.Core.Models.Authorization;
 /// The provider identity the subject is created from, linked in the same save as the subject, so
 /// two first sign-ins racing on one identity cannot leave a subject with no way in.
 /// </param>
+/// <param name="EmailConfirmedAt">
+/// When the provider asserted <paramref name="Email"/> as verified, for a subject created from
+/// that assertion. Ignored without an email.
+/// </param>
 public sealed record NewSubject(
     string Name,
     string? Username = null,
@@ -23,7 +27,8 @@ public sealed record NewSubject(
     string? AccessRequestMessage = null,
     Guid? Id = null,
     IReadOnlyList<string>? RoleNames = null,
-    NewOidcLink? OidcIdentity = null);
+    NewOidcLink? OidcIdentity = null,
+    DateTime? EmailConfirmedAt = null);
 
 /// <summary>An OIDC identity to link to the subject it is stored with.</summary>
 public sealed record NewOidcLink(
@@ -44,6 +49,7 @@ public sealed record SubjectRecord(
     string Name,
     string? Username,
     string? Email,
+    DateTime? EmailConfirmedAt,
     string? Notes,
     bool IsActive,
     bool IsSystemSubject,
@@ -64,6 +70,11 @@ public sealed record SubjectRecord(
 /// be stored as null (email, notes, the access-request message) is set through
 /// <see cref="SubjectProfile"/> or its own method instead.
 /// </summary>
+/// <param name="EmailConfirmedAt">
+/// Confirms <paramref name="Email"/> of this edit at that time, in the same save that stores it, so
+/// the address and its confirmation are written as a pair. Without an <paramref name="Email"/> it
+/// confirms nothing.
+/// </param>
 public sealed record SubjectEdit(
     string? Name = null,
     string? Username = null,
@@ -73,7 +84,8 @@ public sealed record SubjectEdit(
     string? ApprovalStatus = null,
     string? PreferredLanguage = null,
     string? Preferences = null,
-    DateTime? LastLoginAt = null)
+    DateTime? LastLoginAt = null,
+    DateTime? EmailConfirmedAt = null)
 {
     /// <summary>Grants a subject that asked for access: it becomes active and can sign in.</summary>
     public static readonly SubjectEdit AccessApproved =
@@ -86,6 +98,21 @@ public sealed record SubjectEdit(
 
 /// <summary>The profile fields an administrator's edit replaces together, null members included.</summary>
 public sealed record SubjectProfile(string Name, string? Email, string? Notes);
+
+/// <summary>What confirming a subject's email address found.</summary>
+public abstract record EmailConfirmation
+{
+    private EmailConfirmation() { }
+
+    /// <summary>The address is confirmed, since <paramref name="At"/>.</summary>
+    public sealed record Confirmed(DateTime At) : EmailConfirmation;
+
+    /// <summary>There is no such subject.</summary>
+    public sealed record NotFound : EmailConfirmation;
+
+    /// <summary>The address named is not the one the subject holds, or the subject holds none.</summary>
+    public sealed record AddressMismatch : EmailConfirmation;
+}
 
 /// <summary>A tenant a change to a subject would leave without an owner who can sign in.</summary>
 public sealed record LastOwnerTenant(Guid TenantId, string Slug);

@@ -99,12 +99,9 @@ public class OAuthGrantServiceTests : IDisposable
 
     private async Task SeedSubjectAsync(NocturneDbContext db, Guid id, string name, string? email = null)
     {
-        db.Subjects.Add(new SubjectEntity
-        {
-            Id = id,
-            Name = name,
-            Email = email,
-        });
+        var subject = new SubjectEntity { Id = id, Name = name };
+        subject.SetEmail(email);
+        db.Subjects.Add(subject);
         await db.SaveChangesAsync();
     }
 

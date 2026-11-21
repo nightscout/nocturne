@@ -73,12 +73,30 @@ public class SubjectService : ISubjectService
             var existing = match.Subject;
             await _subjects.TouchOidcIdentityAsync(match.Identity.Id, now, email: null, CancellationToken.None);
 
-            var newEmail = verifiedEmail is not null && existing.Email != verifiedEmail ? verifiedEmail : null;
             var newName = !string.IsNullOrEmpty(name) && existing.Name != name ? name : null;
-            if (newEmail is not null || newName is not null)
+            string? adoptedEmail = null;
+            if (verifiedEmail is not null && (existing.EmailConfirmedAt is null || !EmailAddresses.AreSame(existing.Email, verifiedEmail)))
             {
-                await _subjects.UpdateAsync(existing.Id, new SubjectEdit(Name: newName, Email: newEmail), CancellationToken.None);
-                existing = existing with { Email = newEmail ?? existing.Email, Name = newName ?? existing.Name };
+                var confirmation = await _subjects.ConfirmEmailAsync(
+                    existing.Id, verifiedEmail, now, CancellationToken.None);
+                if (confirmation is EmailConfirmation.AddressMismatch)
+                    adoptedEmail = verifiedEmail;
+            }
+
+            if (adoptedEmail is not null || newName is not null)
+            {
+                await _subjects.UpdateAsync(
+                    existing.Id,
+                    new SubjectEdit(
+                        Name: newName,
+                        Email: adoptedEmail,
+                        EmailConfirmedAt: adoptedEmail is null ? null : now),
+                    CancellationToken.None);
+                existing = existing with
+                {
+                    Email = adoptedEmail ?? existing.Email,
+                    Name = newName ?? existing.Name,
+                };
             }
 
             _logger.LogDebug(
@@ -94,7 +112,8 @@ public class SubjectService : ISubjectService
                 Name: name ?? email ?? oidcSubjectId,
                 Email: verifiedEmail,
                 RoleNames: defaultRoles?.ToList(),
-                OidcIdentity: new NewOidcLink(providerId, oidcSubjectId, issuer, email, now)),
+                OidcIdentity: new NewOidcLink(providerId, oidcSubjectId, issuer, email, now),
+                EmailConfirmedAt: verifiedEmail is null ? null : now),
             CancellationToken.None);
 
         _logger.LogInformation(
@@ -331,7 +350,8 @@ public class SubjectService : ISubjectService
 
     /// <inheritdoc />
     public async Task<(OidcLinkOutcome Outcome, Guid? IdentityId)> AttachOidcIdentityAsync(
-        Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email)
+        Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email,
+        bool emailVerified)
     {
         var existing = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
         if (existing != null)
@@ -339,6 +359,7 @@ public class SubjectService : ISubjectService
             if (existing.Identity.SubjectId == subjectId)
             {
                 await _subjects.TouchOidcIdentityAsync(existing.Identity.Id, DateTime.UtcNow, email, CancellationToken.None);
+                await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
                 return (OidcLinkOutcome.AlreadyLinkedToSelf, existing.Identity.Id);
             }
             return (OidcLinkOutcome.AlreadyLinkedToOther, null);
@@ -347,8 +368,24 @@ public class SubjectService : ISubjectService
         var identityId = await _subjects.AddOidcIdentityAsync(
             new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, DateTime.UtcNow),
             CancellationToken.None);
+        await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
         return (OidcLinkOutcome.Created, identityId);
     }
+
+    /// <summary>
+    /// Confirms the subject's address when the provider asserted <paramref name="email"/> as
+    /// verified and it is the address the subject holds. Linking never changes the address, and an
+    /// unverified assertion confirms nothing.
+    /// </summary>
+    private async Task ConfirmAssertedEmailAsync(Guid subjectId, string? email, bool emailVerified)
+    {
+        if (emailVerified && !string.IsNullOrEmpty(email))
+            await _subjects.ConfirmEmailAsync(subjectId, email, DateTime.UtcNow, CancellationToken.None);
+    }
+
+    /// <inheritdoc />
+    public Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email) =>
+        _subjects.ConfirmEmailAsync(subjectId, email, DateTime.UtcNow, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId) =>

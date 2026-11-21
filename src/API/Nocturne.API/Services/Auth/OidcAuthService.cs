@@ -755,7 +755,8 @@ public class OidcAuthService : IOidcAuthService
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
-            claims.Email);
+            claims.Email,
+            claims.EmailVerified == true);
 
         if (outcome == OidcLinkOutcome.AlreadyLinkedToOther)
             return OidcSetupCallbackResult.Failed(
@@ -826,7 +827,8 @@ public class OidcAuthService : IOidcAuthService
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
-            claims.Email);
+            claims.Email,
+            claims.EmailVerified == true);
 
         return outcome switch
         {

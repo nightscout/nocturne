@@ -167,6 +167,7 @@ public class PasskeyCredentialRepository : IPasskeyCredentialRepository
             subject.Name,
             subject.Username,
             subject.Email,
+            subject.EmailConfirmedAt,
             subject.Notes,
             subject.IsActive,
             subject.IsSystemSubject,

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -36,7 +37,42 @@ public class SubjectEntity : IEntityTimestamped
     /// </summary>
     [MaxLength(255)]
     [Column("email")]
-    public string? Email { get; set; }
+    public string? Email { get; private set; }
+
+    /// <summary>
+    /// When <see cref="Email"/> was confirmed as an address its owner controls; null while it is
+    /// unconfirmed. Written only by <see cref="SetEmail"/> and <see cref="ConfirmEmail"/>.
+    /// </summary>
+    [Column("email_confirmed_at")]
+    public DateTime? EmailConfirmedAt { get; private set; }
+
+    /// <summary>
+    /// Stores <paramref name="email"/> as the address. A different address, or none, clears
+    /// <see cref="EmailConfirmedAt"/>: the confirmation was for the old address and says nothing
+    /// about the new one. The same address (<see cref="EmailAddresses.AreSame"/>) keeps it. Every write of the address
+    /// goes through here. Returns whether the address changed, in which case the caller's save
+    /// must write both columns as a pair.
+    /// </summary>
+    public bool SetEmail(string? email)
+    {
+        var changed = !EmailAddresses.AreSame(Email, email);
+        if (changed)
+            EmailConfirmedAt = null;
+        Email = email;
+        return changed;
+    }
+
+    /// <summary>
+    /// Confirms the address at <paramref name="now"/> when <paramref name="email"/> is the one
+    /// stored, and returns whether it is. An address already confirmed keeps its first time.
+    /// </summary>
+    public bool ConfirmEmail(string? email, DateTime now)
+    {
+        if (!EmailAddresses.AreSame(Email, email))
+            return false;
+        EmailConfirmedAt ??= now;
+        return true;
+    }
 
     /// <summary>
     /// Notes or description about this subject
