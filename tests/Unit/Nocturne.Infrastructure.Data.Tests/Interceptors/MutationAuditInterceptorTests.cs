@@ -73,13 +73,7 @@ public class TestNocturneDbContext : NocturneDbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Remove the global query filters that reference PostgreSQL-specific functions
-        // (set_config / current_setting) which don't work with SQLite.
-        modelBuilder.Entity<TestAuditableEntity>(e =>
-        {
-            e.ClearQueryFilters();
-            e.Property(x => x.DeletedAt).IsRequired(false);
-        });
+        modelBuilder.Entity<TestAuditableEntity>(e => e.Property(x => x.DeletedAt).IsRequired(false));
 
         modelBuilder.Entity<TestSensorGlucoseEntity>(e => e.ClearQueryFilters());
 
