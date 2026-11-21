@@ -6,7 +6,7 @@
  * fails until it has one.
  */
 import { EventAnchorKind } from "#lib/api/index.js";
-import { formatLocale } from "#lib/utils/formatting.js";
+import { formatList, formatLocale } from "#lib/utils/formatting.js";
 import type { Weekday } from "./catalogue-vocabulary.js";
 
 /** The word for `id` in `words`, or the id itself when the web has none yet. */
@@ -897,7 +897,7 @@ function scopeWord(scope: string): string {
 export function accessReason(scopes: readonly string[]): string {
   const words = scopes.map(scopeWord);
   return words.length > 0
-    ? `Your access cannot read ${words.join(" or ")}, which this needs.`
+    ? `Your access cannot read ${formatList(words, "disjunction")}, which this needs.`
     : "Your access cannot read the data this needs.";
 }
 

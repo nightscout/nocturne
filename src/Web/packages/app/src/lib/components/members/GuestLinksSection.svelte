@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { RemoteCommand } from '$app/server';
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
-  import { formatDayTime, relativeTime } from "#lib/utils/formatting.js";
+  import { formatDayTime, formatList, relativeTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -11,7 +11,7 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import { toggled } from "#lib/utils/collections.js";
-  import { categoriesIn, formatList } from "./data-categories";
+  import { categoriesIn } from "./data-categories";
   import { EmptyState } from "#lib/components/shared/index.js";
   import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
