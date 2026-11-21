@@ -22,8 +22,14 @@ public interface IAlertRepository
     Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(CancellationToken ct);
 
     /// <summary>
-    /// Returns the enabled rules of <paramref name="tenantId"/> as <see cref="GetEnabledRulesAsync"/>
-    /// does, together with the ids of the enabled rules it leaves out because they cannot be read.
+    /// Returns the enabled rules of the tenant as <see cref="GetEnabledRulesAsync"/> does, together
+    /// with the enabled rules it leaves out because they cannot be read.
+    /// </summary>
+    Task<EnabledAlertRules> ReadEnabledRulesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns the enabled rules of <paramref name="tenantId"/> as <see cref="ReadEnabledRulesAsync(CancellationToken)"/>
+    /// does.
     /// </summary>
     /// <remarks>A startup loop calls it once per tenant.</remarks>
     Task<EnabledAlertRules> ReadEnabledRulesAsync(Guid tenantId, CancellationToken ct);
@@ -172,6 +178,14 @@ public interface IAlertRepository
     /// </returns>
     Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct);
+
+    /// <summary>
+    /// As <see cref="RecordUnevaluableNoticeAsync"/>, for a rule whose stored condition type or
+    /// severity no member has: null when the rule is not enabled, or any of its stored columns
+    /// named in <paramref name="rule"/> has changed.
+    /// </summary>
+    Task<UnevaluableNoticeRecorded?> RecordUnreadableRuleNoticeAsync(
+        UnreadableAlertRule rule, string conditionVersion, DateTime at, CancellationToken ct);
 
     /// <summary>
     /// The notices that a rule cannot be evaluated that still stand (their instance is

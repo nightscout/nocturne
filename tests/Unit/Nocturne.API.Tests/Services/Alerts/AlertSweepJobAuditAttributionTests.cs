@@ -39,8 +39,8 @@ public class AlertSweepJobAuditAttributionTests
 
         var repository = AlertSweepRuns.Repository(Tenant, () => null);
         repository
-            .Setup(x => x.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([rule]);
+            .Setup(x => x.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnabledAlertRules([rule], []));
 
         IAuditContext? scopeContextAudit = null;
         bool? ambientIsSystemMutation = null;

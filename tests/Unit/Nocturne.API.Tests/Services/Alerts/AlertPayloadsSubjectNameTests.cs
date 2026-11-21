@@ -27,7 +27,7 @@ public class AlertPayloadsSubjectNameTests
         AlertPayloads.Build(Rule, Sensor, Tenant, Guid.NewGuid(), Guid.NewGuid(), tenant, 1, Now);
 
     private static AlertPayload Unevaluable(TenantAlertContext? tenant) =>
-        AlertPayloads.Unevaluable(Rule, Tenant, Guid.NewGuid(), Guid.NewGuid(), tenant, 1, Now);
+        AlertPayloads.Unevaluable(Rule.Name, Rule.ConditionType, Rule.Severity, Tenant, Guid.NewGuid(), Guid.NewGuid(), tenant, 1, Now);
 
     public static TheoryData<string?, string?, string> Names => new()
     {

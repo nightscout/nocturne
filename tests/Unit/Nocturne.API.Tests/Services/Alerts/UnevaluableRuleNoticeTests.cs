@@ -162,6 +162,8 @@ public class UnevaluableRuleNoticeTests
         new(id ?? RuleId, Tenant, "Urgent Low", AlertConditionType.Threshold, body,
             severity, "{}", 0, false, null);
 
+    private static EnabledAlertRules Enabled(params AlertRuleSnapshot[] rules) => new(rules, []);
+
     private static readonly AlertRuleChannelSnapshot Webhook =
         new(Guid.Parse("36003600-0000-7000-8000-0000000000c1"), RuleId, ChannelType.Webhook, "https://example.test/hook", null, 0);
 
@@ -217,8 +219,8 @@ public class UnevaluableRuleNoticeTests
     {
         var process = Process();
 
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Once());
         _delivery.Verify(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
@@ -238,7 +240,7 @@ public class UnevaluableRuleNoticeTests
         var enabledRules = await new AlertRepository(new TestNocturneDbContextFactory(_db))
             .GetEnabledRulesAsync(CancellationToken.None);
 
-        await Process().CheckAsync(enabledRules, CancellationToken.None);
+        await Process().CheckAsync(new EnabledAlertRules(enabledRules, []), CancellationToken.None);
 
         VerifySent(Times.Never(), RuleId);
         VerifySent(Times.Once(), OtherRuleId);
@@ -247,12 +249,12 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task A_restart_or_a_second_instance_does_not_send_it_again()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         var restarted = Process();
         var secondInstance = Process();
-        await restarted.CheckAsync([Rule(Broken)], CancellationToken.None);
-        await secondInstance.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await restarted.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await secondInstance.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Once());
         (await _db.AlertExcursions.CountAsync()).Should().Be(1);
@@ -262,10 +264,10 @@ public class UnevaluableRuleNoticeTests
     public async Task An_edit_to_another_condition_that_cannot_be_evaluated_sends_it_again()
     {
         var process = Process();
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var first = (await StandingAsync()).Single();
 
-        await process.CheckAsync([Rule(OtherBroken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(OtherBroken)), CancellationToken.None);
 
         VerifySent(Times.Exactly(2));
         VerifyResolved(first, ExcursionCloseReason.Manual);
@@ -276,10 +278,10 @@ public class UnevaluableRuleNoticeTests
     public async Task An_edit_to_a_condition_that_can_be_evaluated_resolves_it()
     {
         var process = Process();
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var notice = (await StandingAsync()).Single();
 
-        await process.CheckAsync([Rule(Valid)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Valid)), CancellationToken.None);
 
         VerifyResolved(notice, ExcursionCloseReason.Manual);
         (await StandingAsync()).Should().BeEmpty();
@@ -289,7 +291,7 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task Retiring_the_rule_by_disabling_or_deleting_it_resolves_it()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var notice = (await StandingAsync()).Single();
         var tracker = new Mock<IExcursionTracker>();
         tracker
@@ -313,10 +315,10 @@ public class UnevaluableRuleNoticeTests
             .Setup(t => t.ForceCloseAsync(RuleId, ExcursionCloseReason.RuleDisabled, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.None));
 
-        await Process(log).CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process(log).CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         await new AlertRuleRetirement(tracker.Object, _resolution.Object, Process(log))
             .CloseAsync([RuleId], Tenant, CancellationToken.None);
-        await Process(log).CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process(log).CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Exactly(2));
         (await StandingAsync()).Should().ContainSingle();
@@ -326,10 +328,10 @@ public class UnevaluableRuleNoticeTests
     public async Task A_rule_disabled_through_another_instance_and_enabled_again_is_told_again()
     {
         var thisInstance = Process();
-        await thisInstance.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await thisInstance.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         await Process().ResolveAsync(RuleId, ExcursionCloseReason.RuleDisabled, CancellationToken.None);
 
-        await thisInstance.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await thisInstance.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Exactly(2));
     }
@@ -344,12 +346,12 @@ public class UnevaluableRuleNoticeTests
                 ++calls == 1 ? throw new TimeoutException("enricher timed out") : c);
         var process = Process();
 
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         VerifySent(Times.Never());
         (await StandingAsync()).Should().ContainSingle();
 
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Once());
         (await _db.AlertExcursions.CountAsync()).Should().Be(1);
@@ -367,11 +369,11 @@ public class UnevaluableRuleNoticeTests
                     ? throw new OperationCanceledException("shutting down")
                     : RecordDeliveryAsync(instanceId, ct));
 
-        var cancelled = () => Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        var cancelled = () => Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         await cancelled.Should().ThrowAsync<OperationCanceledException>();
 
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Exactly(2));
         (await _db.AlertDeliveries.CountAsync()).Should().Be(1, "one dispatch completed for the version");
@@ -381,10 +383,10 @@ public class UnevaluableRuleNoticeTests
     public async Task A_notice_that_do_not_disturb_silenced_is_not_sent_by_a_later_pass()
     {
         _dnd = new HashSet<DndScope> { DndScope.All };
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         _dnd = new HashSet<DndScope>();
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         VerifySent(Times.Never());
     }
@@ -410,7 +412,7 @@ public class UnevaluableRuleNoticeTests
         notice.Report([Rule(Broken)]);
 
         logger.Warnings.Should().ContainSingle();
-        await Process(log).CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process(log).CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         VerifySent(Times.Once(), because: "the sweep still sends a version that evaluation logged first");
     }
 
@@ -424,7 +426,7 @@ public class UnevaluableRuleNoticeTests
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([new RustValidationIssue(scope, scope, "field_missing", "value")]);
 
-        await Process().CheckAsync([Rule(Valid)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Valid)), CancellationToken.None);
 
         _delivery.VerifyNoOtherCalls();
         (await _db.AlertExcursions.CountAsync()).Should().Be(0);
@@ -435,7 +437,7 @@ public class UnevaluableRuleNoticeTests
     {
         _dnd = new HashSet<DndScope> { DndScope.All };
 
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         _delivery.VerifyNoOtherCalls();
         (await _db.AlertInstances.SingleAsync()).SuppressionReason.Should().Be("dnd:all");
@@ -446,7 +448,7 @@ public class UnevaluableRuleNoticeTests
     {
         _dnd = new HashSet<DndScope> { DndScope.All };
 
-        await Process().CheckAsync([Rule(Broken, AlertRuleSeverity.Critical)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken, AlertRuleSeverity.Critical)), CancellationToken.None);
 
         VerifySent(Times.Once());
         (await _db.AlertInstances.SingleAsync()).SuppressionReason.Should().BeNull();
@@ -468,7 +470,7 @@ public class UnevaluableRuleNoticeTests
             .ThrowsAsync(new HttpRequestException("delivery failed"));
 
         await Process().CheckAsync(
-            [Rule(throwsOnCheck), Rule(Broken, id: failsDelivery), Rule(Broken, id: OtherRuleId)],
+            Enabled(Rule(throwsOnCheck), Rule(Broken, id: failsDelivery), Rule(Broken, id: OtherRuleId)),
             CancellationToken.None);
 
         VerifySent(Times.Once(), OtherRuleId);
@@ -477,17 +479,17 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task A_notice_recorded_as_a_disable_lands_is_resolved_by_the_next_run_and_told_again_on_enable()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var notice = (await StandingAsync()).Single();
         await SetEnabledAsync(RuleId, false);
 
-        await Process().CheckAsync([], CancellationToken.None);
+        await Process().CheckAsync(Enabled(), CancellationToken.None);
 
         VerifyResolved(notice, ExcursionCloseReason.RuleDisabled);
         (await StandingAsync()).Should().BeEmpty();
 
         await SetEnabledAsync(RuleId, true);
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         VerifySent(Times.Exactly(2), because: "a rule enabled again while still broken is told again");
     }
 
@@ -496,7 +498,7 @@ public class UnevaluableRuleNoticeTests
     {
         var process = Process(repository: new CountingRepository(new TestNocturneDbContextFactory(_db), storeHoldsWhatTheRunRead: false));
 
-        await process.CheckAsync([Rule(OtherBroken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(OtherBroken)), CancellationToken.None);
 
         VerifySent(Times.Never(), because: "the store holds Broken; OtherBroken was edited away before the run recorded it");
         (await _db.AlertExcursions.CountAsync()).Should().Be(0);
@@ -508,7 +510,7 @@ public class UnevaluableRuleNoticeTests
         var readBeforeTheDisable = Rule(Broken);
         await SetEnabledAsync(RuleId, false);
 
-        await Process().CheckAsync([readBeforeTheDisable], CancellationToken.None);
+        await Process().CheckAsync(Enabled(readBeforeTheDisable), CancellationToken.None);
 
         VerifySent(Times.Never());
         (await _db.AlertExcursions.CountAsync()).Should().Be(0);
@@ -517,7 +519,7 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task A_notice_whose_retirement_failed_is_resolved_by_the_next_run()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var notice = (await StandingAsync()).Single();
         _resolution
             .Setup(h => h.HandleClosedAsync(It.IsAny<ExcursionTransition>(), Tenant, It.IsAny<CancellationToken>()))
@@ -535,7 +537,7 @@ public class UnevaluableRuleNoticeTests
                     instance.ResolvedAt = Now;
                 await db.SaveChangesAsync(ct);
             });
-        await Process().CheckAsync([], CancellationToken.None);
+        await Process().CheckAsync(Enabled(), CancellationToken.None);
 
         (await StandingAsync()).Should().BeEmpty();
         _resolution.Verify(h => h.HandleClosedAsync(
@@ -546,13 +548,13 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task A_superseded_notice_that_cannot_be_resolved_does_not_hold_back_the_new_one()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var first = (await StandingAsync()).Single();
         _resolution
             .Setup(h => h.HandleClosedAsync(It.Is<ExcursionTransition>(t => t.ExcursionId == first), Tenant, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TimeoutException("resolution failed"));
 
-        await Process().CheckAsync([Rule(OtherBroken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(OtherBroken)), CancellationToken.None);
 
         VerifySent(Times.Exactly(2));
     }
@@ -563,9 +565,9 @@ public class UnevaluableRuleNoticeTests
         var repository = new CountingRepository(new TestNocturneDbContextFactory(_db));
         var process = Process(repository: repository);
 
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
-        await process.CheckAsync([Rule(Broken)], CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
+        await process.CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         repository.Records.Should().Be(1, "a run that finds the notice dispatched opens no write transaction");
         VerifySent(Times.Once());
@@ -583,7 +585,7 @@ public class UnevaluableRuleNoticeTests
                 await RecordDeliveryAsync(instanceId, ct);
             });
 
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
 
         var notice = await _db.AlertExcursions.SingleAsync();
         _resolution.Verify(h => h.HandleClosedAsync(
@@ -595,7 +597,7 @@ public class UnevaluableRuleNoticeTests
     [Fact]
     public async Task A_notice_of_a_rule_that_can_be_evaluated_again_is_resolved_by_a_later_run_when_the_first_try_fails()
     {
-        await Process().CheckAsync([Rule(Broken)], CancellationToken.None);
+        await Process().CheckAsync(Enabled(Rule(Broken)), CancellationToken.None);
         var notice = (await StandingAsync()).Single();
         var failing = true;
         _resolution
@@ -610,9 +612,9 @@ public class UnevaluableRuleNoticeTests
             });
         var log = new ConditionVersionLog();
 
-        await Process(log).CheckAsync([Rule(Valid)], CancellationToken.None);
+        await Process(log).CheckAsync(Enabled(Rule(Valid)), CancellationToken.None);
         failing = false;
-        await Process(log).CheckAsync([Rule(Valid)], CancellationToken.None);
+        await Process(log).CheckAsync(Enabled(Rule(Valid)), CancellationToken.None);
 
         (await StandingAsync()).Should().BeEmpty();
         notice.Should().NotBeEmpty();

@@ -19,7 +19,10 @@ namespace Nocturne.API.Services.Alerts;
 /// Every problem that keeps one of a rule's trees from being evaluated is logged once per version
 /// of its condition, by whichever of <see cref="Report"/> and <see cref="CheckAsync"/> sees the
 /// version first. Only a body that cannot be evaluated skips the rule, so only that is sent: an
-/// auto-resolve tree or snooze conditions that cannot be evaluated leave the rule firing.
+/// auto-resolve tree or snooze conditions that cannot be evaluated leave the rule firing. A rule
+/// whose stored condition type, severity or scope class no engine member has (<see cref="UnreadableAlertRule"/>)
+/// is skipped too, and is sent the same notice through its channels with no condition type, at
+/// critical severity when the severity is the unreadable part.
 /// </para>
 /// <para>
 /// Only <see cref="AlertSweepJob"/> sends, as the system, so that no upload waits on a webhook
@@ -52,12 +55,12 @@ public interface IUnevaluableRuleNotice
     void Report(IReadOnlyList<AlertRuleSnapshot> rules);
 
     /// <summary>
-    /// Sends the notice for each rule in <paramref name="enabledRules"/> (every enabled rule of the
-    /// tenant) whose body cannot be evaluated, unless it was dispatched for this version, and
-    /// resolves every other standing notice of the tenant. A failure for one notice is logged and
-    /// never stops the others.
+    /// Sends the notice for each rule in <paramref name="enabled"/> (every enabled rule of the
+    /// tenant) whose body cannot be evaluated or that cannot be read at all, unless it was
+    /// dispatched for this version, and resolves every other standing notice of the tenant. A
+    /// failure for one notice is logged and never stops the others.
     /// </summary>
-    Task CheckAsync(IReadOnlyList<AlertRuleSnapshot> enabledRules, CancellationToken ct);
+    Task CheckAsync(EnabledAlertRules enabled, CancellationToken ct);
 
     /// <summary>Resolves the rule's standing notice, for a rule being disabled or deleted.</summary>
     Task ResolveAsync(Guid ruleId, ExcursionCloseReason reason, CancellationToken ct);
@@ -80,8 +83,23 @@ internal sealed class UnevaluableRuleNotice(
 
     /// <summary>The version of a rule's condition a notice is sent for.</summary>
     internal static string VersionOf(AlertRuleSnapshot rule) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{AlertConditionTypeNames.ToWireString(rule.ConditionType)}\n{rule.ConditionParams}")));
+        Hash($"{AlertConditionTypeNames.ToWireString(rule.ConditionType)}\n{rule.ConditionParams}");
+
+    /// <summary>The version of an unreadable rule a notice is sent for: whichever of its stored columns changes.</summary>
+    internal static string VersionOf(UnreadableAlertRule rule) =>
+        Hash($"unreadable\n{rule.StoredConditionType}\n{rule.ConditionParams}\n{rule.StoredSeverity}\n{rule.StoredScopeClass}");
+
+    private static string Hash(string version) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(version)));
+
+    /// <summary>What a notice needs of a rule, which an unreadable rule has less of.</summary>
+    private sealed record NoticeRule(
+        Guid Id,
+        string Name,
+        AlertConditionType? ConditionType,
+        AlertRuleSeverity Severity,
+        bool AllowThroughDnd,
+        RuleScopeClass ScopeClass);
 
     public void Report(IReadOnlyList<AlertRuleSnapshot> rules)
     {
@@ -90,41 +108,71 @@ internal sealed class UnevaluableRuleNotice(
             Issues(rule, tenantId);
     }
 
-    public async Task CheckAsync(IReadOnlyList<AlertRuleSnapshot> enabledRules, CancellationToken ct)
+    public async Task CheckAsync(EnabledAlertRules enabled, CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty) return;
 
         var standing = await repository.GetStandingUnevaluableNoticesAsync(null, ct);
-        var enabled = enabledRules.Select(r => r.Id).ToHashSet();
+        var enabledIds = enabled.Rules.Select(r => r.Id).Concat(enabled.Unreadable.Select(r => r.Id)).ToHashSet();
 
-        foreach (var rule in enabledRules)
+        foreach (var rule in enabled.Rules)
         {
             if (Issues(rule, tenantId) is not { } issues)
                 continue;
 
             var version = issues.Any(i => i.Scope == BodyScope) ? VersionOf(rule) : null;
-            foreach (var stale in standing.Where(n => n.AlertRuleId == rule.Id && n.ConditionVersion != version))
-                await TryResolveAsync(stale, ExcursionCloseReason.Manual, ct);
-
-            if (version is null
-                || standing.Any(n => n.AlertRuleId == rule.Id && n.ConditionVersion == version && n.Dispatched))
-                continue;
-
-            try
-            {
-                await NotifyAsync(rule, version, tenantId, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex,
-                    "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
-                    rule.Id, tenantId);
-            }
+            await SendOnceAsync(
+                new NoticeRule(rule.Id, rule.Name, rule.ConditionType, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass),
+                version,
+                at => repository.RecordUnevaluableNoticeAsync(rule, version!, at, ct),
+                standing, tenantId, ct);
         }
 
-        foreach (var orphan in standing.Where(n => !enabled.Contains(n.AlertRuleId)))
+        foreach (var rule in enabled.Unreadable)
+        {
+            var version = VersionOf(rule);
+            await SendOnceAsync(
+                new NoticeRule(rule.Id, rule.Name, null, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass),
+                version,
+                at => repository.RecordUnreadableRuleNoticeAsync(rule, version, at, ct),
+                standing, tenantId, ct);
+        }
+
+        foreach (var orphan in standing.Where(n => !enabledIds.Contains(n.AlertRuleId)))
             await TryResolveAsync(orphan, ExcursionCloseReason.RuleDisabled, ct);
+    }
+
+    /// <summary>
+    /// Resolves the rule's standing notices for any other version, then sends the notice for
+    /// <paramref name="version"/> unless it was dispatched; a null version is a rule that can be
+    /// evaluated, which has no notice.
+    /// </summary>
+    private async Task SendOnceAsync(
+        NoticeRule rule,
+        string? version,
+        Func<DateTime, Task<UnevaluableNoticeRecorded?>> record,
+        IReadOnlyList<StandingUnevaluableNotice> standing,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        foreach (var stale in standing.Where(n => n.AlertRuleId == rule.Id && n.ConditionVersion != version))
+            await TryResolveAsync(stale, ExcursionCloseReason.Manual, ct);
+
+        if (version is null
+            || standing.Any(n => n.AlertRuleId == rule.Id && n.ConditionVersion == version && n.Dispatched))
+            return;
+
+        try
+        {
+            await NotifyAsync(rule, record, tenantId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex,
+                "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
+                rule.Id, tenantId);
+        }
     }
 
     public async Task ResolveAsync(Guid ruleId, ExcursionCloseReason reason, CancellationToken ct)
@@ -182,22 +230,28 @@ internal sealed class UnevaluableRuleNotice(
         return issues;
     }
 
-    private async Task NotifyAsync(AlertRuleSnapshot rule, string version, Guid tenantId, CancellationToken ct)
+    private async Task NotifyAsync(
+        NoticeRule rule,
+        Func<DateTime, Task<UnevaluableNoticeRecorded?>> record,
+        Guid tenantId,
+        CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        if (await repository.RecordUnevaluableNoticeAsync(rule, version, now, ct) is not { Dispatched: false } notice)
+        if (await record(now) is not { Dispatched: false } notice)
             return;
 
         var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
         var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
         var payload = AlertPayloads.Unevaluable(
-            rule, tenantId, notice.ExcursionId, notice.InstanceId, tenant, activeExcursionCount, now);
+            rule.Name, rule.ConditionType, rule.Severity, tenantId, notice.ExcursionId, notice.InstanceId,
+            tenant, activeExcursionCount, now);
 
         var dnd = await contextEnricher.EnrichAsync(
             new SensorContext { LatestValue = null, LatestTimestamp = null, TrendRate = null, LastReadingAt = null }, [], ct);
         await DndGatedDispatch.DispatchAsync(
-            rule, dnd.ActiveDndScopes, notice.InstanceId, channels, payload, repository, deliveryService, logger, ct);
+            rule.Name, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass, dnd.ActiveDndScopes, notice.InstanceId,
+            channels, payload, repository, deliveryService, logger, ct);
 
         logger.LogInformation(
             "Notice {InstanceId} sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",

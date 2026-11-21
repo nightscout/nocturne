@@ -800,6 +800,9 @@ public class AlertSweepJobWallClockTests
                 .Setup(x => x.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => Rules.ToList());
             repository
+                .Setup(x => x.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new EnabledAlertRules(Rules.ToList(), []));
+            repository
                 .Setup(x => x.CreateInstanceAsync(It.IsAny<CreateAlertInstanceRequest>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((CreateAlertInstanceRequest r, CancellationToken _) =>
                 {

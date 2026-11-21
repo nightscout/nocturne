@@ -35,11 +35,15 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(CancellationToken ct)
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(CancellationToken ct) =>
+        (await ReadEnabledRulesAsync(ct)).Rules;
+
+    /// <inheritdoc/>
+    public virtual async Task<EnabledAlertRules> ReadEnabledRulesAsync(CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        return (await ReadEnabledRulesAsync(context, ct)).Rules;
+        return await ReadEnabledRulesAsync(context, ct);
     }
 
     /// <inheritdoc/>
@@ -51,13 +55,14 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <summary>
-    /// The context's tenant's enabled rules, less any whose condition type or severity no enum
+    /// The context's tenant's enabled rules, less any whose condition type, severity or scope class no enum
     /// member has.
     /// </summary>
     /// <remarks>
     /// The enum converter throws on such a value, which fails the whole read, so one stale row
     /// would stop every rule of the tenant evaluating. Each skipped rule is logged as an error
-    /// instead, every time it is skipped.
+    /// every time it is read, and returned as an <see cref="UnreadableAlertRule"/> for the sweep to
+    /// tell its recipients.
     /// </remarks>
     private async Task<EnabledAlertRules> ReadEnabledRulesAsync(NocturneDbContext context, CancellationToken ct)
     {
@@ -68,25 +73,41 @@ public class AlertRepository : IAlertRepository
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             var tenantId = context.TenantId;
-            var unreadable = await context.Database
-                .SqlQuery<StoredRuleEnums>(
-                    $"""SELECT id AS "Id", condition_type AS "ConditionType", severity AS "Severity" FROM alert_rules WHERE tenant_id = {tenantId} AND is_enabled""")
+            var stored = await context.Database
+                .SqlQuery<StoredRule>(
+                    $"""SELECT id AS "Id", name AS "Name", condition_type AS "ConditionType", condition_params::text AS "ConditionParams", severity AS "Severity", scope_class AS "ScopeClass", allow_through_dnd AS "AllowThroughDnd" FROM alert_rules WHERE tenant_id = {tenantId} AND is_enabled""")
                 .ToListAsync(ct);
-            unreadable.RemoveAll(r =>
-                EnumMemberValueConverter<AlertConditionType>.CanRead(r.ConditionType)
-                && EnumMemberValueConverter<AlertRuleSeverity>.CanRead(r.Severity));
+            var unreadable = stored
+                .Where(r => !EnumMemberValueConverter<AlertConditionType>.TryRead(r.ConditionType, out _)
+                            || !EnumMemberValueConverter<AlertRuleSeverity>.TryRead(r.Severity, out _)
+                            || !EnumMemberValueConverter<RuleScopeClass>.TryRead(r.ScopeClass, out _))
+                .Select(r => new UnreadableAlertRule(
+                    r.Id,
+                    r.Name,
+                    r.ConditionType,
+                    r.ConditionParams,
+                    r.Severity,
+                    EnumMemberValueConverter<AlertRuleSeverity>.TryRead(r.Severity, out var severity)
+                        ? severity
+                        : AlertRuleSeverity.Critical,
+                    r.ScopeClass,
+                    EnumMemberValueConverter<RuleScopeClass>.TryRead(r.ScopeClass, out var scopeClass)
+                        ? scopeClass
+                        : RuleScopeClass.Undirected,
+                    r.AllowThroughDnd))
+                .ToList();
             if (unreadable.Count == 0)
                 throw;
 
             foreach (var rule in unreadable)
             {
                 _logger.LogError(
-                    "Alert rule {AlertRuleId} for tenant {TenantId} is not evaluated: condition type '{ConditionType}' or severity '{Severity}' is not one the engine knows",
-                    rule.Id, tenantId, rule.ConditionType, rule.Severity);
+                    "Alert rule {AlertRuleId} for tenant {TenantId} is not evaluated: condition type '{ConditionType}', severity '{Severity}' or scope class '{ScopeClass}' is not one the engine knows",
+                    rule.Id, tenantId, rule.StoredConditionType, rule.StoredSeverity, rule.StoredScopeClass);
             }
 
             var excluded = unreadable.Select(r => r.Id).ToList();
-            return new EnabledAlertRules(await EnabledRules(context, excluded).ToListAsync(ct), excluded);
+            return new EnabledAlertRules(await EnabledRules(context, excluded).ToListAsync(ct), unreadable);
         }
     }
 
@@ -103,11 +124,15 @@ public class AlertRepository : IAlertRepository
             r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass, r.OnUnknown,
             r.GlucoseFreshnessMinutes, r.EnabledAt));
 
-    private sealed class StoredRuleEnums
+    private sealed class StoredRule
     {
         public Guid Id { get; init; }
+        public string Name { get; init; } = string.Empty;
         public string ConditionType { get; init; } = string.Empty;
+        public string ConditionParams { get; init; } = string.Empty;
         public string Severity { get; init; } = string.Empty;
+        public string ScopeClass { get; init; } = string.Empty;
+        public bool AllowThroughDnd { get; init; }
     }
 
     /// <inheritdoc/>
@@ -439,19 +464,47 @@ public class AlertRepository : IAlertRepository
     /// sees the notice this records. An edit made since the caller read the rule likewise records
     /// nothing for the condition it replaced. See <see cref="AdvisoryLockExtensions"/>.
     /// </remarks>
-    public virtual async Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
-        AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct)
+    public virtual Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
+        AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct) =>
+        RecordNoticeAsync(
+            rule.Id,
+            conditionVersion,
+            at,
+            (context, token) => context.AlertRules.AnyAsync(r => r.Id == rule.Id
+                                                                 && r.IsEnabled
+                                                                 && r.ConditionType == rule.ConditionType
+                                                                 && r.ConditionParams == rule.ConditionParams, token),
+            ct);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The rule is read by raw SQL, since no entity can hold its condition type or severity.
+    /// </remarks>
+    public virtual Task<UnevaluableNoticeRecorded?> RecordUnreadableRuleNoticeAsync(
+        UnreadableAlertRule rule, string conditionVersion, DateTime at, CancellationToken ct) =>
+        RecordNoticeAsync(
+            rule.Id,
+            conditionVersion,
+            at,
+            async (context, token) => (await context.Database
+                .SqlQuery<Guid>(
+                    $"""SELECT id AS "Value" FROM alert_rules WHERE id = {rule.Id} AND tenant_id = {context.TenantId} AND is_enabled AND condition_type = {rule.StoredConditionType} AND severity = {rule.StoredSeverity} AND scope_class = {rule.StoredScopeClass} AND condition_params::text = {rule.ConditionParams}""")
+                .ToListAsync(token)).Count > 0,
+            ct);
+
+    private async Task<UnevaluableNoticeRecorded?> RecordNoticeAsync(
+        Guid ruleId,
+        string conditionVersion,
+        DateTime at,
+        Func<NocturneDbContext, CancellationToken, Task<bool>> ruleStillHoldsWhatTheRunRead,
+        CancellationToken ct)
     {
-        var ruleId = rule.Id;
         await using var context = await _contexts.CreateAsync(ct);
         return await context.ExecuteInTransactionAsync<UnevaluableNoticeRecorded?>(async token =>
         {
             await context.LockForTransactionAsync(UnevaluableNoticeLockClass, ruleId, token);
 
-            if (!await context.AlertRules.AnyAsync(r => r.Id == ruleId
-                                                        && r.IsEnabled
-                                                        && r.ConditionType == rule.ConditionType
-                                                        && r.ConditionParams == rule.ConditionParams, token))
+            if (!await ruleStillHoldsWhatTheRunRead(context, token))
                 return null;
 
             var current = await Standing(context, ruleId, conditionVersion).FirstOrDefaultAsync(token);
