@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Uploads;
@@ -126,11 +127,18 @@ public class RejectedUploadRecorderTests
             .Should().HaveLength(RejectedUploadRecorder.MaxStringLength + 1).And.EndWith("…");
     }
 
-    [Fact]
-    public async Task One_refusal_that_cannot_be_kept_does_not_lose_the_others()
+    public static TheoryData<Exception> StoreFailures => new()
+    {
+        new DbUpdateException("store refused"),
+        new RetryLimitExceededException("retries exhausted", new TimeoutException()),
+    };
+
+    [Theory]
+    [MemberData(nameof(StoreFailures))]
+    public async Task One_refusal_that_cannot_be_kept_does_not_lose_the_others(Exception failure)
     {
         _store.Setup(s => s.UpsertAsync(It.Is<RejectedUpload>(u => u.Payload.Contains("bad")), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new DbUpdateException("store refused"));
+            .ThrowsAsync(failure);
 
         await _recorder.RecordTreatmentsAsync(
         [
@@ -140,6 +148,23 @@ public class RejectedUploadRecorderTests
 
         _kept.Should().ContainSingle().Which.Payload.Should().Contain("good");
         VerifyNotified(Times.Once());
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailures))]
+    public async Task A_notification_that_cannot_be_written_does_not_fail_the_record(Exception failure)
+    {
+        _notifications.Setup(n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var record = () => _recorder.RecordTreatmentsAsync([Refused(new Treatment { Id = "t-1", Notes = "hi" })]);
+
+        await record.Should().NotThrowAsync();
+        _kept.Should().ContainSingle();
     }
 
     [Fact]

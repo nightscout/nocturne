@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Hubs;
 
@@ -46,7 +47,7 @@ public sealed class HubConnectionRevalidator(
     /// sharing a subject, grant or tenant cost one read between them, and its scoped services are
     /// never used concurrently.
     /// <para>
-    /// A connection whose check fails in the database (<see cref="HubStoreFailure"/>) is kept until
+    /// A connection whose check fails in the database (<see cref="StoreFailure"/>) is kept until
     /// the next sweep. One whose check fails any other way is closed: its credential cannot be
     /// re-proven, and its client reconnects through the hub's own authorization. That clause is
     /// broad because each connection's check is the isolation boundary of a revocation sweep: a
@@ -77,7 +78,7 @@ public sealed class HubConnectionRevalidator(
                     context.ConnectionId);
                 Close(context);
             }
-            catch (Exception ex) when (HubStoreFailure.Is(ex))
+            catch (Exception ex) when (StoreFailure.Is(ex))
             {
                 logger.LogWarning(ex, "Could not re-check hub connection {ConnectionId}", context.ConnectionId);
             }

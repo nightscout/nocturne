@@ -1,10 +1,10 @@
-using System.Data.Common;
 using System.Text.Json;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
@@ -46,7 +46,7 @@ public sealed class PostgresGoogleHealthGrantHolders(
                 ? GoogleHealthGrantSharing.Shared
                 : GoogleHealthGrantSharing.NotShared;
         }
-        catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             logger.LogWarning(ex,
                 "Google Health could not read who else holds the account of tenant {TenantId}", tenantId);
@@ -84,7 +84,7 @@ public sealed class PostgresGoogleHealthGrantHolders(
             if (GoogleHealthSessionStore.HeldAccount(secrets) is not { } account) return;
             await holders.TryAddAsync(tenantId, account, ct);
         }
-        catch (Exception ex) when (ex is DbException or JsonException or InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is JsonException or InvalidOperationException)
         {
             logger.LogWarning(ex,
                 "Google Health could not read the stored session of tenant {TenantId}; its token is not counted as held",

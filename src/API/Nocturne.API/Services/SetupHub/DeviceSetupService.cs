@@ -1,7 +1,5 @@
-using System.Data.Common;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
@@ -285,15 +283,7 @@ public partial class DeviceSetupService(
         {
             await trackerWriter.PublishAsync(trackers, created, CancellationToken.None);
         }
-        catch (DbUpdateException ex)
-        {
-            logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
-        }
-        catch (DbException ex)
-        {
-            logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogError(ex, "Announcing tracker {DefinitionId} failed", created.Definition.Id);
         }

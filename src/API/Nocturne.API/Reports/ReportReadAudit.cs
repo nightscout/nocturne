@@ -1,9 +1,9 @@
-using System.Data.Common;
 using System.Text.Json;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Reports;
@@ -41,7 +41,7 @@ internal static class ReportReadAudit
             if (!config.ReadAuditEnabled)
                 return;
         }
-        catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ReportReadAudit))
                 .LogWarning(ex, "Could not read the read-audit setting; the report read {What} is not audited", what);

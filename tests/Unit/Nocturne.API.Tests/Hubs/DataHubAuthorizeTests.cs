@@ -10,6 +10,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -171,7 +172,7 @@ public class DataHubAuthorizeTests
     }
 
     [Theory]
-    [MemberData(nameof(HubStoreFailureTests.StoreFailures), MemberType = typeof(HubStoreFailureTests))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task Authorize_answers_a_failed_credential_check_as_unsuccessful(Exception failure)
     {
         var (hub, groups, authorizer) = CreateHub();

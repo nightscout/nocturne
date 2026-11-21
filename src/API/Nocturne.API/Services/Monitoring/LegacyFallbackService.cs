@@ -1,11 +1,9 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -129,19 +127,7 @@ internal sealed class LegacyFallbackService(
                         attempt is null || await ConsumableTrackerWriter.LandedAsync(tx, attempt, token),
                     ct);
             }
-            catch (DbUpdateException ex)
-            {
-                logger.LogError(ex, "Converting the legacy {Kind} age into a tracker failed", kind);
-                failed.Add(kind);
-                continue;
-            }
-            catch (DbException ex)
-            {
-                logger.LogError(ex, "Converting the legacy {Kind} age into a tracker failed", kind);
-                failed.Add(kind);
-                continue;
-            }
-            catch (RetryLimitExceededException ex)
+            catch (Exception ex) when (StoreFailure.Is(ex))
             {
                 logger.LogError(ex, "Converting the legacy {Kind} age into a tracker failed", kind);
                 failed.Add(kind);
@@ -156,15 +142,7 @@ internal sealed class LegacyFallbackService(
                 if (await writer.PublishAsync(trackers, created, CancellationToken.None) is var (published, current))
                     (definition, run) = (published, current);
             }
-            catch (DbUpdateException ex)
-            {
-                logger.LogError(ex, "Announcing tracker {DefinitionId} failed; it is converted", definition.Id);
-            }
-            catch (DbException ex)
-            {
-                logger.LogError(ex, "Announcing tracker {DefinitionId} failed; it is converted", definition.Id);
-            }
-            catch (RetryLimitExceededException ex)
+            catch (Exception ex) when (StoreFailure.Is(ex))
             {
                 logger.LogError(ex, "Announcing tracker {DefinitionId} failed; it is converted", definition.Id);
             }

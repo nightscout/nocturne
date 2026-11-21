@@ -1,6 +1,3 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -10,6 +7,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -292,15 +290,7 @@ public class CompressionLowService : ICompressionLowService
                 reason: NotificationArchiveReason.Completed,
                 cancellationToken: cancellationToken);
         }
-        catch (DbUpdateException ex)
-        {
-            LogArchiveFailure(ex, nightOf);
-        }
-        catch (DbException ex)
-        {
-            LogArchiveFailure(ex, nightOf);
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogArchiveFailure(ex, nightOf);
         }

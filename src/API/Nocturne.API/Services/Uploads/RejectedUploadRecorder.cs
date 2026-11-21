@@ -1,9 +1,7 @@
-using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Configuration;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -65,9 +63,7 @@ public sealed class RejectedUploadRecorder(
             {
                 anyNew |= await store.UpsertAsync(upload, CancellationToken.None);
             }
-            catch (DbUpdateException ex) { LogUnrecorded(ex); }
-            catch (DbException ex) { LogUnrecorded(ex); }
-            catch (InvalidOperationException ex) { LogUnrecorded(ex); }
+            catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException) { LogUnrecorded(ex); }
         }
 
         if (anyNew)
@@ -190,9 +186,7 @@ public sealed class RejectedUploadRecorder(
                 actions: [new NotificationActionDto { ActionId = "review", Label = "review", Icon = "eye", Variant = "default" }],
                 cancellationToken: CancellationToken.None);
         }
-        catch (DbUpdateException ex) { LogUnnotified(ex); }
-        catch (DbException ex) { LogUnnotified(ex); }
-        catch (InvalidOperationException ex) { LogUnnotified(ex); }
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException) { LogUnnotified(ex); }
     }
 
     private void LogUnnotified(Exception ex) =>
