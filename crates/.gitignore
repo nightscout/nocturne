@@ -1,1 +1,3 @@
 target/
+proptest-regressions/
+*.proptest-regressions

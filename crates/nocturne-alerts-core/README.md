@@ -55,6 +55,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --check
 ```
 
+`tests/properties.rs` and the FFI crate's `tests/envelope_properties.rs` state
+the tracker, timer-store, reader and envelope invariants as property tests
+(proptest).
+
 The parity suite names the scenario, tick, rule and field of any divergence
 from the committed `.expected.json` snapshots. Never fix a divergence by
 editing the corpus: it is frozen, and a new scenario's snapshot is written from

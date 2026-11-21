@@ -42,3 +42,6 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+proptest = { version = "1.12.0", default-features = false, features = ["std"] }
