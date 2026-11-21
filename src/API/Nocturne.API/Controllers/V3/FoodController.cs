@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -633,7 +634,7 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         // Add timestamp for uniqueness
-        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture));
 
         // If we have identifying parts, create a hash-based identifier
         if (identifierParts.Any())

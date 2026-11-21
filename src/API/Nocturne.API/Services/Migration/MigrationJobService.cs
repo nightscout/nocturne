@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -2318,7 +2319,7 @@ internal class MigrationJob
             StartDate = doc.GetValue("startDate", BsonNull.Value) switch
             {
                 { IsString: true } value => value.AsString,
-                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 _ => null,
             },
             Mills = mills,

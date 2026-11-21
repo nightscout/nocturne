@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
@@ -124,7 +125,7 @@ public class ActivityController : ControllerBase
             {
                 if (UploaderTimestamp.TryParse(latestActivity.CreatedAt, out var createdDate))
                 {
-                    Response.Headers.Append("Last-Modified", createdDate.ToString("R"));
+                    Response.Headers.Append("Last-Modified", createdDate.ToString("R", CultureInfo.InvariantCulture));
                 }
             }
         }

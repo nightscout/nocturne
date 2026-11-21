@@ -443,10 +443,10 @@ public class LoopService : ILoopService, IDisposable
 
         // Add timestamps (matches legacy logic exactly)
         var now = _time.GetUtcNow();
-        payload["sent-at"] = now.ToString("O"); // ISO 8601 format
+        payload["sent-at"] = now.ToString("O", CultureInfo.InvariantCulture); // ISO 8601 format
 
         var expiration = now.AddMinutes(5); // Expire after 5 minutes
-        payload["expiration"] = expiration.ToString("O");
+        payload["expiration"] = expiration.ToString("O", CultureInfo.InvariantCulture);
 
         return (payload, alert, true, null);
     }

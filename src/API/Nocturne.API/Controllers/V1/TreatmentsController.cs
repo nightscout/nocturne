@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -113,7 +114,7 @@ public class TreatmentsController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(treatmentArray);
     }
@@ -160,7 +161,7 @@ public class TreatmentsController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(treatment);
     }

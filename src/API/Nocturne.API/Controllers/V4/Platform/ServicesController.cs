@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -574,7 +575,7 @@ public class ServicesController : ControllerBase
         _logger.LogInformation(
             "Cursor reset requested for connector {ConnectorId} (from {From})",
             id,
-            request.From?.ToString("o") ?? "beginning");
+            request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
         return SyncOrConflict(result);

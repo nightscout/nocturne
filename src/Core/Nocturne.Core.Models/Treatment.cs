@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Attributes;
@@ -227,7 +228,7 @@ public class Treatment : ProcessableDocumentBase
                 {
                     return DateTimeOffset
                         .FromUnixTimeMilliseconds(mills)
-                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 }
             }
             return _created_at;

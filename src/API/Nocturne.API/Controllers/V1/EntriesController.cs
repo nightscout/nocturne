@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -337,12 +338,12 @@ public class EntriesController : ControllerBase
             entries.Length > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(entries[0].Mills)
                 : DateTimeOffset.UtcNow;
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["Last-Modified"] = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
         if (
             entries.Length > 0
             && Request.Headers.IfModifiedSince.Count > 0
-            && DateTimeOffset.TryParse(Request.Headers.IfModifiedSince.First(), out var ifModifiedSince)
+            && DateTimeOffset.TryParse(Request.Headers.IfModifiedSince.First(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var ifModifiedSince)
             && lastModified <= ifModifiedSince
         )
         {
@@ -606,7 +607,7 @@ public class EntriesController : ControllerBase
         {
             entry.DateString = DateTimeOffset
                 .FromUnixTimeMilliseconds(entry.Mills)
-                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         // Default type to "sgv" if not specified

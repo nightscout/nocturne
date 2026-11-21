@@ -94,7 +94,7 @@ public class ProfileController : ControllerBase
                 lastModified = DateTimeOffset.UtcNow.AddDays(-1); // Default fallback
             }
 
-            Response.Headers.LastModified = lastModified.ToString("R");
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
             // Check If-Modified-Since header for conditional requests
             if (Request.Headers.IfModifiedSince.Count > 0)
@@ -102,6 +102,8 @@ public class ProfileController : ControllerBase
                 if (
                     DateTimeOffset.TryParse(
                         Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var ifModifiedSince
                     )
                 )
@@ -268,7 +270,7 @@ public class ProfileController : ControllerBase
     private static void StampCreatedAt(Profile profile)
     {
         if (string.IsNullOrEmpty(profile.CreatedAt))
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -360,7 +362,7 @@ public class ProfileController : ControllerBase
 
         // Set Last-Modified header for caching
         var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-        Response.Headers.LastModified = lastModified.ToString("R");
+        Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
         // Check If-Modified-Since header for conditional requests
         if (Request.Headers.IfModifiedSince.Count > 0)
@@ -368,6 +370,8 @@ public class ProfileController : ControllerBase
             if (
                 DateTimeOffset.TryParse(
                     Request.Headers.IfModifiedSince.ToString(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
                     out var ifModifiedSince
                 )
             )
@@ -430,7 +434,7 @@ public class ProfileController : ControllerBase
 
             // Set Last-Modified header for caching
             var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-            Response.Headers.LastModified = lastModified.ToString("R");
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
             // Check If-Modified-Since header for conditional requests
             if (Request.Headers.IfModifiedSince.Count > 0)
@@ -438,6 +442,8 @@ public class ProfileController : ControllerBase
                 if (
                     DateTimeOffset.TryParse(
                         Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var ifModifiedSince
                     )
                 )

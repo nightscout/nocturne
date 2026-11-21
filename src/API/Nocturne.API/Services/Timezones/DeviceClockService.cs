@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -148,7 +149,7 @@ public class DeviceClockService : IDeviceClockService
                 "Derived {Count} device-clock deviation segment(s) for connector {Connector} "
                 + "(first: {From:o} → {To} at {Offset:+0;-0}min); corrections are disabled, so they were not applied",
                 segments.Count, connector, segments[0].FromUtc,
-                segments[0].ToUtc?.ToString("o") ?? "open", segments[0].OffsetMinutes);
+                segments[0].ToUtc?.ToString("o", CultureInfo.InvariantCulture) ?? "open", segments[0].OffsetMinutes);
         }
 
         return segments;
@@ -266,7 +267,7 @@ public class DeviceClockService : IDeviceClockService
             await TryNotifyOwnerAsync(
                 tenantId,
                 ZoneChangeNotificationType,
-                sourceId: $"{connector}:{zone}:{effectiveFrom:yyyyMMddHHmm}",
+                sourceId: $"{connector}:{zone}:{effectiveFrom.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)}",
                 cancellationToken);
         }
 
@@ -305,12 +306,12 @@ public class DeviceClockService : IDeviceClockService
                 "Confirmed device-clock deviation for tenant {TenantId}, connector {Connector}: "
                 + "{From:o} → {To} at {Offset:+0;-0}min ({Count} observations)",
                 tenantId, connector, segment.FromUtc,
-                segment.ToUtc?.ToString("o") ?? "open", segment.OffsetMinutes, segment.ObservationCount);
+                segment.ToUtc?.ToString("o", CultureInfo.InvariantCulture) ?? "open", segment.OffsetMinutes, segment.ObservationCount);
 
             var announced = await TryNotifyOwnerAsync(
                 tenantId,
                 SegmentNotificationType,
-                sourceId: $"{connector}:{segment.FirstObservedAtUtc:yyyyMMddHHmm}:{segment.OffsetMinutes}",
+                sourceId: $"{connector}:{segment.FirstObservedAtUtc.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)}:{segment.OffsetMinutes}",
                 cancellationToken);
 
             if (!announced)

@@ -138,9 +138,9 @@ public class GlookoSettingsProfileMapper
         {
             Id = id,
             DefaultProfile = defaultProfile,
-            StartDate = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = mills,
-            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dL",
             EnteredBy = "Glooko",
             IsExternallyManaged = true,

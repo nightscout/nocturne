@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -82,9 +83,9 @@ public static class DemoHealthDataGenerator
                 // earlier seeds wrote it once, at the standard offset, so only the
                 // daylight occurrence carries a suffix.
                 SyncIdentifier = clock.Zone.IsAmbiguousTime(t) && clock.Zone.IsDaylightSavingTime(utc)
-                    ? $"{dataSource}:hr:{t:yyyyMMddTHHmmss}:dst"
-                    : $"{dataSource}:hr:{t:yyyyMMddTHHmmss}",
-                CreatedAt = utc.ToString("o"),
+                    ? $"{dataSource}:hr:{t.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture)}:dst"
+                    : $"{dataSource}:hr:{t.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture)}",
+                CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             });
         }
 
@@ -116,8 +117,8 @@ public static class DemoHealthDataGenerator
                 Device = WearableDevice,
                 EnteredBy = dataSource,
                 DataSource = dataSource,
-                SyncIdentifier = $"{dataSource}:steps:{localDay:yyyyMMdd}:{hour:D2}",
-                CreatedAt = utc.ToString("o"),
+                SyncIdentifier = $"{dataSource}:steps:{localDay.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}:{hour:D2}",
+                CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             });
         }
 
@@ -275,7 +276,7 @@ public static class DemoHealthDataGenerator
             AvgBreathRate = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.RespirationRate!.Value), 1) : null,
             AvgSpo2 = samples.Count > 0 ? (float)ScaledRounding.Round(samples.Average(s => s.Spo2!.Value), 1) : null,
             // Stable per-night key so re-seeding upserts rather than duplicates.
-            OriginalId = $"{sourceApp}:sleep:{start:yyyy-MM-dd}",
+            OriginalId = $"{sourceApp}:sleep:{start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}",
             Stages = stages,
             BiometricSamples = samples,
         };

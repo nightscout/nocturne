@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
@@ -369,7 +370,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         // Tenant reads must not be shared-cacheable: UseResponseCaching answers before
         // authentication runs, so a stored entry would outlive the credential check.
         Response.Headers["Cache-Control"] = "private, max-age=60";
-        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R");
+        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R", CultureInfo.InvariantCulture);
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }
 
@@ -573,7 +574,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     private static string FormatHttpDate(long mills) =>
-        mills.ToUtcDateTime().ToString("R");
+        mills.ToUtcDateTime().ToString("R", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// A V3 <c>history/{lastModified}</c> read: clamps <paramref name="limit"/>, reads one page,

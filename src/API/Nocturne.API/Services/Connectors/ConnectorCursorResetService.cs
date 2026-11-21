@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -173,7 +174,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
             _logger.LogInformation(
                 "Resetting cursor for connector {ConnectorName} in tenant {TenantSlug} (from {From})",
-                config.ConnectorName, tenant.Slug, from?.ToString("o") ?? "beginning");
+                config.ConnectorName, tenant.Slug, from?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
             progress?.ConnectorStarted(config.ConnectorName);
 

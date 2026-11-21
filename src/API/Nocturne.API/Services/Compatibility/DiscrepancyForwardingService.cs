@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -153,7 +154,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
             Directory.CreateDirectory(directory);
 
-            var timestamp = _time.GetUtcNow().ToString("yyyy-MM-dd_HH-mm-ss");
+            var timestamp = _time.GetUtcNow().ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
             var traceId = payload.Analysis.TraceId.Replace(":", "-").Replace("/", "-");
             var filename = $"discrepancy_{timestamp}_{traceId}.json";
             var filePath = Path.Combine(directory, filename);

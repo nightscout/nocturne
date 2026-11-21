@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -122,7 +123,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
         };
 
         _logger.LogInformation(
-            "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o") ?? "default");
+            "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "default");
 
         var result = await _syncService.TriggerSyncAsync(GlookoConnectorId, syncRequest, cancellationToken);
 

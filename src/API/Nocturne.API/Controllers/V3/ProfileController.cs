@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -369,7 +370,7 @@ public class ProfileController : BaseV3Controller<Profile>
         // Ensure profile has required properties for V3 compatibility
         if (string.IsNullOrEmpty(profile.CreatedAt))
         {
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         // Validate profile structure
@@ -394,7 +395,7 @@ public class ProfileController : BaseV3Controller<Profile>
             UploaderTimestamp.TryParse(profile.CreatedAt, out var parsedDate)
         )
         {
-            identifierParts.Add(parsedDate.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            identifierParts.Add(parsedDate.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture));
         }
 
         // Add profile name if available for better identification

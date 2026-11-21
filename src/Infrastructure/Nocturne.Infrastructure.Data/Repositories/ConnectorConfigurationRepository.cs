@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
@@ -219,7 +220,7 @@ public class ConnectorConfigurationRepository : IConnectorConfigurationRepositor
             // a timezone shift.
             var stored = JsonSerializer.Serialize(changes
                 .Where(c => c.Value is not null)
-                .ToDictionary(c => c.Key, c => c.Value!.Value.ToString("O")));
+                .ToDictionary(c => c.Key, c => c.Value!.Value.ToString("O", CultureInfo.InvariantCulture)));
             await db.Database.ExecuteSqlAsync(
                 $"""
                  UPDATE connector_configurations
