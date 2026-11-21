@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatGlucoseValue,

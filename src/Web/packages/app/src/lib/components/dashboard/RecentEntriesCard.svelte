@@ -11,7 +11,7 @@
     getUnitLabel,
     time,
   } from "#lib/utils/formatting.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import { deltaColorClass } from "@nocturne/ui/glucose";
 
   interface ComponentProps {

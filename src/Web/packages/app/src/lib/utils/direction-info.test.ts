@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDirectionInfo } from "./index";
+import { getDirectionInfo } from "./direction-info.svelte";
 
 describe("getDirectionInfo", () => {
 	it.each([
