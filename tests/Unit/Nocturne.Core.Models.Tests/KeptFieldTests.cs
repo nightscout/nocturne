@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Core.Models;
@@ -180,5 +181,84 @@ public class KeptFieldTests
         KeptField.Json(Json("12"))!.Value.ValueKind.Should().Be(JsonValueKind.Number);
         KeptField.Json("2026-01-01T00:00:00Z")!.Value.GetString().Should().Be("2026-01-01T00:00:00Z");
         KeptField.Json(5L)!.Value.GetInt64().Should().Be(5);
+    }
+
+    [Theory]
+    [InlineData("\"text\"", "text")]
+    [InlineData("12.50", "12.50")]
+    [InlineData("true", "True")]
+    [InlineData("false", "False")]
+    [InlineData("null", "")]
+    [InlineData("{\"a\":1}", "{\"a\":1}")]
+    [InlineData("[1,2]", "[1,2]")]
+    public void LenientString_reads_a_persisted_value_of_any_kind(string raw, string expected) =>
+        KeptField.LenientString(Json(raw)).Should().Be(expected);
+
+    [Fact]
+    public void LenientString_reads_an_in_memory_value_of_any_kind()
+    {
+        KeptField.LenientString("text").Should().Be("text");
+        KeptField.LenientString(null).Should().BeNull();
+        KeptField.LenientString(42).Should().Be("42");
+        KeptField.LenientString(2.5).Should().Be("2.5");
+        KeptField.LenientString(true).Should().Be("True");
+    }
+
+    [Fact]
+    public void LenientString_writes_a_number_with_the_invariant_culture()
+    {
+        var current = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+        try
+        {
+            KeptField.LenientString(2.5).Should().Be("2.5");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = current;
+        }
+    }
+
+    [Theory]
+    [InlineData("\"text\"", "text")]
+    [InlineData("12.50", "12.50")]
+    [InlineData("true", "true")]
+    [InlineData("false", "false")]
+    [InlineData("{\"a\":1}", "{\"a\":1}")]
+    [InlineData("[1,2]", "[1,2]")]
+    public void AnyKindAsText_reads_a_persisted_value_as_its_text_or_raw_json(string raw, string expected) =>
+        KeptField.AnyKindAsText(Json(raw)).Should().Be(expected);
+
+    [Fact]
+    public void AnyKindAsText_is_null_for_null_and_for_a_json_null()
+    {
+        KeptField.AnyKindAsText((object?)null).Should().BeNull();
+        KeptField.AnyKindAsText(Json("null")).Should().BeNull();
+    }
+
+    [Fact]
+    public void AnyKindAsText_reads_an_in_memory_value_by_ToString()
+    {
+        KeptField.AnyKindAsText("text").Should().Be("text");
+        KeptField.AnyKindAsText(42).Should().Be("42");
+        KeptField.AnyKindAsText(true).Should().Be("True");
+    }
+
+    [Fact]
+    public void AnyKindAsText_reads_the_key_of_a_record_and_is_null_for_a_missing_key_or_record()
+    {
+        KeptField.AnyKindAsText(Held(Json("7")), Key).Should().Be("7");
+        KeptField.AnyKindAsText(Held(1), "absent").Should().BeNull();
+        KeptField.AnyKindAsText((IReadOnlyDictionary<string, object?>?)null, Key).Should().BeNull();
+    }
+
+    [Fact]
+    public void Value_is_null_for_a_missing_record_key_or_json_null_and_otherwise_the_value_as_stored()
+    {
+        KeptField.Value(null, Key).Should().BeNull();
+        KeptField.Value(Held(1), "absent").Should().BeNull();
+        KeptField.Value(Held(Json("null")), Key).Should().BeNull();
+        KeptField.Value(Held(3), Key).Should().Be(3);
+        KeptField.Value(Held(Json("\"x\"")), Key).Should().BeOfType<JsonElement>();
     }
 }
