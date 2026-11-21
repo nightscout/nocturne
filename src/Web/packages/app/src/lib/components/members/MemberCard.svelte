@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import * as Card from "#lib/components/ui/card/index.js";
@@ -21,6 +22,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
+  import History from "@lucide/svelte/icons/history";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
@@ -32,6 +34,7 @@
     roles: TenantRoleDto[];
     canEditRoles: boolean;
     canManage: boolean;
+    canViewHistory?: boolean;
     isExpanded: boolean;
     isSaving: boolean;
     saveError?: string | null;
@@ -46,6 +49,7 @@
     roles = [],
     canEditRoles = false,
     canManage = false,
+    canViewHistory = false,
     isExpanded = false,
     isSaving = false,
     saveError = null,
@@ -54,6 +58,10 @@
     onSave,
     onRemove,
   }: Props = $props();
+
+  const historyLabel = $derived(
+    member.name ? `View history for ${member.name}` : "View history for this member",
+  );
 
   /**
    * The server refuses role and permission changes and removal on the caller's own membership,
@@ -158,6 +166,17 @@
         {/if}
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        {#if canViewHistory && member.subjectId}
+          <Button
+            variant="outline"
+            size="sm"
+            href={resolve(`settings/members/history?member=${member.subjectId}`)}
+            aria-label={historyLabel}
+          >
+            <History class="mr-1.5 h-3.5 w-3.5" />
+            View history
+          </Button>
+        {/if}
         {#if canEditRoles}
           <Button
             variant="outline"

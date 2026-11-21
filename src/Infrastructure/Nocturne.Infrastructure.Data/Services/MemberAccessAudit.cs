@@ -44,16 +44,19 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// </remarks>
 internal static class MemberAccessAudit
 {
-    private const string RoleKey = "role";
-    private const string TenantKind = "tenant";
+    internal const string RoleKey = "role";
+    internal const string TenantKind = "tenant";
     private const string GlobalKind = "global";
-    private const string PermissionKey = "permission";
-    private const string HistoryLimitKey = "history_limit";
-    private const string InviteKey = "invite";
-    private const string TwentyFourHours = "24_hours";
-    private const string FullHistory = "full";
-    private const string System = "system";
-    private const string Anonymous = "anonymous";
+    internal const string KindKey = "kind";
+    internal const string GainedKey = "gained";
+    internal const string LostKey = "lost";
+    internal const string PermissionKey = "permission";
+    internal const string HistoryLimitKey = "history_limit";
+    internal const string InviteKey = "invite";
+    internal const string TwentyFourHours = "24_hours";
+    internal const string FullHistory = "full";
+    internal const string System = "system";
+    internal const string Anonymous = "anonymous";
     private const int CredentialLength = 64;
 
     /// <summary>Stages a row for each role slug in <paramref name="removed"/>, then each in <paramref name="added"/>.</summary>
@@ -115,9 +118,9 @@ internal static class MemberAccessAudit
         {
             ["role_id"] = roleId.ToString(),
             [RoleKey] = role,
-            ["gained"] = gained,
-            ["lost"] = lost,
-            ["kind"] = kind,
+            [GainedKey] = gained,
+            [LostKey] = lost,
+            [KindKey] = kind,
         }, source: null);
     }
 
@@ -135,7 +138,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object> { [key] = item, ["kind"] = TenantKind };
+        var details = new Dictionary<string, object> { [key] = item, [KindKey] = TenantKind };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 

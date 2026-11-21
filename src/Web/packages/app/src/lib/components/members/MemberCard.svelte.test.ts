@@ -92,3 +92,33 @@ describe("MemberCard", () => {
     );
   });
 });
+
+describe("MemberCard history link", () => {
+  const base = {
+    member: ownerMember,
+    roles: administratorRoles,
+    canEditRoles: true,
+    canManage: true,
+    isExpanded: false,
+    isSaving: false,
+    onToggleExpand: () => {},
+    onSave: () => {},
+    onRemove: () => {},
+  };
+
+  it("links to the history of that member when it is offered", async () => {
+    render(MemberCard, { ...base, canViewHistory: true });
+
+    await expect.element(page.getByText("View history")).toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "View history for Alex" }))
+      .toHaveAttribute("href", expect.stringContaining(`/settings/members/history?member=${ownerMember.subjectId}`));
+  });
+
+  it("offers no link when it is not offered", async () => {
+    render(MemberCard, base);
+
+    await expect.element(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect(page.getByRole("link", { name: "View history for Alex" }).elements()).toHaveLength(0);
+  });
+});

@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.Base;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Identity;
@@ -32,6 +34,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Authorize]
 public class MemberInviteController : ControllerBase
 {
+    private const int DefaultHistoryPageSize = 25;
+
     private readonly IMemberInviteService _memberInviteService;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
@@ -272,6 +276,32 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         return Ok(tenant.Members);
+    }
+
+    /// <summary>
+    /// A page of the changes to what the current tenant's members can read, newest first: roles and
+    /// direct permissions given or taken, history limits, and the permissions a role grants. Narrow it
+    /// to one member with <c>memberSubjectId</c>.
+    /// </summary>
+    [HttpGet("members/history")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(PaginatedResponse<MemberHistoryEntry>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PaginatedResponse<MemberHistoryEntry>>> GetMemberHistory(
+        [FromServices] IMemberHistoryReader history,
+        [FromQuery] Guid? memberSubjectId = null,
+        [FromQuery] int limit = DefaultHistoryPageSize,
+        [FromQuery] int offset = 0,
+        CancellationToken ct = default)
+    {
+        var page = await history.GetAsync(
+            _tenantAccessor.TenantId,
+            memberSubjectId,
+            V4ReadLimits.ClampPageSize(limit),
+            V4ReadLimits.ClampOffset(offset),
+            ct);
+        return Ok(page);
     }
 
     /// <summary>

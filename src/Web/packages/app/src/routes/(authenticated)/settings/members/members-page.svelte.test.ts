@@ -278,3 +278,33 @@ describe("members page listing members who cannot sign in", () => {
     expect(browserPage.getByText("Members who cannot sign in").elements()).toHaveLength(0);
   });
 });
+
+describe("members page linking to the member history", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [];
+  });
+
+  it("links the page and each member to the history for a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    const historyLink = browserPage.getByRole("link", { name: /Member history/ });
+    await expect.element(historyLink).toHaveAttribute("href", "/settings/members/history");
+    await expect
+      .element(browserPage.getByRole("link", { name: "View history for Alex" }))
+      .toHaveAttribute("href", expect.stringContaining(`/settings/members/history?member=${member.subjectId}`));
+  });
+
+  it("offers neither link without members.manage", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("link", { name: /Member history/ }).elements()).toHaveLength(0);
+    expect(browserPage.getByRole("link", { name: "View history for Alex" }).elements()).toHaveLength(0);
+  });
+});

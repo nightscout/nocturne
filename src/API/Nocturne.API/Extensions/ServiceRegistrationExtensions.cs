@@ -765,6 +765,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITreatmentStore, TreatmentReadService>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadStore, Nocturne.Infrastructure.Data.Repositories.RejectedUploadRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditLogReader, Nocturne.Infrastructure.Data.Repositories.AuditLogReader>();
+        services.AddScoped<Nocturne.Core.Contracts.Multitenancy.IMemberHistoryReader, Nocturne.Infrastructure.Data.Repositories.MemberHistoryReader>();
         services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditConfigStore, Nocturne.Infrastructure.Data.Repositories.AuditConfigRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadRecorder, Nocturne.API.Services.Uploads.RejectedUploadRecorder>();
         services.AddScoped<ITreatmentCache, TreatmentCacheAdapter>();
