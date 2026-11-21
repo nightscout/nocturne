@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.Realtime;
 
 /// <summary>
 /// Broadcasts a state span written through <c>StateSpansController</c> as a native record, in the
-/// shape <see cref="SignalRV4RecordBroadcaster{TModel}"/> sends. The v1 and v3 treatment feeds serve
+/// shape <see cref="SignalRRecordChangeSubscriber"/> sends. The v1 and v3 treatment feeds serve
 /// an override or a temporary target written there, and a classic socket client refetches treatments
 /// only when a broadcast names them (see <c>legacy-delta.ts</c> in the bridge).
 /// </summary>

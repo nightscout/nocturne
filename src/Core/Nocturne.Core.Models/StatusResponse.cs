@@ -41,7 +41,7 @@ public class StatusResponse
     /// Computed from <see cref="ServerTime"/>.
     /// </summary>
     [JsonPropertyName("serverTimeEpoch")]
-    public long ServerTimeEpoch => ((DateTimeOffset)ServerTime).ToUnixTimeMilliseconds();
+    public long ServerTimeEpoch => ServerTime.ToMills();
 
     [JsonPropertyName("enabled")]
     public string[]? Enabled { get; set; }

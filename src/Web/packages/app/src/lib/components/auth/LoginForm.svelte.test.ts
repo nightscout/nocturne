@@ -43,6 +43,16 @@ vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", async () => ({
   },
 }));
 
+let trustedDeviceDays = 30;
+
+vi.mock("#lib/api/generated/totps.generated.remote.js", () => ({
+  getTrustedDevicePolicy: () => ({
+    get current() {
+      return { days: trustedDeviceDays };
+    },
+  }),
+}));
+
 vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   discoverableLoginOptions: vi.fn(),
   loginOptions: vi.fn(),
@@ -183,7 +193,25 @@ describe("LoginForm after an identity provider asks for the authenticator code",
   beforeEach(() => {
     providersLoading = false;
     providers = [{ id: "provider-1", name: "Example SSO" }];
+    trustedDeviceDays = 30;
     setLastSignIn(null);
+  });
+
+  it("offers to trust the device, off until the visitor selects it", async () => {
+    render(LoginForm, { props: { pendingStepUpToken: "step-up-token" } });
+
+    const trust = page.getByRole("checkbox", { name: "Trust this device for 30 days" });
+    await expect.element(trust).toBeVisible();
+    await expect.element(trust).not.toBeChecked();
+  });
+
+  it("does not offer to trust the device when the instance turned that off", async () => {
+    trustedDeviceDays = 0;
+
+    render(LoginForm, { props: { pendingStepUpToken: "step-up-token" } });
+
+    await expect.element(page.getByText("Authenticator code")).toBeVisible();
+    await expect.element(page.getByRole("checkbox")).not.toBeInTheDocument();
   });
 
   it.each([false, true])("opens on the code entry (tenantless: %s)", async (tenantless) => {

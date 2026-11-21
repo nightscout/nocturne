@@ -135,4 +135,15 @@ public static class AuthAuditEventType
     /// code did not resolve to one.
     /// </summary>
     public const string LoginHandoffFailed = "login_handoff_failed";
+
+    /// <summary>
+    /// Event type when a subject trusts a device at the authenticator step, so its later sign-ins
+    /// skip the code.
+    /// </summary>
+    public const string DeviceTrustGranted = "trusted_device_added";
+
+    /// <summary>
+    /// Event type when a subject stops trusting one device, or all of them.
+    /// </summary>
+    public const string DeviceTrustRevoked = "trusted_device_revoked";
 }

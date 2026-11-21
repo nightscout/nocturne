@@ -102,9 +102,9 @@ public class SampleDataSeederLegacyReadTests : IDisposable
             new StateSpanRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<StateSpanRepository>.Instance, _written),
             new ProfileActivationRepository(
-                contexts, audit, NullLogger<ProfileActivationRepository>.Instance, legacyReads: _written),
+                contexts, audit, NullLogger<ProfileActivationRepository>.Instance, changes: _written.AsRecordChanges()),
             new TempBasalRepository(
-                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, legacyReads: _written),
+                contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance, changes: _written.AsRecordChanges()),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);

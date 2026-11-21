@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Identity;
@@ -127,7 +128,7 @@ public class AlertSetupService(
 
         return new AlertSetupStatus(
             routing, units, starters.Count > 0, starterRules, thresholdsFrom, toThisDevice,
-            toThisDevice ? [] : primary.Select(ToResponse).ToList(),
+            toThisDevice ? [] : primary.Select(AlertRuleResponses.Channel).ToList(),
             ChannelTypesOffered,
             primary.Any(c => AlertDeliveryCheck.DeliversWhileClosed(c.ChannelType)),
             routing == AlertRouting.ToYouAsCaregiver,
@@ -271,7 +272,7 @@ public class AlertSetupService(
 
         var channels = PrimaryChannels(rule, callerId).ToList();
         var instanceId = await delivery.TestFireAsync(
-            rule.Rule.Id, channels, AlertRulesController.BuildTestPayload(rule.Rule, db.TenantId), ct);
+            rule.Rule.Id, channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, db.TenantId, time.GetUtcNow().UtcDateTime), ct);
 
         return await GetTestAsync(instanceId, ct);
     }
@@ -511,15 +512,4 @@ public class AlertSetupService(
                 $"The {Starters[kind].Name} alert's threshold must be between "
                 + $"{Display(MinThresholdMgdl, units)} and {Display(MaxThresholdMgdl, units)}.");
     }
-
-    private static AlertRuleChannelResponse ToResponse(AlertRuleChannelSnapshot c) => new()
-    {
-        Id = c.Id,
-        ChannelType = c.ChannelType,
-        Destination = c.Destination,
-        DestinationLabel = c.DestinationLabel,
-        SortOrder = c.SortOrder,
-        Metadata = c.Metadata is null ? null : JsonSerializer.Deserialize<JsonElement>(c.Metadata),
-        HasSecret = c.Secret is not null,
-    };
 }

@@ -605,6 +605,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
+        services.AddScheduledJob<TrustedDeviceCleanupJob>();
 
         services.AddHostedService<AuthorizationSeedService>();
 
@@ -626,6 +627,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
+        services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
         // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
         // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
         // one Fido2Configuration refuses to parse.
@@ -748,6 +750,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<CacheFlights>();
         services.AddScoped<ITenantCache, TenantCache>();
         services.AddScoped<ILegacyReadCacheInvalidation, LegacyReadCacheInvalidation>();
+        services.AddScoped<IRecordChangeSubscriber, LegacyReadCacheSubscriber>();
 
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
@@ -1059,10 +1062,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
 
-        // Native V4 record broadcasting (companion + Prelude) over the glucose/care/device/therapy
-        // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
-        // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
-        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
+        services.AddScoped<IRecordChangeSubscriber, SignalRRecordChangeSubscriber>();
         services.AddScoped<IGlucoseReadingBroadcaster, HomeAssistantGlucoseBroadcaster>();
 
         // Push notifications

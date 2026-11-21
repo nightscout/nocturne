@@ -24,14 +24,14 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     // logger is unused but retained for DI + direct test construction.
     public UploaderSnapshotRepository(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<UploaderSnapshotRepository> logger,
-        IV4RecordBroadcaster<UploaderSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, logger, broadcaster)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

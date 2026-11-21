@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 

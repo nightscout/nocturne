@@ -2091,6 +2091,7 @@ msgstr "Height: {0}px"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
+#: src/lib/components/settings/TrustedDevices.svelte
 msgid "<0/> Remove"
 msgstr "<0/> Remove"
 
@@ -4972,6 +4973,7 @@ msgstr "Remove member"
 #: src/lib/components/alerts/ChannelsSection.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
+#: src/lib/components/settings/TrustedDevices.svelte
 #: src/routes/(authenticated)/meals/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -16294,10 +16296,12 @@ msgstr "Sign out"
 
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/settings/ActiveSessions.svelte
+#: src/lib/components/settings/TrustedDevices.svelte
 msgid "Unknown device"
 msgstr "Unknown device"
 
 #: src/lib/components/settings/ActiveSessions.svelte
+#: src/lib/components/settings/TrustedDevices.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "This device"
@@ -16887,10 +16891,8 @@ msgstr "This will invalidate all existing recovery codes and generate new ones. 
 #~ msgid "Save these codes in a safe place. Each code can only be used once. This is the only time they will be shown."
 #~ msgstr "Save these codes in a safe place. Each code can only be used once. This is the only time they will be shown."
 
-#. 0: totpRemoveTarget?.label ?? "Unnamed authenticator"
-#: src/routes/(authenticated)/settings/account/+page.svelte
-msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app."
-msgstr "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app."
+#~ msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app."
+#~ msgstr "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app."
 
 #~ msgid "Create an API key below to authenticate uploaders. Each key is scoped to specific permissions and can be revoked independently."
 #~ msgstr "Create an API key below to authenticate uploaders. Each key is scoped to specific permissions and can be revoked independently."
@@ -29401,10 +29403,8 @@ msgstr "Could not load the data. Try again."
 msgid "This server does not recognize the time zone in the profile settings."
 msgstr "This server does not recognize the time zone in the profile settings."
 
-#. 0: otherSessionCount; 1: otherSessionCount === 1 ? "other session" \\: "other sessions"
-#: src/lib/components/settings/ActiveSessions.svelte
-msgid "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again."
-msgstr "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again."
+#~ msgid "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again."
+#~ msgstr "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again."
 
 #. 0: session.deviceDescription ?? "this device"
 #: src/lib/components/settings/ActiveSessions.svelte
@@ -45017,3 +45017,93 @@ msgstr "Discard your changes?"
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Nocturne discards the changes that are not saved, also in this browser. The report opens as it was saved."
 msgstr "Nocturne discards the changes that are not saved, also in this browser. The report opens as it was saved."
+
+#: src/lib/components/auth/LoginForm.svelte
+msgid "Trust this device for 1 day"
+msgstr "Trust this device for 1 day"
+
+#. 0: trustDays
+#: src/lib/components/auth/LoginForm.svelte
+msgid "Trust this device for {0} days"
+msgstr "Trust this device for {0} days"
+
+#: src/lib/components/auth/LoginForm.svelte
+msgid "You will not need a code on this device during that time. Select this only on a device that only you use."
+msgstr "You will not need a code on this device during that time. Select this only on a device that only you use."
+
+#. 0: otherSessionCount; 1: otherSessionCount === 1 ? "other session" \\: "other sessions"
+#: src/lib/components/settings/ActiveSessions.svelte
+msgid "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again, and Nocturne stops trusting them."
+msgstr "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again, and Nocturne stops trusting them."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Device removed."
+msgstr "Device removed."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Could not remove the device. Try again."
+msgstr "Could not remove the device. Try again."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "All trusted devices removed."
+msgstr "All trusted devices removed."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Could not remove the trusted devices. Try again."
+msgstr "Could not remove the trusted devices. Try again."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Trusted devices"
+msgstr "Trusted devices"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Devices that sign in without an authenticator code"
+msgstr "Devices that sign in without an authenticator code"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Remove all trusted devices"
+msgstr "Remove all trusted devices"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Remove all"
+msgstr "Remove all"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "<0/> Remove all"
+msgstr "<0/> Remove all"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "The next sign-in on each device will need an authenticator code. The devices stay signed in."
+msgstr "The next sign-in on each device will need an authenticator code. The devices stay signed in."
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "No trusted devices"
+msgstr "No trusted devices"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "To trust a device, select “Trust this device” when you enter your authenticator code."
+msgstr "To trust a device, select “Trust this device” when you enter your authenticator code."
+
+#. 0: formatMediumDate(device.createdAt)
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Trusted {0}"
+msgstr "Trusted {0}"
+
+#. 0: formatMediumDate(device.expiresAt)
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "<0/> Expires {0}"
+msgstr "<0/> Expires {0}"
+
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "Remove trusted device"
+msgstr "Remove trusted device"
+
+#. 0: device.deviceDescription ?? "this device"
+#: src/lib/components/settings/TrustedDevices.svelte
+msgid "The next sign-in on {0} will need an authenticator code. The device stays signed in."
+msgstr "The next sign-in on {0} will need an authenticator code. The device stays signed in."
+
+#. 0: totpRemoveTarget?.label ?? "Unnamed authenticator"
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app. This also removes your trusted devices."
+msgstr "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app. This also removes your trusted devices."

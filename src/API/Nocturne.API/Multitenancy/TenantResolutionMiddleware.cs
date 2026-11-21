@@ -168,6 +168,10 @@ public class TenantResolutionMiddleware
         // as the sole tenant like the passkey ceremonies it also follows; TotpController.Login
         // matches a token the tenantless OIDC callback minted at that same apex.
         new TenantlessPath("/api/auth/totp/login", HttpMethods.Post, SoleTenantAtApex: true),
+        new TenantlessPath("/api/auth/totp/trusted-device-policy", HttpMethods.Get, SoleTenantAtApex: true),
+        // GET the list, DELETE one by id and POST revoke-all. trusted_devices carries no tenant
+        // column either.
+        new TenantlessPath("/api/auth/trusted-devices", Prefix: true, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
         // /login is admitted only by its own entry above. Routing has no DELETE beneath /login.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),

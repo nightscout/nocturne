@@ -37,6 +37,13 @@ public class SessionOptions
     /// Improves security but increases database writes
     /// </summary>
     public bool RotateRefreshTokens { get; set; } = true;
+
+    /// <summary>
+    /// How long a device stays trusted after its holder ticks "trust this device" at the
+    /// authenticator step. Counted from that moment and never extended. Zero or less turns
+    /// trusted devices off, including the ones already trusted.
+    /// </summary>
+    public TimeSpan TrustedDeviceLifetime { get; set; } = TimeSpan.FromDays(30);
 }
 
 public class CookieSettings

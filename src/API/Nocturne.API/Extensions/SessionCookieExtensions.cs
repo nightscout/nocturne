@@ -33,6 +33,14 @@ public static class SessionCookieExtensions
     public const string TotpStepUpCookieName = ".Nocturne.TotpStepUp";
 
     /// <summary>
+    /// The HttpOnly cookie holding the token of a device its holder trusted at the authenticator
+    /// step. It is no credential on its own: <see cref="ITrustedDeviceService"/> honours it only
+    /// after a primary factor has passed for the subject it was minted for. Sign-out leaves it,
+    /// since coming back without the code is what it is for.
+    /// </summary>
+    public const string TrustedDeviceCookieName = ".Nocturne.TrustedDevice";
+
+    /// <summary>
     /// The sign-in methods <see cref="LastSignInCookieName"/> can name. The web app's
     /// <c>last-sign-in.ts</c> parses these same values.
     /// </summary>
@@ -214,6 +222,38 @@ public static class SessionCookieExtensions
             Path = "/",
             IsEssential = true,
             MaxAge = TotpService.StepUpExpiry,
+        });
+    }
+
+    /// <summary>
+    /// Give the browser the token of the device it was just trusted as. Written at the session
+    /// cookies' <c>Domain</c>, because the trust belongs to the subject and so serves every tenant
+    /// host the session does.
+    /// </summary>
+    public static void SetTrustedDeviceCookie(
+        this HttpResponse response, TrustedDeviceGrant grant, OidcOptions options)
+    {
+        response.Cookies.Append(TrustedDeviceCookieName, grant.Token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = options.Cookie.Secure,
+            SameSite = MapSameSiteMode(options.Cookie.SameSite),
+            Path = options.Cookie.Path,
+            Domain = options.Cookie.SessionDomain,
+            IsEssential = true,
+            Expires = new DateTimeOffset(DateTime.SpecifyKind(grant.ExpiresAt, DateTimeKind.Utc)),
+        });
+    }
+
+    /// <summary>
+    /// Delete the trusted-device cookie, mirroring <see cref="SetTrustedDeviceCookie"/>.
+    /// </summary>
+    public static void ClearTrustedDeviceCookie(this HttpResponse response, OidcOptions options)
+    {
+        response.Cookies.Delete(TrustedDeviceCookieName, new CookieOptions
+        {
+            Path = options.Cookie.Path,
+            Domain = options.Cookie.SessionDomain,
         });
     }
 

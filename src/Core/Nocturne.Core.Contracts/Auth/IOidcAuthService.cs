@@ -59,6 +59,10 @@ public interface IOidcAuthService
     /// The tenant the login is being performed against (the resolved subdomain tenant).
     /// When set, the resolved subject must be a member of this tenant or no session is issued.
     /// </param>
+    /// <param name="trustedDeviceToken">
+    /// The trusted-device cookie the callback request carried, if any. See
+    /// <see cref="ITotpService.GetSecondFactorRequirementAsync"/>.
+    /// </param>
     /// <returns>Authentication result with session tokens</returns>
     Task<OidcCallbackResult> HandleCallbackAsync(
         string code,
@@ -66,7 +70,8 @@ public interface IOidcAuthService
         string expectedState,
         string? ipAddress = null,
         string? userAgent = null,
-        Guid? currentTenantId = null
+        Guid? currentTenantId = null,
+        string? trustedDeviceToken = null
     );
 
     /// <param name="ipAddress">Client IP address</param>
@@ -237,11 +242,18 @@ public class OidcCallbackResult
     /// </summary>
     public string? StepUpToken { get; set; }
 
+    /// <summary>
+    /// True when the subject has an authenticator enrolled and the session was issued without a
+    /// code because the callback came from a device the subject trusted.
+    /// </summary>
+    public bool UsedTrustedDevice { get; set; }
+
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
         string? returnUrl = null,
-        Guid? providerId = null
+        Guid? providerId = null,
+        bool usedTrustedDevice = false
     ) =>
         new()
         {
@@ -251,6 +263,7 @@ public class OidcCallbackResult
             ReturnUrl = returnUrl,
             SubjectId = tokens.SubjectId,
             ProviderId = providerId,
+            UsedTrustedDevice = usedTrustedDevice,
         };
 
     public static OidcCallbackResult Failed(string error, string? description = null) =>

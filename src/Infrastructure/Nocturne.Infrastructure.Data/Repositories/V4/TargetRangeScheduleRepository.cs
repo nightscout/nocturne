@@ -21,8 +21,8 @@ public class TargetRangeScheduleRepository : ProfileScopedRepositoryBase<TargetR
     /// Initializes a new instance of the <see cref="TargetRangeScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TargetRangeScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
+    public TargetRangeScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

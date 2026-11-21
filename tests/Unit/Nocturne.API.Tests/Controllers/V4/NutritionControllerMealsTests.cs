@@ -293,7 +293,7 @@ public class NutritionControllerMealsTests : IDisposable
         (await verify.CarbIntakes.CountAsync()).Should().Be(1, "the unrelated carb intake was removed during the create");
     }
 
-    private BolusRepository CreateBolusRepo(IV4RecordBroadcaster<Bolus> broadcaster) =>
+    private BolusRepository CreateBolusRepo(IRecordChangePublisher broadcaster) =>
         new(
             new TestNocturneDbContextFactory(_dbContext),
             new Mock<IDuplicateLinker>().Object,
@@ -301,7 +301,7 @@ public class NutritionControllerMealsTests : IDisposable
             NullLogger<BolusRepository>.Instance,
             broadcaster);
 
-    private CarbIntakeRepository CreateCarbIntakeRepo(IV4RecordBroadcaster<CarbIntake> broadcaster) =>
+    private CarbIntakeRepository CreateCarbIntakeRepo(IRecordChangePublisher broadcaster) =>
         new(
             new TestNocturneDbContextFactory(_dbContext),
             new Mock<IDuplicateLinker>().Object,
@@ -335,17 +335,16 @@ public class NutritionControllerMealsTests : IDisposable
 
     /// <summary>Runs a write from another caller inside the repository's single upsert.</summary>
     private sealed class InterleavingBroadcaster<TModel>(Action? onCreated = null, Action? onUpdated = null)
-        : IV4RecordBroadcaster<TModel> where TModel : class
+        : IRecordChangePublisher where TModel : class
     {
-        public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
+        public Task PublishAsync(RecordsChanged batch, CancellationToken ct)
         {
-            onCreated?.Invoke();
-            return Task.CompletedTask;
-        }
+            foreach (var change in batch.Changes.Where(c => c.Origin == WriteOrigin.Live && c.RecordType == typeof(TModel)))
+            {
+                if (change.Created.Count > 0) onCreated?.Invoke();
+                if (change.Updated.Count > 0) onUpdated?.Invoke();
+            }
 
-        public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-        {
-            onUpdated?.Invoke();
             return Task.CompletedTask;
         }
     }

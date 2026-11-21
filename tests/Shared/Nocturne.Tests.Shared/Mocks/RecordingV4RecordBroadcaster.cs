@@ -1,29 +1,27 @@
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Tests.Shared.Mocks;
 
-public sealed class RecordingV4RecordBroadcaster<TModel> : IV4RecordBroadcaster<TModel>
-    where TModel : class
+/// <summary>
+/// The <typeparamref name="TModel"/> records of the <see cref="WriteOrigin.Live"/> changes a write
+/// published: what the SignalR subscriber announces for the type.
+/// </summary>
+public sealed class RecordingV4RecordBroadcaster<TModel> : RecordingRecordChanges
+    where TModel : class, IV4Record
 {
-    public List<TModel> Created { get; } = [];
-    public List<TModel> Updated { get; } = [];
-    public List<Guid> Deleted { get; } = [];
+    public IReadOnlyList<TModel> Created => Live(change => change.Created);
 
-    public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-    {
-        Created.AddRange(items);
-        return Task.CompletedTask;
-    }
+    public IReadOnlyList<TModel> Updated => Live(change => change.Updated);
 
-    public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-    {
-        Updated.AddRange(items);
-        return Task.CompletedTask;
-    }
+    public IReadOnlyList<Guid> Deleted => [.. Live(change => change.Deleted).Select(record => record.Id)];
 
-    public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
-    {
-        Deleted.AddRange(ids);
-        return Task.CompletedTask;
-    }
+    private IReadOnlyList<TModel> Live(Func<RecordTypeChange, IReadOnlyList<IV4Record>> records) =>
+    [
+        .. Changes
+            .Where(change => change.Origin == WriteOrigin.Live && change.RecordType == typeof(TModel))
+            .SelectMany(records)
+            .Cast<TModel>(),
+    ];
 }

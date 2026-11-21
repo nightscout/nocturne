@@ -28,9 +28,8 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<NoteRepository> logger,
-        IV4RecordBroadcaster<Note>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 

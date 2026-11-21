@@ -51,12 +51,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <summary>Carries the bulk paths' report of what they skipped; see <see cref="SkippedWriteLog.LogSkippedDeleted"/>.</summary>
     protected ILogger Logger { get; }
 
-    /// <summary>
-    /// Broadcasts native V4 record shapes to the chokepoint's realtime category. Optional: when null
-    /// (e.g. a repo constructed without DI) writes simply broadcast nothing. Fired for live writes only —
-    /// the <see cref="WriteOrigin"/> gate is applied in <see cref="RaiseBroadcastAsync"/>.
-    /// </summary>
-    private readonly IV4RecordBroadcaster<TModel>? _broadcaster;
+    /// <summary>Optional: a repo constructed without one tells no one of its writes.</summary>
+    private readonly IRecordChangePublisher? _changes;
 
     /// <summary>
     /// Legacy <see cref="Entry"/> sink fired for glucose-family writes alongside the native V4 broadcast,
@@ -67,8 +63,6 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     private readonly IDataEventSink<Entry>? _entrySink;
 
-    private readonly ILegacyReadCacheInvalidation? _legacyReads;
-
     /// <summary>
     /// Links committed inserts into their duplicate groups. Null for a type deduplication does not
     /// cover (<see cref="DuplicateGroupPrimaries.RecordTypeOf{TEntity}"/>), or a repo constructed without it.
@@ -77,33 +71,44 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <summary>
     /// Initializes the base with the tenant-scoped context factory, audit context, logger, (optional)
-    /// broadcaster, (optional) legacy entry sink, (optional) legacy read cache invalidation and
-    /// (optional) duplicate linker.
+    /// record change publisher, (optional) legacy entry sink and (optional) duplicate linker.
     /// </summary>
     protected V4RepositoryBase(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
-        IV4RecordBroadcaster<TModel>? broadcaster = null,
+        IRecordChangePublisher? changes = null,
         IDataEventSink<Entry>? entrySink = null,
-        ILegacyReadCacheInvalidation? legacyReads = null,
         IDuplicateLinker? linker = null)
     {
         ContextFactory = contextFactory;
         AuditContext = auditContext;
         Logger = logger;
-        _broadcaster = broadcaster;
+        _changes = changes;
         _entrySink = entrySink;
-        _legacyReads = legacyReads;
         _linker = linker;
     }
 
     /// <summary>
-    /// Tells <see cref="ILegacyReadCacheInvalidation"/> this type was written. <see cref="RaiseBroadcastAsync"/>
-    /// does for every write that reaches it; a write that does not calls this itself.
+    /// Publishes that this type was written, with no record to announce. <see cref="RaiseBroadcastAsync"/>
+    /// publishes for every write that reaches it; a write that does not calls this itself.
     /// </summary>
+    /// <remarks>
+    /// <see cref="WriteOrigin.Backfill"/> because the change carries no record and so is announced to
+    /// no one. Uncancellable for the reason <see cref="ILegacyReadCacheInvalidation"/> takes no token.
+    /// </remarks>
     protected Task ReportWrittenAsync() =>
-        _legacyReads?.WrittenAsync([typeof(TModel)]) ?? Task.CompletedTask;
+        PublishAsync([], [], [], WriteOrigin.Backfill, CancellationToken.None);
+
+    private Task PublishAsync(
+        IReadOnlyList<TModel> created,
+        IReadOnlyList<TModel> updated,
+        IReadOnlyList<TModel> deleted,
+        WriteOrigin origin,
+        CancellationToken ct) =>
+        _changes?.PublishAsync(
+            new RecordsChanged([new RecordTypeChange(typeof(TModel), origin, created, updated, deleted)]), ct)
+        ?? Task.CompletedTask;
 
     /// <summary>
     /// Projects a domain model to the legacy <see cref="Entry"/> shape, or null when the type has no
@@ -123,13 +128,13 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         IReadOnlyList<TModel> models, CancellationToken ct) => Task.FromResult(models);
 
     /// <summary>
-    /// Raises the events for a just-committed write. The native V4 broadcast and the legacy entry
-    /// projection fire only for <see cref="WriteOrigin.Live"/> writes (backfill imports stay silent so
-    /// clients aren't flooded); <see cref="ReportWrittenAsync"/> and <see cref="RaiseEntriesWrittenAsync"/>
-    /// fire for every origin, the first ahead of every broadcast so no client re-reads a stale cache. Every
-    /// write that broadcasts routes through here, so the origin rule lives in exactly one place; a write
-    /// that does not (an update the material gate does not count, a collapsed bulk delete, or a subclass's
-    /// own bulk statement) calls <see cref="ReportWrittenAsync"/> itself.
+    /// Raises the events for a just-committed write. The record change is published for every origin,
+    /// and its subscribers decide what an origin means (<see cref="IRecordChangePublisher"/>); the legacy
+    /// entry projection fires only for <see cref="WriteOrigin.Live"/> writes (backfill imports stay silent
+    /// so clients aren't flooded), and <see cref="RaiseEntriesWrittenAsync"/> for every origin. Every
+    /// write that broadcasts routes through here; a write that does not (an update the material gate
+    /// does not count, a collapsed bulk delete, or a subclass's own bulk statement) calls
+    /// <see cref="ReportWrittenAsync"/> itself.
     /// <c>vacated</c> holds the stored state of updated records before the write, read only by
     /// <see cref="RaiseEntriesWrittenAsync"/>: it is not a record any more, so the V4 broadcast and the
     /// legacy projection never see it.
@@ -142,9 +147,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         CancellationToken ct,
         IReadOnlyList<TModel>? vacated = null)
     {
-        await ReportWrittenAsync();
-        await V4RecordBroadcast.RaiseAsync(
-            _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
+        await PublishAsync(created, updated, deleted, origin, ct);
         await RaiseEntriesWrittenAsync(created, updated, deleted, vacated ?? [], ct);
         await RaiseEntriesProjectionAsync(created, updated, deleted, origin, ct);
         await RaiseLiveCreatedAsync(created, origin, ct);
@@ -186,8 +189,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// The coarse substitute for per-record delete events when a delete matched more rows than
     /// <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>: the legacy entries sink's
     /// collection-level bulk-delete signal (the eHbA1c cache clear plus a count-only storage-delete
-    /// broadcast). The native V4 port has no coarse form — <see cref="IV4RecordBroadcaster{TModel}"/>
-    /// carries record ids only — so V4 subscribers see no delete event and converge on their next read.
+    /// broadcast). A <see cref="RecordTypeChange"/> has no coarse form, so V4 subscribers see no delete
+    /// event and converge on their next read.
     /// </summary>
     private async Task RaiseBulkDeleteBroadcastAsync(int deletedCount, WriteOrigin origin, CancellationToken ct)
     {

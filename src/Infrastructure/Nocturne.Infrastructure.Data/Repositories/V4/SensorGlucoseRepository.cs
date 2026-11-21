@@ -38,12 +38,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
-        IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
+        IRecordChangePublisher? changes = null,
         IDataEventSink<Entry>? entrySink = null,
-        IGlucoseReadingBroadcaster? readingBroadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null
+        IGlucoseReadingBroadcaster? readingBroadcaster = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
+        : base(contextFactory, auditContext, logger, changes, entrySink, linker)
     {
         _readingBroadcaster = readingBroadcaster;
     }

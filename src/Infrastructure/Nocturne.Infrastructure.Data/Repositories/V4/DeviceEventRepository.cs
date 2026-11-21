@@ -31,19 +31,17 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
     /// <param name="linker">Links committed inserts into their duplicate groups.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
-    /// <param name="broadcaster">Optional realtime broadcaster for native V4 record shapes.</param>
+    /// <param name="changes">Optional; null tells no one of a write.</param>
     /// <param name="reactor">Optional domain reaction to live creates and deletes — the tracker trigger.
     /// Null when the repository is constructed without DI, in which case writes simply run no reaction.</param>
-    /// <param name="legacyReads">Optional; null clears no legacy read cache.</param>
     public DeviceEventRepository(
         INocturneDbContextFactory contextFactory,
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<DeviceEventRepository> logger,
-        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
-        IDeviceEventReactor? reactor = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null,
+        IDeviceEventReactor? reactor = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
         _reactor = reactor;
     }
