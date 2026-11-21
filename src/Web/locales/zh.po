@@ -36957,11 +36957,7 @@ msgid "You cannot change a role that gives more access than you have."
 msgstr ""
 
 #. 0: joined; 1: part
-#. 0: labels.slice(0, -1).join(", "); 1: labels.at(-1)
-#. 0: names.slice(0, -1).join(", "); 1: names.at(-1)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
-#: src/lib/components/reports/custom/workspace/given.svelte.ts
-#: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "{0} and {1}"
 msgstr ""
 
@@ -37102,7 +37098,7 @@ msgstr ""
 msgid "No data for at least {0}"
 msgstr ""
 
-#. 0: listFormat().format(p.buckets.map(glucoseBucketLabel))
+#. 0: formatList(p.buckets.map(glucoseBucketLabel), "disjunction")
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Glucose range: {0}"
 msgstr ""
@@ -37117,7 +37113,7 @@ msgstr ""
 msgid "Time since last bolus {0} {1}"
 msgstr ""
 
-#. 0: listFormat().format(p.days.map(alertWeekdayLabel))
+#. 0: formatList(p.days.map(alertWeekdayLabel), "disjunction")
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "On {0}"
 msgstr ""
@@ -44788,7 +44784,7 @@ msgstr ""
 msgid "Glucose from 1 hour before to 8 hours after each site change."
 msgstr ""
 
-#. 0: words.join(" or ")
+#. 0: formatList(words, "disjunction")
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Your access cannot read {0}, which this needs."
 msgstr ""
@@ -46277,7 +46273,7 @@ msgstr ""
 msgid "with a food"
 msgstr ""
 
-#. 0: joinOr(moment.foods.map((f) => f.name))
+#. 0: formatList(moment.foods.map((f) => f.name), "disjunction")
 #. 0: moment.foodCategory.trim()
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
@@ -46347,8 +46343,8 @@ msgstr ""
 msgid "over the last {0} hours"
 msgstr ""
 
-#. 0: joinAnd(left)
-#. 0: joinAnd(left)
+#. 0: formatList(left)
+#. 0: formatList(left)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "without {0}"
@@ -46383,7 +46379,7 @@ msgstr ""
 msgid "day by day"
 msgstr ""
 
-#. 0: joinAnd(anchors.map((a) => anchorPhrase(a)))
+#. 0: formatList(anchors.map((a) => anchorPhrase(a)))
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "around {0}"
 msgstr ""
@@ -46404,4 +46400,8 @@ msgstr ""
 #. 0: s.profileName
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "only while {0} was active"
+msgstr ""
+
+#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+msgid "disjunction"
 msgstr ""
