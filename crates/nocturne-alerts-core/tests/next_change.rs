@@ -320,6 +320,11 @@ fn for_minutes_kinds_change_when_the_span_has_held() {
             json!({ "active_pump_state": { "mode": "Automatic", "started_at": ago(min(4)) } }),
         ),
         (
+            "pump_state",
+            json!({ "mode": "Automatic", "is_active": true, "for_minutes": 10 }),
+            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
+        ),
+        (
             "state_span_active",
             json!({ "category": "Override", "is_active": true, "for_minutes": 10 }),
             json!({ "active_state_spans": [{ "category": "Override", "state": null, "started_at": ago(min(4)) }] }),
@@ -353,6 +358,16 @@ fn a_guard_that_holds_the_leaf_constant_contributes_nothing() {
             "override_active",
             json!({ "is_active": true }),
             json!({ "active_override": { "started_at": ago(min(4)) } }),
+        ),
+        (
+            "pump_state",
+            json!({ "mode": "Automatic", "is_active": true }),
+            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
+        ),
+        (
+            "pump_state",
+            json!({ "mode": "Automatic", "is_active": false, "for_minutes": 10 }),
+            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
         ),
         (
             "time_since_last_carb",

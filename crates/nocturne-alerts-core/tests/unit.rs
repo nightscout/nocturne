@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::{SensorContext, TrackerReference};
 use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
-use nocturne_alerts_core::enums::WireEnum;
+use nocturne_alerts_core::enums::{GlucoseBucket, StateSpanCategory, TrendBucket, WireEnum};
 use nocturne_alerts_core::eval::{Env, eval_node, eval_payload as eval_parsed};
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind,
@@ -1469,7 +1469,7 @@ fn unknown_context_enum_values_drop_only_their_facts() {
     let ctx: SensorContext = serde_json::from_value(wire).expect("context still parses");
     assert_eq!(ctx.trend_bucket, None);
     assert_eq!(ctx.glucose_bucket, None);
-    assert!(ctx.active_pump_state.is_none());
+    assert_eq!(ctx.active_pump_state.map(|s| s.mode), Some(None));
     assert_eq!(ctx.active_state_spans.len(), 1);
 
     assert_eq!(
@@ -1492,6 +1492,132 @@ fn unknown_context_enum_values_drop_only_their_facts() {
         Unknown,
         eval_payload(ConditionKind::Trend, &json!({"bucket": "flat"}), &ctx)
     );
+}
+
+fn context_with(fields: Value) -> SensorContext {
+    serde_json::from_value(fields).expect("context parses")
+}
+
+/// The active span has lasted 60 minutes at `base()`. Rows: configured mode
+/// Automatic; columns: `is_active`, `for_minutes` (none, 30 held, 90 not yet).
+#[test]
+fn pump_state_over_every_active_mode_reads_the_spec_table() {
+    let cells = |active: Option<&str>| {
+        let ctx = match active {
+            Some(mode) => context_with(json!({
+                "active_pump_state": { "mode": mode, "started_at": "2026-01-05T11:00:00Z" },
+            })),
+            None => context_with(json!({})),
+        };
+        let mut read = Vec::new();
+        for is_active in [true, false] {
+            for for_minutes in [Value::Null, json!(30), json!(90)] {
+                let payload = json!({
+                    "mode": "Automatic", "is_active": is_active, "for_minutes": for_minutes
+                });
+                read.push(eval_payload(ConditionKind::PumpState, &payload, &ctx));
+            }
+        }
+        read
+    };
+    let (t, f, u) = (True, False, Unknown);
+    assert_eq!(cells(None), [f, f, f, t, t, t], "no active state");
+    assert_eq!(
+        cells(Some("Automatic")),
+        [t, t, f, f, f, f],
+        "the configured mode"
+    );
+    assert_eq!(
+        cells(Some("Manual")),
+        [f, f, f, t, t, t],
+        "another known mode"
+    );
+    assert_eq!(
+        cells(Some("Turbo")),
+        [u, u, f, u, u, u],
+        "an unrecognised mode"
+    );
+}
+
+#[test]
+fn a_known_pump_mode_still_answers_both_sides() {
+    let ctx = context_with(json!({
+        "active_pump_state": { "mode": "Manual", "started_at": "2026-01-05T11:00:00Z" },
+    }));
+    let at = |mode, is_active| {
+        eval_payload(
+            ConditionKind::PumpState,
+            &json!({ "mode": mode, "is_active": is_active }),
+            &ctx,
+        )
+    };
+    assert_eq!(True, at("Manual", true));
+    assert_eq!(False, at("Manual", false));
+    assert_eq!(False, at("Automatic", true));
+    assert_eq!(True, at("Automatic", false));
+}
+
+#[test]
+fn a_state_span_of_a_category_the_crate_cannot_name_matches_no_leaf() {
+    let with = context_with(json!({
+        "active_state_spans": [
+            { "category": "NotACategory", "state": null, "started_at": "2026-01-05T11:00:00Z" },
+            { "category": "NotACategory", "state": "x", "started_at": "2026-01-05T11:00:00Z" },
+        ],
+    }));
+    let without = context_with(json!({}));
+    for category in StateSpanCategory::ALL
+        .iter()
+        .filter(|c| **c != StateSpanCategory::PumpMode)
+    {
+        for state in [Value::Null, json!("x")] {
+            for is_active in [true, false] {
+                let payload = json!({
+                    "category": category.name(), "state": state, "is_active": is_active
+                });
+                assert_eq!(
+                    eval_payload(ConditionKind::StateSpanActive, &payload, &without),
+                    eval_payload(ConditionKind::StateSpanActive, &payload, &with),
+                    "{} {state} active={is_active}",
+                    category.name()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_bucket_name_the_crate_cannot_name_reads_as_an_absent_bucket() {
+    let unrecognised = context_with(json!({
+        "latest_value": 55,
+        "trend_bucket": "sideways",
+        "glucose_bucket": "off_the_chart",
+    }));
+    let absent = context_with(json!({ "latest_value": 55 }));
+    for bucket in TrendBucket::ALL {
+        let payload = json!({ "bucket": bucket.name() });
+        assert_eq!(
+            Unknown,
+            eval_payload(ConditionKind::Trend, &payload, &unrecognised)
+        );
+        assert_eq!(
+            eval_payload(ConditionKind::Trend, &payload, &absent),
+            eval_payload(ConditionKind::Trend, &payload, &unrecognised)
+        );
+    }
+    for bucket in GlucoseBucket::ALL {
+        let payload = json!({ "buckets": [bucket.name()] });
+        assert_eq!(
+            Unknown,
+            eval_payload(ConditionKind::GlucoseBucket, &payload, &unrecognised)
+        );
+    }
+    let negated = eval_tree(
+        &json!({ "type": "not", "not": { "child": {
+            "type": "trend", "trend": { "bucket": "flat" } } } }),
+        &unrecognised,
+    );
+    assert_eq!(Unknown, negated);
 }
 
 #[test]

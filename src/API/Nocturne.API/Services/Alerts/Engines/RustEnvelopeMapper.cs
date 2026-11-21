@@ -206,7 +206,7 @@ internal static class RustEnvelopeMapper
                 ? TimeZoneHelper.ToIanaIdIfWindows(tenantZone)
                 : ctx.TenantTimeZoneId,
             ActivePumpState = ctx.ActivePumpState is { } pump
-                ? new WirePumpState(WireEnum(pump.Mode), Utc(pump.StartedAt)!.Value)
+                ? new WirePumpState(pump.Mode, Utc(pump.StartedAt)!.Value)
                 : null,
             // Serialise from the dictionary KEYS (not the snapshot's echoed fields) so the
             // engine reconstructs the exact same (category, state) lookup — including

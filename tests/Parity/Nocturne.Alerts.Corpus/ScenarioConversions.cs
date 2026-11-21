@@ -98,9 +98,7 @@ public static class ScenarioConversions
             LastBolusAt = Utc(ctx.LastBolusAt),
             TenantTimeZoneId = ctx.TenantTimeZoneId,
             ActivePumpState = ctx.ActivePumpState is { } pumpState
-                ? new PumpStateSnapshot(
-                    ParseWireEnum<PumpModeState>(pumpState.Mode)!.Value,
-                    Utc(pumpState.StartedAt)!.Value)
+                ? new PumpStateSnapshot(pumpState.Mode, Utc(pumpState.StartedAt)!.Value)
                 : null,
             ActiveStateSpans = ctx.ActiveStateSpans?.ToDictionary(
                     s => (ParseWireEnum<StateSpanCategory>(s.Category)!.Value, s.State),

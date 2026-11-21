@@ -215,7 +215,7 @@ as false or true.
 | `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ **unknown** |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null (no reading history) ⇒ **unknown**; only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ **unknown**; with points present but none within the horizon or satisfying ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ **unknown** |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null, or a name the engine has no member for (§4) ⇒ **unknown** |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ **unknown** |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ **unknown** |
@@ -233,16 +233,34 @@ as false or true.
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate): never unknown |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ **unknown**; ratio null ⇒ **unknown** |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off: never unknown |
-| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ **unknown** |
+| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null, or a name the engine has no member for (§4) ⇒ **unknown** |
 | `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
-| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard: never unknown |
-| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown |
+| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard; no active span is an answer; an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on that mode (table below) |
+| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown; a span of a category the engine has no member for (§4) is not in the lookup |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
+
+`pump_state` by what the pump is in, for a leaf naming mode `X`. An unrecognised mode is one
+the engine has no member for (§4): the pump may or may not be in `X`, so the leaf is unknown
+wherever the answer differs between the two, and `for_minutes` on the inactive side is a
+no-op as for every span leaf. On the active side with `for_minutes`, a span that has not yet
+lasted that long is false whatever its mode, so the leaf is false until then and unknown from
+then on (§5.3 reports that instant).
+
+| Pump is | `is_active` | no `for_minutes` | `for_minutes` not yet held | `for_minutes` held |
+|---|---|---|---|---|
+| no active state | true | false | false | false |
+| no active state | false | true | true | true |
+| in `X` | true | true | false | true |
+| in `X` | false | false | false | false |
+| in another known mode | true | false | false | false |
+| in another known mode | false | true | true | true |
+| in an unrecognised mode | true | unknown | false | unknown |
+| in an unrecognised mode | false | unknown | unknown | unknown |
 
 A **lower-bound** `reservoir` reading `b` (`ReservoirIsLowerBound`, "50+") is read exactly:
 the reservoir holds at least `b`.
@@ -296,6 +314,25 @@ in §3 plus:
   bucket of the reading's stored arrow (`DoubleUp` rising_fast, `SingleUp`/`FortyFiveUp`
   rising, `Flat` flat, `FortyFiveDown`/`SingleDown` falling, `DoubleDown` falling_fast;
   any other arrow, or none, gives null). The arrow never becomes a `TrendRate`.
+- **An enum name the engine has no member for.** A host newer than the engine can send one in
+  the context (a bucket, a pump mode, a state-span category). The context still reads, and the
+  name degrades only the fact that carries it, by what each leaf can honestly say:
+  - `trend_bucket` and `glucose_bucket`: read as an absent bucket, so `trend` and
+    `glucose_bucket` are **unknown**, whatever bucket the leaf names.
+  - `active_pump_state.mode`: the pump is in some mode the engine cannot name, so it may or may
+    not be the mode a `pump_state` leaf names. The leaf is **unknown** for every configured
+    mode wherever the answer depends on it, and **false** where every mode gives false (the
+    table in §3); the one change over time, false to unknown when `for_minutes` has passed,
+    is a next change (§5.3).
+  - `active_state_spans[].category`: the span is ignored. A `state_span_active` leaf names a
+    category the engine knows, and a span of a name the engine does not know is a different
+    category, so it can neither be the leaf's span nor stand for its absence. The leaf reads
+    the known spans alone. This assumes a category keeps its name: a host that renames one the
+    engine knows must send the new name only once the engine knows it.
+  - A state span's `state` is free text matched exactly, not an enum.
+
+  A condition operand naming an unknown member is a different case: the tree cannot be
+  evaluated (§1.4).
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.
@@ -467,7 +504,7 @@ even when the root does not. Containers contribute only through their children, 
 | Node | Contribution |
 |---|---|
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
-| `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`. |
+| `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
 | `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set, whatever its child returned; without one, only what its child contributes. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
@@ -478,7 +515,8 @@ even when the root does not. Containers contribute only through their children, 
 A leaf without an anchor, or whose guard holds it constant (a `has_ever_*` flag false, a
 `tracker_age` threshold held back at recording), contributes nothing, so an unknown leaf
 contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
-known would contribute as a known one, and there is none today), as does a
+known contributes as a known one: `pump_state` with `is_active` and `for_minutes` over an
+unrecognised mode, §3, moves from false to unknown there), as does a
 comparison that has already flipped for good (an elapsed time grows only). Each flip is
 found by searching the comparison evaluation makes, so the decimal rounding of §1.3 moves
 it with the truth it changes: a fractional bound can hold before the exact instant it

@@ -8,7 +8,9 @@ use proptest::sample::select;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use nocturne_alerts_core::enums::{AlertStateKind, PumpMode, StateSpanCategory, WireEnum};
+use nocturne_alerts_core::enums::{
+    AlertStateKind, GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum,
+};
 
 use crate::generators::{object, word};
 
@@ -40,6 +42,14 @@ pub(crate) fn naming_the_context(mut doc: Value) -> Value {
     doc
 }
 
+/// A member's wire name, or one the crate has no member for a quarter of the
+/// time: a host newer than the crate sends them.
+pub(crate) fn word_or_unrecognised<E: WireEnum>(
+    unrecognised: &'static str,
+) -> BoxedStrategy<&'static str> {
+    prop_oneof![3 => word::<E>(), 1 => Just(unrecognised)].boxed()
+}
+
 /// An instant `seconds` before `now`, or none; a negative age is in the
 /// future.
 fn anchor(now: DateTime<Utc>, seconds: Option<i64>) -> Option<Value> {
@@ -58,6 +68,7 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
         .iter()
         .filter(|c| **c != StateSpanCategory::PumpMode)
         .map(|c| c.name())
+        .chain(["NotACategory"])
         .collect();
     let zone = select(vec![
         "UTC",
@@ -72,10 +83,14 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
             option::of(40..300i32),
             any::<bool>(),
             any::<bool>(),
-            word::<PumpMode>(),
+            word_or_unrecognised::<PumpMode>("Turbo"),
             select(categories),
             word::<AlertStateKind>(),
             option::of(zone),
+        ),
+        (
+            option::of(word_or_unrecognised::<TrendBucket>("sideways")),
+            option::of(word_or_unrecognised::<GlucoseBucket>("off_the_chart")),
         ),
     )
         .prop_map(
@@ -83,6 +98,7 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                 (reading, site, sensor, aps, enacted, carb, bolus),
                 (suspension, override_, dnd, pump_state, span, alert),
                 (glucose, aps_cycled, pump_snapshot, mode, category, alert_state, zone),
+                (trend, glucose_bucket),
             )| {
                 let at = |s| anchor(now, s);
                 let started = |s| at(s).map(|at| json!({ "started_at": at }));
@@ -134,6 +150,8 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                         }),
                     ),
                     ("tenant_time_zone_id", zone.map(Value::from)),
+                    ("trend_bucket", trend.map(Value::from)),
+                    ("glucose_bucket", glucose_bucket.map(Value::from)),
                 ])
             },
         )

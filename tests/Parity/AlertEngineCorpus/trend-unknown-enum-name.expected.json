@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "scenario": "trend-unknown-enum-name",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none"
+        }
+      ]
+    }
+  ]
+}

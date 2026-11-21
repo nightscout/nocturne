@@ -31,7 +31,10 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Rule, WireRule, evaluate_rule};
-use nocturne_alerts_core::enums::{CompositeOp, WireEnum};
+use nocturne_alerts_core::enums::{
+    CompositeOp, GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum,
+};
+use nocturne_alerts_core::eval::{Env, eval_payload};
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
     TransitionType,
@@ -39,11 +42,11 @@ use nocturne_alerts_core::excursion::{
 use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
 };
-use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
+use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
 use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
-use clock::{clock_context, naming_the_context};
+use clock::{clock_context, naming_the_context, word_or_unrecognised};
 use generators::{
     RULE_ID, Tick, arbitrary_json, base, composite, is_container, mutated, mutations, node,
     node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree, word,
@@ -1140,5 +1143,141 @@ proptest! {
         };
         quiet::quiet_until_next_change(&rule, &context, before, case.now)
             .map_err(TestCaseError::fail)?;
+    }
+}
+
+/// The mode, category and bucket names a context carries, each a member's name
+/// or one the crate has no member for.
+#[derive(Debug, Clone)]
+struct NamedFacts {
+    pump_mode: Option<&'static str>,
+    spans: Vec<(&'static str, Option<&'static str>)>,
+    trend: Option<&'static str>,
+    glucose: Option<&'static str>,
+}
+
+const PUMP_SPAN_MINUTES: i32 = 10;
+
+fn named_facts() -> impl Strategy<Value = NamedFacts> {
+    let categories: Vec<&'static str> = StateSpanCategory::ALL
+        .iter()
+        .filter(|c| **c != StateSpanCategory::PumpMode)
+        .map(|c| c.name())
+        .chain(["NotACategory"])
+        .collect();
+    (
+        option::of(word_or_unrecognised::<PumpMode>("Turbo")),
+        vec(
+            (select(categories), option::of(select(vec!["a", "b"]))),
+            0..=3,
+        ),
+        option::of(word_or_unrecognised::<TrendBucket>("sideways")),
+        option::of(word_or_unrecognised::<GlucoseBucket>("off_the_chart")),
+    )
+        .prop_map(|(pump_mode, spans, trend, glucose)| NamedFacts {
+            pump_mode,
+            spans,
+            trend,
+            glucose,
+        })
+}
+
+fn recognised<E: WireEnum>(name: Option<&str>) -> Option<E> {
+    name.and_then(E::from_name)
+}
+
+proptest! {
+    /// §3, §4: a name the crate has no member for is unknown where it decides
+    /// the answer (`pump_state` over an active pump unless `for_minutes` has
+    /// not yet passed, `trend` and `glucose_bucket` over a bucket), and is
+    /// ignored where it could only
+    /// name a category no leaf can name (`state_span_active`).
+    #[test]
+    fn an_unrecognised_name_is_unknown_or_ignored_as_the_spec_says(
+        facts in named_facts(),
+        mode in word::<PumpMode>(),
+        is_active in any::<bool>(),
+        for_minutes in option::of(select(vec![5i32, 10, 30])),
+        category in select(
+            StateSpanCategory::ALL
+                .iter()
+                .filter(|c| **c != StateSpanCategory::PumpMode)
+                .map(|c| c.name())
+                .collect::<Vec<_>>(),
+        ),
+        state in option::of(select(vec!["a", "b"])),
+        trend in word::<TrendBucket>(),
+        buckets in vec(word::<GlucoseBucket>(), 1..4),
+    ) {
+        let started = (base() - TimeDelta::minutes(PUMP_SPAN_MINUTES.into())).to_rfc3339();
+        let context: SensorContext = serde_json::from_value(generators::object(vec![
+            (
+                "active_pump_state",
+                facts
+                    .pump_mode
+                    .map(|m| json!({ "mode": m, "started_at": started })),
+            ),
+            (
+                "active_state_spans",
+                Some(
+                    facts
+                        .spans
+                        .iter()
+                        .map(|(c, s)| json!({ "category": c, "state": s, "started_at": started }))
+                        .collect(),
+                ),
+            ),
+            ("trend_bucket", facts.trend.map(Value::from)),
+            ("glucose_bucket", facts.glucose.map(Value::from)),
+        ]))
+        .expect("a context");
+        let at = |kind: ConditionKind, payload: Value| {
+            let parsed = parse_payload(kind, &payload).expect("a payload");
+            let mut timers = TimerStore::new();
+            eval_payload(&parsed, kind.name(), &mut Env::new(base(), Uuid::nil(), &context, &mut timers))
+        };
+
+        let pump = at(
+            ConditionKind::PumpState,
+            json!({ "mode": mode, "is_active": is_active, "for_minutes": for_minutes }),
+        );
+        let held = for_minutes.is_none_or(|m| m <= PUMP_SPAN_MINUTES);
+        let expected = match facts.pump_mode {
+            None => Truth::from(!is_active),
+            Some(active) if recognised::<PumpMode>(Some(active)).is_none() => {
+                if is_active && !held {
+                    Truth::False
+                } else {
+                    Truth::Unknown
+                }
+            }
+            Some(active) => Truth::from((active == mode) == is_active && (!is_active || held)),
+        };
+        prop_assert_eq!(pump, expected);
+
+        let span = at(
+            ConditionKind::StateSpanActive,
+            json!({ "category": category, "state": state, "is_active": is_active }),
+        );
+        let present = facts.spans.contains(&(category, state));
+        prop_assert_eq!(span, Truth::from(present == is_active));
+
+        let trend_truth = at(ConditionKind::Trend, json!({ "bucket": trend }));
+        let expected = match facts.trend {
+            Some(seen) if recognised::<TrendBucket>(Some(seen)).is_some() => {
+                Truth::from(seen == trend)
+            }
+            _ => Truth::Unknown,
+        };
+        prop_assert_eq!(trend_truth, expected);
+
+        let bucket_truth = at(ConditionKind::GlucoseBucket, json!({ "buckets": buckets }));
+        let expected = match facts.glucose {
+            Some(seen) if recognised::<GlucoseBucket>(Some(seen)).is_some() => {
+                Truth::from(buckets.contains(&seen))
+            }
+            _ => Truth::Unknown,
+        };
+        prop_assert_eq!(bucket_truth, expected);
     }
 }

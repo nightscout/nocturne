@@ -1,8 +1,9 @@
 //! `SensorContext` as plain data: pure input to the evaluators, read from the
 //! context wire format (engine-semantics.md §4). An enum name this crate does
 //! not know (a host newer than it) degrades only that fact: an unknown bucket
-//! reads as absent and an unknown pump mode or state-span category drops that
-//! entry, so every other leaf still evaluates.
+//! reads as an absent one, an active pump in an unknown mode keeps its
+//! snapshot with no mode, and a state span of an unknown category is dropped,
+//! so every other leaf still evaluates.
 
 use std::collections::HashMap;
 
@@ -38,7 +39,8 @@ pub struct StartedSpan {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PumpStateSnapshot {
-    pub mode: PumpMode,
+    /// `None`: the pump is in a mode this crate has no name for.
+    pub mode: Option<PumpMode>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -446,14 +448,12 @@ impl SensorContext {
             active_pump_state: w
                 .active_pump_state
                 .map(|p| {
-                    let started_at = check_timestamp(p.started_at, "active_pump_state.started_at")?;
-                    Ok::<_, String>(
-                        PumpMode::from_name(&p.mode)
-                            .map(|mode| PumpStateSnapshot { mode, started_at }),
-                    )
+                    Ok::<_, String>(PumpStateSnapshot {
+                        mode: PumpMode::from_name(&p.mode),
+                        started_at: check_timestamp(p.started_at, "active_pump_state.started_at")?,
+                    })
                 })
-                .transpose()?
-                .flatten(),
+                .transpose()?,
             active_state_spans,
             active_trackers,
             sleep_session_active: w.sleep_session_active,
