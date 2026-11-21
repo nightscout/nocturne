@@ -287,15 +287,25 @@ public class OidcCallbackResult
         };
 
     /// <summary>
-    /// Create an access-denied result for an authenticated identity that is not a member
-    /// of the tenant being logged into. No session is issued.
+    /// SHA-256 hex digest of the issuer and sub claim of an identity refused as not a member
+    /// that has no subject to name. Null when <see cref="SubjectId"/> names the person.
     /// </summary>
-    public static OidcCallbackResult NotAMember(Guid subjectId, string? returnUrl = null) =>
+    public string? ExternalIdentityDigest { get; set; }
+
+    /// <summary>
+    /// Create an access-denied result for an authenticated identity that is not a member
+    /// of the tenant being logged into. No session is issued, and an identity the instance has
+    /// not seen has no subject, so <paramref name="subjectId"/> is null for it.
+    /// </summary>
+    public static OidcCallbackResult NotAMember(
+        Guid? subjectId, Guid providerId, string? externalIdentityDigest, string? returnUrl = null) =>
         new()
         {
             Success = false,
             IsAccessDenied = true,
             SubjectId = subjectId,
+            ProviderId = providerId,
+            ExternalIdentityDigest = externalIdentityDigest,
             Error = "not_a_member",
             ErrorDescription = "You are not a member of this account.",
             ReturnUrl = returnUrl,

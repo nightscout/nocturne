@@ -88,6 +88,9 @@ public class OidcAuthServiceLoginGateTests
     {
         var subject = new Subject { Id = Guid.NewGuid(), Name = "Rhys", Email = "user@example.com" };
         _subjectService
+            .Setup(s => s.FindFromOidcAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(subject);
+        _subjectService
             .Setup(s => s.FindOrCreateFromOidcAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
@@ -551,5 +554,120 @@ public class OidcAuthServiceLoginGateTests
         _sessionService.Verify(
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    private void SetupFirstTimeIdentity() =>
+        _subjectService
+            .Setup(s => s.FindFromOidcAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((Subject?)null);
+
+    private void VerifyNothingWrittenForTheIdentity()
+    {
+        _subjectService.Verify(
+            s => s.FindOrCreateFromOidcAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAnUnseenIdentityThatIsNotAMember_IsRefusedWithoutASubject()
+    {
+        SetupFirstTimeIdentity();
+        var provider = Provider();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), provider, Claims(), Guid.NewGuid(), ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().BeNull();
+        result.ProviderId.Should().Be(provider.Id);
+        result.ExternalIdentityDigest.Should().Be(
+            OidcAuthService.ExternalIdentityDigest(provider.IssuerUrl, Claims().Sub));
+        result.ExternalIdentityDigest.Should().NotContain(Claims().Sub);
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAKnownIdentityThatIsNotAMember_LeavesItsSubjectAsItWas()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().Be(subject.Id);
+        result.ExternalIdentityDigest.Should().BeNull("the subject id already names the person");
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ExternalIdentityDigest_IsStablePerIssuerAndSub_AndDoesNotHoldTheSub()
+    {
+        var digest = OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "alice@example.com");
+
+        digest.Should().Be(OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "alice@example.com"));
+        digest.Should().NotBe(OidcAuthService.ExternalIdentityDigest("https://other.example.com", "alice@example.com"));
+        digest.Should().NotBe(OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "bob@example.com"));
+        digest.Should().MatchRegex("^[0-9a-f]{64}$");
+        digest.Should().NotContain("alice");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenStateNamesATenantButNoneResolved_WritesNothingForTheIdentity()
+    {
+        SetupFirstTimeIdentity();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: "erik"), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.Error.Should().Be("invalid_state");
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAnUnseenIdentityWithAValidJoinLink_CreatesItsSubjectWithTheProvidersDefaultRoles()
+    {
+        SetupFirstTimeIdentity();
+        var created = new Subject { Id = Guid.NewGuid(), Name = "Invitee" };
+        var provider = Provider();
+        provider.DefaultRoles = ["provider-default"];
+        _subjectService
+            .Setup(s => s.FindOrCreateFromOidcAsync(
+                provider.Id, Claims().Sub, provider.IssuerUrl,
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), provider.DefaultRoles))
+            .ReturnsAsync(created);
+        var tenantId = Guid.NewGuid();
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"), provider, Claims(), tenantId,
+            ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _tenantMemberService.Verify(
+            t => t.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "an identity with no subject is a member of nothing");
     }
 }

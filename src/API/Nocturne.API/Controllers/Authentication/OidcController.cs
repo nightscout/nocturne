@@ -248,7 +248,7 @@ public class OidcController : ControllerBase
                 await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
                     ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
                     errorMessage: "not_a_member",
-                    detailsJson: JsonSerializer.Serialize(new { method = "oidc", reason = "not_a_member" }));
+                    detailsJson: NotAMemberDetails(result));
 
                 return RedirectToLogin();
             }
@@ -745,6 +745,26 @@ public class OidcController : ControllerBase
     /// when the tenant allows access requests.
     /// </summary>
     private IActionResult RedirectToLogin() => Redirect("/auth/login");
+
+    /// <summary>
+    /// Names the provider always. The person is the row's subject when there is one, else a digest
+    /// of the external identity, so the row never holds the identity itself.
+    /// </summary>
+    internal static string NotAMemberDetails(OidcCallbackResult result) =>
+        result.ExternalIdentityDigest is { } digest
+            ? JsonSerializer.Serialize(new
+            {
+                method = "oidc",
+                reason = "not_a_member",
+                providerId = result.ProviderId,
+                externalIdentityDigest = digest,
+            })
+            : JsonSerializer.Serialize(new
+            {
+                method = "oidc",
+                reason = "not_a_member",
+                providerId = result.ProviderId,
+            });
 
     #endregion
 }
