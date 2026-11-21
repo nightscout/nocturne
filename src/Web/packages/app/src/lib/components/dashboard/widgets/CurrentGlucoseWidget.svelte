@@ -8,7 +8,7 @@
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
   import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import {
     formatGlucoseDelta,
     formatGlucoseValue,

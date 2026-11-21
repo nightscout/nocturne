@@ -5,7 +5,7 @@
     formatGlucoseValue,
     formatGlucoseDelta,
   } from "#lib/utils/formatting.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import { deltaColorClass } from "@nocturne/ui/glucose";
   import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";

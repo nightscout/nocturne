@@ -34,7 +34,7 @@
   import type { ConditionNode } from "./types";
   import { isTrendBucket, toAlertConditionType, type TrendBucket } from "./types";
   import { Direction } from "#lib/api/index.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import RuleBuilder from "./RuleBuilder.svelte";
   import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
   import { FACT_GROUP_COLOURS, getFact, type LucideIconName } from "./factCatalog";

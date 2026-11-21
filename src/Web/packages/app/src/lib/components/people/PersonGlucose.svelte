@@ -4,7 +4,7 @@
   import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
   import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
   import { bg, bgDelta, bgLabel } from "#lib/utils/formatting.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import { deltaColorClass } from "@nocturne/ui/glucose";
   import { readingIsNotCurrent } from "./person.js";
 

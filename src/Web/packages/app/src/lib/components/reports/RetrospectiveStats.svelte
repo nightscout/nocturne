@@ -9,7 +9,7 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatClock,
