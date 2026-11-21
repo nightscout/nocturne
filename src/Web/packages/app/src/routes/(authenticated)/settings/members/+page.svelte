@@ -283,6 +283,7 @@
               canEditRoles={canEditMemberRoles}
               canManage={true}
               canViewHistory={canViewMemberHistory}
+              canSeeRecoveryEmail={canEditMemberRoles}
               currentSubjectId={page.data.user?.subjectId}
               isExpanded={expandedMember === member.subjectId}
               isSaving={isSavingMember}

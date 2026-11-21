@@ -15,6 +15,7 @@ public sealed record TenantMemberRecord(
     bool IsSystemSubject,
     bool IsDemoSubject,
     bool IsPlatformAdmin,
+    bool HasConfirmedEmail,
     IReadOnlyList<TenantMemberRoleRecord> Roles,
     IReadOnlyList<string>? DirectPermissions,
     string? Label,

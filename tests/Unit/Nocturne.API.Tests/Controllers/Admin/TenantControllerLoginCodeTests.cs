@@ -323,7 +323,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         [
             new TenantMemberDto(
                 Guid.CreateVersion7(), _memberSubjectId, "Owner", false, [], null, null, false,
-                null, DateTime.UtcNow, false, null, false),
+                null, DateTime.UtcNow, false, null, false, null),
         ]);
 
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Net.Mail;
+
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>The one rule for when two email addresses are the same address.</summary>
@@ -14,4 +17,25 @@ public static class EmailAddresses
         stored is not null
         && other is not null
         && string.Equals(stored.Trim(), other.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether <paramref name="value"/>, trimmed, is one bare address: <c>local@domain.tld</c> with no
+    /// display name, no whitespace, control or format character, and a dotted domain. Anything else
+    /// would be stored and mailed as typed yet never match the plain address a person types later
+    /// (<see cref="AreSame"/>). A writer stores the trimmed value.
+    /// </summary>
+    public static bool IsBareAddress(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return false;
+        if (trimmed.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)
+            || char.GetUnicodeCategory(c) == UnicodeCategory.Format))
+            return false;
+
+        return MailAddress.TryCreate(trimmed, out var parsed)
+            && parsed.DisplayName.Length == 0
+            && parsed.Address == trimmed
+            && parsed.Host.Contains('.');
+    }
 }
