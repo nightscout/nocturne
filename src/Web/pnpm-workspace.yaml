@@ -26,6 +26,9 @@ onlyBuiltDependencies:
 # Svelte answers the destroyed binding with an internal Symbol; the upstream guard is `if (!node)`,
 # so it calls querySelectorAll on the Symbol and rejects. The patch narrows the guard to Element.
 # Unfixed upstream as of 2.19.3; drop the patch once bits-ui guards it.
+# bits-ui's DismissibleLayer leaves its 1 ms arming timer running when the layer is destroyed, so
+# a sheet open at teardown reads a destroyed $derived (derived_inert). The patch clears the timer
+# on destroy. Fixed upstream in 2.18.2 (huntabyte/bits-ui#2080); drop that hunk with the bump.
 # SignalR 8.0.17 throws from onclose when a transport closes before start resumes.
 # Cover both Node CJS and bundler ESM entry points; remove after an upstream fix.
 # layerchart spreads options that are not attributes onto the elements it renders: a data-mode
