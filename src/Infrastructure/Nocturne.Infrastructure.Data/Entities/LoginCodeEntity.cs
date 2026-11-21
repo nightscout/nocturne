@@ -44,6 +44,15 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     [Column("purpose")]
     public LoginCodePurpose Purpose { get; set; } = LoginCodePurpose.Login;
 
+    /// <summary>
+    /// The address an emailed code was sent to (<see cref="LoginCodePurpose.EmailRecovery"/>,
+    /// <see cref="LoginCodePurpose.EmailConfirm"/>); null for every other purpose. The code proves
+    /// control of this address only, so it is good only while the account still holds it.
+    /// </summary>
+    [MaxLength(255)]
+    [Column("email")]
+    public string? Email { get; set; }
+
     /// <summary>When the code was exchanged for a session; null until then.</summary>
     [Column("consumed_at")]
     public DateTime? ConsumedAt { get; set; }
@@ -75,4 +84,21 @@ public enum LoginCodePurpose
     /// administrator or a member of several tenants.
     /// </summary>
     OperatorRecovery,
+
+    /// <summary>
+    /// As <see cref="Recovery"/>, emailed to the member's confirmed address at their own request.
+    /// Redeemable only while the member still holds that address, confirmed.
+    /// </summary>
+    EmailRecovery,
+
+    /// <summary>
+    /// Confirms the address it was emailed to, at <c>POST /api/auth/email-confirmation/redeem</c>.
+    /// </summary>
+    EmailConfirm,
+
+    /// <summary>
+    /// The recovery session a spent recovery code starts: held in a host-only cookie, it admits one
+    /// enrolment, a passkey or an identity-provider link, and that enrolment spends it.
+    /// </summary>
+    RecoverySession,
 }

@@ -42,11 +42,18 @@ public interface IOidcAuthService
     /// <remarks>
     /// This is the only part of the state readable before the callback is handled, and it goes
     /// through the same protector as the rest of the payload — the redirect target is therefore
-    /// derived from data this instance signed, not from a caller-supplied value. Deliberately
-    /// exposes only the slug: nothing else in the state is safe to act on before the full
-    /// callback validation in <see cref="HandleCallbackAsync"/> has run.
+    /// derived from data this instance signed, not from a caller-supplied value. Besides
+    /// <see cref="IsRecoveryState"/>, it exposes only the slug: nothing else in the state is safe
+    /// to act on before the full callback validation in <see cref="HandleCallbackAsync"/> has run.
     /// </remarks>
     string? TryReadTenantSlug(string state);
+
+    /// <summary>
+    /// Whether a protected link state was issued by
+    /// <see cref="GenerateRecoveryLinkAuthorizationUrlAsync"/>, so the link callback knows which
+    /// proof of identity to require. It picks the validation only; the callback still runs all of it.
+    /// </summary>
+    bool IsRecoveryState(string state);
 
     /// <summary>
     /// Handle the OIDC callback - exchange code for tokens and create session
@@ -125,6 +132,27 @@ public interface IOidcAuthService
         string? ipAddress = null, string? userAgent = null);
 
     /// <summary>
+    /// Generate an authorisation URL for linking an identity to <paramref name="subjectId"/> under
+    /// the recovery session that names it. The callback is the link callback, and its state
+    /// completes only with that recovery session (<see cref="HandleRecoveryLinkCallbackAsync"/>).
+    /// </summary>
+    /// <param name="providerId">The provider to link; it must be enabled.</param>
+    /// <param name="subjectId">The subject the recovery session is for.</param>
+    /// <param name="returnUrl">URL to return to after the flow completes.</param>
+    /// <param name="tenantSlug">The tenant the recovery session belongs to.</param>
+    Task<OidcAuthorizationRequest> GenerateRecoveryLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null);
+
+    /// <summary>
+    /// Handle the link callback of a flow started by <see cref="GenerateRecoveryLinkAuthorizationUrlAsync"/>:
+    /// attaches the identity to <paramref name="recoverySubjectId"/>, the subject of the recovery
+    /// session the callback presents, when the state was issued for a recovery link for that
+    /// subject. An identity already linked to another subject is refused.
+    /// </summary>
+    Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
+        string code, string state, string expectedState, Guid recoverySubjectId);
+
+    /// <summary>
     /// Generate an authorization URL for OIDC-based owner creation during setup.
     /// Encodes the pre-created subject ID in state so the callback can link the identity.
     /// </summary>
@@ -151,8 +179,15 @@ public class OidcLinkResult
     public Guid? IdentityId { get; set; }
     public string? ReturnUrl { get; set; }
 
-    public static OidcLinkResult Succeeded(Guid identityId, string? returnUrl = null)
-        => new() { Success = true, IdentityId = identityId, ReturnUrl = returnUrl };
+    /// <summary>The provider the linked identity belongs to; set on success.</summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>Whether the link added the identity, rather than finding it already on the account.</summary>
+    public bool Added { get; set; }
+
+    public static OidcLinkResult Succeeded(
+        Guid identityId, string? returnUrl = null, Guid? providerId = null, bool added = true)
+        => new() { Success = true, IdentityId = identityId, ReturnUrl = returnUrl, ProviderId = providerId, Added = added };
     public static OidcLinkResult Failed(string error, string? description = null)
         => new() { Success = false, Error = error, ErrorDescription = description };
 }

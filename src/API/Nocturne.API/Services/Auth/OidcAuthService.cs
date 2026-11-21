@@ -656,8 +656,17 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <inheritdoc />
-    public async Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
-        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null)
+    public Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null) =>
+        GenerateLinkAuthorizationUrlAsync(providerId, subjectId, returnUrl, tenantSlug, LinkIntent);
+
+    /// <inheritdoc />
+    public Task<OidcAuthorizationRequest> GenerateRecoveryLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null) =>
+        GenerateLinkAuthorizationUrlAsync(providerId, subjectId, returnUrl, tenantSlug, RecoveryIntent);
+
+    private async Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl, string? tenantSlug, string intent)
     {
         var provider =
             await _providerService.GetProviderByIdAsync(providerId)
@@ -675,7 +684,7 @@ public class OidcAuthService : IOidcAuthService
             Nonce = GenerateRandomString(32),
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
-            Intent = "link",
+            Intent = intent,
             SubjectId = subjectId,
             TenantSlug = tenantSlug,
         };
@@ -695,11 +704,22 @@ public class OidcAuthService : IOidcAuthService
             return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        var stateData = parsed.StateData!;
-        var provider = parsed.Provider!;
-        var claims = parsed.Claims!;
+        return await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, authenticatedSubjectId, LinkIntent);
+    }
 
-        return await AttachVerifiedIdentityAsync(stateData, provider, claims, authenticatedSubjectId);
+    /// <inheritdoc />
+    public async Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
+        string code, string state, string expectedState, Guid recoverySubjectId)
+    {
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, LinkCallbackPath);
+        if (!parsed.Success)
+        {
+            return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
+        }
+
+        return await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, recoverySubjectId, RecoveryIntent);
     }
 
     /// <inheritdoc />
@@ -798,24 +818,29 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Attaches a verified OIDC identity to an already-authenticated subject.
+    /// Attaches a verified OIDC identity to the subject the caller proved it is, by a signed-in
+    /// session for <see cref="LinkIntent"/> or a recovery session for <see cref="RecoveryIntent"/>.
+    /// The state must have been issued for that same proof, so neither flow's state completes the
+    /// other, and for that same subject.
     /// Extracted from <see cref="HandleLinkCallbackAsync"/> to enable unit testing
     /// without mocking token exchange and JWKS verification.
     /// </summary>
-    /// <param name="stateData">Decoded state data from the link callback, which must have <c>Intent == "link"</c>.</param>
+    /// <param name="stateData">Decoded state data from the link callback.</param>
     /// <param name="provider">The OIDC provider from which the identity originated.</param>
     /// <param name="claims">Parsed claims from the provider's ID token.</param>
-    /// <param name="authenticatedSubjectId">The currently authenticated subject to link the identity to.</param>
+    /// <param name="authenticatedSubjectId">The subject the caller proved it is, to link the identity to.</param>
+    /// <param name="intent">The intent the caller's proof completes.</param>
     /// <returns>An <see cref="OidcLinkResult"/> describing the outcome of the link operation.</returns>
     internal async Task<OidcLinkResult> AttachVerifiedIdentityAsync(
         OidcStateData stateData,
         OidcProvider provider,
         OidcIdTokenClaims claims,
-        Guid authenticatedSubjectId)
+        Guid authenticatedSubjectId,
+        string intent = LinkIntent)
     {
-        if (stateData.Intent != "link")
+        if (stateData.Intent != intent)
         {
-            return OidcLinkResult.Failed("invalid_intent", "State was not issued for a link flow");
+            return OidcLinkResult.Failed("invalid_intent", "State was not issued for this link flow");
         }
         if (stateData.SubjectId != authenticatedSubjectId)
         {
@@ -833,7 +858,8 @@ public class OidcAuthService : IOidcAuthService
         return outcome switch
         {
             OidcLinkOutcome.Created or OidcLinkOutcome.AlreadyLinkedToSelf
-                => OidcLinkResult.Succeeded(identityId!.Value, stateData.ReturnUrl),
+                => OidcLinkResult.Succeeded(
+                    identityId!.Value, stateData.ReturnUrl, provider.Id, added: outcome == OidcLinkOutcome.Created),
             OidcLinkOutcome.AlreadyLinkedToOther
                 => OidcLinkResult.Failed(
                     "identity_already_linked",
@@ -843,6 +869,15 @@ public class OidcAuthService : IOidcAuthService
     }
 
     #region Private Helper Methods
+
+    /// <summary>The state intent of a link a signed-in member starts.</summary>
+    internal const string LinkIntent = "link";
+
+    /// <summary>
+    /// The state intent of a link started under a recovery session. It shares the link callback,
+    /// which every provider already has registered, and completes only with a recovery session.
+    /// </summary>
+    internal const string RecoveryIntent = "recovery";
 
     private const string LoginCallbackPath = "/api/auth/oidc/callback";
     private const string LinkCallbackPath = "/api/auth/oidc/link/callback";
@@ -1228,6 +1263,23 @@ public class OidcAuthService : IOidcAuthService
 
         return JsonSerializer.Deserialize<OidcStateData>(json)
             ?? throw new InvalidOperationException("Invalid state data");
+    }
+
+    /// <inheritdoc />
+    public bool IsRecoveryState(string state)
+    {
+        if (string.IsNullOrEmpty(state))
+            return false;
+
+        try
+        {
+            return DecodeState(state).Intent == RecoveryIntent;
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Could not read an intent from the OIDC state");
+            return false;
+        }
     }
 
     /// <inheritdoc />

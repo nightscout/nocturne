@@ -161,6 +161,42 @@ public class SubjectRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task TheMembersByConfirmedEmailAreTheSitesActivePeopleWhoseConfirmedAddressIsTheOneNamed()
+    {
+        async Task<Guid> Member(NewSubject subject, Guid? tenant = null)
+        {
+            var id = await CreateAsync(subject);
+            AddMember(tenant ?? _tenant, id);
+            return id;
+        }
+
+        var parent = await Member(new NewSubject("Parent", Email: "a@example.test", EmailConfirmedAt: Now));
+        var child = await Member(new NewSubject("Child", Email: " A@Example.TEST ", EmailConfirmedAt: Now));
+        await Member(new NewSubject("Unconfirmed", Email: "a@example.test"));
+        await Member(new NewSubject("Gone", Email: "a@example.test", IsActive: false, EmailConfirmedAt: Now));
+        await Member(new NewSubject("System", Email: "a@example.test", IsSystemSubject: true, EmailConfirmedAt: Now));
+        await Member(new NewSubject("Demo", Email: "a@example.test", IsDemoSubject: true, EmailConfirmedAt: Now));
+        await Member(new NewSubject("Elsewhere", Email: "a@example.test", EmailConfirmedAt: Now), _otherTenant);
+        await CreateAsync(new NewSubject("No membership", Email: "a@example.test", EmailConfirmedAt: Now));
+        await Member(new NewSubject("Lookalike", Email: "aa@example.test", EmailConfirmedAt: Now));
+
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "a@example.test", CancellationToken.None))
+            .Select(s => s.Id).Should().BeEquivalentTo([parent, child]);
+    }
+
+    [Fact]
+    public async Task AnAddressDifferingByAKelvinSign_IsNotAMembersConfirmedAddress()
+    {
+        var kate = await CreateAsync(new NewSubject("Kate", Email: "kate@example.test", EmailConfirmedAt: Now));
+        AddMember(_tenant, kate);
+
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "Kate@example.test", CancellationToken.None))
+            .Should().BeEmpty();
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "KATE@example.test", CancellationToken.None))
+            .Select(s => s.Id).Should().Equal(kate);
+    }
+
+    [Fact]
     public async Task TheSetupOwnerCandidateIsTheOldestActivePersonAndNeverTheDemoVisitor()
     {
         // Explicit ids: the candidate is the first by id, and v7 ids minted in one millisecond do not order.
