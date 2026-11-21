@@ -104,6 +104,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = (await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct)).ToList();
         await _treatmentFoodService.ApplyFoodTypesAsync(data, ct);
@@ -516,6 +518,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     [HttpGet("meals")]
     [RemoteQuery]
     [ProducesResponseType(typeof(MealEvent[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MealEvent[]>> GetMeals(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
@@ -524,6 +527,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
     {
         var fromTimestamp = from ?? DateTime.UtcNow.Date;
         var toTimestamp = to ?? DateTime.UtcNow.Date.AddDays(1);
+        if (this.RejectDateSpan(fromTimestamp, toTimestamp) is { } overlong)
+            return overlong;
 
         var meals = await _mealReadService.GetMealsAsync(fromTimestamp, toTimestamp, attributed, ct);
         return Ok(meals.ToArray());
