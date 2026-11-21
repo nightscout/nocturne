@@ -702,8 +702,10 @@ msgstr "Zakázáno"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
+#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/DndNoticeStrip.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Disable"
 msgstr "Zakázat"
 
@@ -732,6 +734,7 @@ msgstr "Upravit"
 #: src/lib/components/patient/PatientInsulinManager.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
@@ -6287,9 +6290,7 @@ msgid "Failed to load custom sounds"
 msgstr "Nepodařilo se načíst vlastní zvuky"
 
 #. 0: sound.name
-#. 0: editor.name
 #: src/lib/components/settings/CustomSoundUpload.svelte
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Delete \"{0}\"? This cannot be undone."
 msgstr "Odstranit „{0}“? Tuto akci nelze vrátit zpět."
 
@@ -14106,7 +14107,9 @@ msgid "Row actions"
 msgstr "Akce řádku"
 
 #. 0: rule.name
+#. 0: editor.name
 #: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Delete \"{0}\"?"
 msgstr "Odstranit „{0}“?"
 
@@ -15407,9 +15410,8 @@ msgstr "Naskenujte QR kód autentizační aplikací a poté zadejte šestimístn
 msgid "Managed by tracker"
 msgstr "Spravováno sledováním"
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "This rule will stop firing immediately. Existing alert history is preserved. This action cannot be undone."
-msgstr "Toto pravidlo se okamžitě přestane spouštět. Stávající historie upozornění zůstane zachována. Akci nelze vrátit zpět."
+#~ msgid "This rule will stop firing immediately. Existing alert history is preserved. This action cannot be undone."
+#~ msgstr "Toto pravidlo se okamžitě přestane spouštět. Stávající historie upozornění zůstane zachována. Akci nelze vrátit zpět."
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 msgid "<0/> Test fire"
@@ -45106,4 +45108,24 @@ msgstr ""
 #. 0: totpRemoveTarget?.label ?? "Unnamed authenticator"
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app. This also removes your trusted devices."
+msgstr ""
+
+#. 0: rule.name
+#. 0: editor.name
+#: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "Disable \"{0}\"?"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "<0/> This rule will stop firing immediately. Existing alert history is preserved. This action cannot be undone."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "<0/> Add a low alert"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "No alert is on for low glucose. Nocturne will not tell you when glucose is low."
 msgstr ""
