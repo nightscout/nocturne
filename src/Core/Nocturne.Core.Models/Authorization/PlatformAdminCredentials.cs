@@ -9,10 +9,10 @@ namespace Nocturne.Core.Models.Authorization;
 /// A subject can therefore hold it while issuing credentials that are meant to do one narrow job,
 /// and a device token minted by or for a platform admin would otherwise inherit the whole instance.
 /// <para>
-/// The test is what the credential stands for, not what it is allowed to do. A session, a provider
-/// login and a legacy session JWT are the person; a grant, an api-secret or an OAuth token is a
-/// delegation the person handed out, bounded by its scopes. Only the first kind speaks for the
-/// subject's own standing.
+/// Only a Nocturne session carries the standing, because only a session is issued by Nocturne's own
+/// sign-in checks, which hold it back until an enrolled second factor is passed. A grant, an
+/// api-secret or an OAuth token is a delegation bounded by its scopes, and an identity provider's ID
+/// token sent as a bearer passed none of those checks.
 /// </para>
 /// <para>
 /// <see cref="AuthType.PlatformAccess"/> is included because it is minted only by an endpoint that
@@ -23,10 +23,9 @@ namespace Nocturne.Core.Models.Authorization;
 /// </para>
 /// <para>
 /// This is deliberately its own set rather than a reuse of
-/// <see cref="MemberScopeResolver.UnscopedCredentialTypes"/>, which it currently coincides with.
-/// That set answers "does this credential carry a scope grant of its own"; this one answers "is
-/// this credential the person". They agree today for related reasons, and tying them together
-/// would let a change to scope handling silently move a privilege boundary.
+/// <see cref="MemberScopeResolver.UnscopedCredentialTypes"/>. That set answers "does this credential
+/// carry a scope grant of its own"; this one answers "did the person sign in for it". Tying them
+/// together would let a change to scope handling silently move a privilege boundary.
 /// </para>
 /// </remarks>
 public static class PlatformAdminCredentials
@@ -34,7 +33,6 @@ public static class PlatformAdminCredentials
     private static readonly IReadOnlySet<AuthType> CarryingTypes = new HashSet<AuthType>
     {
         AuthType.SessionCookie,
-        AuthType.OidcToken,
         AuthType.LegacyJwt,
         AuthType.PlatformAccess,
     };
