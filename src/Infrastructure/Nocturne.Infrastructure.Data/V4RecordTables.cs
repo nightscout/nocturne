@@ -102,10 +102,7 @@ internal static class V4RecordTables
     /// </summary>
     /// <remarks>
     /// Reading the deleted snapshots lifts the soft-delete filter for the whole query, so each live
-    /// test is written out. The selector's tests are correlated on the extras row, not a set of the
-    /// selected statuses: <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteAsync{T}"/> runs
-    /// this query again for each chunk of ids, and a set would be rebuilt from the whole history of
-    /// the source or writers for every chunk.
+    /// test is written out.
     /// </remarks>
     internal static IQueryable<DeviceStatusExtrasEntity> StatusExtrasLeftBy(NocturneDbContext db, RecordSelector selector)
     {

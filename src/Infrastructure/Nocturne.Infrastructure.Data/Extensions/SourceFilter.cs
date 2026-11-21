@@ -48,8 +48,7 @@ public static class SourceFilter
     ];
 
     /// <summary>
-    /// Rows one of <paramref name="grantIds"/> inserted. The test is on the row, so a query that is
-    /// run again per chunk of ids reads the same parameter rather than a rebuilt set.
+    /// Rows one of <paramref name="grantIds"/> inserted.
     /// </summary>
     public static Expression<Func<TEntity, bool>> WrittenBy<TEntity>(IReadOnlyList<Guid> grantIds)
         where TEntity : IWriterStamped
@@ -74,10 +73,6 @@ public static class SourceFilter
     /// union of its <paramref name="sourceParts"/>, so each part is read off its own index as a read of
     /// <see cref="Parts{TEntity}"/> is, and a set of writers' by <see cref="WrittenBy{TEntity}"/>.
     /// </summary>
-    /// <remarks>
-    /// A delete runs the query again for each chunk of the ids it read, filtered by those ids, and
-    /// PostgreSQL pushes that filter into each part of the union.
-    /// </remarks>
     public static IQueryable<TEntity> Selected<TEntity>(
         this IQueryable<TEntity> rows,
         RecordSelector selector,
