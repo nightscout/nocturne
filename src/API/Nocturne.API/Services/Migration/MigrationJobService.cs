@@ -1310,7 +1310,8 @@ internal class MigrationJob
         Func<HttpContent, CancellationToken, Task<T>> readBody, CancellationToken ct)
     {
         using var readToken = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        readToken.CancelAfter(httpClient.Timeout); // HttpClient.Timeout stops covering a headers-only send once the headers arrive
+        // Real time on purpose: it carries HttpClient.Timeout past the headers, and HttpClient measures that on the system clock.
+        readToken.CancelAfter(httpClient.Timeout);
         using var response = await SendToSourceAsync(httpClient, url, label, read, readToken.Token, ct);
         try
         {
@@ -1385,14 +1386,14 @@ internal class MigrationJob
     /// unreachable host is not tolerated: those defeat every collection, so the run fails here
     /// with the right words.
     /// </remarks>
-    private async Task<long?> FetchCollectionCountAsync(
+    internal async Task<long?> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
     {
         if (!s_countableCollections.TryGetValue(collectionName, out var cursor))
             return 0;
 
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(CountBudget);
+        using var deadline = new CancellationTokenSource(CountBudget, _timeProvider);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
 
         try
         {

@@ -216,7 +216,7 @@ public sealed class GoogleHealthConnectorService(
         var days = Math.Max(1, (int)Math.Ceiling((window.To - window.From).TotalDays / 2));
         try
         {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
             var state = await LoadBackfillStateAsync(cleanup.Token);
             await SaveBackfillStateAsync(state with { ChunkDays = days }, cleanup.Token);
             logger.LogWarning(
@@ -516,7 +516,7 @@ public sealed class GoogleHealthConnectorService(
                 {
                     try
                     {
-                        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
                         await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
                     }
                     catch (Exception cleanupException)

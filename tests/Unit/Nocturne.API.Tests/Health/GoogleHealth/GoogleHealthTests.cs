@@ -1847,6 +1847,37 @@ public class GoogleHealthTests : IDisposable
         Assert.Equal("revoke_in_google", status.ErrorCode);
     }
 
+    [Fact]
+    public async Task A_preview_that_outlasts_its_timeout_reports_google_unavailable()
+    {
+        var time = new FakeTimeProvider();
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, ct) =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/token": return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}""");
+                case "/v1/userinfo": return Json("""{"sub":"account"}""");
+                default:
+                    reading.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return Json("{}");
+            }
+        });
+        var patience = TimeSpan.FromSeconds(30);
+        var service = Service(new TestConnectorStore(), handler, Guid.NewGuid(), time: time);
+        await ConnectAsync(service);
+
+        var preview = service.PreviewAsync(Guid.NewGuid(), default);
+        await reading.Task.WaitAsync(patience);
+        Assert.False(preview.IsCompleted);
+        time.Advance(TimeSpan.FromMinutes(3));
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => preview.WaitAsync(patience));
+        Assert.Equal("google_unavailable", error.Message);
+        Assert.Equal("preview_timeout", error.Stage);
+    }
+
     private sealed class ThrowingTokenCache(Func<Exception> failure) : IConnectorTokenCache
     {
         public Task<ConnectorSession?> GetAsync(string connectorName, Guid tenantId) => Task.FromResult<ConnectorSession?>(null);

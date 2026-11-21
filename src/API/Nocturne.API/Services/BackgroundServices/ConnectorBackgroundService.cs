@@ -87,6 +87,9 @@ public abstract class ConnectorBackgroundService<TConfig> : IScheduledJob
 
     private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
+    /// <summary>The clock the schedule and every deadline of this service run on.</summary>
+    protected TimeProvider Clock => _timeProvider;
+
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>

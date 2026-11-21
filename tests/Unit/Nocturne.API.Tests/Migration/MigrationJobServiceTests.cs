@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -312,6 +313,32 @@ public class MigrationJobServiceTests
     }
 
     [Fact]
+    public async Task A_count_that_outlasts_its_budget_is_given_up_on_when_the_clock_passes_it()
+    {
+        var (_, provider) = CreateService();
+        var clock = new FakeTimeProvider();
+        var id = Guid.NewGuid();
+        var job = new MigrationJob(
+            id,
+            Guid.NewGuid(),
+            ApiRequest(),
+            new MigrationJobInfo { Id = id, Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow },
+            tenantContext: null,
+            NullLogger.Instance,
+            provider,
+            clock);
+        var counting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http = new HttpClient(new StallingHandler(counting)) { BaseAddress = new Uri("https://example-nightscout.invalid/") };
+
+        var count = job.FetchCollectionCountAsync(http, "entries", CancellationToken.None);
+        await counting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        count.IsCompleted.Should().BeFalse();
+        clock.Advance(TimeSpan.FromSeconds(30));
+
+        (await count.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull("the run goes on without a total");
+    }
+
+    [Fact]
     public void UpdateCollectionProgress_keeps_a_recorded_failure_reason()
     {
         var job = CreateJob();
@@ -335,6 +362,18 @@ public class MigrationJobServiceTests
         job.UpdateCollectionProgress("profile", 3, 3, 0, true);
 
         job.GetStatus().CollectionProgress["profile"].SkippedReason.Should().Be("no profile endpoint");
+    }
+
+    /// <summary>Never answers, and says when a request has arrived.</summary>
+    private sealed class StallingHandler(TaskCompletionSource arrived) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            arrived.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
     }
 
     /// <summary>Holds every source request until released, keeping the job in a live state.</summary>
