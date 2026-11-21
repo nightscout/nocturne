@@ -22,6 +22,12 @@ public interface ICanonicalGlucoseService
     Task<SensorGlucose?> GetLatestAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// The most recent canonical reading timestamped at or before <paramref name="notAfter"/>, however
+    /// old; null when there is none.
+    /// </summary>
+    Task<SensorGlucose?> GetLatestAsync(DateTime notAfter, CancellationToken ct = default);
+
+    /// <summary>
     /// Canonical readings timestamped at or after <paramref name="since"/>, newest first, under the
     /// same source filtering as <see cref="GetLatestAsync"/>.
     /// </summary>

@@ -5,7 +5,8 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use rust_decimal::Decimal;
 
-use crate::compare::{Unit, decimal_from_f64_cs, elapsed};
+use crate::clock_anomaly::{CLOCK_TOLERANCE, ClockAnchor, since_anchor};
+use crate::compare::{Unit, decimal_from_f64_cs, in_unit};
 use crate::context::SensorContext;
 use crate::enums::CmpOp;
 use crate::model::Payload;
@@ -26,14 +27,11 @@ impl ClockLeaf {
     pub(crate) fn holds(self, now: DateTime<Utc>) -> Truth {
         match self {
             ClockLeaf::Fixed(value) => value,
-            ClockLeaf::Measured(e) => e.holds(now).into(),
-            ClockLeaf::UnknownOnceHeld(e) => {
-                if e.holds(now) {
-                    Truth::Unknown
-                } else {
-                    Truth::False
-                }
-            }
+            ClockLeaf::Measured(e) => e.truth(now),
+            ClockLeaf::UnknownOnceHeld(e) => match e.truth(now) {
+                Truth::False => Truth::False,
+                Truth::True | Truth::Unknown => Truth::Unknown,
+            },
         }
     }
 
@@ -50,6 +48,10 @@ impl ClockLeaf {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Elapsed {
     pub(crate) anchor: DateTime<Utc>,
+    /// The name an anchor ahead of `now` is reported under (§5.4); `None` for
+    /// one meant to be ahead, a scheduled event or an arrival, whose elapsed
+    /// time is negative until it.
+    pub(crate) source: Option<ClockAnchor>,
     pub(crate) measure: Measure,
 }
 
@@ -73,9 +75,10 @@ pub(crate) enum Measure {
 impl Elapsed {
     /// Held for at least `minutes` fractional minutes: `for_minutes` and
     /// `sustained`.
-    pub(crate) fn held_for(anchor: DateTime<Utc>, minutes: i32) -> Self {
+    pub(crate) fn held_for(anchor: DateTime<Utc>, minutes: i32, source: ClockAnchor) -> Self {
         Elapsed {
             anchor,
+            source: Some(source),
             measure: Measure::Minutes {
                 op: CmpOp::Ge,
                 minutes: f64::from(minutes),
@@ -83,20 +86,55 @@ impl Elapsed {
         }
     }
 
-    pub(crate) fn holds(self, now: DateTime<Utc>) -> bool {
+    /// The time since the anchor, or how far beyond [`CLOCK_TOLERANCE`]
+    /// ahead of `now` it is.
+    fn since(self, now: DateTime<Utc>) -> Result<TimeDelta, TimeDelta> {
+        let d = now.signed_duration_since(self.anchor);
+        match self.source {
+            Some(_) => since_anchor(d),
+            None => Ok(d),
+        }
+    }
+
+    /// Unknown while the anchor is beyond the tolerance ahead.
+    pub(crate) fn truth(self, now: DateTime<Utc>) -> Truth {
+        self.since(now)
+            .map_or(Truth::Unknown, |d| self.compares(d).into())
+    }
+
+    /// The comparison with an anchor beyond the tolerance read as one within
+    /// it: false then true as `now` advances wherever the measure is, so the
+    /// next-change search can bisect it.
+    pub(crate) fn reached(self, now: DateTime<Utc>) -> bool {
+        self.compares(self.since(now).unwrap_or(TimeDelta::zero()))
+    }
+
+    /// The anchor and how far ahead of `now` it is, when beyond the tolerance.
+    pub(crate) fn ahead(self, now: DateTime<Utc>) -> Option<(ClockAnchor, TimeDelta)> {
+        self.source.zip(self.since(now).err())
+    }
+
+    /// When an anchor beyond the tolerance ahead comes within it, so the
+    /// comparison is known; `None` when it is known at `now`.
+    pub(crate) fn known_from(self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        self.ahead(now)
+            .and_then(|_| self.anchor.checked_sub_signed(CLOCK_TOLERANCE))
+    }
+
+    fn compares(self, d: TimeDelta) -> bool {
         match self.measure {
             Measure::Decimal {
                 unit,
                 op,
                 threshold,
-            } => elapsed(now, self.anchor, unit)
+            } => in_unit(d, unit)
                 .and_then(decimal_from_f64_cs)
                 .is_some_and(|actual| op.apply(actual, threshold)),
             Measure::Minutes { op, minutes } => {
-                elapsed(now, self.anchor, Unit::Minutes).is_some_and(|m| op.apply(m, minutes))
+                in_unit(d, Unit::Minutes).is_some_and(|m| op.apply(m, minutes))
             }
-            Measure::AtLeast(bound) => now.signed_duration_since(self.anchor) >= bound,
-            Measure::Over(bound) => now.signed_duration_since(self.anchor) > bound,
+            Measure::AtLeast(bound) => d >= bound,
+            Measure::Over(bound) => d > bound,
         }
     }
 
@@ -114,7 +152,6 @@ impl Elapsed {
             },
         };
         ops.iter().map(move |&op| Elapsed {
-            anchor: self.anchor,
             measure: match self.measure {
                 Measure::Decimal {
                     unit, threshold, ..
@@ -126,6 +163,7 @@ impl Elapsed {
                 Measure::Minutes { minutes, .. } => Measure::Minutes { op, minutes },
                 measure @ (Measure::AtLeast(_) | Measure::Over(_)) => measure,
             },
+            ..self
         })
     }
 }
@@ -143,16 +181,27 @@ pub(crate) fn clock_leaf(
         Payload::SiteAge(p) => super::device::site_age(p, ctx),
         Payload::SensorAge(p) => super::device::sensor_age(p, ctx),
         Payload::TrackerAge(p) => super::device::tracker_age(p, ctx),
-        Payload::LoopStale(p) => super::device::loop_stale(p, ctx.last_aps_cycle_at, ctx),
-        Payload::LoopEnactionStale(p) => super::device::loop_stale(p, ctx.last_aps_enacted_at, ctx),
+        Payload::LoopStale(p) => {
+            super::device::loop_stale(p, ctx.last_aps_cycle_at, ClockAnchor::LastApsCycleAt, ctx)
+        }
+        Payload::LoopEnactionStale(p) => super::device::loop_stale(
+            p,
+            ctx.last_aps_enacted_at,
+            ClockAnchor::LastApsEnactedAt,
+            ctx,
+        ),
         Payload::PumpSuspended(p) => super::device::pump_suspended(p, ctx),
         Payload::AlertState(p) => super::spans::alert_state(p, ctx),
         Payload::OverrideActive(p) => super::spans::override_active(p, ctx),
         Payload::DoNotDisturb(p) => super::spans::do_not_disturb(p, ctx),
         Payload::PumpState(p) => super::spans::pump_state(p, ctx),
         Payload::StateSpanActive(p) => super::spans::state_span_active(p, ctx),
-        Payload::TimeSinceLastCarb(p) => super::clock::time_since(p, ctx.last_carb_at),
-        Payload::TimeSinceLastBolus(p) => super::clock::time_since(p, ctx.last_bolus_at),
+        Payload::TimeSinceLastCarb(p) => {
+            super::clock::time_since(p, ctx.last_carb_at, ClockAnchor::LastCarbAt)
+        }
+        Payload::TimeSinceLastBolus(p) => {
+            super::clock::time_since(p, ctx.last_bolus_at, ClockAnchor::LastBolusAt)
+        }
         Payload::Threshold(_)
         | Payload::RateOfChange(_)
         | Payload::Composite(_)
@@ -183,10 +232,11 @@ pub(super) fn active_for(
     is_active: bool,
     for_minutes: Option<i32>,
     started_at: Option<DateTime<Utc>>,
+    source: ClockAnchor,
 ) -> ClockLeaf {
     match started_at {
         Some(at) if is_active => for_minutes.map_or(ClockLeaf::Fixed(Truth::True), |m| {
-            ClockLeaf::Measured(Elapsed::held_for(at, m))
+            ClockLeaf::Measured(Elapsed::held_for(at, m, source))
         }),
         Some(_) => ClockLeaf::Fixed(Truth::False),
         None => ClockLeaf::Fixed((!is_active).into()),
@@ -196,12 +246,14 @@ pub(super) fn active_for(
 /// An elapsed time in `unit` converted to decimal and compared.
 pub(super) fn decimal(
     anchor: DateTime<Utc>,
+    source: Option<ClockAnchor>,
     unit: Unit,
     op: CmpOp,
     threshold: impl Into<Decimal>,
 ) -> ClockLeaf {
     ClockLeaf::Measured(Elapsed {
         anchor,
+        source,
         measure: Measure::Decimal {
             unit,
             op,

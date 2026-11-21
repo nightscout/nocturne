@@ -1,0 +1,1073 @@
+{
+  "schema_version": 1,
+  "scenario": "clock-skew-elapsed-leaves",
+  "ticks": [
+    {
+      "at": "2026-04-01T11:57:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "next_change_at": "2026-04-01T12:20:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-04-01T12:00:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-04-01T12:10:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 3
+          },
+          "next_change_at": "2026-04-01T12:10:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 4
+          },
+          "next_change_at": "2026-04-01T13:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 5
+          },
+          "next_change_at": "2026-04-02T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 6
+          },
+          "next_change_at": "2026-04-01T12:30:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 7
+          },
+          "next_change_at": "2026-04-01T12:30:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000009",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 8
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000010",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 9
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000011",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 10
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000012",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 11
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000013",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 12
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000014",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 13
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-04-01T11:55:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "next_change_at": "2026-04-01T12:20:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-04-01T12:00:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-04-01T12:10:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 3
+          },
+          "next_change_at": "2026-04-01T12:10:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 4
+          },
+          "next_change_at": "2026-04-01T13:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 5
+          },
+          "next_change_at": "2026-04-02T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 6
+          },
+          "next_change_at": "2026-04-01T12:30:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 7
+          },
+          "next_change_at": "2026-04-01T12:30:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000009",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 8
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000010",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 9
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000011",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 10
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000012",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 11
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000013",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 12
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000014",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 13
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-04-01T11:54:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "confirmation_count": 0
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_reading_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_reading_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 2
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_aps_cycle_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 3
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_aps_enacted_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 4
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_site_change_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 5
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_sensor_start_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 6
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_carb_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 7
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_bolus_at",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000009",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 8
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_alerts",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000010",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 9
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_pump_suspension",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000011",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 10
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_override",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000012",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 11
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_do_not_disturb",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000013",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 12
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_pump_state",
+              "ahead_ms": 360000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000014",
+          "root": false,
+          "unknown": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 13
+          },
+          "next_change_at": "2026-04-01T11:55:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "active_state_spans",
+              "ahead_ms": 360000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-04-01T12:40:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 14
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 1,
+            "hysteresis_started_at": "2026-04-01T12:40:00Z"
+          },
+          "next_change_at": "2026-04-01T12:40:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 2,
+            "hysteresis_started_at": "2026-04-01T12:40:00Z"
+          },
+          "next_change_at": "2026-04-01T12:40:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 3,
+            "hysteresis_started_at": "2026-04-01T12:40:00Z"
+          },
+          "next_change_at": "2026-04-01T12:40:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 4
+          },
+          "next_change_at": "2026-04-01T13:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 5
+          },
+          "next_change_at": "2026-04-02T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 6,
+            "hysteresis_started_at": "2026-04-01T12:40:00Z"
+          },
+          "next_change_at": "2026-04-01T12:40:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "excursion": 7,
+            "hysteresis_started_at": "2026-04-01T12:40:00Z"
+          },
+          "next_change_at": "2026-04-01T12:40:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000009",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 8
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000010",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 9
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000011",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 10
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000012",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 11
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000013",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 12
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000014",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 13
+          }
+        }
+      ]
+    }
+  ]
+}

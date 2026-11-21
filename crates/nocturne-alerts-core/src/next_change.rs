@@ -12,13 +12,14 @@ use chrono::{
 use chrono_tz::Tz;
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnchor;
 use crate::context::SensorContext;
 use crate::engine::{EngineState, Rule};
 use crate::enums::WireEnum;
 use crate::eval::clock::{local, tenant_zone, time_of_day_zone};
 use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf};
 use crate::eval::glucose::freshness_expiry;
-use crate::excursion::{TrackerStateKind, hysteresis_expiry};
+use crate::excursion::{TrackerStateKind, hysteresis_window};
 use crate::leaf_identity::nodes_with_paths;
 use crate::model::{Node, Payload};
 use crate::paths::AUTO_RESOLVE_ROOT;
@@ -62,8 +63,12 @@ pub(crate) fn next_change_at(
     if let Some(tracker) = state.tracker.state(rule.id) {
         match tracker.state {
             TrackerStateKind::Hysteresis => {
-                if let Some(end) = hysteresis_expiry(tracker, rule.hysteresis_minutes) {
-                    scan.candidate(if end > now { Some(end) } else { due_now });
+                if let Some(window) = hysteresis_window(tracker, rule.hysteresis_minutes) {
+                    if window.truth(now).is_true() {
+                        scan.candidate(due_now);
+                    } else {
+                        scan.elapsed(window);
+                    }
                 }
             }
             TrackerStateKind::Confirming if !held => scan.candidate(due_now),
@@ -120,7 +125,11 @@ impl Scan<'_> {
             match node.payload() {
                 Payload::Sustained(p) => {
                     if let Some(first) = self.timers.get_first_true(self.rule_id, &path) {
-                        self.elapsed(Elapsed::held_for(first, p.minutes.get()));
+                        self.elapsed(Elapsed::held_for(
+                            first,
+                            p.minutes.get(),
+                            ClockAnchor::Sustained,
+                        ));
                     }
                 }
                 Payload::TimeOfDay(p) => {
@@ -141,10 +150,13 @@ impl Scan<'_> {
         }
     }
 
+    /// Where the comparison flips, and where an anchor beyond the tolerance
+    /// ahead comes within it (§5.4).
     fn elapsed(&mut self, e: Elapsed) {
+        self.candidate(e.known_from(self.now));
         for part in e.monotone_parts() {
-            if !part.holds(self.now) {
-                self.candidate(first_true_after(self.now, |t| part.holds(t)));
+            if !part.reached(self.now) {
+                self.candidate(first_true_after(self.now, |t| part.reached(t)));
             }
         }
     }

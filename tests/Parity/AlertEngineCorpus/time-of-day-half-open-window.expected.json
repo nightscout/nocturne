@@ -84,7 +84,13 @@
             "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T13:00:00Z"
-          }
+          },
+          "clock_anomaly": [
+            {
+              "fact": "hysteresis_started_at",
+              "ahead_ms": 3660000
+            }
+          ]
         }
       ]
     }

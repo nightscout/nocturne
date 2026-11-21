@@ -239,7 +239,7 @@ as false or true.
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
 | `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard; no active span is an answer; an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on that mode (table below) |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown; a span of a category the engine has no member for (§4) is not in the lookup |
-| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
@@ -274,7 +274,9 @@ one is. `bound` is the rule's `glucose_freshness_minutes`, a whole number of min
 1440, or **11 minutes** when the rule has none; any other value is an error in the `evaluate`
 and `replay` envelopes. An evaluation with no rule (`evaluate_node`, the snooze) uses 11
 minutes. With neither time the reading has no age and is not judged: the leaves read the facts
-as they are, which a host sends only with a reading time. An arrival after `now` is fresh.
+as they are, which a host sends only with a reading time. An arrival after `now` is fresh. A
+timestamp the age runs from follows §5.4: more than 5 minutes after `now`, the reading is not
+known to be fresh.
 
 The default suits a source that sends a reading every 5 minutes: a reading is fresh until the
 next is due, with room for one late arrival. On a slower source the default runs out between two
@@ -293,10 +295,9 @@ the rule was last enabled: the rule's `enabled_at`, an instant the host sends be
 `now - enabled_at` with its operator and value. So a sensor that never sends a reading is noticed
 one bound after the rule is enabled. The leaf is known from `enabled_at` on, and a comparison that
 holds while the elapsed time is short holds from the start: `staleness` `<` and `<=` are true from
-`enabled_at` until the bound, as is `not(signal_loss)`. An `enabled_at` after `now` is a negative
-elapsed time, as a reading timestamped after `now` is: `signal_loss` and `staleness` `>`, `>=`
-and `==` are false, `<` and `<=` true, and the bound is still reached at `enabled_at` plus the
-bound. With no `enabled_at` either (a host that does not send it, a rule stored before the host
+`enabled_at` until the bound, as is `not(signal_loss)`. An `enabled_at` after `now` is an anchor
+ahead of the clock, as a reading timestamped after `now` is (§5.4): up to 5 minutes ahead it has
+passed no time, and further ahead the leaf is unknown. With no `enabled_at` either (a host that does not send it, a rule stored before the host
 recorded it) the leaf is **unknown**. Any reading history decides as it always has, and
 `enabled_at` is not read. An evaluation with no rule has no `enabled_at`, so these leaves read
 unknown there without a reading: `evaluate_node`, which the backend uses for the snooze and for
@@ -343,7 +344,9 @@ the reservoir holds at least `b`.
     not broken by not knowing, and not started by it;
   - child true, no timer ⇒ **set** timer to `now`, return **false** (a 0-elapsed check
     does not happen on the set tick);
-  - child true, timer exists ⇒ return `(now - first).TotalMinutes >= minutes` (double).
+  - child true, timer exists ⇒ return `(now - first).TotalMinutes >= minutes` (double), with
+    `first` ahead of `now` read by §5.4: within 5 minutes it is zero elapsed, beyond that the node
+    is **unknown** and the timer is kept.
   - The timer key path is the path **of the sustained node itself**, not the child.
 
 ---
@@ -354,6 +357,15 @@ The context is assembled host-side (enricher in the backend; local assembler in
 Prelude). For the crate it is pure input data. Fields and their consumers are the table
 in §3 plus:
 
+- **The newest reading.** A host builds an alert context from the newest reading dated no more
+  than the clock tolerance (§5.4) after `now`, which the crate exports
+  (`nocturne_alerts_clock_tolerance_ms`). A reading dated further ahead is skipped until its time
+  comes within the tolerance, so the readings that arrive meanwhile keep driving the rules, and
+  `LastReadingAt` and `LatestTimestamp` are the selected reading's. Every context a host builds
+  for alerts selects so: per reading, the periodic evaluation, the snooze and its trend, and
+  replay, whose reading is at or before its tick. Stored readings, and what charts and statistics
+  read, are not filtered. A reading within the tolerance is selected, and the engine reads its
+  instant as `now`.
 - `LatestReceivedAt` is when the host received the newest reading, the instant its glucose
   facts' age runs from (§3). The backend sends the instant it stored the reading's row: a
   re-upload under the reading's sync key, or an edit, updates that row and keeps the instant; a
@@ -595,8 +607,11 @@ even when the root does not. Containers contribute only through their children, 
 | Tracker in `confirming` | At once: the next evaluation counts towards confirmation (§6), whatever its time. Nothing after an evaluation the rule held: the next one, with the same facts, holds too until another node's contribution changes the root. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
-A `signal_loss` or `staleness` leaf with no reading history measures from the rule's
-`enabled_at` (§3), so it contributes `enabled_at` plus its bound like any anchor, and a host can
+A leaf unknown because its anchor is more than 5 minutes ahead of `now` contributes
+`anchor - 5 minutes`, where it becomes known (§5.4); a `sustained` timer and a hysteresis start
+ahead contribute the same instant. A `signal_loss` or `staleness` leaf with no reading history
+measures from the rule's `enabled_at` (§3), so it contributes `enabled_at` plus its bound like any
+anchor, and a host can
 pre-arm that instant for a sensor that has never sent a reading. A leaf without an anchor, or
 whose guard holds it constant (a `has_ever_*` flag false, a `tracker_age` threshold held back at
 recording), contributes nothing, so an unknown leaf
@@ -637,6 +652,85 @@ facts, so a reading arriving moves the key and the sweep evaluates. A held rule 
 never evaluated before keeps no state after a held evaluation, so nothing is recorded and the
 sweep evaluates it on its cadence.
 
+### 5.4 Anchors ahead of the clock
+
+`now` is the host's clock. An anchor comes from an uploader or a device whose clock can be wrong,
+or from the host's own clock before it was stepped back. One function decides how far ahead of
+`now` an anchor may be. With `ahead = anchor - now`:
+
+- `ahead <= 0`: the elapsed time is `now - anchor`, as §1.3 measures it.
+- `0 < ahead <= 5 minutes`: the elapsed time is **zero**. An anchor exactly 5 minutes ahead is
+  within the tolerance; one a tick further is not. This covers ordinary skew between clocks.
+- `ahead > 5 minutes`: the elapsed time is **not known**, so the comparison is **unknown** (§2.4),
+  and the evaluation reports the anchor (below).
+
+The rule applies to every comparison of `now - anchor`:
+
+| Anchor (`fact`) | Read by |
+|---|---|
+| `last_reading_at` | `signal_loss`, `staleness` |
+| `enabled_at` | `signal_loss`, `staleness` with no reading history (§3) |
+| `latest_timestamp` | the glucose freshness of §3, when the context has no `LatestReceivedAt` |
+| `last_aps_cycle_at`, `last_aps_enacted_at` | `loop_stale`, `loop_enaction_stale` |
+| `last_site_change_at`, `last_sensor_start_at` | `site_age`, `sensor_age` |
+| `active_trackers` | `tracker_age` over a **duration** instance |
+| `last_carb_at`, `last_bolus_at` | `time_since_last_carb`, `time_since_last_bolus` |
+| `active_alerts` | `alert_state` `for_minutes` |
+| `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_state`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
+| `sustained` | a `sustained` timer's first-true instant (§3) |
+| `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
+
+Two instants are meant to be ahead of `now` and are exempt, so their elapsed time is negative
+until they pass: a **scheduled** (event) `tracker_age` instance's time, and `LatestReceivedAt`.
+The arrival is the host's own record of when it stored the reading, and replay reads a reading
+stored after its tick as fresh there (§8), so an arrival after `now` is fresh (§3).
+
+`enabled_at` and the two state instants are written from the host's clock, so they are ahead of
+`now` only when that clock went back, or when two hosts' clocks differ. The rule treats them as
+any anchor.
+
+What each kind does beyond the tolerance follows from the leaf being unknown:
+
+- Under `hold` a rule whose root it makes unknown is held (§6.4): an open excursion stays open,
+  and nothing opens. Under `met` it is read as true, so such a rule fires for as long as the anchor
+  is beyond the tolerance; under `not_met` as false. A host must tell someone (below). A reading
+  dated beyond the tolerance never reaches the engine from a host that selects as §4 says, so
+  `signal_loss` and `staleness` measure from the readings that did arrive.
+- A glucose reading whose freshness runs from its timestamp is not known to be fresh, so the four
+  judged leaves read unknown, as for a stale reading.
+- A `sustained` timer whose first-true instant is beyond the tolerance ahead returns unknown and
+  is kept: the run neither completes nor breaks on that evaluation. Within the tolerance it reads
+  zero elapsed, which is false, since `minutes > 0`.
+- A hysteresis window whose start is beyond the tolerance ahead does not close on that evaluation,
+  by the tracker or by the sweep's `CloseElapsedHysteresisAsync`. Within the tolerance the start
+  reads as `now`, so a window of zero or fewer minutes closes.
+
+The engine cannot tell a forward step of the host's clock from time passing: a timer, a window or
+a bound that a step jumps past completes at once, as it would had the time passed. No rule here
+guesses at one.
+
+**Report.** An evaluation reports `clock_anomaly`: each anchor it read beyond the tolerance, by
+the name in the table, with how far ahead of `now` it was, the furthest when two instants share a
+name. It is absent when there is none, so an evaluation that reads no such anchor has the output it
+had before this rule. The `evaluate` result and the `evaluate_node` response carry it; the replay
+output does not.
+
+**Next change.** A leaf unknown by an anchor beyond the tolerance becomes known when `now`
+reaches `anchor - 5 minutes`, with every fact frozen, so it contributes that instant (§5.3), and
+from there it contributes as a known leaf.
+
+**Host.** The backend tells the tenant's owner by an in-app notification (`ClockAnomalyNotice`),
+one per tenant and fact, under its own source. It is raised when an evaluation pass reports a fact
+beyond the tolerance, or when the reading selection of §4 skips a reading, and archived only once
+the fact is no longer ahead of `now` at all: for the reading, once no stored reading is ahead. So a
+device clock a few minutes more than the tolerance fast raises it once and keeps it. A fact that
+leaves the context (a span that ended, a rule that no longer reads it) is not observed again, so
+the notification keeps the instant the fact was ahead to and is archived once `now` passes it. The
+notification is reported after the evaluation it comes from, and a failure to write it never stops
+an evaluation. Instants the
+host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
+`active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+
 ---
 
 ## 6. Excursion state machine (`ExcursionTracker`)
@@ -670,7 +764,8 @@ start and re-arm flag (§6.3) are dropped. Every operation reads it so.
 ### 6.1 Hysteresis expiry
 
 `expired = now >= HysteresisStartedAt + HysteresisMinutes`, with the window an exact
-whole-minute duration. The start is the instant of the evaluation that entered hysteresis
+whole-minute duration, and a start ahead of `now` read by §5.4: within 5 minutes it is `now`,
+beyond that the window does not expire on that evaluation. The start is the instant of the evaluation that entered hysteresis
 and does not move until the excursion resumes or closes, so a window closes on the first
 false evaluation at or past its end, whatever the evaluation cadence. A non-positive
 `HysteresisMinutes` has always expired: the excursion closes on the first false evaluation

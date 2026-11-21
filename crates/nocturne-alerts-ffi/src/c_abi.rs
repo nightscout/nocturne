@@ -53,6 +53,14 @@ pub extern "C" fn nocturne_alerts_tzdb_version() -> *mut c_char {
     into_c_string(nocturne_alerts_core::TZDB_VERSION.to_owned())
 }
 
+/// How far ahead of `now` an anchor may be and still read as `now`, in whole
+/// milliseconds (engine-semantics.md §5.4). A host selects the newest reading
+/// for an alert context by the same bound.
+#[unsafe(no_mangle)]
+pub extern "C" fn nocturne_alerts_clock_tolerance_ms() -> i64 {
+    nocturne_alerts_core::clock_anomaly::CLOCK_TOLERANCE.num_milliseconds()
+}
+
 /// Evaluates one rule for one tick. Free the result with
 /// [`nocturne_alerts_free_string`].
 ///

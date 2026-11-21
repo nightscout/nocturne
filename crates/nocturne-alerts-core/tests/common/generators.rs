@@ -152,41 +152,73 @@ pub(crate) fn rule_spec() -> impl Strategy<Value = RuleSpec> {
 }
 
 /// One evaluation instant and the context it reads. A reading arrives on its
-/// tick, timestamped at or before it and sometimes long before; a tick without
-/// a new reading carries the last one, which goes stale as the gap grows.
+/// tick, timestamped at or before it and sometimes long before, or, from a
+/// device clock ahead of the host's, after it; a tick without a new reading
+/// carries the last one, which goes stale as the gap grows. A host that does
+/// not send the arrival leaves the timestamp to measure freshness from.
 #[derive(Debug, Clone)]
 pub(crate) struct Tick {
     pub(crate) now: DateTime<Utc>,
     pub(crate) context: Value,
 }
 
+/// Ticks in time order.
 pub(crate) fn ticks() -> impl Strategy<Value = Vec<Tick>> {
+    ticks_stepping(false)
+}
+
+/// Ticks whose clock steps back now and then, as a host clock corrected
+/// backwards does, so state set on an earlier tick lies ahead of a later one.
+pub(crate) fn skewed_ticks() -> impl Strategy<Value = Vec<Tick>> {
+    ticks_stepping(true)
+}
+
+fn ticks_stepping(step_back: bool) -> impl Strategy<Value = Vec<Tick>> {
+    let forward = prop_oneof![0..=1800i64, (0..=30i64).prop_map(|m| m * 60)];
+    let step: BoxedStrategy<i64> = if step_back {
+        prop_oneof![8 => forward, 1 => -1800..=-1i64].boxed()
+    } else {
+        forward.boxed()
+    };
     vec(
         (
-            prop_oneof![1 => 0..=1800i64, 1 => (0..=30i64).prop_map(|m| m * 60)],
+            step,
             option::of(40..300i32),
             option::of(0..6i32),
             any::<bool>(),
             prop_oneof![3 => Just(true), 1 => Just(false)],
-            prop_oneof![3 => Just(0i64), 1 => 0..=3600i64],
+            prop_oneof![
+                9 => Just(0i64),
+                3 => 0..=3600i64,
+                1 => -300..=0i64,
+                1 => -3600..=-301i64,
+            ],
+            prop_oneof![3 => Just(true), 1 => Just(false)],
         ),
         1..=24,
     )
     .prop_map(|steps| {
         let mut now = base();
-        let mut reading: (DateTime<Utc>, DateTime<Utc>, Option<i32>) = (now, now, None);
+        let mut reading: (DateTime<Utc>, Option<DateTime<Utc>>, Option<i32>) =
+            (now, Some(now), None);
         steps
             .into_iter()
-            .map(|(seconds, glucose, iob, asleep, arrives, late)| {
+            .map(|(seconds, glucose, iob, asleep, arrives, late, arrival)| {
                 now += TimeDelta::seconds(seconds);
                 if arrives {
-                    reading = (now - TimeDelta::seconds(late), now, glucose);
+                    reading = (
+                        now - TimeDelta::seconds(late),
+                        arrival.then_some(now),
+                        glucose,
+                    );
                 }
                 let mut context = json!({
                     "latest_timestamp": reading.0.to_rfc3339(),
-                    "latest_received_at": reading.1.to_rfc3339(),
                     "sleep_session_active": asleep,
                 });
+                if let Some(arrived) = reading.1 {
+                    context["latest_received_at"] = arrived.to_rfc3339().into();
+                }
                 if let Some(glucose) = reading.2 {
                     context["latest_value"] = glucose.into();
                 }

@@ -615,32 +615,48 @@ fn staleness_cold_start_is_unknown_before_infinity() {
     );
 }
 
-/// §3: an `enabled_at` after `now` is a negative elapsed time, as a reading
-/// from the future is.
+/// §5.4: an `enabled_at` after `now` is an anchor ahead of the clock, as a
+/// reading from the future is: up to 5 minutes ahead, exactly 5 included, it
+/// has passed no time, and further ahead the leaf is unknown.
 #[test]
-fn an_enablement_after_now_reads_as_a_negative_elapsed_time() {
+fn an_enablement_after_now_follows_the_clock_tolerance() {
     let ctx = SensorContext::default();
-    let leaf = |kind: ConditionKind, payload: Value| {
+    let leaf = |ahead: TimeDelta, kind: ConditionKind, payload: Value| {
         let parsed = parse_payload(kind, &payload).expect("payload parses");
         let mut timers = TimerStore::new();
-        let mut env = Env::new(base(), Uuid::nil(), &ctx, &mut timers)
-            .with_enabled_at(Some(base() + TimeDelta::minutes(10)));
+        let mut env =
+            Env::new(base(), Uuid::nil(), &ctx, &mut timers).with_enabled_at(Some(base() + ahead));
         eval_parsed(&parsed, kind.name(), &mut env)
     };
-    let staleness = |op: &str| {
+    let staleness = |ahead: TimeDelta| {
+        move |op: &str| {
+            leaf(
+                ahead,
+                ConditionKind::Staleness,
+                json!({"operator": op, "value": 0}),
+            )
+        }
+    };
+    let signal_loss = |ahead| {
         leaf(
-            ConditionKind::Staleness,
-            json!({"operator": op, "value": 0}),
+            ahead,
+            ConditionKind::SignalLoss,
+            json!({"timeout_minutes": 1}),
         )
     };
 
+    for within in [TimeDelta::minutes(3), TimeDelta::minutes(5)] {
+        assert_eq!(False, signal_loss(within));
+        assert_eq!(
+            [False, True, True, False, True],
+            [">", ">=", "==", "<", "<="].map(staleness(within))
+        );
+    }
+    let beyond = TimeDelta::minutes(5) + TimeDelta::seconds(1);
+    assert_eq!(Unknown, signal_loss(beyond));
     assert_eq!(
-        False,
-        leaf(ConditionKind::SignalLoss, json!({"timeout_minutes": 1}))
-    );
-    assert_eq!(
-        [False, False, False, True, True],
-        [">", ">=", "==", "<", "<="].map(staleness)
+        [Unknown; 5],
+        [">", ">=", "==", "<", "<="].map(staleness(beyond))
     );
 }
 
@@ -1416,12 +1432,27 @@ fn tracker_age_other_definition_is_false() {
     );
 }
 
+/// A duration instance's start 12h ahead is an anchor beyond the clock
+/// tolerance (§5.4): unknown, whatever the threshold.
+#[test]
+fn tracker_age_duration_start_ahead_of_the_clock_is_unknown() {
+    let ctx = tracker_ctx(base() + TimeDelta::hours(12));
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::TrackerAge,
+            &tracker_age_payload(">=", -1440),
+            &ctx
+        )
+    );
+}
+
 #[test]
 fn tracker_age_negative_minutes_pre_event_window() {
     // Event tracker scheduled 12h from now: elapsed is -720 minutes.
     // A "-24h before event" threshold (minutes = -1440) is already crossed;
     // a "-6h before event" threshold (minutes = -360) is not yet.
-    let ctx = tracker_ctx(base() + TimeDelta::hours(12));
+    let ctx = recorded_ctx(base() + TimeDelta::hours(12), None, true);
     assert_eq!(
         True,
         eval_payload(

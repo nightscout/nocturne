@@ -21,8 +21,9 @@ namespace Nocturne.API.Services.Alerts;
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
 /// the evaluation pass. A rule whose stored condition tree cannot be evaluated is logged once
 /// per version through <see cref="IUnevaluableRuleNotice.Report"/>; the sweep sends the notice,
-/// so evaluation never waits on it. Delayed escalation is a separate rule whose tree
-/// references the parent through an <c>alert_state</c> condition.
+/// so evaluation never waits on it. The instants the pass read too far ahead of the clock go to
+/// <see cref="IClockAnomalyNotice"/> once, after every rule's side effects. Delayed escalation is a
+/// separate rule whose tree references the parent through an <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IAlertEvaluationEngine"/>
@@ -37,6 +38,7 @@ internal sealed class AlertOrchestrator(
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
     IUnevaluableRuleNotice unevaluableNotice,
+    IClockAnomalyNotice clockAnomalyNotice,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -70,11 +72,16 @@ internal sealed class AlertOrchestrator(
         // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
         var enriched = await contextEnricher.EnrichAsync(context, evaluable, ct);
 
+        var anomalies = new Dictionary<string, ClockAnomaly>(StringComparer.Ordinal);
         foreach (var rule in evaluable)
         {
             try
             {
-                await EvaluateRuleAsync(rule, enriched, tenantId, ct);
+                foreach (var anomaly in await EvaluateRuleAsync(rule, enriched, tenantId, ct))
+                {
+                    if (!anomalies.TryGetValue(anomaly.Fact, out var seen) || seen.Ahead < anomaly.Ahead)
+                        anomalies[anomaly.Fact] = anomaly;
+                }
             }
             catch (RustAlertEngineException ex) when (ex.IsConditionRejection)
             {
@@ -86,9 +93,11 @@ internal sealed class AlertOrchestrator(
                     rule.Id, tenantId);
             }
         }
+
+        await clockAnomalyNotice.ReportIsolatedAsync(enriched, anomalies.Values, logger, ct);
     }
 
-    private async Task EvaluateRuleAsync(
+    private async Task<IReadOnlyList<ClockAnomaly>> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         Guid tenantId,
@@ -98,7 +107,7 @@ internal sealed class AlertOrchestrator(
         // unconditional auto-resolve under the auto_resolve path root) and persists all
         // evaluation state; this method applies the side effects its transitions call for.
         var evaluation = await evaluationEngine.EvaluateRuleAsync(rule, context, AlertEngineOptions.Default, ct);
-        if (evaluation.Skipped) return;
+        if (evaluation.Skipped) return [];
 
         switch (evaluation.Transition.Type)
         {
@@ -108,7 +117,7 @@ internal sealed class AlertOrchestrator(
 
             case ExcursionTransitionType.ExcursionClosed:
                 await HandleExcursionClosed(evaluation.Transition, tenantId, ct);
-                return;
+                break;
 
             case ExcursionTransitionType.ExcursionContinues:
                 // Nothing to do per-reading. The dispatch happened at open; subsequent
@@ -123,6 +132,8 @@ internal sealed class AlertOrchestrator(
         {
             await HandleExcursionClosed(autoResolveClose, tenantId, ct);
         }
+
+        return evaluation.ClockAnomalies;
     }
 
     private async Task HandleExcursionOpened(

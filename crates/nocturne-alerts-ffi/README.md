@@ -22,6 +22,7 @@ The crate builds a `cdylib` and a `staticlib`, library name `nocturne_alerts`.
 ```c
 char* nocturne_alerts_version(void);
 char* nocturne_alerts_tzdb_version(void);
+int64_t nocturne_alerts_clock_tolerance_ms(void);
 char* nocturne_alerts_evaluate(const char* request_json);
 char* nocturne_alerts_evaluate_node(const char* request_json);
 char* nocturne_alerts_leaf_paths(const char* condition_node_json);
@@ -43,8 +44,11 @@ void  nocturne_alerts_free_string(char* ptr);
   once (null is a no-op).
 - `nocturne_alerts_version` returns the crate version (e.g. `0.1.0`) and
   `nocturne_alerts_tzdb_version` the IANA time zone database release compiled
-  in (e.g. `2025b`), both plain strings, not JSON. Everything else returns a
-  JSON envelope.
+  in (e.g. `2025b`), both plain strings, not JSON.
+  `nocturne_alerts_clock_tolerance_ms` returns how far ahead of `now` an anchor
+  may be and still read as `now` (`docs/alerts/engine-semantics.md` §5.4), a
+  plain integer that is not freed. A host selects the newest reading for an
+  alert context by it. Everything else returns a JSON envelope.
 - The library never panics across the boundary and never crashes on bad
   input: panics, null pointers, invalid UTF-8 and malformed JSON all come
   back as the error envelope:
@@ -124,7 +128,8 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
                  unknown?}], transition, close_reason?,
                  tracker {state, confirmation_count, excursion?,
                           hysteresis_started_at?, awaiting_rearm?},
-                 auto_resolved?, timer_ops[], next_change_at? */ },
+                 auto_resolved?, timer_ops[], next_change_at?,
+                 clock_anomaly? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
     "state": "active",
@@ -174,6 +179,32 @@ periodic timer only while nothing but `now` moves the facts the rule reads
 (§5.1); a write that moves one must evaluate the rule. Additive, so
 `schema_version` stays 1. The tracker entry points do not report it: a rule's
 next change needs its full evaluation.
+
+### Clock anomaly
+
+`result.clock_anomaly` lists every anchor or state instant the evaluation read
+more than 5 minutes ahead of `now`, which the engine reads as not known
+(`docs/alerts/engine-semantics.md` §5.4). It is absent when there is none.
+
+```jsonc
+"clock_anomaly": [
+  { "fact": "last_reading_at", "ahead_ms": 3600000 }  // ClockAnchor order, once each
+]
+```
+
+`fact` is the context field the instant came from (`last_reading_at`,
+`latest_timestamp`, `last_aps_cycle_at`, `last_aps_enacted_at`,
+`last_site_change_at`, `last_sensor_start_at`, `last_carb_at`, `last_bolus_at`,
+`active_alerts`, `active_pump_suspension`, `active_override`,
+`active_do_not_disturb`, `active_pump_state`, `active_state_spans`,
+`active_trackers`), the rule's `enabled_at`, or the evaluation state that held
+it (`sustained` for a timer, `hysteresis_started_at` for the tracker).
+`ahead_ms` is how far ahead of `now` it was, in whole milliseconds, the furthest
+when two instants share a name. Under `hold` such a rule is held, so a host
+tells someone a device clock is ahead while it is reported. A host also selects
+the newest reading for an alert context by the tolerance, so a reading dated
+beyond it never becomes `last_reading_at` (engine-semantics.md §4). Additive,
+so `schema_version` stays 1.
 
 ### State threading
 
@@ -234,9 +265,14 @@ auto-resolve (`root: "auto_resolve"`).
   "timers": { "snooze": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "timer_ops": [                            // observable mutations, execution order
     { "op": "set", "path": "snooze", "at": "2026-01-05T12:00:00Z" }
+  ],
+  "clock_anomaly": [                        // present only when an instant was read too far ahead
+    { "fact": "last_reading_at", "ahead_ms": 3600000 }
   ]
 }
 ```
+
+`clock_anomaly` is as in `evaluate` (see Clock anomaly above).
 
 A `node` that cannot be evaluated (`docs/alerts/engine-semantics.md` §1.4,
 with paths under `root`) is an envelope error (`ok: false`) naming every

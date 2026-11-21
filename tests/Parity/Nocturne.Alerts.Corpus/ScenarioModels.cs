@@ -297,7 +297,18 @@ public sealed record ExpectedRuleResult
     /// </summary>
     [JsonPropertyName("next_change_at"), JsonConverter(typeof(CorpusJson.TickInstantConverter))]
     public DateTime? NextChangeAt { get; init; }
+
+    /// <summary>
+    /// The anchors read more than 5 minutes ahead of the tick (docs/alerts/engine-semantics.md
+    /// §5.4); carried only when there is one.
+    /// </summary>
+    [JsonPropertyName("clock_anomaly")]
+    public List<ExpectedClockAnomaly>? ClockAnomaly { get; init; }
 }
+
+public sealed record ExpectedClockAnomaly(
+    [property: JsonPropertyName("fact")] string Fact,
+    [property: JsonPropertyName("ahead_ms")] long AheadMs);
 
 /// <summary><see cref="Value"/> is false when <see cref="Unknown"/>, which is carried only when true.</summary>
 public sealed record ExpectedLeaf(

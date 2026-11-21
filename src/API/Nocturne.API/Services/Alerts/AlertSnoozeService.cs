@@ -119,7 +119,7 @@ internal sealed class AlertSnoozeService(
 
         // Same freshness bar as the sweep's snooze context: a stale value would describe a patient
         // who may have moved on, so the re-notification carries no reading instead.
-        var latest = await canonicalGlucose.GetLatestAsync(ct);
+        var latest = (await AlertReadings.SelectAsync(canonicalGlucose, now, ct)).Selected;
         var fresh = latest is not null && now - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;

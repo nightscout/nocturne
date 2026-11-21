@@ -56,6 +56,15 @@ public static partial class RustAlertEngine
     /// <inheritdoc cref="AlertsInterop.GetTzdbVersion"/>
     public static string TzdbVersion() => AlertsInterop.GetTzdbVersion();
 
+    private static readonly Lazy<TimeSpan> Tolerance = new(AlertsInterop.GetClockTolerance);
+
+    /// <summary>
+    /// How far ahead of now an anchor may be and still read as now
+    /// (docs/alerts/engine-semantics.md §5.4); the bound a host selects an alert context's
+    /// reading by.
+    /// </summary>
+    public static TimeSpan ClockTolerance() => Tolerance.Value;
+
     private static readonly Lazy<bool> NextChangeReported = new(() => ReportsNextChange(AlertsInterop.Evaluate));
 
     /// <summary>

@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "name": "tracker-age-event-versus-duration",
+  "description": "a scheduled (event) instance 12 hours ahead has a negative elapsed time: >= -1440 is true and opens, >= -360 is not yet true; a duration instance whose start is 12 hours ahead is unknown and clock_anomaly reports active_trackers; a duration start 3 minutes ahead reads as zero elapsed, so >= 0 is true",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": ">=",
+        "minutes": -1440
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": ">=",
+        "minutes": -360
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000002",
+        "operator": ">=",
+        "minutes": -1440
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000003",
+        "operator": ">=",
+        "minutes": 0
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-06T00:00:00Z",
+            "scheduled": true
+          },
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000002",
+            "reference_at": "2026-01-06T00:00:00Z"
+          },
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000003",
+            "reference_at": "2026-01-05T12:03:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

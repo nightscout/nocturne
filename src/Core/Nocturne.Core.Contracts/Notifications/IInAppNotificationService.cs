@@ -41,6 +41,36 @@ public interface IInAppNotificationService
     );
 
     /// <summary>
+    /// Creates a notification unless the user already has an active one of
+    /// <paramref name="type"/> and <paramref name="sourceId"/>; concurrent callers create one.
+    /// </summary>
+    /// <returns>Whether a notification was created.</returns>
+    Task<bool> CreateNotificationUnlessActiveAsync(
+        string userId,
+        string type,
+        string title,
+        string sourceId,
+        NotificationCategory? category = null,
+        string? source = null,
+        string? subtitle = null,
+        Dictionary<string, object>? metadata = null,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Replaces the metadata of the user's active notification of <paramref name="type"/> and
+    /// <paramref name="sourceId"/>, without announcing it again.
+    /// </summary>
+    /// <returns>Whether an active notification was found.</returns>
+    Task<bool> ReplaceMetadataBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        Dictionary<string, object> metadata,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Archive a notification with a reason, confined to a notification the given user owns
     /// </summary>
     /// <param name="reason">The reason for archiving</param>

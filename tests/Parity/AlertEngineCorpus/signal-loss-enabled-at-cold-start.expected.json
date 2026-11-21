@@ -73,15 +73,19 @@
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          },
-          "next_change_at": "2026-03-02T12:45:00Z"
+          "next_change_at": "2026-03-02T12:20:00Z",
+          "unknown": true,
+          "clock_anomaly": [
+            {
+              "fact": "enabled_at",
+              "ahead_ms": 301000
+            }
+          ]
         }
       ]
     },

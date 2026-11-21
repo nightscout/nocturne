@@ -66,7 +66,20 @@ public sealed record AlertEngineEvaluation
     /// moving (docs/alerts/engine-semantics.md §5.3), or null when none can.
     /// </summary>
     public DateTime? NextChangeAt { get; init; }
+
+    /// <summary>
+    /// The anchors the evaluation read more than 5 minutes ahead of the clock, which it read as
+    /// unknown (docs/alerts/engine-semantics.md §5.4); empty when none was.
+    /// </summary>
+    public IReadOnlyList<ClockAnomaly> ClockAnomalies { get; init; } = [];
 }
+
+/// <summary>
+/// An anchor an evaluation read more than 5 minutes ahead of the clock.
+/// </summary>
+/// <param name="Fact">The context field or evaluation state that held it, as the engine names it.</param>
+/// <param name="Ahead">How far ahead of the clock it was.</param>
+public sealed record ClockAnomaly(string Fact, TimeSpan Ahead);
 
 /// <summary>
 /// Engine seam for alert rule evaluation, implemented over the Rust engine

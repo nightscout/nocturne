@@ -42,7 +42,8 @@ use nocturne_alerts_core::facts::ContextFact;
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseError, parse_payload};
 
 use generators::{
-    RULE_ID, arbitrary_json, base, mutated, mutations, payload, rule_spec, ticks, tree, word,
+    RULE_ID, arbitrary_json, base, mutated, mutations, payload, rule_spec, skewed_ticks, ticks,
+    tree, word,
 };
 
 type Entry = unsafe extern "C" fn(*const c_char) -> *mut c_char;
@@ -554,7 +555,7 @@ proptest! {
     #[test]
     fn evaluate_threaded_through_its_response_matches_the_core_engine(
         spec in rule_spec(),
-        ticks in ticks(),
+        ticks in skewed_ticks(),
     ) {
         let wire: WireRule = serde_json::from_value(spec.wire()).unwrap();
         let rule = Rule::try_from(wire).unwrap();

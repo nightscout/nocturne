@@ -14,18 +14,20 @@ mod spans;
 use chrono::{DateTime, TimeDelta, Utc};
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
 use crate::enums::CompositeOp;
 use crate::model::{Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
+use elapsed::Elapsed;
 
 pub use glucose::{DEFAULT_GLUCOSE_FRESHNESS, MAX_GLUCOSE_FRESHNESS_MINUTES};
 
 /// Per-evaluation environment: the clock instant, the rule whose timers are
 /// keyed with its glucose freshness bound and when it was enabled, the sensor
-/// context, and the mutable timer store.
+/// context, the mutable timer store, and the anchors read ahead of the clock.
 pub struct Env<'a> {
     pub(crate) now: DateTime<Utc>,
     pub(crate) rule_id: Uuid,
@@ -33,6 +35,7 @@ pub struct Env<'a> {
     pub(crate) enabled_at: Option<DateTime<Utc>>,
     pub(crate) ctx: &'a SensorContext,
     pub(crate) timers: &'a mut TimerStore,
+    clock_anomaly: ClockAnomalies,
 }
 
 impl<'a> Env<'a> {
@@ -51,6 +54,7 @@ impl<'a> Env<'a> {
             enabled_at: None,
             ctx,
             timers,
+            clock_anomaly: ClockAnomalies::default(),
         }
     }
 
@@ -65,6 +69,23 @@ impl<'a> Env<'a> {
     #[must_use]
     pub fn with_enabled_at(self, enabled_at: Option<DateTime<Utc>>) -> Self {
         Self { enabled_at, ..self }
+    }
+
+    /// Every anchor the evaluations in this environment read beyond the
+    /// tolerance ahead of `now` (engine-semantics.md §5.4).
+    #[must_use]
+    pub fn clock_anomaly(&self) -> &ClockAnomalies {
+        &self.clock_anomaly
+    }
+
+    pub(crate) fn into_clock_anomaly(self) -> ClockAnomalies {
+        self.clock_anomaly
+    }
+
+    /// `e` at `now`, noting its anchor when it is beyond the tolerance ahead.
+    pub(crate) fn measure(&mut self, e: Elapsed) -> Truth {
+        self.clock_anomaly.note(e.ahead(self.now));
+        e.truth(self.now)
     }
 }
 
@@ -109,8 +130,14 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> Truth {
         | Payload::TimeSinceLastBolus(_)
         | Payload::PumpState(_)
         | Payload::StateSpanActive(_)
-        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at)
-            .map_or(Truth::False, |leaf| leaf.holds(env.now)),
+        | Payload::TrackerAge(_) => {
+            elapsed::clock_leaf(payload, env.ctx, env.enabled_at).map_or(Truth::False, |leaf| {
+                if let Some(e) = leaf.elapsed() {
+                    env.measure(e);
+                }
+                leaf.holds(env.now)
+            })
+        }
     }
 }
 

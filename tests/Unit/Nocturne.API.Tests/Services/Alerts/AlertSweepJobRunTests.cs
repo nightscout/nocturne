@@ -106,6 +106,7 @@ public class AlertSweepJobRunTests
             .AddSingleton(TimeProvider.System)
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>()
+            .AddSingleton(Mock.Of<IClockAnomalyNotice>())
             .BuildServiceProvider();
         await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(services, Tenant, Now, active: true);
 
@@ -123,6 +124,7 @@ public class AlertSweepJobRunTests
         await using var services = new ServiceCollection()
             .AddSingleton(_repository.Object)
             .AddSingleton(_notice.Object)
+            .AddSingleton(Mock.Of<IClockAnomalyNotice>())
             .AddScoped(_ => Mock.Of<ITenantAccessor>())
             .BuildServiceProvider();
         return await new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(services, Tenant, Now, active);

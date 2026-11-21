@@ -62,9 +62,17 @@ pub(crate) fn enabled_at(now: DateTime<Utc>) -> BoxedStrategy<Option<Value>> {
     prop_oneof![1 => Just(None), 1 => age().prop_map(move |s| anchor(now, s))].boxed()
 }
 
-/// Ages in seconds, up to nine days back and an hour ahead.
+/// Ages in seconds, up to nine days back and an hour ahead, with a share
+/// ahead within the clock tolerance and exactly at it.
 fn age() -> BoxedStrategy<Option<i64>> {
-    option::of(prop_oneof![-3600..=3600i64, -3600..=777_600i64]).boxed()
+    option::of(prop_oneof![
+        4 => -3600..=3600i64,
+        4 => -3600..=777_600i64,
+        1 => -300..=0i64,
+        1 => Just(-300i64),
+        1 => Just(-301i64),
+    ])
+    .boxed()
 }
 
 /// A context holding every anchor a wall-clock leaf measures from, each
@@ -99,6 +107,7 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
             option::of(word_or_unrecognised::<TrendBucket>("sideways")),
             option::of(word_or_unrecognised::<GlucoseBucket>("off_the_chart")),
             age(),
+            any::<bool>(),
         ),
     )
         .prop_map(
@@ -106,7 +115,7 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                 (reading, site, sensor, aps, enacted, carb, bolus),
                 (suspension, override_, dnd, pump_state, span, alert),
                 (glucose, aps_cycled, pump_snapshot, mode, category, alert_state, zone),
-                (rate, trend, bucket, received),
+                (rate, trend, bucket, received, scheduled),
             )| {
                 let at = |s| anchor(now, s);
                 let started = |s| at(s).map(|at| json!({ "started_at": at }));
@@ -157,7 +166,8 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                             json!([{
                                 "tracker_definition_id": TRACKER_ID,
                                 "reference_at": reference,
-                                "recorded_at": at(sensor)
+                                "recorded_at": at(sensor),
+                                "scheduled": scheduled
                             }])
                         }),
                     ),

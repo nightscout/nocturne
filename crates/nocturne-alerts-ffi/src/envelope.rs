@@ -254,9 +254,11 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
 
     let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
     let value = eval_node(&node, &root, &mut env);
+    let clock_anomaly = env.clock_anomaly().clone();
     let ops = timers.drain_ops();
     let mut response = Map::new();
     value.write(&mut response, "value");
+    clock_anomaly.write(&mut response);
     response.insert("timers".into(), timers_json(&timers, req.rule_id));
     response.insert(
         "timer_ops".into(),

@@ -50,8 +50,8 @@ use nocturne_alerts_core::validate::{validate_node, validate_rule};
 use clock::{clock_context, enabled_at, naming_the_context, word_or_unrecognised};
 use generators::{
     RULE_ID, Tick, arbitrary_json, base, composite, glucose_freshness_minutes, is_container,
-    mutated, mutations, node, node_value, on_unknown, payload, rule_spec, simple_leaf, ticks, tree,
-    word,
+    mutated, mutations, node, node_value, on_unknown, payload, rule_spec, simple_leaf,
+    skewed_ticks, ticks, tree, word,
 };
 
 #[derive(Debug, Clone)]
@@ -389,6 +389,20 @@ fn apply_ops(
     Ok(())
 }
 
+/// §5.4, stated apart from the engine: the time from `anchor` to `now`,
+/// zero for an anchor up to 5 minutes ahead (exactly 5 included), and not
+/// known for one further ahead.
+fn model_since(now: DateTime<Utc>, anchor: DateTime<Utc>) -> Option<TimeDelta> {
+    let passed = now - anchor;
+    if passed >= TimeDelta::zero() {
+        Some(passed)
+    } else if passed >= -TimeDelta::minutes(5) {
+        Some(TimeDelta::zero())
+    } else {
+        None
+    }
+}
+
 /// The leaves and Kleene connectives of the generated trees, the reading
 /// freshness of §3, and the `sustained` rule of §3 stated as a run start per
 /// path.
@@ -408,15 +422,22 @@ impl Model {
     }
 
     /// More than the bound has passed since the reading arrived, else since its
-    /// timestamp: exactly the bound is fresh.
-    fn stale(&self, ctx: &Value, now: DateTime<Utc>) -> bool {
-        let arrived = ctx["latest_received_at"].as_str();
-        arrived
-            .or(ctx["latest_timestamp"].as_str())
-            .is_some_and(|at| {
-                let at: DateTime<Utc> = at.parse().expect("an instant");
-                now - at > TimeDelta::minutes(self.glucose_freshness_minutes)
-            })
+    /// timestamp: exactly the bound is fresh. An arrival after `now` is fresh;
+    /// a timestamp follows the clock tolerance, so beyond it the reading's
+    /// freshness is not known.
+    fn stale(&self, ctx: &Value, now: DateTime<Utc>) -> Truth {
+        let bound = TimeDelta::minutes(self.glucose_freshness_minutes);
+        let instant = |field: &str| {
+            ctx[field]
+                .as_str()
+                .map(|at| at.parse::<DateTime<Utc>>().expect("an instant"))
+        };
+        if let Some(arrived) = instant("latest_received_at") {
+            return (now - arrived > bound).into();
+        }
+        instant("latest_timestamp").map_or(Truth::False, |at| {
+            model_since(now, at).map_or(Truth::Unknown, |passed| (passed > bound).into())
+        })
     }
 
     fn eval(&mut self, node: &Value, path: &str, ctx: &Value, now: DateTime<Utc>) -> Truth {
@@ -431,7 +452,7 @@ impl Model {
                 let value = payload["value"].as_i64().unwrap();
                 match ctx["latest_value"]
                     .as_i64()
-                    .filter(|_| !self.stale(ctx, now))
+                    .filter(|_| self.stale(ctx, now).is_false())
                 {
                     None => Truth::Unknown,
                     Some(latest) if payload["direction"] == "above" => (latest > value).into(),
@@ -495,7 +516,9 @@ impl Model {
                             self.run_starts.insert(path.to_owned(), now);
                             Truth::False
                         }
-                        Some(first) => ((now - *first).num_seconds() >= minutes * 60).into(),
+                        Some(first) => model_since(now, *first).map_or(Truth::Unknown, |passed| {
+                            (passed >= TimeDelta::minutes(minutes)).into()
+                        }),
                     }
                 }
             },
@@ -508,7 +531,7 @@ proptest! {
     /// The returned timer ops, replayed in order onto a map, are exactly the
     /// store's timers for the rule after each tick.
     #[test]
-    fn timer_ops_replayed_give_the_stored_timers(spec in rule_spec(), ticks in ticks()) {
+    fn timer_ops_replayed_give_the_stored_timers(spec in rule_spec(), ticks in skewed_ticks()) {
         let rule = rule_from_wire(spec.wire());
         let mut state = EngineState::new();
         let mut mirror: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
@@ -525,7 +548,7 @@ proptest! {
     #[test]
     fn engine_state_rebuilt_every_tick_evaluates_as_the_continuous_one(
         spec in rule_spec(),
-        ticks in ticks(),
+        ticks in skewed_ticks(),
     ) {
         let rule = rule_from_wire(spec.wire());
         let mut continuous = EngineState::new();
@@ -551,11 +574,12 @@ proptest! {
     /// child's run is unbroken and holds the first tick the child was true in
     /// it; an unknown child neither starts nor breaks a run and leaves the
     /// node unknown. The node is true once a run begun on an earlier tick has
-    /// lasted its minutes.
+    /// lasted its minutes, measured by the clock tolerance of §5.4 when the
+    /// clock has stepped back past the run's start.
     #[test]
     fn sustained_timers_follow_the_child_run_and_hold_for_their_minutes(
         spec in rule_spec(),
-        ticks in ticks(),
+        ticks in skewed_ticks(),
     ) {
         let rule = rule_from_wire(spec.wire());
         let mut state = EngineState::new();
@@ -595,7 +619,7 @@ proptest! {
     #[test]
     fn a_held_evaluation_changes_nothing_but_an_elapsed_hysteresis_window(
         spec in rule_spec(),
-        ticks in ticks(),
+        ticks in skewed_ticks(),
     ) {
         let wire = spec.wire();
         let holds = wire["on_unknown"] == "hold";
@@ -610,9 +634,11 @@ proptest! {
             }
             let window_elapsed = before.is_some_and(|s| {
                 s.state == TrackerStateKind::Hysteresis
-                    && s.hysteresis_started_at.is_some_and(|started| {
-                        tick.now - started >= TimeDelta::minutes(i64::from(rule.hysteresis_minutes))
-                    })
+                    && s.hysteresis_started_at
+                        .and_then(|started| model_since(tick.now, started))
+                        .is_some_and(|passed| {
+                            passed >= TimeDelta::minutes(i64::from(rule.hysteresis_minutes))
+                        })
             });
             if window_elapsed {
                 prop_assert_eq!(evaluation.transition.kind, TransitionType::ExcursionClosed);
@@ -739,6 +765,62 @@ fn generated_evaluations_reach_unknown_and_hold_it() {
         "{held} of {evaluations} held"
     );
 }
+
+/// §5.4: generated runs read an anchor or state instant beyond the clock
+/// tolerance in a stated share of evaluations: 99 of 3248 over 256 sampled
+/// rules and skewed tick runs, and 47 of 512 clock cases; the floors are about
+/// half.
+#[test]
+fn generated_evaluations_read_anchors_beyond_the_clock_tolerance() {
+    let mut evaluations = 0usize;
+    let mut flagged = 0usize;
+    for (spec, ticks) in sample(&(rule_spec(), skewed_ticks()), 256) {
+        let rule = rule_from_wire(spec.wire());
+        let mut state = EngineState::new();
+        for tick in &ticks {
+            let evaluation = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false)
+                .evaluation
+                .expect("the body is evaluable");
+            evaluations += 1;
+            if !evaluation.clock_anomaly.is_empty() {
+                flagged += 1;
+            }
+        }
+    }
+    assert!(
+        flagged * 100 >= evaluations * SKEWED_TICKS_FLOOR_PERCENT,
+        "{flagged} of {evaluations} read an anchor beyond the tolerance"
+    );
+
+    let cases = sample(&clock_case(), 512);
+    let mut evaluated = 0usize;
+    let mut beyond = 0usize;
+    for case in cases {
+        let rule = rule_from_wire(case.rule.clone());
+        let context: SensorContext =
+            serde_json::from_value(case.context.clone()).expect("a context");
+        let mut state = EngineState::new();
+        if let Some(tracker) = case.tracker {
+            state.tracker.restore_state(RULE_ID, tracker);
+        }
+        let Some(evaluation) =
+            evaluate_rule(&rule, &context, case.now, &mut state, false).evaluation
+        else {
+            continue;
+        };
+        evaluated += 1;
+        if !evaluation.clock_anomaly.is_empty() {
+            beyond += 1;
+        }
+    }
+    assert!(
+        beyond * 100 >= evaluated * CLOCK_CASE_FLOOR_PERCENT,
+        "{beyond} of {evaluated} clock cases read an anchor beyond the tolerance"
+    );
+}
+
+const SKEWED_TICKS_FLOOR_PERCENT: usize = 1;
+const CLOCK_CASE_FLOOR_PERCENT: usize = 4;
 
 const UNKNOWN_FLOOR_PERCENT: usize = 15;
 const HELD_FLOOR_PERCENT: usize = 10;
@@ -1163,7 +1245,8 @@ fn data_stopped_case() -> impl Strategy<Value = DataStoppedCase> {
 /// §3 and §5: data stopped at the reading; a timestamp without a reading time
 /// is forever ago; with neither, at the rule's enablement; with none of them,
 /// unknown. `signal_loss` holds once its minutes have passed, `staleness`
-/// compares the minutes passed with its operator.
+/// compares the minutes passed with its operator. An instant up to 5 minutes
+/// ahead has passed no time, and one further ahead is unknown (§5.4).
 fn model_data_stopped(case: &DataStoppedCase) -> Truth {
     let passed = match (case.last_reading, case.latest, case.enabled) {
         (Some(ago), _, _) | (None, None, Some(ago)) => Some(ago),
@@ -1177,6 +1260,11 @@ fn model_data_stopped(case: &DataStoppedCase) -> Truth {
     };
     let Some(passed) = passed else {
         return matches!(op, ">" | ">=").into();
+    };
+    let passed = match passed {
+        ..-300 => return Truth::Unknown,
+        -300..0 => 0,
+        _ => passed,
     };
     match op {
         ">" => passed > value,
@@ -1225,8 +1313,95 @@ proptest! {
     }
 }
 
+/// A `tracker_age` instance at an age around `now` in whole seconds, ahead of
+/// it when negative: a scheduled (event) time or a duration start.
+#[derive(Debug, Clone)]
+struct TrackerAgeCase {
+    ago: i64,
+    scheduled: bool,
+    operator: &'static str,
+    minutes: i64,
+}
+
+fn tracker_age_case() -> impl Strategy<Value = TrackerAgeCase> {
+    (
+        prop_oneof![-7200..=7200i64, -300..=0i64, Just(-300i64), Just(-301i64)],
+        any::<bool>(),
+        word::<nocturne_alerts_core::enums::CmpOp>(),
+        -120..=120i64,
+    )
+        .prop_map(|(ago, scheduled, operator, minutes)| TrackerAgeCase {
+            ago,
+            scheduled,
+            operator,
+            minutes,
+        })
+}
+
+/// §3 and §5.4: a scheduled time is meant to be ahead, so its elapsed time
+/// is negative until it; a duration start follows the clock tolerance.
+fn model_tracker_age(case: &TrackerAgeCase) -> Truth {
+    let passed = if case.scheduled {
+        case.ago
+    } else {
+        match case.ago {
+            ..-300 => return Truth::Unknown,
+            -300..0 => 0,
+            ago => ago,
+        }
+    };
+    let value = case.minutes * 60;
+    match case.operator {
+        ">" => passed > value,
+        ">=" => passed >= value,
+        "<" => passed < value,
+        "<=" => passed <= value,
+        "==" => passed == value,
+        other => panic!("the generators produce no operator {other}"),
+    }
+    .into()
+}
+
+proptest! {
+    /// §3 and §5.4: `tracker_age` exempts a scheduled instance from the
+    /// clock tolerance and holds a duration instance to it.
+    #[test]
+    fn tracker_age_measures_a_scheduled_time_ahead_and_holds_a_duration_start_to_the_tolerance(
+        case in tracker_age_case(),
+    ) {
+        let now = base();
+        let tracker = Uuid::from_u128(7);
+        let rule = rule_from_wire(json!({
+            "id": RULE_ID.to_string(),
+            "condition_type": "tracker_age",
+            "condition_params": {
+                "tracker_definition_id": tracker.to_string(),
+                "operator": case.operator,
+                "minutes": case.minutes,
+            },
+        }));
+        let context: SensorContext = serde_json::from_value(json!({
+            "active_trackers": [{
+                "tracker_definition_id": tracker.to_string(),
+                "reference_at": (now - TimeDelta::seconds(case.ago)).to_rfc3339(),
+                "scheduled": case.scheduled,
+            }],
+        }))
+        .unwrap();
+        let evaluation = evaluate_rule(&rule, &context, now, &mut EngineState::new(), false)
+            .evaluation
+            .expect("an evaluable rule");
+        prop_assert_eq!(evaluation.root, model_tracker_age(&case));
+        prop_assert_eq!(
+            evaluation.clock_anomaly.is_empty(),
+            case.scheduled || case.ago >= -300
+        );
+    }
+}
+
 /// A tracker state a rule can be left in: each of the four, and idle
-/// awaiting re-arm.
+/// awaiting re-arm, last changed up to an hour before `now` or, by a clock
+/// that has since stepped back, up to 15 minutes after it.
 fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
     let kinds = select(vec![
         (TrackerStateKind::Idle, false),
@@ -1235,8 +1410,9 @@ fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
         (TrackerStateKind::Active, false),
         (TrackerStateKind::Hysteresis, false),
     ]);
-    option::of((kinds, 0..3i32, 0..=3600i64).prop_map(
-        move |((state, awaiting_rearm), count, ago)| {
+    let ago = prop_oneof![3 => 0..=3600i64, 1 => -900..=-1i64];
+    option::of(
+        (kinds, 0..3i32, ago).prop_map(move |((state, awaiting_rearm), count, ago)| {
             let since = now - TimeDelta::seconds(ago);
             TrackerState {
                 state,
@@ -1254,8 +1430,8 @@ fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
                 hysteresis_started_at: (state == TrackerStateKind::Hysteresis).then_some(since),
                 awaiting_rearm,
             }
-        },
-    ))
+        }),
+    )
     .boxed()
 }
 
@@ -1280,7 +1456,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
             0..10i32,
             clock_context(now),
             seeded_tracker(now),
-            vec(1..=3600i64, 0..=2),
+            vec(prop_oneof![3 => 1..=3600i64, 1 => -900..=-1i64], 0..=2),
             on_unknown(),
             glucose_freshness_minutes(),
             enabled_at(now),

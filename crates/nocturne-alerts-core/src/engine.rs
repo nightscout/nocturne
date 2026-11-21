@@ -6,13 +6,15 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
+use crate::clock_anomaly::ClockAnomalies;
 use crate::context::{SensorContext, opt_ts};
 use crate::enums::{WireEnum, wire_enum};
 use crate::eval::{
     DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, eval_node, eval_payload,
 };
 use crate::excursion::{
-    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, Transition, TransitionType,
+    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
+    TransitionType, hysteresis_window,
 };
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
@@ -201,6 +203,9 @@ pub struct Evaluation {
     /// When an evaluation from the state this one left can next differ with
     /// only `now` advancing (engine-semantics.md §5.3); `None` when none can.
     pub next_change_at: Option<DateTime<Utc>>,
+    /// The anchors and state instants it read beyond the tolerance ahead of
+    /// `now` (engine-semantics.md §5.4).
+    pub clock_anomaly: ClockAnomalies,
 }
 
 /// An instant as RFC 3339 UTC: whole seconds without a fraction, sub-second
@@ -282,6 +287,7 @@ impl RuleOutcome {
         if let Some(at) = e.next_change_at {
             o.insert("next_change_at".into(), format_instant(at).into());
         }
+        e.clock_anomaly.write(&mut o);
         Value::Object(o)
     }
 }
@@ -326,6 +332,7 @@ pub fn evaluate_parsed_rule(
     log_leaves: bool,
 ) -> RuleOutcome {
     let outcome = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
+    let mut clock_anomaly = outcome.clock_anomaly;
     let config = TrackerRuleConfig {
         confirmation_readings: rule.confirmation_readings,
         hysteresis_minutes: rule.hysteresis_minutes,
@@ -343,17 +350,29 @@ pub fn evaluate_parsed_rule(
             ctx,
             now,
             &mut state.timers,
+            &mut clock_anomaly,
         )
         .is_false();
     let met = rule.on_unknown.resolve(outcome.root);
+    if met != Some(true) {
+        clock_anomaly.note(
+            state
+                .tracker
+                .state(rule.id)
+                .filter(|s| s.state == TrackerStateKind::Hysteresis)
+                .and_then(|s| hysteresis_window(s, rule.hysteresis_minutes))
+                .and_then(|w| w.ahead(now)),
+        );
+    }
     let transition = match met {
         Some(met) => state
             .tracker
             .process_evaluation(rule.id, config, met, auto_resolve_met, now),
         None => state.tracker.close_elapsed_hysteresis(rule.id, config, now),
     };
-    let auto_resolved =
-        !awaiting && rule.auto_resolve_enabled && try_auto_resolve(rule, ctx, now, state);
+    let auto_resolved = !awaiting
+        && rule.auto_resolve_enabled
+        && try_auto_resolve(rule, ctx, now, state, &mut clock_anomaly);
     let next_change_at = next_change_at(rule, body, ctx, now, state, met.is_none());
 
     RuleOutcome {
@@ -366,6 +385,7 @@ pub fn evaluate_parsed_rule(
             auto_resolved,
             timer_ops: state.timers.drain_ops(),
             next_change_at,
+            clock_anomaly,
         }),
     }
 }
@@ -374,6 +394,7 @@ pub fn evaluate_parsed_rule(
 pub(crate) struct BodyOutcome {
     pub(crate) root: Truth,
     pub(crate) leaves: Option<Vec<Truth>>,
+    pub(crate) clock_anomaly: ClockAnomalies,
 }
 
 /// The root truth of a body read by [`Rule::parse_body`] and, when
@@ -398,7 +419,11 @@ pub(crate) fn evaluate_body(
             .map(|leaf| eval_node(leaf, wire, &mut env))
             .collect()
     });
-    BodyOutcome { root, leaves }
+    BodyOutcome {
+        root,
+        leaves,
+        clock_anomaly: env.into_clock_anomaly(),
+    }
 }
 
 /// Only while an excursion is active or in hysteresis; one that the
@@ -409,6 +434,7 @@ fn try_auto_resolve(
     ctx: &SensorContext,
     now: DateTime<Utc>,
     state: &mut EngineState,
+    clock_anomaly: &mut ClockAnomalies,
 ) -> bool {
     if state.tracker.active_excursion_id(rule.id).is_none()
         || !auto_resolve_truth(
@@ -417,6 +443,7 @@ fn try_auto_resolve(
             ctx,
             now,
             &mut state.timers,
+            clock_anomaly,
         )
         .is_true()
     {
@@ -429,19 +456,23 @@ fn try_auto_resolve(
 }
 
 /// An auto-resolve tree read by [`Rule::parse_auto_resolve`] evaluated at
-/// the `auto_resolve` root; no tree is false.
+/// the `auto_resolve` root, adding the anchors it read ahead of the clock to
+/// `clock_anomaly`; no tree is false.
 pub(crate) fn auto_resolve_truth(
     rule: &Rule,
     tree: Option<&Node>,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     timers: &mut TimerStore,
+    clock_anomaly: &mut ClockAnomalies,
 ) -> Truth {
     let Some(tree) = tree else {
         return Truth::False;
     };
     let mut env = rule_env(rule, ctx, now, timers);
-    eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)
+    let truth = eval_node(tree, AUTO_RESOLVE_ROOT, &mut env);
+    clock_anomaly.merge(env.into_clock_anomaly());
+    truth
 }
 
 fn rule_env<'a>(

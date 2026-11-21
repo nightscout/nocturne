@@ -7,19 +7,22 @@
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "opened",
-          "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 1
-          }
+          "transition": "none",
+          "unknown": true,
+          "clock_anomaly": [
+            {
+              "fact": "active_trackers",
+              "ahead_ms": 43200000
+            }
+          ]
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
@@ -27,14 +30,18 @@
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "unknown": true,
+          "clock_anomaly": [
+            {
+              "fact": "active_trackers",
+              "ahead_ms": 43200000
+            }
+          ]
         }
       ]
     },
@@ -43,35 +50,41 @@
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "continues",
-          "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 1
-          }
+          "transition": "none",
+          "unknown": true,
+          "clock_anomaly": [
+            {
+              "fact": "active_trackers",
+              "ahead_ms": 21300000
+            }
+          ]
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "opened",
-          "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 2
-          }
+          "transition": "none",
+          "unknown": true,
+          "clock_anomaly": [
+            {
+              "fact": "active_trackers",
+              "ahead_ms": 21300000
+            }
+          ]
         }
       ]
     }
