@@ -60,6 +60,73 @@ public class MyTenantsControllerTests
             Times.Never);
     }
 
+    [Theory]
+    [InlineData(14)]
+    [InlineData(30)]
+    [InlineData(90)]
+    public async Task A_review_is_read_for_a_supported_period(int days)
+    {
+        var review = new TenantReviewResponse(default, default, default, default, []);
+        _overviewService
+            .Setup(s => s.GetReviewAsync(
+                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, days,
+                false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(review);
+
+        var result = await CreateController(Member()).GetReview(days, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
+    }
+
+    [Theory]
+    [InlineData(-14)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(13)]
+    [InlineData(15)]
+    [InlineData(60)]
+    [InlineData(91)]
+    [InlineData(365)]
+    public async Task A_review_of_any_other_period_is_refused_and_nothing_is_read(int days)
+    {
+        var result = await CreateController(Member()).GetReview(days, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _overviewService.Verify(
+            s => s.GetReviewAsync(
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [MemberData(nameof(SubjectlessCredentials))]
+    public async Task A_subjectless_session_is_answered_by_the_service_with_no_subject(AuthType authType)
+    {
+        var review = new TenantReviewResponse(default, default, default, default, []);
+        _overviewService
+            .Setup(s => s.GetReviewAsync(
+                null, It.IsAny<IReadOnlySet<string>>(), authType, 14,
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(review);
+
+        var result = await CreateController(Subjectless(authType)).GetReview(14, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
+    }
+
+    [Theory]
+    [MemberData(nameof(SubjectlessCredentials))]
+    public async Task A_subjectless_session_is_refused_an_unsupported_period(AuthType authType)
+    {
+        var result = await CreateController(Subjectless(authType)).GetReview(15, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+    }
+
     [Fact]
     public async Task A_member_gets_the_tenants_their_subject_belongs_to()
     {
@@ -126,6 +193,13 @@ public class MyTenantsControllerTests
     /// </summary>
     public static TheoryData<AuthType> SubjectlessCredentials =>
         [AuthType.Guest, AuthType.InstanceKey, AuthType.ApiKey];
+
+    private AuthContext Member() => new()
+    {
+        IsAuthenticated = true,
+        AuthType = AuthType.SessionCookie,
+        SubjectId = _subjectId,
+    };
 
     private static AuthContext Subjectless(AuthType authType) => new()
     {

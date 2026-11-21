@@ -28,6 +28,20 @@ public interface ITenantOverviewService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the statistics of the last <paramref name="days"/> days, and the change in time in
+    /// range from the period before, for every tenant <see cref="GetGlucoseReadTenantsAsync"/>
+    /// returns. A tenant whose access lacks reports read, or whose membership or
+    /// <paramref name="credentialLimitTo24Hours"/> limits the caller to the last 24 hours, is
+    /// returned unavailable and read not at all. A period is the span ending now, as
+    /// <c>GET /api/v4/statistics/periods</c> reads it. A caller with no subject of its own has no
+    /// memberships, and gets the periods with no people.
+    /// </summary>
+    Task<TenantReviewResponse> GetReviewAsync(
+        Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        bool credentialLimitTo24Hours = false,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Returns every active tenant the subject may read glucose for: active memberships
     /// (revoked ones are excluded by the global query filter) whose scopes, as resolved by
     /// <see cref="MemberScopeResolver"/> from <paramref name="authType"/> and

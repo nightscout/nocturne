@@ -99,20 +99,50 @@ public class MyTenantsController : ControllerBase
             is { } answer)
             return answer;
 
-        // This endpoint is tenantless, so MemberScopeMiddleware has not applied the membership
-        // restriction — the service resolves it per tenant through MemberScopeResolver, which needs
-        // the credential type to know whether the token's scopes are a ceiling at all.
-        // PlatformAccess is a superuser auth type, matching MemberScopeMiddleware's handling: it
-        // never reaches membership resolution there, so stand in a full-access grant.
-        IReadOnlySet<string> tokenScopes =
-            caller.AuthType is AuthType.PlatformAccess
-                ? new HashSet<string> { Scope.FullAccess }
-                : HttpContext.GetGrantedScopes();
-
         var overview = await _overviewService.GetOverviewAsync(
-            subjectId, tokenScopes, caller.AuthType, caller.LimitTo24Hours, ct);
+            subjectId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
+
+    /// <inheritdoc cref="ITenantOverviewService.GetReviewAsync"/>
+    /// <param name="days">The length of the period: 14, 30 or 90.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    [HttpGet("overview/review")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantReviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<TenantReviewResponse>> GetReview(
+        [FromQuery] int days = 14, CancellationToken ct = default)
+    {
+        // A caller without a subject is answered by the service, which states the periods: see
+        // ResolveOwnSubject for why it is not refused.
+        var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
+        if (!caller.IsAuthenticated)
+            return Unauthorized();
+
+        if (!TenantReviewPeriods.IsSupported(days))
+            return Problem(
+                detail: $"The period must be one of {string.Join(", ", TenantReviewPeriods.Days)} days.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Bad Request");
+
+        var review = await _overviewService.GetReviewAsync(
+            caller.SubjectId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
+        return Ok(review);
+    }
+
+    /// <summary>
+    /// The scopes the credential's grant allows. These endpoints are tenantless, so
+    /// MemberScopeMiddleware has not applied the membership restriction: the service resolves it
+    /// per tenant through MemberScopeResolver, which needs the credential type to know whether the
+    /// token's scopes are a ceiling at all. PlatformAccess is a superuser auth type, matching
+    /// MemberScopeMiddleware's handling: it never reaches membership resolution there, so stand in
+    /// a full-access grant.
+    /// </summary>
+    private IReadOnlySet<string> TokenScopesOf(AuthContext caller) =>
+        caller.AuthType is AuthType.PlatformAccess
+            ? new HashSet<string> { Scope.FullAccess }
+            : HttpContext.GetGrantedScopes();
 
     /// <inheritdoc cref="ITenantService.CreateAsync"/>
     [HttpPost]
