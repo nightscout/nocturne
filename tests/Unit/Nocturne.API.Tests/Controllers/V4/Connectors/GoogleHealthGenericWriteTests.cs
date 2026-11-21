@@ -39,6 +39,9 @@ public class GoogleHealthGenericWriteTests
     public async Task The_generic_write_still_accepts_an_enabled_flag_for_other_connectors()
     {
         var service = new Mock<IConnectorConfigurationService>();
+        service
+            .Setup(s => s.GetBoundKeysAsync("Dexcom", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["enabled"] = typeof(bool) });
 
         var result = await SaveAsync(service, "Dexcom", """{"enabled":false}""");
 

@@ -1,6 +1,7 @@
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Connectors.Core.Services;
@@ -42,7 +43,7 @@ public static class ConnectorMetadataService
         EnsureInitialized();
 
         return ConnectorsByDataSourceId.Values.FirstOrDefault(c =>
-            c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
+            ConnectorNames.Canonical(c.ConnectorName) == ConnectorNames.Canonical(connectorId)
         );
     }
 
@@ -56,7 +57,7 @@ public static class ConnectorMetadataService
 
         EnsureInitialized();
 
-        RegistrationsByConnectorId.TryGetValue(connectorId.ToLowerInvariant(), out var registration);
+        RegistrationsByConnectorId.TryGetValue(ConnectorNames.Canonical(connectorId), out var registration);
         return registration;
     }
 

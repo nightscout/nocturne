@@ -77,6 +77,9 @@ public class ConnectorConfigurationUriValidationTests
 
         var service = new Mock<IConnectorConfigurationService>();
         service
+            .Setup(s => s.GetBoundKeysAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["enabled"] = typeof(bool), ["url"] = typeof(string) });
+        service
             .Setup(s => s.GetSchemaAsync(ConnectorName, It.IsAny<CancellationToken>()))
             .ReturnsAsync(schema);
         service

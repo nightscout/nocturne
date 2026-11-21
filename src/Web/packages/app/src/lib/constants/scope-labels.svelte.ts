@@ -46,6 +46,9 @@ export function scopeLabels(): Record<Scope, string> {
     "sleep.readwrite": "View, record and remove sleep data",
     "food.read": "View food data",
     "food.readwrite": "View, record and remove food data",
+    "connectors.read": "View which data sources are connected and whether they are syncing",
+    "connectors.readwrite":
+      "Connect, change and remove data sources. Data from a connected source is added to your record",
     "health.read": "View all health data (read-only)",
     "health.readwrite": "View, update and remove all health data",
     "device.notify": "Send notifications to this device, and mute an alert for yourself from it",

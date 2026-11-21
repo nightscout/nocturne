@@ -103,6 +103,13 @@ public class ConnectorPropertyAttribute : Attribute
     /// </summary>
     public string? Format { get; set; }
 
+    /// <summary>
+    ///     Whether turning this boolean on makes Nocturne send the tenant's records to the
+    ///     connector's destination. A delegated credential may not turn it on
+    ///     (<see cref="Services.DelegatedConfigurationGuard"/>).
+    /// </summary>
+    public bool SendsRecords { get; set; }
+
     public string GetKeyName() => Key.ToString();
 
     /// <summary>

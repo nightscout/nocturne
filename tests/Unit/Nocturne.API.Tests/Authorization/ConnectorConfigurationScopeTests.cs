@@ -9,6 +9,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Connectors;
+using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
@@ -19,37 +20,45 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// Guards the connector configuration surface against a read-only credential. The stored values
-/// name the host the server fetches from and the credentials it presents, so reading them exposes
-/// account identifiers and writing them redirects or silences a CGM feed. Every action there
-/// requires <see cref="Scope.TenantSettings"/>; the exceptions are enumerated in
-/// <see cref="Ungated"/>.
+/// Guards the connector configuration surface. The stored values name the host the server fetches
+/// from and the credentials it presents, so reading them exposes account identifiers and writing
+/// them redirects or silences a CGM feed. Configuration and status take
+/// <see cref="Scope.ConnectorsRead"/> to read and <see cref="Scope.ConnectorsReadWrite"/> to change,
+/// which <see cref="Scope.TenantSettings"/> satisfies; the browser connect ceremony and the separate
+/// webhook and MyFitnessPal settings stay on <see cref="Scope.TenantSettings"/>. The exceptions are
+/// enumerated in <see cref="Ungated"/>.
 /// </summary>
 /// <remarks>
 /// <see cref="V4WriteScopeGatingTests"/> sweeps the whole V4 plane for a data-category scope and
-/// files these controllers as an exemption, because <c>tenant.settings</c> is not one. This class
-/// is what that exemption defers to: it pins the gate that is there instead, and asserts the scope
-/// resolution that decides who keeps access — a seed role through <see cref="MemberScopeResolver"/>,
-/// a guest grant through <see cref="Scope.ValidateGrantScopes"/>, and the CareLink desktop
-/// link token.
+/// files the <c>tenant.settings</c> controllers as an exemption. This class pins the gates and
+/// asserts the scope resolution that decides who keeps access: a seed role or a scoped credential
+/// through <see cref="MemberScopeResolver"/>, a guest grant through
+/// <see cref="Scope.ValidateGrantScopes"/>, and the CareLink desktop link token.
 /// </remarks>
 public class ConnectorConfigurationScopeTests
 {
     /// <summary>Reason marker for an action whose gate lives in the handler rather than an attribute.</summary>
     private const string HandlerGuarded = "enforced in the handler; also admits the desktop link token";
 
-    private static readonly Type[] ConnectorSurface =
+    private static readonly Type[] ConnectorScopedSurface =
     [
         typeof(ConfigurationController),
         typeof(ConnectorStatusController),
+    ];
+
+    private static readonly Type[] TenantSettingsSurface =
+    [
         typeof(CareLinkConnectController),
         typeof(WebhookSettingsController),
         typeof(MyFitnessPalSettingsController),
     ];
 
+    private static readonly AuthType[] ScopedCredentialTypes =
+        [AuthType.OAuthAccessToken, AuthType.DirectGrant, AuthType.ApiKey];
+
     /// <summary>
-    /// Actions on the surface that deliberately carry no <c>tenant.settings</c> attribute, with the
-    /// reason. Anything else fails <see cref="EveryConnectorAction_RequiresTenantSettings"/>.
+    /// Actions on the surface that deliberately carry no scope attribute, with the reason. Anything
+    /// else fails <see cref="EveryConnectorAction_RequiresItsScope"/>.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Ungated =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -68,33 +77,29 @@ public class ConnectorConfigurationScopeTests
         };
 
     [Fact]
-    public void EveryConnectorAction_RequiresTenantSettings()
+    public void EveryConnectorAction_RequiresItsScope()
     {
-        var ungated = new List<string>();
+        var wrong = new List<string>();
         var checkedActions = 0;
 
-        foreach (var (controller, action) in SurfaceActions())
+        foreach (var (controller, action) in GatedActions())
         {
-            if (Ungated.ContainsKey($"{controller.Name}.{action.Name}"))
-                continue;
-
             checkedActions++;
 
-            if (!RequiredScopes(controller, action).Contains(Scope.TenantSettings, StringComparer.Ordinal))
-                ungated.Add($"{controller.Name}.{action.Name}");
+            var expected = ExpectedScope(controller, action);
+            var required = RequiredScopes(controller, action).ToList();
+            if (required is not [var only] || only != expected)
+                wrong.Add($"{controller.Name}.{action.Name} requires [{string.Join(",", required)}], expected {expected}");
         }
 
         // Sanity: the scan must find the surface, or the assertion below passes vacuously.
-        // Thirteen actions carry the gate today: seven on ConfigurationController, two each on
-        // WebhookSettings and MyFitnessPalSettings, and one each on ConnectorStatus and
-        // CareLinkConnect.
         checkedActions.Should().BeGreaterThan(10,
             "the reflection scan should discover every action on the connector configuration surface");
 
-        ungated.Should().BeEmpty(
-            "reading or changing a connector's configuration is tenant administration, so it must "
-            + "carry [RequireScope(tenant.settings)] on the action or the class, or be listed in "
-            + "Ungated with a reason. Unprotected: " + string.Join("; ", ungated));
+        wrong.Should().BeEmpty(
+            "configuration and status reads take connectors.read and their writes connectors.readwrite; "
+            + "the other connector settings take tenant.settings; anything ungated is listed in "
+            + "Ungated with a reason. Wrong: " + string.Join("; ", wrong));
     }
 
     [Fact]
@@ -156,15 +161,30 @@ public class ConnectorConfigurationScopeTests
     }
 
     [Fact]
-    public void UnauthenticatedCaller_IsDeniedTheWholeConnectorSurface()
+    public void UnauthenticatedCaller_IsDeniedEveryWrite()
     {
         var tenantSettings = new HashSet<string> { Scope.TenantSettings };
 
-        foreach (var (controller, action) in GatedActions())
+        foreach (var (controller, action) in GatedActions().Where(x => ExpectedScope(x.Controller, x.Action) != Scope.ConnectorsRead))
         {
             Evaluate(controller, action, authenticated: false, tenantSettings)
                 .Should().BeOfType<UnauthorizedResult>(
                     $"{controller.Name}.{action.Name} must reject an unauthenticated caller");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Scope.ConnectorsRead"/> is a read, so <see cref="RequireScopeAttribute"/> decides it
+    /// on the scope set alone for an anonymous caller. The only anonymous principal with scopes is
+    /// a public share, capped at <see cref="Scope.PublicShareScopes"/>.
+    /// </summary>
+    [Fact]
+    public void PublicShare_IsDeniedTheWholeConnectorSurface()
+    {
+        foreach (var (controller, action) in GatedActions())
+        {
+            Evaluate(controller, action, authenticated: false, Scope.PublicShareScopes)
+                .Should().NotBeNull($"a public share must not reach {controller.Name}.{action.Name}");
         }
     }
 
@@ -185,29 +205,98 @@ public class ConnectorConfigurationScopeTests
         }
     }
 
-    /// <summary>
-    /// A scoped credential cannot reach the connector surface however wide its membership, because
-    /// <c>tenant.settings</c> is outside <see cref="Scope.ValidRequestScopes"/> and
-    /// <see cref="MemberScopeResolver"/> re-normalises a credential's scopes through the request
-    /// vocabulary before intersecting. Pinned so the CareLink desktop token's premise — that its
-    /// bespoke scope reaches nothing else — stays true for every scoped credential.
-    /// </summary>
-    [Fact]
-    public void ScopedCredentialOnAnAdminMembership_IsDeniedTheWholeConnectorSurface()
+    [Theory]
+    [MemberData(nameof(AdministeringMembershipsOnScopedCredentials))]
+    public void HealthReadWriteCredential_IsDeniedTheWholeConnectorSurface(string role, AuthType authType)
     {
-        var scopes = MemberScopeResolver.Resolve(
-            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Admin]),
-            AuthType.OAuthAccessToken,
-            Scope.Normalize([Scope.HealthReadWrite]).ToHashSet());
-
-        scopes.Should().NotContain(Scope.TenantSettings);
+        var scopes = ScopedCredentialScopes(role, authType, Scope.HealthReadWrite);
 
         foreach (var (controller, action) in GatedActions())
         {
-            Evaluate(controller, action, authenticated: true, scopes)
+            Evaluate(controller, action, authenticated: true, scopes, authType)
                 .Should().BeOfType<ScopeForbiddenResult>(
-                    $"a consented OAuth grant must not reach {controller.Name}.{action.Name}");
+                    "connector management is not health data, so health.readwrite must not reach "
+                    + $"{controller.Name}.{action.Name}");
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(AdministeringMembershipsOnScopedCredentials))]
+    public void ConnectorsReadWriteCredential_ReachesTheConnectorScopedSurfaceAndNothingElse(
+        string role, AuthType authType)
+    {
+        var scopes = ScopedCredentialScopes(role, authType, Scope.ConnectorsReadWrite);
+
+        scopes.Should().NotContain(Scope.TenantSettings, "a credential is never widened by its membership");
+
+        foreach (var (controller, action) in ConnectorScopedActions())
+        {
+            Evaluate(controller, action, authenticated: true, scopes, authType)
+                .Should().BeNull($"a connectors.readwrite credential on a {role} membership must reach "
+                    + $"{controller.Name}.{action.Name}");
+        }
+
+        foreach (var (controller, action) in TenantSettingsActions().Append(TenantSettingsRead()))
+        {
+            Evaluate(controller, action, authenticated: true, scopes, authType)
+                .Should().BeOfType<ScopeForbiddenResult>(
+                    $"connectors.readwrite is not tenant.settings, so it must not reach {controller.Name}.{action.Name}");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AdministeringMembershipsOnScopedCredentials))]
+    public void ConnectorsReadCredential_ReachesTheReadsAndIsDeniedEveryWrite(string role, AuthType authType)
+    {
+        var scopes = ScopedCredentialScopes(role, authType, Scope.ConnectorsRead);
+        var reads = 0;
+        var writes = 0;
+
+        foreach (var (controller, action) in ConnectorScopedActions())
+        {
+            var result = Evaluate(controller, action, authenticated: true, scopes, authType);
+
+            if (IsRead(action))
+            {
+                reads++;
+                result.Should().BeNull($"connectors.read must reach {controller.Name}.{action.Name}");
+            }
+            else
+            {
+                writes++;
+                result.Should().BeOfType<ScopeForbiddenResult>(
+                    $"connectors.read must not reach {controller.Name}.{action.Name}");
+            }
+        }
+
+        reads.Should().BeGreaterThan(0);
+        writes.Should().BeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData(RoleSeeds.Viewer)]
+    [InlineData(RoleSeeds.Clinician)]
+    [InlineData(RoleSeeds.Caretaker)]
+    public void ConnectorsReadWriteCredential_OnAMembershipWithoutTenantSettings_IsDenied(string role)
+    {
+        var scopes = ScopedCredentialScopes(role, AuthType.OAuthAccessToken, Scope.ConnectorsReadWrite);
+
+        foreach (var (controller, action) in GatedActions())
+        {
+            Evaluate(controller, action, authenticated: true, scopes, AuthType.OAuthAccessToken)
+                .Should().BeOfType<ScopeForbiddenResult>(
+                    $"the {role} role holds neither tenant.settings nor a connector scope, so its credential "
+                    + $"must not reach {controller.Name}.{action.Name}");
+        }
+    }
+
+    public static TheoryData<string, AuthType> AdministeringMembershipsOnScopedCredentials()
+    {
+        var data = new TheoryData<string, AuthType>();
+        foreach (var role in new[] { RoleSeeds.Owner, RoleSeeds.Admin })
+            foreach (var authType in ScopedCredentialTypes)
+                data.Add(role, authType);
+        return data;
     }
 
     // ── the CareLink flow, whose gate is in the handler ────────────────────────────────────────
@@ -273,13 +362,42 @@ public class ConnectorConfigurationScopeTests
         Scope.Normalize(
             Scope.ValidateGrantScopes(Scope.AllowedGuestScopes, OAuthGrantTypes.Guest));
 
-    private static IEnumerable<(Type Controller, MethodInfo Action)> SurfaceActions() =>
-        ConnectorSurface
+    private static IReadOnlySet<string> ScopedCredentialScopes(string role, AuthType authType, string credentialScope) =>
+        MemberScopeResolver.Resolve(
+            new HashSet<string>(RoleSeeds.Permissions[role]),
+            authType,
+            new HashSet<string> { credentialScope });
+
+    private static IEnumerable<(Type Controller, MethodInfo Action)> ActionsOf(IEnumerable<Type> controllers) =>
+        controllers
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .SelectMany(c => Actions(c).Select(a => (Controller: c, Action: a)));
 
+    private static IEnumerable<(Type Controller, MethodInfo Action)> SurfaceActions() =>
+        ActionsOf([.. ConnectorScopedSurface, .. TenantSettingsSurface]);
+
     private static IEnumerable<(Type Controller, MethodInfo Action)> GatedActions() =>
         SurfaceActions().Where(x => !Ungated.ContainsKey($"{x.Controller.Name}.{x.Action.Name}"));
+
+    private static IEnumerable<(Type Controller, MethodInfo Action)> ConnectorScopedActions() =>
+        GatedActions().Where(x => ConnectorScopedSurface.Contains(x.Controller));
+
+    private static IEnumerable<(Type Controller, MethodInfo Action)> TenantSettingsActions() =>
+        GatedActions().Where(x => TenantSettingsSurface.Contains(x.Controller));
+
+    private static (Type Controller, MethodInfo Action) TenantSettingsRead() =>
+        (typeof(TenantSettingsController),
+            typeof(TenantSettingsController).GetMethod(nameof(TenantSettingsController.GetTenantSettings))!);
+
+    private static bool IsRead(MethodInfo action) =>
+        action.GetCustomAttributes(inherit: true).OfType<IActionHttpMethodProvider>()
+            .SelectMany(p => p.HttpMethods ?? [])
+            .All(verb => verb == "GET");
+
+    private static string ExpectedScope(Type controller, MethodInfo action) =>
+        !ConnectorScopedSurface.Contains(controller) ? Scope.TenantSettings
+        : IsRead(action) ? Scope.ConnectorsRead
+        : Scope.ConnectorsReadWrite;
 
     /// <summary>The methods MVC would route: declared on the controller, not a property accessor.</summary>
     private static IEnumerable<MethodInfo> Actions(Type controller) =>

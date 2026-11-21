@@ -445,6 +445,52 @@ public class MemberScopeResolverTests
             .Should().BeEmpty();
     }
 
+    // ---- connector management ----
+
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public void ConnectorsReadWriteCredential_OnAnOwnerOrAdminMembership_ResolvesToConnectorAccessOnly(
+        AuthType authType)
+    {
+        foreach (var role in new[] { RoleSeeds.Owner, RoleSeeds.Admin })
+        {
+            Resolve(RoleSeeds.Permissions[role], authType, Scope.ConnectorsReadWrite)
+                .Should().BeEquivalentTo(
+                    [Scope.ConnectorsReadWrite, Scope.ConnectorsRead],
+                    $"a {role} membership must neither widen the credential to tenant.settings nor drop it");
+        }
+    }
+
+    [Fact]
+    public void ConnectorsReadCredential_OnAnAdminMembership_ResolvesToConnectorsReadOnly()
+    {
+        Resolve(RoleSeeds.Permissions[RoleSeeds.Admin], AuthType.OAuthAccessToken, Scope.ConnectorsRead)
+            .Should().BeEquivalentTo([Scope.ConnectorsRead]);
+    }
+
+    [Theory]
+    [InlineData(RoleSeeds.Viewer)]
+    [InlineData(RoleSeeds.Clinician)]
+    [InlineData(RoleSeeds.Caretaker)]
+    [InlineData(RoleSeeds.Denied)]
+    public void ConnectorsReadWriteCredential_OnAMembershipWithoutTenantSettings_ResolvesToNothing(string role)
+    {
+        Resolve(RoleSeeds.Permissions[role], AuthType.OAuthAccessToken, Scope.ConnectorsReadWrite)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AnAdminsInteractiveLogin_KeepsTenantSettingsAndSatisfiesBothConnectorTiers()
+    {
+        var resolved = Resolve(RoleSeeds.Permissions[RoleSeeds.Admin], AuthType.SessionCookie);
+
+        resolved.Should().Contain(Scope.TenantSettings);
+        Scope.Satisfies(resolved, Scope.ConnectorsReadWrite).Should().BeTrue();
+        Scope.Satisfies(resolved, Scope.ConnectorsRead).Should().BeTrue();
+    }
+
     // ---- unknown atoms ----
 
     [Fact]

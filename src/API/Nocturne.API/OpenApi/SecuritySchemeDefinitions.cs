@@ -71,6 +71,8 @@ public static class SecuritySchemeDefinitions
             [Scope.SleepReadWrite] = "Read and write sleep sessions",
             [Scope.FoodRead] = "Read food records",
             [Scope.FoodReadWrite] = "Read and write food records",
+            [Scope.ConnectorsRead] = "View which data sources are connected and whether they are syncing",
+            [Scope.ConnectorsReadWrite] = "Connect, change and remove data sources. Data from a connected source is added to your record",
             [Scope.AlertsRead] = "Read alert configuration",
             [Scope.AlertsReadWrite] = "Read and write alert configuration",
             [Scope.AlertsAcknowledge] = "Silence an alarm for everyone for a time",

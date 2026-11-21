@@ -255,6 +255,22 @@ public class DirectGrantControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_ByATenantSettingsHolder_StoresTheConnectorScopes()
+    {
+        _controller.HttpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.TenantSettings };
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Connector repair",
+            Scopes = [Scope.ConnectorsReadWrite, Scope.ConnectorsRead],
+        });
+
+        var response = Assert.IsType<CreateDirectGrantResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
+        Assert.Equal([Scope.ConnectorsRead, Scope.ConnectorsReadWrite], grant.Scopes.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Create_NoExpiry_StoresOpenEndedGrant()
     {
         var request = new CreateDirectGrantRequest
