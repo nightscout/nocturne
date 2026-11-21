@@ -46625,3 +46625,51 @@ msgstr ""
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Sign in on the sign-in page"
 msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising extremely fast"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising very fast"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising slowly"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "stable"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling slowly"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling very fast"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling extremely fast"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "out of range"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "sensor error"
+msgstr ""
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "unknown"
+msgstr ""

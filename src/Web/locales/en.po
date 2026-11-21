@@ -45686,3 +45686,51 @@ msgstr "<0/> Create a passkey"
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Sign in on the sign-in page"
 msgstr "Sign in on the sign-in page"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising extremely fast"
+msgstr "rising extremely fast"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising very fast"
+msgstr "rising very fast"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising"
+msgstr "rising"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "rising slowly"
+msgstr "rising slowly"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "stable"
+msgstr "stable"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling slowly"
+msgstr "falling slowly"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling"
+msgstr "falling"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling very fast"
+msgstr "falling very fast"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "falling extremely fast"
+msgstr "falling extremely fast"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "out of range"
+msgstr "out of range"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "sensor error"
+msgstr "sensor error"
+
+#: src/lib/utils/direction-info.svelte.ts
+msgid "unknown"
+msgstr "unknown"
