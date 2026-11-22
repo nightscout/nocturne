@@ -762,6 +762,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantCache, TenantCache>();
         services.AddScoped<ILegacyReadCacheInvalidation, LegacyReadCacheInvalidation>();
         services.AddScoped<IRecordChangeSubscriber, LegacyReadCacheSubscriber>();
+        services.AddScoped<IRecordChangeSubscriber, GlucoseFirstArrivalsInvalidation>();
 
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
@@ -1166,6 +1167,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlarmAckHandler, AlarmAckHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();
         services.AddScoped<IAlertReplayService, AlertReplayService>();
+        services.AddScoped<ImportedHistory>();
         // Scope-class classification (scoped Do Not Disturb, ADR 0004): stateless over
         // the static native engine, so a singleton. Backfilled once per tenant.
         services.AddSingleton<IRuleScopeClassifier, RuleScopeClassifier>();

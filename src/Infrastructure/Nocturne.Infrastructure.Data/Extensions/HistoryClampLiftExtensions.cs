@@ -25,8 +25,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
 /// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
-/// and the restore's check of the unique keys a restored row would take
-/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant. One lifted read
+/// the restore's check of the unique keys a restored row would take
+/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant, and
+/// the first arrival of each glucose stream, which replay classifies readings by
+/// (<see cref="Repositories.V4.SensorGlucoseRepository.GetStreamFirstArrivalsAsync"/>). One lifted read
 /// returns a row the clamp hides: a retried clear of a do-not-disturb window the caller names by id, cleared before
 /// the clamp's window, answers with that window as the first clear did (<see cref="Repositories.DndWindowRepository"/>).
 /// <para>

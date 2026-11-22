@@ -480,6 +480,28 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    public async Task<IEnumerable<GlucoseStreamArrival>> GetStreamFirstArrivalsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var streams = ctx.SensorGlucose.AsNoTracking()
+            .GroupBy(e => new { e.WriterGrantId, e.DataSource, e.Device })
+            .Select(g => new { g.Key.WriterGrantId, g.Key.DataSource, g.Key.Device, First = g.Min(e => e.SysCreatedAt) });
+        var rows = await ctx.WriteWithHistoryClampLiftedAsync(token => streams.ToListAsync(token), ct);
+        return rows.Select(r => new GlucoseStreamArrival(r.WriterGrantId, r.DataSource, r.Device, r.First)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<GlucoseStreamReading>> GetStreamReadingsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to)
+            .Select(e => new GlucoseStreamReading(e.Id, e.Timestamp, e.WriterGrantId, e.DataSource, e.Device))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetHiddenAsync(
         DateTime from, DateTime to, int limit, DateTime? afterTimestamp, Guid? afterId,
         CancellationToken ct = default)

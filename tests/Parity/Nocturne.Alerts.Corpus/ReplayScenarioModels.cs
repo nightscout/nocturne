@@ -19,7 +19,10 @@ public sealed record ReplayScenarioFile
 
     public required string Description { get; init; }
 
-    /// <summary>Tracker configuration on these rules is ignored by replay.</summary>
+    /// <summary>
+    /// The .NET runner reads no <c>hysteresis_minutes</c> from these rules, as the backend stores
+    /// none; every scenario here holds 0.
+    /// </summary>
     public required List<ScenarioRule> Rules { get; init; }
 
     public required List<ReplayScenarioTick> Ticks { get; init; }
@@ -35,6 +38,9 @@ public sealed record ReplayScenarioTick
     /// <summary>Rules a fire opening on this tick is recorded for as suppressed by Do Not Disturb.</summary>
     [JsonPropertyName("suppressed_rule_ids")]
     public List<Guid>? SuppressedRuleIds { get; init; }
+
+    /// <summary>A reading arrived at <see cref="At"/>; false is a sample between readings.</summary>
+    public bool Reading { get; init; } = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,9 +65,12 @@ public sealed record ReplayExpectedFile
     public required List<ReplayExpectedTick> Ticks { get; init; }
 }
 
-/// <summary><see cref="Kind"/> is <c>fired | suppressed_by_dnd | auto_resolved | cleared</c>.</summary>
+/// <summary>
+/// <see cref="Kind"/> is <c>fired | suppressed_by_dnd | hysteresis_started | hysteresis_resumed |
+/// closed | auto_resolved</c>.
+/// </summary>
 public sealed record ReplayExpectedEvent(
-    [property: JsonPropertyName("at")] DateTime At,
+    [property: JsonPropertyName("at"), JsonConverter(typeof(CorpusJson.TickInstantConverter))] DateTime At,
     [property: JsonPropertyName("rule_id")] Guid RuleId,
     [property: JsonPropertyName("kind")] string Kind);
 
@@ -79,8 +88,9 @@ public sealed record ReplayExpectedPoint(
     [property: JsonPropertyName("value")] bool Value,
     [property: JsonPropertyName("unknown")] bool? Unknown = null);
 
+/// <summary>An evaluation instant: a tick, or a step between ticks on the engine's 100 ns grid.</summary>
 public sealed record ReplayExpectedTick(
-    [property: JsonPropertyName("at")] DateTime At,
+    [property: JsonPropertyName("at"), JsonConverter(typeof(CorpusJson.TickInstantConverter))] DateTime At,
     [property: JsonPropertyName("rules")] List<ReplayExpectedRuleTick> Rules);
 
 /// <summary>A skipped rule carries only <see cref="Skipped"/>; any other carries <see cref="Met"/> and <see cref="Firing"/>.</summary>

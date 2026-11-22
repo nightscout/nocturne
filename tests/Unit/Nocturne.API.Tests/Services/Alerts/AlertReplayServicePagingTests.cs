@@ -110,6 +110,7 @@ public class AlertReplayServicePagingTests
             _tenantAccessor.Object,
             Options.Create(options),
             new RustAlertReplayEngine(new AlertEngineErrors(new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()),
             TimeProvider.System);
     }
 
@@ -426,6 +427,25 @@ public class AlertReplayServicePagingTests
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task Controller_MapsTheStepLimitToAProblemNamingTheRule()
+    {
+        var replayService = new Mock<IAlertReplayService>();
+        var ruleId = Guid.NewGuid();
+        replayService
+            .Setup(s => s.ReplayAsync(It.IsAny<DateOnly?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ReplayStepLimitException(ruleId, "Night low", new InvalidOperationException()));
+        var controller = new AlertReplayController(replayService.Object);
+
+        var response = await controller.Replay(
+            new AlertReplayRequest(null, null, _dayStart, _dayStart.AddDays(1)), CancellationToken.None);
+
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Which;
+        problem.StatusCode.Should().Be(422);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("\"Night low\"");
+    }
+
     private static AlertRuleSnapshot Rule(Guid id, AlertConditionType type, string json) =>
         new(id, Guid.NewGuid(), type.ToString(), type, json, AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
@@ -454,16 +474,21 @@ public class AlertReplayServicePagingTests
             .Select(i => Reading(_dayStart.AddHours(2).AddMinutes(i).AddSeconds(30), 250, dataSource: "other")));
         SetupSeries(series);
 
+        // Each reading of the fall fires, and each flat reading of the second uploader after it
+        // closes the excursion again, as live evaluation of each arriving reading does.
+        var falling = Enumerable.Range(11, 10).Select(i => _dayStart.AddHours(2).AddMinutes(i)).ToList();
         foreach (var pageSize in new[] { 1, 3, 1000 })
         {
             var result = await CreateSut(pageSize)
                 .ReplayAsync(new DateOnly(2026, 4, 28), "UTC", null, null, CancellationToken.None);
 
             result.Events.Select(e => (e.RuleId, e.At, e.Kind)).Should().BeEquivalentTo(
-            [
-                (rateRule, _dayStart.AddHours(2).AddMinutes(15), AlertReplayEventKind.Fired),
-                (trendRule, _dayStart.AddHours(2).AddMinutes(15), AlertReplayEventKind.Fired),
-            ], "page size {0}", pageSize);
+                falling.SelectMany(at => new[]
+                {
+                    (rateRule, at, AlertReplayEventKind.Fired),
+                    (trendRule, at, AlertReplayEventKind.Fired),
+                }),
+                "page size {0}", pageSize);
         }
     }
 
@@ -493,8 +518,8 @@ public class AlertReplayServicePagingTests
 
         result.Events.Select(e => (e.RuleId, e.At)).Should().BeEquivalentTo(
         [
-            (rateRule, _dayStart.AddMinutes(5)),
-            (lowRule, _dayStart.AddMinutes(5)),
+            (rateRule, _dayStart.AddMinutes(3)),
+            (lowRule, _dayStart.AddMinutes(3)),
         ]);
     }
 
@@ -557,7 +582,7 @@ public class AlertReplayServicePagingTests
         SetupHidden(hidden);
 
         foreach (var pageSize in new[] { 1, 3, 1000 })
-            (await FiredAtAsync(rule, pageSize)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(5) },
+            (await FiredAtAsync(rule, pageSize)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(4).AddSeconds(3) },
                 "the xdrip reading at 02:04:03 pairs with the hidden xdrip copy at 01:59:03 (page size {0})", pageSize);
     }
 
@@ -575,14 +600,14 @@ public class AlertReplayServicePagingTests
         SetupSeries(shown);
         SetupHidden(hidden);
 
-        (await FiredAtAsync(rule)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(5) },
+        (await FiredAtAsync(rule)).Should().Equal(new[] { _dayStart.AddHours(2).AddMinutes(4).AddSeconds(3) },
             "the xdrip reading at 02:04:03 pairs with the xdrip copy at 01:59:03, not the dexcom copy at 02:04:00");
     }
 
     /// <summary>
     /// Two apps upload one registered G7 and deduplication links none of their copies: the xdrip
-    /// copy of each reading lands 40 seconds after the dexcom one, so both are shown and every
-    /// tick sees the xdrip copy. Over a 20 mg/dL fall every 5 minutes with equal copies, paired
+    /// copy of each reading lands 40 seconds after the dexcom one, so both are shown and each is
+    /// evaluated in turn. Over a 20 mg/dL fall every 5 minutes with equal copies, paired
     /// with the dexcom copy the rate would be 0. Over flat glucose with the xdrip copy 3 mg/dL low,
     /// it would be -4.5 mg/dL/min.
     /// </summary>
@@ -607,8 +632,8 @@ public class AlertReplayServicePagingTests
 
         foreach (var pageSize in new[] { 1, 3, 1000 })
             (await FiredAtAsync(rule, pageSize)).Should().Equal(
-                fires ? new[] { _dayStart.AddHours(2).AddMinutes(5) } : [],
-                "the xdrip copy pairs with the xdrip copy 5 minutes before it (page size {0})", pageSize);
+                fires ? new[] { _dayStart.AddHours(2).AddMinutes(4) } : [],
+                "each copy pairs with its own uploader's copy 5 minutes before it (page size {0})", pageSize);
     }
 
     /// <summary>
@@ -630,7 +655,7 @@ public class AlertReplayServicePagingTests
         SetupSeries([dexcomBefore, xdripAfter]);
         SetupHidden([(xdripBefore, dexcomBefore.Id), (dexcomAfter, xdripAfter.Id)]);
 
-        (await FiredAtAsync(rule)).Should().Equal(_dayStart.AddMinutes(5));
+        (await FiredAtAsync(rule)).Should().Equal(after.AddSeconds(3));
     }
 
     /// <summary>

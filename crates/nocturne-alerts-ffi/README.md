@@ -639,13 +639,13 @@ unknown `reason` is the error envelope.
 
 ## Replay (`nocturne_alerts_replay`)
 
-Re-evaluates a whole rule set over a series of ticks in one call
+Steps a whole rule set over a series of ticks in one call
 (`docs/alerts/engine-semantics.md` §8): what the rules would have done over a
-historical window. The host builds each tick's context as of that instant;
-the engine owns everything else for the call — one fresh timer store,
-replay-local firing state instead of the excursion tracker, and the active
-alerts `alert_state` reads. Nothing carries over between calls and nothing is
-persisted.
+historical window, through the same driver sequence `evaluate` runs. The host
+builds each tick's context as of that instant; the engine owns everything else
+for the call: one fresh timer store, one fresh excursion tracker, and the
+active alerts `alert_state` reads. Nothing carries over between calls and
+nothing is persisted.
 
 Request:
 
@@ -657,30 +657,39 @@ Request:
     {
       "at": "2026-01-05T12:00:00Z",         // the tick instant ("now")
       "context": { /* ScenarioContext corpus shape */ },
-      "suppressed_rule_ids": [ "…" ]         // optional; see below
+      "suppressed_rule_ids": [ "…" ],        // optional; see below
+      "reading": true                        // optional; default true; false is a sample between readings
     }
   ],
-  "include_ticks": false                    // optional; default false
+  "include_ticks": false,                   // optional; default false
+  "until": "2026-01-06T00:00:00Z"           // optional; the window's end; see "Steps"
 }
 ```
 
 - **Order.** Rules are evaluated so that every rule runs after the rules its
   `alert_state` leaves reference; a reference cycle keeps the given order.
-  `hysteresis_minutes` is ignored.
+- **Ticks.** A `reading` tick evaluates every rule, as live evaluates every
+  rule per reading. A sample (`"reading": false`) is a sweep: each elapsed
+  hysteresis window closes, then the wall-clock rules and the rules that read
+  a fact other than glucose and the time zone are evaluated.
+- **Steps.** Between ticks the engine evaluates each wall-clock rule at its
+  `next_change_at`, against the latest tick's context with only `now`
+  advanced, and closes another rule's hysteresis window where it ends. A step
+  closes the due rule's elapsed window before it evaluates. With `until` it
+  steps on past the last tick up to, not including, that instant. A rule due
+  more than 1,000 times between two ticks is an error.
 - **Active alerts.** A tick context's `active_alerts` is replaced by the
-  replay's own: a rule is in it, `firing` from the tick it fired, until it
-  clears or auto-resolves. A rule's fire is visible to rules later in the
-  order on the same tick.
+  replay's own: a rule is in it, `firing` from the instant an excursion
+  opened, until the excursion closes. An opening is visible to rules later in
+  the order at the same instant.
 - **No reading.** A context with neither `latest_timestamp` nor
   `last_reading_at` reads `last_reading_at` as the tick instant, so staleness
   and `signal_loss` see a fresh reading rather than none. Send the last
   reading at or before the tick when there is one.
-- **Suppression.** `suppressed_rule_ids` names the rules a fire opening on
-  that tick is recorded for as `suppressed_by_dnd` instead of `fired` (the
-  host resolves Do Not Disturb). The rule fires either way.
-- **Unknown.** A rule's `on_unknown` reads an unknown `met` (§8): under
-  `hold` the rule stays firing or not as it was and keeps its timers; `met`
-  and `not_met` read it as true or false.
+- **Suppression.** `suppressed_rule_ids` names the rules an excursion opening
+  on that tick, or on a step before the next tick, is recorded for as
+  `suppressed_by_dnd` instead of `fired` (the host resolves Do Not Disturb).
+  The excursion opens either way.
 - A rule whose body cannot be evaluated (§1.4), or whose `condition_params`
   is neither an object nor null, is skipped on every tick, not an error.
 
@@ -691,14 +700,14 @@ Response:
   "schema_version": 1,
   "ok": true,
   "order": [ "…" ],                         // rule ids in evaluation order
-  "events": [                               // by tick, then evaluation order
+  "events": [                               // by instant, then evaluation order
     { "at": "2026-01-05T12:00:00Z", "rule_id": "…", "kind": "fired" }
   ],
   "leaf_transitions": [                     // evaluation order; absent for a rule never evaluated
     { "rule_id": "…", "leaves": [
         { "leaf_id": 0, "points": [ { "at_ms": 1767614400000, "value": true } ] } ] }  // a point's "unknown": true beside a false value marks an unknown leaf
   ],
-  "ticks": [                                // only with include_ticks
+  "ticks": [                                // only with include_ticks: every evaluation instant
     { "at": "2026-01-05T12:00:00Z", "rules": [
         { "rule_id": "…", "met": true, "firing": true },  // "unknown": true beside a false met marks an unknown root
         { "rule_id": "…", "skipped": true } ] }
@@ -706,18 +715,17 @@ Response:
 }
 ```
 
-`kind` is `fired`, `suppressed_by_dnd`, `auto_resolved`, or `cleared` (the
-body went false while firing). Each close removes the rule from the active
-alerts. A `cleared` also ends all its sustained runs at that tick, so a later
-fire starts its durations over, no earlier than that tick; an `auto_resolved`
-keeps them. Auto-resolve is
-evaluated while the rule is firing, including on the tick it fired, and on
-every tick while it awaits re-arm (engine-semantics.md §6.3, §8). The leaf log holds,
-per leaf id, the first observation and every flip, at unix milliseconds;
-`firing` is the rule's state after the tick. Errors are an unusable envelope,
-an unknown `condition_type`, a rule id listed twice, or a tick instant outside
-the supported range. The replay corpus in `tests/Parity/AlertEngineCorpus/replay/`
-pins this envelope.
+`kind` is the tracker's transition: `fired` or `suppressed_by_dnd` (an
+excursion opened), `hysteresis_started`, `hysteresis_resumed`, `closed` (its
+hysteresis window ran out) or `auto_resolved`. An instant between ticks is on
+the engine's 100 ns grid, so it can carry a fraction in nanoseconds
+(`12:20:00.000000100Z`). The leaf log holds, per leaf id, the first observation
+and every flip, at unix milliseconds, so a flip at a tick and one at a step
+within the same millisecond share an `at_ms`. A tick entry lists the rules evaluated at that instant; `firing`
+is whether an excursion is open after it. Errors are an unusable envelope, an
+unknown `condition_type`, a rule id listed twice, a tick instant or `until`
+outside the supported range, or a rule past the step bound. The replay corpus
+in `tests/Parity/AlertEngineCorpus/replay/` pins this envelope.
 
 ## Kotlin (UniFFI)
 

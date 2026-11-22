@@ -1,6 +1,7 @@
-//! The replay driver (engine-semantics.md §8): a rule set re-evaluated over a
-//! series of pre-enriched ticks with one fresh timer store and replay-local
-//! firing state instead of the excursion tracker.
+//! The replay driver (engine-semantics.md §8): a rule set stepped over a
+//! series of pre-enriched ticks through the live driver sequence
+//! ([`evaluate_parsed_rule`]), with sustained timers and the excursion
+//! tracker held in memory for the call.
 
 use std::collections::{HashMap, HashSet};
 
@@ -9,13 +10,21 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use crate::clock_anomaly::ClockAnomalies;
 use crate::context::{ActiveAlertSnapshot, SensorContext};
-use crate::engine::{Rule, auto_resolve_truth, evaluate_body, format_instant};
+use crate::engine::{EngineState, Evaluation, Rule, evaluate_parsed_rule, format_instant};
+use crate::excursion::{CloseReason, TrackerRuleConfig, TrackerStateKind, TransitionType};
+use crate::facts::{ContextFact, RuleConditions, rule_reads};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{Node, Payload};
-use crate::sustained::TimerStore;
+use crate::next_change::next_change_at;
 use crate::truth::Truth;
+use crate::wall_clock::references_wall_clock;
+
+/// How many times one rule may be stepped between two ticks, or after the last
+/// tick. With every fact frozen a rule changes only where an elapsed time
+/// crosses a bound, once each, or at a calendar edge, a few a day, so a
+/// replay that reaches it is reported rather than cut short.
+pub const MAX_STEPS_PER_GAP: usize = 1_000;
 
 /// One replay tick: the instant and the context enriched as of it.
 #[derive(Debug, Clone, Deserialize)]
@@ -23,20 +32,35 @@ pub struct ReplayTick {
     pub at: DateTime<Utc>,
     /// Its `active_alerts` are replaced by the replay's own.
     pub context: SensorContext,
-    /// The rules a fire opening on this tick is recorded as suppressed for by
-    /// Do Not Disturb, which the host resolves.
+    /// The rules a fire opening on this tick, or on a step before the next
+    /// tick, is recorded as suppressed for by Do Not Disturb, which the host
+    /// resolves.
     #[serde(default)]
     pub suppressed_rule_ids: HashSet<Uuid>,
+    /// A glucose reading arrived at `at`, so every rule is evaluated, as live
+    /// evaluates every rule per reading. Otherwise the tick samples the other
+    /// facts between readings and evaluates only the rules a live host would
+    /// evaluate then (engine-semantics.md §8).
+    #[serde(default = "a_reading")]
+    pub reading: bool,
+}
+
+fn a_reading() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ReplayEventKind {
+    /// An excursion opened.
     Fired,
+    /// An excursion opened while Do Not Disturb would have kept it silent.
     SuppressedByDnd,
+    HysteresisStarted,
+    HysteresisResumed,
+    /// The excursion closed when its hysteresis window ran out.
+    Closed,
     AutoResolved,
-    /// The body went false while firing.
-    Cleared,
 }
 
 impl ReplayEventKind {
@@ -45,8 +69,10 @@ impl ReplayEventKind {
         match self {
             ReplayEventKind::Fired => "fired",
             ReplayEventKind::SuppressedByDnd => "suppressed_by_dnd",
+            ReplayEventKind::HysteresisStarted => "hysteresis_started",
+            ReplayEventKind::HysteresisResumed => "hysteresis_resumed",
+            ReplayEventKind::Closed => "closed",
             ReplayEventKind::AutoResolved => "auto_resolved",
-            ReplayEventKind::Cleared => "cleared",
         }
     }
 }
@@ -58,10 +84,11 @@ pub struct ReplayEvent {
     pub kind: ReplayEventKind,
 }
 
-/// A rule's state after one tick.
+/// A rule's state after one evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReplayRuleState {
     pub met: Truth,
+    /// An excursion is open, active or in hysteresis.
     pub firing: bool,
 }
 
@@ -75,7 +102,7 @@ pub struct ReplayRuleTick {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplayTickOutcome {
     pub at: DateTime<Utc>,
-    /// In evaluation order.
+    /// The rules evaluated at `at`, in evaluation order.
     pub rules: Vec<ReplayRuleTick>,
 }
 
@@ -94,15 +121,18 @@ pub struct RuleLeafLog {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ReplayOptions {
-    /// Report every rule's state on every tick.
+    /// Report every evaluation instant and the rules evaluated there.
     pub include_ticks: bool,
+    /// Step the rules on past the last tick up to, not including, this
+    /// instant: the end of the replayed window.
+    pub until: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplayOutcome {
     /// Rule ids in evaluation order.
     pub order: Vec<Uuid>,
-    /// In the order they happened: by tick, then evaluation order.
+    /// In the order they happened: by instant, then evaluation order.
     pub events: Vec<ReplayEvent>,
     /// In evaluation order; a rule skipped on every tick has none.
     pub leaf_transitions: Vec<RuleLeafLog>,
@@ -114,189 +144,321 @@ pub struct ReplayOutcome {
 #[non_exhaustive]
 pub enum ReplayError {
     DuplicateRuleId(Uuid),
+    /// A rule was due more than [`MAX_STEPS_PER_GAP`] times in one gap.
+    StepLimit {
+        rule_id: Uuid,
+        at: DateTime<Utc>,
+    },
 }
 
 impl std::fmt::Display for ReplayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ReplayError::DuplicateRuleId(id) => write!(f, "rule id {id} appears more than once"),
+            ReplayError::StepLimit { rule_id, at } => write!(
+                f,
+                "rule {rule_id} changes more than {MAX_STEPS_PER_GAP} times between two ticks, at {}",
+                format_instant(*at)
+            ),
         }
     }
 }
 
 impl std::error::Error for ReplayError {}
 
-/// Replays `rules` over `ticks` in order.
+/// Replays `rules` over `ticks`, which are in time order.
 ///
 /// # Errors
-/// Two rules share an id.
+/// Two rules share an id, or a rule reaches [`MAX_STEPS_PER_GAP`].
 pub fn replay(
     rules: &[Rule],
     ticks: impl IntoIterator<Item = ReplayTick>,
     options: ReplayOptions,
 ) -> Result<ReplayOutcome, ReplayError> {
-    let ordered: Vec<Prepared<'_>> = evaluation_order(rules)?
-        .into_iter()
-        .filter_map(|i| rules.get(i))
-        .map(|rule| Prepared {
-            rule,
-            body: rule.parse_body().ok(),
-            auto_resolve: rule
-                .auto_resolve_enabled
-                .then(|| rule.parse_auto_resolve())
-                .flatten(),
+    let mut run = Run {
+        rules: evaluation_order(rules)?
+            .into_iter()
+            .filter_map(|i| rules.get(i))
+            .map(Prepared::new)
+            .collect(),
+        state: EngineState::new(),
+        ctx: SensorContext::default(),
+        suppressed: HashSet::new(),
+        events: Vec::new(),
+        ticks: options.include_ticks.then(Vec::new),
+    };
+
+    for tick in ticks {
+        run.step_until(tick.at)?;
+        let mut ctx = tick.context;
+        ctx.active_alerts = std::mem::take(&mut run.ctx.active_alerts);
+        if ctx.last_reading_at.is_none() && ctx.latest_timestamp.is_none() {
+            ctx.last_reading_at = Some(tick.at);
+        }
+        run.ctx = ctx;
+        run.suppressed = tick.suppressed_rule_ids;
+        run.tick(tick.at, tick.reading);
+    }
+    if let Some(until) = options.until {
+        run.step_until(until)?;
+    }
+
+    let leaf_transitions = run
+        .rules
+        .iter_mut()
+        .filter(|p| !p.leaf_log.is_empty())
+        .map(|p| RuleLeafLog {
+            rule_id: p.rule.id,
+            leaves: std::mem::take(&mut p.leaf_log)
+                .into_iter()
+                .map(|(_, points)| points)
+                .collect(),
         })
         .collect();
 
-    let mut timers = TimerStore::new();
-    let mut active = HashMap::new();
-    let mut firing = vec![Firing::default(); ordered.len()];
-    let mut leaf_logs: Vec<Vec<(Truth, Vec<LeafPoint>)>> = vec![Vec::new(); ordered.len()];
-    let mut events = Vec::new();
-    let mut tick_outcomes = options.include_ticks.then(Vec::new);
+    Ok(ReplayOutcome {
+        order: run.rules.iter().map(|p| p.rule.id).collect(),
+        events: run.events,
+        leaf_transitions,
+        ticks: run.ticks,
+    })
+}
 
-    for tick in ticks {
-        let at = tick.at;
-        let mut ctx = tick.context;
-        ctx.active_alerts = std::mem::take(&mut active);
-        if ctx.last_reading_at.is_none() && ctx.latest_timestamp.is_none() {
-            ctx.last_reading_at = Some(at);
+/// A rule with its body read once for the call, and how a host schedules it.
+struct Prepared<'a> {
+    rule: &'a Rule,
+    /// `None` when it cannot be evaluated: the rule is skipped.
+    body: Option<Node>,
+    /// The live sweep evaluates it between readings (engine-semantics.md §5.1).
+    wall_clock: bool,
+    /// It reads a fact other than glucose and the time zone, which a write
+    /// between readings moves.
+    reads_other_facts: bool,
+    reads_active_alerts: bool,
+    /// When a host next has to evaluate it, or for a rule the sweep does not
+    /// evaluate, close its elapsed hysteresis window.
+    due: Option<DateTime<Utc>>,
+    steps: usize,
+    leaf_log: Vec<(Truth, Vec<LeafPoint>)>,
+}
+
+impl<'a> Prepared<'a> {
+    fn new(rule: &'a Rule) -> Self {
+        let conditions = RuleConditions::from(rule);
+        let reads = rule_reads(&conditions);
+        Prepared {
+            rule,
+            body: rule.parse_body().ok(),
+            wall_clock: references_wall_clock(&conditions),
+            reads_other_facts: reads
+                .iter()
+                .any(|f| !matches!(f, ContextFact::Glucose | ContextFact::TimeZone)),
+            reads_active_alerts: reads.contains(&ContextFact::ActiveAlerts),
+            due: None,
+            steps: 0,
+            leaf_log: Vec::new(),
         }
+    }
+}
 
-        let mut rule_ticks = Vec::with_capacity(ordered.len());
-        for ((prepared, firing), leaf_log) in ordered.iter().zip(&mut firing).zip(&mut leaf_logs) {
-            let rule = prepared.rule;
-            let Some(body) = &prepared.body else {
-                rule_ticks.push(ReplayRuleTick {
-                    rule_id: rule.id,
+struct Run<'a> {
+    rules: Vec<Prepared<'a>>,
+    state: EngineState,
+    /// The latest tick's context, holding the replay's active alerts.
+    ctx: SensorContext,
+    suppressed: HashSet<Uuid>,
+    events: Vec<ReplayEvent>,
+    ticks: Option<Vec<ReplayTickOutcome>>,
+}
+
+impl Run<'_> {
+    /// A reading evaluates every rule. A sample is a sweep: it closes each
+    /// elapsed hysteresis window, then evaluates the rules the live sweep
+    /// evaluates and those reading a fact a write may have moved.
+    fn tick(&mut self, at: DateTime<Utc>, reading: bool) {
+        let mut outcomes = Vec::new();
+        for i in 0..self.rules.len() {
+            let Some(p) = self.rules.get_mut(i) else {
+                continue;
+            };
+            p.steps = 0;
+            let evaluated = p.wall_clock || p.reads_other_facts;
+            if p.body.is_none() {
+                outcomes.push(ReplayRuleTick {
+                    rule_id: p.rule.id,
                     state: None,
                 });
                 continue;
-            };
-            let body = evaluate_body(rule, body, &ctx, at, &mut timers, None, true);
-            record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
-
-            let met = body.root;
-            let resolved = rule.on_unknown.resolve(met);
-            let rearm_read_resolve = firing.awaiting_rearm;
-            if rearm_read_resolve {
-                let resolve_met = auto_resolve_truth(
-                    rule,
-                    prepared.auto_resolve.as_ref(),
-                    &ctx,
-                    at,
-                    &mut timers,
-                    &mut ClockAnomalies::default(),
-                );
-                if let Some(met) = resolved {
-                    firing.awaiting_rearm = met && !resolve_met.is_false();
-                }
             }
-            let mut now_firing = match resolved {
-                Some(resolved) => resolved && !firing.awaiting_rearm,
-                None => firing.firing,
-            };
-            if now_firing && !firing.firing {
-                let kind = if tick.suppressed_rule_ids.contains(&rule.id) {
+            if !reading {
+                self.sweep(i, at);
+            }
+            if reading || evaluated {
+                outcomes.extend(self.evaluate(i, at));
+            }
+        }
+        self.record_tick(at, outcomes);
+    }
+
+    /// Steps every rule due before `limit`, each instant in turn, as the live
+    /// sweep does: at an instant, a due rule has its elapsed hysteresis window
+    /// closed, then a due rule the sweep evaluates is evaluated against the
+    /// latest tick's context with only `now` advanced. A rule that reads the
+    /// active alerts is stepped as well when a rule before it opened or closed
+    /// there.
+    fn step_until(&mut self, limit: DateTime<Utc>) -> Result<(), ReplayError> {
+        while let Some(at) = self
+            .rules
+            .iter()
+            .filter_map(|p| p.due)
+            .filter(|&due| due < limit)
+            .min()
+        {
+            let mut outcomes = Vec::new();
+            let mut alerts_moved = false;
+            for i in 0..self.rules.len() {
+                let Some(p) = self.rules.get_mut(i) else {
+                    continue;
+                };
+                let due = p.due.is_some_and(|due| due <= at);
+                if !due && !(alerts_moved && p.reads_active_alerts && p.body.is_some()) {
+                    continue;
+                }
+                p.steps = p.steps.saturating_add(1);
+                if p.steps > MAX_STEPS_PER_GAP {
+                    return Err(ReplayError::StepLimit {
+                        rule_id: p.rule.id,
+                        at,
+                    });
+                }
+                let before = self.ctx.active_alerts.contains_key(&p.rule.id);
+                let evaluated = p.wall_clock || !due;
+                self.sweep(i, at);
+                if evaluated {
+                    outcomes.extend(self.evaluate(i, at));
+                }
+                alerts_moved |= before
+                    != self
+                        .rules
+                        .get(i)
+                        .is_some_and(|p| self.ctx.active_alerts.contains_key(&p.rule.id));
+            }
+            self.record_tick(at, outcomes);
+        }
+        Ok(())
+    }
+
+    /// One evaluation through the live driver sequence (engine-semantics.md
+    /// §7) and its events.
+    fn evaluate(&mut self, i: usize, at: DateTime<Utc>) -> Option<ReplayRuleTick> {
+        let p = self.rules.get_mut(i)?;
+        let body = p.body.as_ref()?;
+        let rule = p.rule;
+        let outcome = evaluate_parsed_rule(rule, body, &self.ctx, at, &mut self.state, true);
+        let e = outcome.evaluation?;
+        record_leaves(&mut p.leaf_log, e.leaves.clone().unwrap_or_default(), at);
+        p.due = if p.wall_clock {
+            e.next_change_at
+        } else {
+            hysteresis_due(&e)
+        };
+        let firing = self.state.tracker.active_excursion_id(rule.id).is_some();
+        self.record_evaluation(rule.id, &e, at);
+        Some(ReplayRuleTick {
+            rule_id: rule.id,
+            state: Some(ReplayRuleState {
+                met: e.root,
+                firing,
+            }),
+        })
+    }
+
+    /// What the live sweep does to a rule it does not evaluate: close its
+    /// hysteresis window once elapsed (engine-semantics.md §6.1).
+    fn sweep(&mut self, i: usize, at: DateTime<Utc>) {
+        let Some(p) = self.rules.get_mut(i) else {
+            return;
+        };
+        let rule = p.rule;
+        let config = TrackerRuleConfig {
+            hysteresis_minutes: rule.hysteresis_minutes,
+        };
+        let transition = self
+            .state
+            .tracker
+            .close_elapsed_hysteresis(rule.id, config, at);
+        p.due = match (&p.body, self.state.tracker.state(rule.id)) {
+            (Some(body), Some(s)) if s.state == TrackerStateKind::Hysteresis => {
+                next_change_at(rule, body, &self.ctx, at, &self.state)
+            }
+            _ => None,
+        };
+        if transition.kind == TransitionType::ExcursionClosed {
+            self.ctx.active_alerts.remove(&rule.id);
+            self.push(at, rule.id, ReplayEventKind::Closed);
+        }
+    }
+
+    fn record_evaluation(&mut self, rule_id: Uuid, e: &Evaluation, at: DateTime<Utc>) {
+        match e.transition.kind {
+            TransitionType::ExcursionOpened => {
+                let kind = if self.suppressed.contains(&rule_id) {
                     ReplayEventKind::SuppressedByDnd
                 } else {
                     ReplayEventKind::Fired
                 };
-                events.push(event(at, rule.id, kind));
-                ctx.active_alerts.insert(
-                    rule.id,
+                self.ctx.active_alerts.insert(
+                    rule_id,
                     ActiveAlertSnapshot {
                         state: "firing".to_owned(),
                         triggered_at: at,
                         acknowledged_at: None,
                     },
                 );
-            } else if resolved == Some(false) && firing.firing {
-                close(&mut ctx, &mut timers, rule.id, at);
-                events.push(event(at, rule.id, ReplayEventKind::Cleared));
+                self.push(at, rule_id, kind);
             }
-
-            if now_firing
-                && !rearm_read_resolve
-                && auto_resolve_truth(
-                    rule,
-                    prepared.auto_resolve.as_ref(),
-                    &ctx,
-                    at,
-                    &mut timers,
-                    &mut ClockAnomalies::default(),
-                )
-                .is_true()
-            {
-                ctx.active_alerts.remove(&rule.id);
-                events.push(event(at, rule.id, ReplayEventKind::AutoResolved));
-                now_firing = false;
-                firing.awaiting_rearm = true;
+            TransitionType::HysteresisStarted => {
+                self.push(at, rule_id, ReplayEventKind::HysteresisStarted);
             }
-
-            firing.firing = now_firing;
-            timers.drain_ops();
-            rule_ticks.push(ReplayRuleTick {
-                rule_id: rule.id,
-                state: Some(ReplayRuleState {
-                    met,
-                    firing: now_firing,
-                }),
-            });
+            TransitionType::HysteresisResumed => {
+                self.push(at, rule_id, ReplayEventKind::HysteresisResumed);
+            }
+            TransitionType::ExcursionClosed => {
+                self.ctx.active_alerts.remove(&rule_id);
+                let kind = match e.transition.close_reason {
+                    Some(CloseReason::AutoResolve) => ReplayEventKind::AutoResolved,
+                    _ => ReplayEventKind::Closed,
+                };
+                self.push(at, rule_id, kind);
+            }
+            _ => {}
         }
-        active = ctx.active_alerts;
-        if let Some(outcomes) = &mut tick_outcomes {
-            outcomes.push(ReplayTickOutcome {
-                at,
-                rules: rule_ticks,
-            });
+        if e.auto_resolved {
+            self.ctx.active_alerts.remove(&rule_id);
+            self.push(at, rule_id, ReplayEventKind::AutoResolved);
         }
     }
 
-    let leaf_transitions = ordered
-        .iter()
-        .zip(leaf_logs)
-        .filter(|(_, log)| !log.is_empty())
-        .map(|(prepared, log)| RuleLeafLog {
-            rule_id: prepared.rule.id,
-            leaves: log.into_iter().map(|(_, points)| points).collect(),
-        })
-        .collect();
+    fn push(&mut self, at: DateTime<Utc>, rule_id: Uuid, kind: ReplayEventKind) {
+        self.events.push(ReplayEvent { at, rule_id, kind });
+    }
 
-    Ok(ReplayOutcome {
-        order: ordered.iter().map(|p| p.rule.id).collect(),
-        events,
-        leaf_transitions,
-        ticks: tick_outcomes,
-    })
+    fn record_tick(&mut self, at: DateTime<Utc>, rules: Vec<ReplayRuleTick>) {
+        if let Some(ticks) = &mut self.ticks
+            && !rules.is_empty()
+        {
+            ticks.push(ReplayTickOutcome { at, rules });
+        }
+    }
 }
 
-/// A rule with its body and enabled auto-resolve tree read once for the call;
-/// `body` is `None` when it cannot be evaluated.
-struct Prepared<'a> {
-    rule: &'a Rule,
-    body: Option<Node>,
-    auto_resolve: Option<Node>,
-}
-
-/// A rule's replay-local firing state. `awaiting_rearm` follows an
-/// auto-resolve until the body or the auto-resolve tree is false, as the
-/// tracker's does (engine-semantics.md §6.3).
-#[derive(Debug, Clone, Copy, Default)]
-struct Firing {
-    firing: bool,
-    awaiting_rearm: bool,
-}
-
-fn event(at: DateTime<Utc>, rule_id: Uuid, kind: ReplayEventKind) -> ReplayEvent {
-    ReplayEvent { at, rule_id, kind }
-}
-
-/// A rule's body went false at `at` while firing: it leaves the active alerts
-/// and its runs end there.
-fn close(ctx: &mut SensorContext, timers: &mut TimerStore, rule_id: Uuid, at: DateTime<Utc>) {
-    ctx.active_alerts.remove(&rule_id);
-    timers.clear_all_for_rule(rule_id, at);
+/// A rule the sweep does not evaluate is due only to close its hysteresis
+/// window; `next_change_at` reaches that instant no later than the window's
+/// end.
+fn hysteresis_due(e: &Evaluation) -> Option<DateTime<Utc>> {
+    e.tracker
+        .filter(|t| t.state == TrackerStateKind::Hysteresis)
+        .and(e.next_change_at)
 }
 
 /// Each entry holds the leaf's last value and its points; a leaf turning

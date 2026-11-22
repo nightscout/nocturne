@@ -481,15 +481,18 @@ public sealed record RustReplayRequest
     [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; init; } = AlertEnvelopeJson.SchemaVersion;
 
-    /// <summary>The rule set, in any order; tracker configuration is ignored.</summary>
+    /// <summary>The rule set, in any order.</summary>
     public required List<RustAlertRule> Rules { get; init; }
 
     /// <summary>The ticks, in time order.</summary>
     public required List<RustReplayTick> Ticks { get; init; }
 
-    /// <summary>Whether <see cref="RustReplayResponse.Ticks"/> reports every rule's state on every tick.</summary>
+    /// <summary>Whether <see cref="RustReplayResponse.Ticks"/> reports every evaluation instant and the rules evaluated there.</summary>
     [JsonPropertyName("include_ticks")]
     public bool IncludeTicks { get; init; }
+
+    /// <summary>The end of the window: the rules are stepped on past the last tick up to, not including, it.</summary>
+    public DateTime? Until { get; init; }
 }
 
 public sealed record RustReplayTick
@@ -503,9 +506,18 @@ public sealed record RustReplayTick
     /// </summary>
     public required JsonElement Context { get; init; }
 
-    /// <summary>The rules a fire opening on this tick is recorded for as suppressed by Do Not Disturb.</summary>
+    /// <summary>
+    /// The rules a fire opening on this tick, or on a step before the next tick, is recorded for
+    /// as suppressed by Do Not Disturb.
+    /// </summary>
     [JsonPropertyName("suppressed_rule_ids")]
     public List<Guid>? SuppressedRuleIds { get; init; }
+
+    /// <summary>
+    /// A glucose reading arrived at <see cref="At"/>; otherwise the tick samples the other facts
+    /// between readings.
+    /// </summary>
+    public bool Reading { get; init; } = true;
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_replay</c>.</summary>
@@ -523,7 +535,7 @@ public sealed record RustReplayResponse : IRustResponseEnvelope
     /// <summary>Rule ids in evaluation order.</summary>
     public List<Guid>? Order { get; init; }
 
-    /// <summary>By tick, then evaluation order.</summary>
+    /// <summary>By instant, then evaluation order.</summary>
     public List<RustReplayEvent>? Events { get; init; }
 
     /// <summary>In evaluation order; a rule skipped on every tick has none.</summary>
@@ -545,8 +557,10 @@ public enum RustReplayEventKind
 {
     [JsonStringEnumMemberName("fired")] Fired,
     [JsonStringEnumMemberName("suppressed_by_dnd")] SuppressedByDnd,
+    [JsonStringEnumMemberName("hysteresis_started")] HysteresisStarted,
+    [JsonStringEnumMemberName("hysteresis_resumed")] HysteresisResumed,
+    [JsonStringEnumMemberName("closed")] Closed,
     [JsonStringEnumMemberName("auto_resolved")] AutoResolved,
-    [JsonStringEnumMemberName("cleared")] Cleared,
 }
 
 /// <summary>One rule's leaf log: per leaf, the first observation then every flip.</summary>
@@ -568,7 +582,10 @@ public sealed record RustReplayTickOutcome(
     [property: JsonPropertyName("at"), JsonRequired] DateTime At,
     [property: JsonPropertyName("rules"), JsonRequired] List<RustReplayRuleTick> Rules);
 
-/// <summary>A rule's state after one tick; <see cref="Met"/> and <see cref="Firing"/> are present unless skipped.</summary>
+/// <summary>
+/// A rule's state after one evaluation; <see cref="Met"/> and <see cref="Firing"/> are present
+/// unless skipped. <see cref="Firing"/> is whether an excursion is open.
+/// </summary>
 public sealed record RustReplayRuleTick
 {
     [JsonPropertyName("rule_id"), JsonRequired]

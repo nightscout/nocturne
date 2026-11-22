@@ -39,6 +39,7 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> Replay(
         [FromBody] AlertReplayRequest request, CancellationToken ct)
     {
@@ -52,6 +53,10 @@ public class AlertReplayController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
 
     /// <summary>
@@ -63,6 +68,7 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
@@ -78,6 +84,10 @@ public class AlertReplayController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
 
     /// <summary>
@@ -88,13 +98,25 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
         [FromBody] AlertFiringSearchRequest request, CancellationToken ct)
     {
         if (Invalid(request.Rule) is { } invalid)
             return invalid;
-        return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        try
+        {
+            return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
+
+    /// <summary>A 422 naming the rule the replay stopped at.</summary>
+    private ObjectResult StepLimit(ReplayStepLimitException ex) =>
+        Problem(detail: ex.Message, statusCode: 422, title: "Unprocessable Entity");
 
     /// <summary>
     /// A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, or a
