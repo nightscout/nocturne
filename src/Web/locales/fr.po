@@ -234,6 +234,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
@@ -256,6 +257,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
@@ -5751,6 +5753,7 @@ msgstr ""
 #: src/lib/components/alerts/HistoryCheck.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 #: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -15340,11 +15343,17 @@ msgstr ""
 msgid "Active alerts ({0})"
 msgstr ""
 
+#. 0: bg(bounds.urgentLow); 1: bg(bounds.low)
+#. 0: bg(bounds.low); 1: bg(bounds.high)
+#. 0: bg(bounds.high); 1: bg(bounds.urgentHigh)
 #. 0: span.from; 1: span.to
 #. 0: from; 1: to
 #. 0: relativeMinutes(slotMinute(minutes, slot)); 1: relativeMinutes(slotMinute(minutes, slot + 1))
 #. 0: mFrom; 1: mTo
 #. 0: rFrom; 1: rTo
+#: src/lib/components/people/WallLegend.svelte
+#: src/lib/components/people/WallLegend.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
@@ -21320,6 +21329,7 @@ msgstr ""
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
@@ -23264,6 +23274,7 @@ msgstr ""
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
@@ -23471,6 +23482,7 @@ msgstr ""
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -38028,6 +38040,7 @@ msgstr ""
 msgid "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0> ."
 msgstr ""
 
+#: src/lib/components/people/PeopleWall.svelte
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 #: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "<0/>Back"
@@ -45203,6 +45216,7 @@ msgstr[1] ""
 #~ msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "The list of people did not load."
 msgstr ""
 
@@ -45220,7 +45234,9 @@ msgid "Person"
 msgstr ""
 
 #. 0: bgLabel()
+#. 0: bgLabel()
 #: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/WallLegend.svelte
 msgid "Glucose, {0}"
 msgstr ""
 
@@ -45402,6 +45418,7 @@ msgid "Statistics for {0}."
 msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "Readings refresh every minute."
 msgstr ""
 
@@ -45530,6 +45547,7 @@ msgid "Recent entries"
 msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "Readings update as they arrive."
 msgstr ""
 
@@ -46583,4 +46601,59 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "No member changes are recorded."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "<0/> Wall display"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "People wall display - Nocturne"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "People wall display"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "You do not follow anyone."
+msgstr ""
+
+#. 0: time(lastRead.at)
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Connection lost. Showing readings from {0}."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Loading the list of people."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "# more person is not shown."
+msgid_plural "# more people are not shown."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "This person is flagged."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "# of them is flagged."
+msgid_plural "# of them are flagged."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: bg(bounds.urgentLow)
+#: src/lib/components/people/WallLegend.svelte
+msgid "Below {0}"
+msgstr ""
+
+#. 0: bg(bounds.urgentHigh)
+#: src/lib/components/people/WallLegend.svelte
+msgid "Above {0}"
+msgstr ""
+
+#: src/lib/components/people/WallLegend.svelte
+msgid "Ranges are each person's own."
 msgstr ""
