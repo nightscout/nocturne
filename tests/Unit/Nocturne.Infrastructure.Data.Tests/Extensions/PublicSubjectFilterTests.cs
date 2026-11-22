@@ -32,6 +32,7 @@ public class PublicSubjectFilterTests
             IsSystemSubject: system,
             IsDemoSubject: false,
             IsPlatformAdmin: false,
+            HasConfirmedEmail: false,
             Roles: [],
             DirectPermissions: null,
             Label: null,

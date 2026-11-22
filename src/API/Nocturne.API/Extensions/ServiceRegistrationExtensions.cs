@@ -183,6 +183,9 @@ public static class ServiceRegistrationExtensions
         // A signed-in member asking for their own confirmation link again. Each one is mail, so the
         // ceiling is as tight as a recovery link's.
         ("email-confirmation", 5, TimeSpan.FromMinutes(10)),
+        // Setting a recovery email sends a confirmation link to the address given, which may not
+        // be the member's own, so each write is mail to a stranger's inbox as well.
+        ("recovery-email", 5, TimeSpan.FromMinutes(10)),
         // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),

@@ -308,3 +308,36 @@ describe("members page linking to the member history", () => {
     expect(browserPage.getByRole("link", { name: "View history for Alex" }).elements()).toHaveLength(0);
   });
 });
+
+describe("members page recovery email badge", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [{ ...member, hasConfirmedRecoveryEmail: false }];
+    lockedOut = [];
+  });
+
+  it("marks a member with no confirmed recovery email for a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("No recovery email")).toBeVisible();
+  });
+
+  it("shows nothing for a caller who can only share, even if the list carried the flag", async () => {
+    page.data.effectivePermissions = ["sharing.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+
+  it("shows nothing for a member the list does not report on", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    members = [{ ...member, hasConfirmedRecoveryEmail: undefined }];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+});

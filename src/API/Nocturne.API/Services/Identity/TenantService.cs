@@ -204,7 +204,8 @@ public partial class TenantService : ITenantService
                     m.SysCreatedAt,
                     m.IsPlatformAdmin,
                     m.AccessEndsAt,
-                    MembershipLiveness.HasEnded(m.AccessEndsAt, now)))
+                    MembershipLiveness.HasEnded(m.AccessEndsAt, now),
+                    _linkRoute.IsConfigured && !m.IsSystemSubject && !m.IsDemoSubject ? m.HasConfirmedEmail : null))
                 .ToList());
     }
 

@@ -71,6 +71,8 @@ const pageData: HarnessProps["data"] = {
   isShareHost: false,
   canViewRealtimeData: false,
   showBackupSignInPrompt: false,
+    showRecoveryEmailPrompt: false,
+    recoveryEmailHasAddress: false,
   tenantTargets: [],
   isDemo: false,
   isGuestSession: false,
