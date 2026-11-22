@@ -632,6 +632,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
+        services.AddSingleton<StepUpCodeAttempts>();
         services.AddScoped<ITrustedDeviceService, TrustedDeviceService>();
         // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
         // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
