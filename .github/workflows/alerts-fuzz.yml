@@ -1,0 +1,98 @@
+name: Alerts fuzz
+
+# Runs each cargo-fuzz target of the alert engine (crates/nocturne-alerts-ffi/fuzz) for a minute on a pull request
+# that touches crates/, and every week. The stable crates job (tests.yml, alerts-ffi-parity) never
+# builds it: it is its own workspace and needs a nightly toolchain. A crash fails the job and uploads the crashing input.
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - '.github/workflows/alerts-fuzz.yml'
+  schedule:
+    - cron: '23 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alerts-fuzz-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # A dated nightly, so a new nightly never turns the job red for a reason that is not the change.
+  # Overrides crates/rust-toolchain.toml for every cargo call below.
+  RUSTUP_TOOLCHAIN: nightly-2026-11-10
+  CARGO_FUZZ_VERSION: 0.13.2
+  FUZZ_SECONDS: 60
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: nightly-2026-11-10
+      - name: Cache cargo-fuzz
+        id: cargo-fuzz
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-fuzz
+          key: cargo-fuzz-bin-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ env.CARGO_FUZZ_VERSION }}
+      - name: Install cargo-fuzz
+        if: steps.cargo-fuzz.outputs.cache-hit != 'true'
+        run: cargo install cargo-fuzz --locked --version "$CARGO_FUZZ_VERSION"
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+            crates/nocturne-alerts-ffi/fuzz/target
+          # Sources, not just the lockfile: see the alerts-ffi-parity job in tests.yml. No
+          # restore-keys, for the same reason.
+          key: cargo-fuzz-build-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/nocturne-alerts-ffi/fuzz/Cargo.lock', 'crates/**/Cargo.toml') }}
+      # What earlier runs found interesting. It is not a build output, so a stale one is still
+      # valid input and any earlier run's will do.
+      - name: Cache corpus
+        uses: actions/cache@v5
+        with:
+          path: crates/nocturne-alerts-ffi/fuzz/corpus
+          key: alerts-fuzz-corpus-${{ github.run_id }}
+          restore-keys: alerts-fuzz-corpus-
+      # The seeds come from the generators and the golden corpus; they are not committed. They
+      # are written apart from the cached corpus so that a missing seed test cannot hide behind it.
+      - name: Write seed corpora
+        working-directory: crates
+        run: |
+          seeds="$RUNNER_TEMP/seeds"
+          NOCTURNE_FUZZ_SEEDS="$seeds" cargo test -p nocturne-alerts-ffi --test envelope_properties -- --ignored --exact write_fuzz_seeds
+          cd nocturne-alerts-ffi/fuzz
+          for target in $(cargo fuzz list); do
+            find "$seeds/$target" -type f 2>/dev/null | grep -q . || { echo "::error::no seeds written for $target"; exit 1; }
+          done
+          mkdir -p corpus
+          cp -r "$seeds"/. corpus/
+      - name: Build the targets
+        working-directory: crates/nocturne-alerts-ffi/fuzz
+        run: cargo fuzz build
+      - name: Run each target
+        working-directory: crates/nocturne-alerts-ffi/fuzz
+        run: |
+          status=0
+          for target in $(cargo fuzz list); do
+            echo "::group::$target"
+            cargo fuzz run "$target" -- -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=4096 || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: alerts-fuzz-artifacts
+          path: crates/nocturne-alerts-ffi/fuzz/artifacts
+          if-no-files-found: ignore
