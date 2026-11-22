@@ -100,7 +100,7 @@ impl CloseReason {
 #[must_use]
 pub struct Transition {
     pub kind: TransitionType,
-    /// The excursion involved, as its 1-based creation ordinal.
+    /// The excursion involved, as its rule's 1-based ordinal for it.
     pub excursion: Option<u32>,
     pub close_reason: Option<CloseReason>,
 }
@@ -119,8 +119,13 @@ impl Transition {
 #[derive(Debug, Clone, Copy)]
 pub struct TrackerState {
     pub state: TrackerStateKind,
-    /// The active excursion's 1-based creation ordinal.
+    /// The active excursion's ordinal.
     pub active_excursion: Option<u32>,
+    /// The ordinal of the excursion the rule opened last, 0 before its first.
+    /// A rule numbers its excursions 1, 2, ... in the order it opens them, so
+    /// an excursion is identified by its rule and this ordinal
+    /// (engine-semantics.md §7).
+    pub last_excursion: u32,
     pub updated_at: DateTime<Utc>,
     /// When the active excursion entered hysteresis; set only in
     /// [`TrackerStateKind::Hysteresis`].
@@ -137,7 +142,11 @@ impl TrackerState {
     /// excursion goes on to close, otherwise idle, so the rule can fire.
     /// Hysteresis and re-arm start over.
     #[must_use]
-    pub fn recovered(active_excursion: Option<u32>, updated_at: DateTime<Utc>) -> Self {
+    pub fn recovered(
+        active_excursion: Option<u32>,
+        last_excursion: u32,
+        updated_at: DateTime<Utc>,
+    ) -> Self {
         TrackerState {
             state: if active_excursion.is_some() {
                 TrackerStateKind::Active
@@ -145,6 +154,7 @@ impl TrackerState {
                 TrackerStateKind::Idle
             },
             active_excursion,
+            last_excursion,
             updated_at,
             hysteresis_started_at: None,
             awaiting_rearm: false,
@@ -158,12 +168,11 @@ pub struct TrackerRuleConfig {
     pub hysteresis_minutes: i32,
 }
 
-/// In-memory tracker for a set of rules. Excursion ids are 1-based ordinals in
-/// creation order.
+/// In-memory tracker for a set of rules. Each rule numbers its own
+/// excursions ([`TrackerState::last_excursion`]).
 #[derive(Debug, Default)]
 pub struct ExcursionTracker {
     states: HashMap<Uuid, TrackerState>,
-    next_ordinal: u32,
 }
 
 impl ExcursionTracker {
@@ -178,24 +187,17 @@ impl ExcursionTracker {
     }
 
     /// Restores persisted per-rule state. State in hysteresis with no
-    /// `hysteresis_started_at` adopts its `updated_at` as the start.
+    /// `hysteresis_started_at` adopts its `updated_at` as the start. A last
+    /// ordinal below the active one is raised to it, so the next excursion
+    /// never reuses the active one's ordinal.
     pub fn restore_state(&mut self, rule_id: Uuid, mut state: TrackerState) {
         if state.state == TrackerStateKind::Hysteresis && state.hysteresis_started_at.is_none() {
             state.hysteresis_started_at = Some(state.updated_at);
         }
+        state.last_excursion = state
+            .last_excursion
+            .max(state.active_excursion.unwrap_or(0));
         self.states.insert(rule_id, state);
-    }
-
-    /// The 1-based ordinal the next opened excursion will receive.
-    #[must_use]
-    pub fn next_excursion_ordinal(&self) -> u32 {
-        self.next_ordinal.saturating_add(1)
-    }
-
-    /// Sets the 1-based ordinal the next opened excursion will receive
-    /// (values below 1 are clamped to 1).
-    pub fn set_next_excursion_ordinal(&mut self, next: u32) {
-        self.next_ordinal = next.saturating_sub(1);
     }
 
     /// The excursion's ordinal while it is active or in hysteresis.
@@ -232,13 +234,14 @@ impl ExcursionTracker {
         let mut state = *self.states.entry(rule_id).or_insert(TrackerState {
             state: TrackerStateKind::Idle,
             active_excursion: None,
+            last_excursion: 0,
             updated_at: now,
             hysteresis_started_at: None,
             awaiting_rearm: false,
         });
 
         let transition = match state.state {
-            TrackerStateKind::Idle => self.handle_idle(&mut state, condition_met, auto_resolve_met),
+            TrackerStateKind::Idle => handle_idle(&mut state, condition_met, auto_resolve_met),
             TrackerStateKind::Active => handle_active(&mut state, condition_met, now),
             TrackerStateKind::Hysteresis => {
                 handle_hysteresis(&mut state, config, condition_met, now)
@@ -248,36 +251,6 @@ impl ExcursionTracker {
         state.updated_at = now;
         self.states.insert(rule_id, state);
         transition
-    }
-
-    fn handle_idle(
-        &mut self,
-        state: &mut TrackerState,
-        condition_met: bool,
-        auto_resolve_met: bool,
-    ) -> Transition {
-        if state.awaiting_rearm {
-            if condition_met && auto_resolve_met {
-                return Transition::none();
-            }
-            state.awaiting_rearm = false;
-        }
-        if !condition_met {
-            return Transition::none();
-        }
-        self.open_excursion(state)
-    }
-
-    fn open_excursion(&mut self, state: &mut TrackerState) -> Transition {
-        self.next_ordinal = self.next_ordinal.saturating_add(1);
-        let ordinal = self.next_ordinal;
-        state.state = TrackerStateKind::Active;
-        state.active_excursion = Some(ordinal);
-        Transition {
-            kind: TransitionType::ExcursionOpened,
-            excursion: Some(ordinal),
-            close_reason: None,
-        }
     }
 
     /// Closes the rule's excursion when it is in hysteresis and the window has
@@ -328,6 +301,35 @@ impl ExcursionTracker {
             excursion: Some(excursion),
             close_reason: Some(reason),
         }
+    }
+}
+
+fn handle_idle(
+    state: &mut TrackerState,
+    condition_met: bool,
+    auto_resolve_met: bool,
+) -> Transition {
+    if state.awaiting_rearm {
+        if condition_met && auto_resolve_met {
+            return Transition::none();
+        }
+        state.awaiting_rearm = false;
+    }
+    if !condition_met {
+        return Transition::none();
+    }
+    open_excursion(state)
+}
+
+fn open_excursion(state: &mut TrackerState) -> Transition {
+    state.last_excursion = state.last_excursion.saturating_add(1);
+    let ordinal = state.last_excursion;
+    state.state = TrackerStateKind::Active;
+    state.active_excursion = Some(ordinal);
+    Transition {
+        kind: TransitionType::ExcursionOpened,
+        excursion: Some(ordinal),
+        close_reason: None,
     }
 }
 

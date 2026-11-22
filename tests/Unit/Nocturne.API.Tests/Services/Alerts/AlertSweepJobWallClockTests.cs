@@ -783,11 +783,11 @@ public class AlertSweepJobWallClockTests
                 .Setup(x => x.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new EnabledAlertRules(Rules.ToList(), []));
             repository
-                .Setup(x => x.CreateInstanceAsync(It.IsAny<CreateAlertInstanceRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((CreateAlertInstanceRequest r, CancellationToken _) =>
+                .Setup(x => x.EnsureInstanceAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() =>
                 {
                     InstancesCreated++;
-                    return new AlertInstanceSnapshot(Guid.NewGuid(), Tenant, r.ExcursionId, r.Status, r.TriggeredAt, null, 0);
+                    return new OpenedInstance(Guid.NewGuid(), Suppressed: false);
                 });
             services.AddSingleton(repository.Object);
             var rules = new Mock<IAlertRuleRepository>();
@@ -856,6 +856,7 @@ public class AlertSweepJobWallClockTests
             services.AddSingleton<NotTrueRecordingFloor>();
             services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
             services.AddSingleton<ILogger<AlertOrchestrator>>(OrchestratorLogger);
+            services.AddScoped<IExcursionOpenedHandler, ExcursionOpenedHandler>();
             services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
             services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
             services.AddSingleton(ClockNotice.Object);

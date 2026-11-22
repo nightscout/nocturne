@@ -48,7 +48,7 @@ public class AlertRowQueryGuardTests
     /// <summary>Members that query the tables unfiltered, keyed by file and member, with why a notice is safe there.</summary>
     private static readonly Dictionary<string, string> Allowed = new()
     {
-        ["src/API/Nocturne.API/Services/Alerts/AlertDeliveryService.cs:AlertDeliveryService.DispatchAsync"] =
+        ["src/API/Nocturne.API/Services/Alerts/AlertDeliveryService.cs:AlertDeliveryService.SendAsync"] =
             "reads the snooze of the instance being dispatched, which may be a notice's",
         ["src/API/Nocturne.API/Services/Seeding/SampleDataSeeder.cs:SampleDataSeeder.SeedAlertsAsync"] =
             "purges every row of the seeded rules, notices included",
@@ -60,6 +60,12 @@ public class AlertRowQueryGuardTests
             "reads test fires only (IsTest); a notice is never one",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.GetInstancesForExcursionAsync"] =
             "the resolution of a named excursion, which resolves a notice as it resolves an excursion",
+        ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.EnsureInstanceAsync"] =
+            "the instance of a named excursion's opening",
+        ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.TakeUpOwedTransitionAsync"] =
+            "writes a named excursion's owed work",
+        ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.SettleTransitionAsync"] =
+            "writes a named excursion's owed work; a notice's opening owes its dispatch as an excursion's does",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.GetExcursionRuleAsync"] =
             "reads a named excursion's rule and whether it is a notice",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertRepository.cs:AlertRepository.ResolveInstancesForExcursionAsync"] =

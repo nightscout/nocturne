@@ -112,10 +112,8 @@ public record AlertInstanceSnapshot(Guid Id, Guid TenantId, Guid AlertExcursionI
     string Status, DateTime TriggeredAt,
     DateTime? SnoozedUntil, int SnoozeCount);
 
-/// <summary>
-/// Request to create a new alert instance when an <see cref="AlertExcursion"/> is first detected.
-/// </summary>
-public record CreateAlertInstanceRequest(Guid ExcursionId, string Status, DateTime TriggeredAt);
+/// <summary>The instance an excursion's opening raised, and whether Do Not Disturb silenced it.</summary>
+public record OpenedInstance(Guid Id, bool Suppressed);
 
 /// <summary>
 /// Request to update an existing alert instance (snooze, status change).

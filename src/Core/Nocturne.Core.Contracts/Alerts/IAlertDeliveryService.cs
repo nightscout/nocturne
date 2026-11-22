@@ -12,14 +12,26 @@ namespace Nocturne.Core.Contracts.Alerts;
 public interface IAlertDeliveryService
 {
     /// <summary>
-    /// Dispatches the alert payload to every channel in <paramref name="channels"/> in parallel.
-    /// One <c>alert_deliveries</c> row is written per channel before the provider call so the
-    /// audit trail is complete even on provider failure.
+    /// Dispatches the alert payload to every channel in <paramref name="channels"/> that the
+    /// instance's dispatch still owes, so it can be called again for the same instance after a
+    /// call that did not finish. One <c>alert_deliveries</c> row is written per channel before the
+    /// provider call so the audit trail is complete even on provider failure.
     /// </summary>
     /// <param name="alertInstanceId">The alert instance the deliveries belong to.</param>
     /// <param name="channels">The rule's channel list (typically empty when the rule was created with no opt-in delivery surface).</param>
     /// <param name="payload">The <see cref="AlertPayload"/> rendered into each delivery.</param>
     Task DispatchAsync(
+        Guid alertInstanceId,
+        IReadOnlyList<AlertRuleChannelSnapshot> channels,
+        AlertPayload payload,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Dispatches the payload to every channel again, with new delivery rows, whatever the
+    /// instance was sent before: the re-notification of an alert still standing when its snooze
+    /// lapses.
+    /// </summary>
+    Task RenotifyAsync(
         Guid alertInstanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,

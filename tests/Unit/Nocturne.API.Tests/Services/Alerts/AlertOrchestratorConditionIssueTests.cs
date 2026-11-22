@@ -286,15 +286,12 @@ public class AlertOrchestratorConditionIssueTests
             _orchestrator = new AlertOrchestrator(
                 Engine.Object,
                 Mock.Of<IAlertRepository>(),
-                Mock.Of<IAlertRuleRepository>(),
                 tenant.Object,
-                Delivery.Object,
                 enricher.Object,
-                Mock.Of<IAlertAcknowledgementService>(),
+                Mock.Of<IExcursionOpenedHandler>(),
                 Mock.Of<IExcursionResolutionHandler>(),
                 notice,
                 ClockNotice.Object,
-                TimeProvider.System,
                 new ListLogger<AlertOrchestrator>());
         }
 

@@ -27,9 +27,10 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal static class RustEnvelopeMapper
 {
     /// <summary>
-    /// Sentinel ordinal sent for "this rule has an active excursion". The actual value is
-    /// irrelevant to the engine's semantics (it only checks presence and echoes it back);
-    /// the next-ordinal is set above it so a same-call open never collides.
+    /// The ordinal sent for "this rule has an active excursion". The engine only checks that one is
+    /// present and echoes it back. The host identifies an excursion by its row id, which the
+    /// transition writer maps from the transition, so it stores no engine ordinal and sends no
+    /// last ordinal: the engine reads the active one as the last, so an open never reuses it.
     /// </summary>
     private const int ActiveExcursionSentinel = 1;
 
@@ -83,7 +84,6 @@ internal static class RustEnvelopeMapper
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
                 HysteresisStartedAt = Utc(state.HysteresisStartedAt),
                 AwaitingRearm = state.AwaitingRearm,
-                NextExcursionOrdinal = ActiveExcursionSentinel + 1,
             };
 
     public static JsonElement ParseJson(string json)

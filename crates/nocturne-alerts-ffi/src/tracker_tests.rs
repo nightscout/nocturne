@@ -52,7 +52,7 @@ fn process_opens_continues_and_enters_hysteresis() {
             "state": "active",
             "active_excursion_ordinal": 1,
             "updated_at": "2026-01-05T12:00:00Z",
-            "next_excursion_ordinal": 2,
+            "last_excursion_ordinal": 1,
         })
     );
 
@@ -78,7 +78,7 @@ fn a_stored_confirming_state_reads_as_idle() {
     let stored = json!({
         "state": "confirming",
         "updated_at": "2026-01-05T11:55:00Z",
-        "next_excursion_ordinal": 7,
+        "last_excursion_ordinal": 6,
     });
 
     let quiet = process_at(&stored, false, "2026-01-05T12:00:00Z", 0);
@@ -112,7 +112,7 @@ fn force_close_reports_the_excursion_it_closed() {
         json!({
             "state": "idle",
             "updated_at": "2026-01-05T12:03:00Z",
-            "next_excursion_ordinal": 2,
+            "last_excursion_ordinal": 1,
         })
     );
 }
@@ -172,7 +172,7 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
             "updated_at": "2026-01-05T11:55:00Z",
             "hysteresis_started_at": "2026-01-05T11:50:00Z",
             "awaiting_rearm": true,
-            "next_excursion_ordinal": 4,
+            "last_excursion_ordinal": 3,
         });
         if let Some(ordinal) = excursion {
             tracker["active_excursion_ordinal"] = json!(ordinal);
@@ -219,7 +219,7 @@ fn an_unknown_stored_state_reads_as_active_with_an_excursion_and_idle_without() 
         json!({
             "state": "idle",
             "updated_at": "2026-01-05T11:55:00Z",
-            "next_excursion_ordinal": 4,
+            "last_excursion_ordinal": 3,
         })
     );
 }
@@ -242,7 +242,7 @@ fn force_close_without_an_excursion_changes_nothing() {
         "now": "2026-01-05T12:03:00Z",
     }));
     assert_eq!(never["transition"], json!({ "type": "none" }));
-    assert_eq!(never["tracker"], json!({ "next_excursion_ordinal": 1 }));
+    assert_eq!(never["tracker"], json!({}));
 }
 
 fn in_hysteresis(started_at: Option<&str>) -> Value {
@@ -250,7 +250,7 @@ fn in_hysteresis(started_at: Option<&str>) -> Value {
         "state": "hysteresis",
         "active_excursion_ordinal": 4,
         "updated_at": "2026-01-05T12:10:00Z",
-        "next_excursion_ordinal": 5,
+        "last_excursion_ordinal": 4,
     });
     if let Some(at) = started_at {
         tracker["hysteresis_started_at"] = json!(at);
@@ -286,7 +286,7 @@ fn close_elapsed_hysteresis_closes_at_the_window_end() {
         json!({
             "state": "idle",
             "updated_at": "2026-01-05T12:35:00Z",
-            "next_excursion_ordinal": 5,
+            "last_excursion_ordinal": 4,
         })
     );
 }
@@ -396,17 +396,15 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
         let mut timers: Map<String, Value> = Map::new();
         let mut via_evaluate: Map<String, Value> = Map::new();
         let mut via_entry_points: Map<String, Value> = Map::new();
-        let mut next_ordinal: u64 = 1;
 
         for tick in &scenario.ticks {
             for rule in &scenario.rules {
                 let rule_id = rule["id"].as_str().expect("rule id").to_owned();
                 let at = format!("scenario {} tick {} rule {rule_id}", scenario.name, tick.at);
-                let mut tracker = via_evaluate
+                let tracker = via_evaluate
                     .get(&rule_id)
                     .cloned()
                     .unwrap_or_else(|| json!({}));
-                tracker["next_excursion_ordinal"] = json!(next_ordinal);
                 let response = evaluate(&json!({
                     "schema_version": 1,
                     "rule": rule,
@@ -425,11 +423,10 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                 assert_eq!(response["ok"], json!(true), "{at}: {}", response["error"]);
                 let result = &response["result"];
 
-                let mut shadow = via_entry_points
+                let shadow = via_entry_points
                     .get(&rule_id)
                     .cloned()
                     .unwrap_or_else(|| json!({}));
-                shadow["next_excursion_ordinal"] = json!(next_ordinal);
                 let auto_resolve_met = shadow["awaiting_rearm"] == json!(true)
                     && auto_resolve_not_false(rule, tick, timers.get(&rule_id));
                 let condition_met = match (result.get("unknown"), rule.get("on_unknown")) {
@@ -478,9 +475,6 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                 }
                 assert_eq!(after, response["tracker"], "{at}");
 
-                next_ordinal = response["tracker"]["next_excursion_ordinal"]
-                    .as_u64()
-                    .expect("next_excursion_ordinal present");
                 timers.insert(rule_id.clone(), response["timers"].clone());
                 via_evaluate.insert(rule_id.clone(), response["tracker"].clone());
                 via_entry_points.insert(rule_id, after);

@@ -91,6 +91,7 @@ fn tracker(kind: TrackerStateKind, hysteresis_started_at: Option<DateTime<Utc>>)
     TrackerState {
         state: kind,
         active_excursion: (kind != TrackerStateKind::Idle).then_some(1),
+        last_excursion: 1,
         updated_at: now() - min(1),
         hysteresis_started_at,
         awaiting_rearm: false,

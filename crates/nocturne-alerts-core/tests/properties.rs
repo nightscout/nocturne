@@ -143,8 +143,8 @@ fn run(
 #[derive(Default)]
 struct Ledger {
     open: HashMap<Uuid, u32>,
-    closed: BTreeSet<u32>,
-    last_opened: u32,
+    closed: BTreeSet<(Uuid, u32)>,
+    last_opened: HashMap<Uuid, u32>,
 }
 
 impl Ledger {
@@ -156,12 +156,10 @@ impl Ledger {
             }
             TransitionType::ExcursionOpened => {
                 let ordinal = t.excursion.expect("an opened excursion has an ordinal");
-                prop_assert!(
-                    ordinal > self.last_opened,
-                    "ordinal {ordinal} not increasing"
-                );
+                let last = self.last_opened.get(&rule).copied().unwrap_or(0);
+                prop_assert_eq!(ordinal, last + 1, "a rule numbers its excursions 1, 2, ...");
                 prop_assert!(!self.open.contains_key(&rule), "a second excursion opened");
-                self.last_opened = ordinal;
+                self.last_opened.insert(rule, ordinal);
                 self.open.insert(rule, ordinal);
             }
             TransitionType::ExcursionContinues
@@ -172,7 +170,10 @@ impl Ledger {
             TransitionType::ExcursionClosed => {
                 let ordinal = t.excursion.expect("a closed excursion has an ordinal");
                 prop_assert_eq!(self.open.remove(&rule), Some(ordinal));
-                prop_assert!(self.closed.insert(ordinal), "{ordinal} closed twice");
+                prop_assert!(
+                    self.closed.insert((rule, ordinal)),
+                    "{ordinal} closed twice"
+                );
                 prop_assert!(t.close_reason.is_some());
             }
             other => prop_assert!(false, "unhandled transition {other:?}"),
@@ -286,13 +287,12 @@ fn rebuilt(prev: &ExcursionTracker, rules: &[Uuid]) -> ExcursionTracker {
             fresh.restore_state(*rule, *state);
         }
     }
-    fresh.set_next_excursion_ordinal(prev.next_excursion_ordinal());
     fresh
 }
 
 proptest! {
     /// An excursion opens once and closes at most once, one is open per rule
-    /// at a time, ordinals only grow, the state's fields agree with its kind,
+    /// at a time, a rule numbers its excursions 1, 2, ..., the state's fields agree with its kind,
     /// and the re-arm hold and hysteresis window follow their rules.
     #[test]
     fn tracker_keeps_one_excursion_per_rule_and_follows_its_rules((rules, steps) in steps()) {
@@ -335,10 +335,6 @@ proptest! {
                     format!("{:?}", reloaded.state(*id))
                 );
             }
-            prop_assert_eq!(
-                continuous.next_excursion_ordinal(),
-                reloaded.next_excursion_ordinal()
-            );
         }
     }
 }
@@ -1855,6 +1851,7 @@ fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
                     TrackerStateKind::Active | TrackerStateKind::Hysteresis
                 )
                 .then_some(1),
+                last_excursion: 1,
                 updated_at: since,
                 hysteresis_started_at: (state == TrackerStateKind::Hysteresis).then_some(since),
                 awaiting_rearm,

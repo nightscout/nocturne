@@ -13,13 +13,13 @@ public class ResponseStrictnessTests
 {
     private const string RuleId = "00000000-0000-0000-0000-0000000000aa";
 
-    private const string Tracker = """{"state":"active","active_excursion_ordinal":1,"updated_at":"2026-01-05T12:00:00Z","next_excursion_ordinal":2}""";
+    private const string Tracker = """{"state":"active","active_excursion_ordinal":1,"updated_at":"2026-01-05T12:00:00Z","last_excursion_ordinal":1}""";
 
     private static string Evaluate(string result, string tracker = Tracker, int schemaVersion = 1) =>
         $$"""{"schema_version":{{schemaVersion}},"ok":true,"result":{{result}},"timers":{},"not_true":{},"tracker":{{tracker}}}""";
 
     private static RustRuleResult RuleResult(string result) =>
-        RustAlertEngine.GetRuleResult(RustAlertEngine.ParseEvaluateResponse(Evaluate(result)));
+        RustAlertEngine.GetRuleResult(RustAlertEngine.ParseEvaluateResponse(Evaluate(result)), leavesRequested: true);
 
     [Fact]
     public void A_complete_result_parses()
@@ -120,7 +120,7 @@ public class ResponseStrictnessTests
     {
         var act = () => RustAlertEngine.ParseEvaluateResponse(Evaluate(
             $$"""{"rule_id":"{{RuleId}}","skipped":true}""",
-            tracker: """{"state":"idle","next_excursion_ordinal":1}"""));
+            tracker: """{"state":"idle"}"""));
 
         act.Should().Throw<RustAlertEngineException>().WithMessage("*'tracker.updated_at'*");
     }

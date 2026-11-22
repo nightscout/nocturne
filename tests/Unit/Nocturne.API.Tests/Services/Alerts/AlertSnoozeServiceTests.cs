@@ -294,7 +294,7 @@ public class AlertSnoozeServiceTests
         var resumed = await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None);
 
         resumed.Should().BeTrue();
-        _delivery.Verify(d => d.DispatchAsync(
+        _delivery.Verify(d => d.RenotifyAsync(
             seeded.InstanceId,
             It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
             It.Is<AlertPayload>(p =>
@@ -318,7 +318,7 @@ public class AlertSnoozeServiceTests
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
 
-        _delivery.Verify(d => d.DispatchAsync(
+        _delivery.Verify(d => d.RenotifyAsync(
             seeded.InstanceId,
             It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
             It.Is<AlertPayload>(p => p.GlucoseValue == 61m),
@@ -337,7 +337,7 @@ public class AlertSnoozeServiceTests
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
 
-        _delivery.Verify(d => d.DispatchAsync(
+        _delivery.Verify(d => d.RenotifyAsync(
             seeded.InstanceId,
             It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
             It.Is<AlertPayload>(p => p.TrendRate == -2m),
@@ -352,7 +352,7 @@ public class AlertSnoozeServiceTests
 
         (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
 
-        _delivery.Verify(d => d.DispatchAsync(
+        _delivery.Verify(d => d.RenotifyAsync(
             seeded.InstanceId,
             It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
             It.Is<AlertPayload>(p => p.GlucoseValue == null),

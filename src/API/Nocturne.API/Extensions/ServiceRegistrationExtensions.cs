@@ -1163,6 +1163,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<AlertReceiptService>();
         services.AddScoped<IAlertSnoozeService, AlertSnoozeService>();
         services.AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>();
+        services.AddScoped<IExcursionOpenedHandler, ExcursionOpenedHandler>();
         services.AddScoped<IEngineAlarmRelay, EngineAlarmRelay>();
         services.AddScoped<IAlarmAckHandler, AlarmAckHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();

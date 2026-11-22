@@ -19,6 +19,7 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// <list type="number">
+///   <item>Finish the work an excursion's opening or close still owes (<see cref="ActOnOwedTransitionsAsync"/>).</item>
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
@@ -27,7 +28,7 @@ namespace Nocturne.API.Services.Alerts;
 ///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="RuleTrees.ReferencesWallClock"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
-/// The wall-clock pass evaluates every such rule of the tenant, so it runs after the two cheap,
+/// The wall-clock pass evaluates every such rule of the tenant, so it runs after the cheap,
 /// time-critical passes rather than delaying them. A pass that throws does not stop the passes
 /// after it; the run then fails with the first error, and is retried after <see cref="SweepMaxBackoff"/>.
 /// An inactive tenant's row is parked for <see cref="IScheduledJob.InactiveTenantRecheck"/>.
@@ -102,6 +103,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         Exception? failed = null;
         foreach (var (pass, what) in new (Func<Sweep, CancellationToken, Task>, string)[]
                  {
+                     (ActOnOwedTransitionsAsync, "finishing owed transitions"),
                      (CloseHysteresisWindowsAsync, "closing hysteresis windows"),
                      (CheckSnoozedInstancesAsync, "checking snoozed instances"),
                      (CheckRuleConditionsAsync, "checking rule conditions"),
@@ -169,6 +171,117 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             _trend = (reading.Id, reading.Timestamp, trend);
             return trend;
         }
+    }
+
+    /// <summary>
+    /// How long after the work of an opening or close was last taken up the sweep takes it up
+    /// again. The evaluation that made the transition takes it up as it commits it and normally
+    /// settles it within seconds, so only work whose taker died, or failed, is this old.
+    /// </summary>
+    internal static readonly TimeSpan OwedTransitionLease = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Finishes the work each opening or close still owes once its <see cref="OwedTransitionLease"/>
+    /// has run out: a process that died, or a handler that threw, after the transition committed
+    /// (docs/alerts/engine-semantics.md §7). The first run after a start is the start's pass, since
+    /// the ledger finds the tenant's run overdue. Each is taken up first
+    /// (<see cref="IAlertRepository.TakeUpOwedTransitionAsync"/>), so of two sweeps one acts, and a
+    /// handler still running past the lease can be overlapped: its pending sends may then go twice.
+    /// </summary>
+    /// <remarks>
+    /// An opening is dispatched while its excursion is open, acknowledged or not: an acknowledgement
+    /// can be an acknowledge-all made for another alarm, and must not consume an alert nobody
+    /// received. Exactly two cutoffs settle it without a send, since an alert for a condition that
+    /// has ended misleads: the excursion has closed (checked again under the instance lock,
+    /// <see cref="IAlertRepository.EnsureInstanceAsync"/>), or the rule is disabled or deleted. An
+    /// enabled rule whose stored row cannot be read keeps its opening owed, taken up again each
+    /// lease, until one of the two applies. A close is finished whatever its age. A handler that
+    /// throws leaves its work owed and stops the pass; the work it took up waits out a new lease,
+    /// so the next run goes on with the rest.
+    /// </remarks>
+    private async Task ActOnOwedTransitionsAsync(Sweep sweep, CancellationToken ct)
+    {
+        var owed = await sweep.Repository.GetOwedTransitionsAsync(sweep.Now - OwedTransitionLease, ct);
+        if (owed.Count == 0) return;
+
+        var resolutionHandler = sweep.Services.GetRequiredService<IExcursionResolutionHandler>();
+        var openedHandler = sweep.Services.GetRequiredService<IExcursionOpenedHandler>();
+        var enabled = await sweep.ReadEnabledRulesAsync(ct);
+        var rules = enabled.Rules.ToDictionary(r => r.Id);
+        var unreadable = enabled.Unreadable.Select(r => r.Id).ToHashSet();
+        SensorContext? context = null;
+
+        foreach (var transition in owed)
+        {
+            if (!await sweep.Repository.TakeUpOwedTransitionAsync(
+                    transition.ExcursionId, transition.Kind, transition.TakenUpAt, sweep.Now, ct))
+                continue;
+
+            if (transition.Kind == ExcursionTransitionType.ExcursionClosed)
+            {
+                logger.LogWarning(
+                    "Finishing the close of excursion {ExcursionId}, which its evaluation left unfinished",
+                    transition.ExcursionId);
+                await resolutionHandler.HandleClosedAsync(
+                    new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, transition.ExcursionId),
+                    sweep.TenantId, ct);
+                continue;
+            }
+
+            if (transition.EndedAt is null && unreadable.Contains(transition.AlertRuleId))
+            {
+                logger.LogWarning(
+                    "Excursion {ExcursionId} opened without being dispatched, and its rule {AlertRuleId} cannot be read; it stays owed",
+                    transition.ExcursionId, transition.AlertRuleId);
+                continue;
+            }
+
+            if (transition.EndedAt is not null || !rules.TryGetValue(transition.AlertRuleId, out var rule))
+            {
+                logger.LogWarning(
+                    "Excursion {ExcursionId} opened without being dispatched and has since closed or lost its rule; it is not sent",
+                    transition.ExcursionId);
+                await sweep.Repository.SettleTransitionAsync(transition.ExcursionId, transition.Kind, ct);
+                continue;
+            }
+
+            logger.LogWarning(
+                "Dispatching excursion {ExcursionId} of rule {AlertRuleId}, which its evaluation opened without finishing its dispatch",
+                transition.ExcursionId, rule.Id);
+            context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
+            await openedHandler.HandleOpenedAsync(rule, transition.ExcursionId, context, sweep.TenantId, late: true, ct);
+        }
+    }
+
+    /// <summary>
+    /// The context a late dispatch is built from: the last usable reading when it is at most
+    /// <see cref="SmartSnoozeTrendGate.MaxLatestAge"/> old, the bar a snooze's re-notification
+    /// sets, and otherwise no glucose value with the last reading's time, so the payload never
+    /// presents an old value or the dispatch time as a current reading. Enriched for the owed
+    /// rules, which gives the Do Not Disturb scopes active now.
+    /// </summary>
+    private async Task<SensorContext> OwedDispatchContextAsync(
+        Sweep sweep,
+        IReadOnlyList<OwedTransition> owed,
+        IReadOnlyDictionary<Guid, AlertRuleSnapshot> rules,
+        CancellationToken ct)
+    {
+        var last = await LastUsableReadingAsync(sweep, ct);
+        var context = last.Reading is { } usable && sweep.Now - usable.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
+            ? CanonicalAlertEvaluator.ContextFor(usable, await sweep.TrendOfAsync(usable, ct))
+            : new SensorContext
+            {
+                LatestValue = null,
+                LatestTimestamp = last.At,
+                TrendRate = null,
+                LastReadingAt = last.At,
+            };
+        var owedRules = owed
+            .Select(t => rules.GetValueOrDefault(t.AlertRuleId))
+            .OfType<AlertRuleSnapshot>()
+            .DistinctBy(r => r.Id)
+            .ToList();
+        return await sweep.Services.GetRequiredService<ISensorContextEnricher>().EnrichAsync(context, owedRules, ct);
     }
 
     /// <summary>

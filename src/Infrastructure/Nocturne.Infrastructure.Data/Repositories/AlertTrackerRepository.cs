@@ -126,13 +126,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         return entity is null ? null : MapAlertExcursion(entity);
     }
 
-    /// <summary>
-    /// Create a new excursion record and return it.
-    /// </summary>
-    /// <param name="alertRuleId">The unique identifier of the alert rule.</param>
-    /// <param name="startedAt">The timestamp when the excursion started.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created alert excursion.</returns>
+    /// <inheritdoc/>
     public virtual async Task<AlertExcursion> CreateExcursionAsync(
         Guid alertRuleId,
         DateTime startedAt,
@@ -143,6 +137,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             Id = Guid.CreateVersion7(),
             AlertRuleId = alertRuleId,
             StartedAt = startedAt,
+            OpenedOwedAt = startedAt,
         };
 
         await using var lease = await OpenAsync(ct);
@@ -151,12 +146,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         return MapAlertExcursion(excursion);
     }
 
-    /// <summary>
-    /// Close an excursion by setting its EndedAt timestamp.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the excursion.</param>
-    /// <param name="endedAt">The timestamp when the excursion ended.</param>
-    /// <param name="ct">The cancellation token.</param>
+    /// <inheritdoc/>
     public virtual async Task CloseExcursionAsync(
         Guid excursionId,
         DateTime endedAt,
@@ -169,6 +159,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         if (excursion != null)
         {
             excursion.EndedAt = endedAt;
+            excursion.ClosedOwedAt = endedAt;
             await lease.Context.SaveChangesAsync(ct);
         }
     }

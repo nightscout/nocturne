@@ -50,6 +50,7 @@ final class CorpusScenarioTests: XCTestCase {
                 "now": try XCTUnwrap(tick["at"]),
                 "timers": timers,
                 "not_true": notTrue,
+                "include_leaves": true,
             ]
             if !(tracker is NSNull) { request["tracker"] = tracker }
 

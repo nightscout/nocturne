@@ -12,7 +12,7 @@
     reason = "test code"
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -76,11 +76,37 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
         })
         .collect();
 
-    json!({
+    let mut actual = json!({
         "schema_version": 1,
         "scenario": scenario.name,
         "ticks": ticks,
-    })
+    });
+    number_as_corpus(&mut actual);
+    actual
+}
+
+/// Renumbers each `tracker.excursion` as the corpus numbers excursions: 1, 2,
+/// ... in the order they open across every rule of the scenario. The engine
+/// numbers each rule's own (engine-semantics.md §7), so the corpus number is
+/// the rule and its ordinal looked up in opening order.
+fn number_as_corpus(actual: &mut Value) {
+    let mut opened: HashMap<String, u64> = HashMap::new();
+    let mut corpus: HashMap<(String, u64), u64> = HashMap::new();
+    for tick in actual["ticks"].as_array_mut().expect("ticks") {
+        for result in tick["rules"].as_array_mut().expect("rules") {
+            let rule = result["rule_id"].as_str().expect("rule id").to_owned();
+            if result["transition"] == "opened" {
+                let ordinal = opened.entry(rule.clone()).or_default();
+                *ordinal += 1;
+                let next = u64::try_from(corpus.len()).expect("a count") + 1;
+                corpus.insert((rule.clone(), *ordinal), next);
+            }
+            if let Some(excursion) = result.pointer_mut("/tracker/excursion") {
+                let ordinal = excursion.as_u64().expect("an ordinal");
+                *excursion = json!(corpus[&(rule, ordinal)]);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
