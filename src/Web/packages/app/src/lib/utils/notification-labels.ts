@@ -16,6 +16,10 @@ const LABEL_MAP: Record<string, string> = {
   open_alerts: "Open alerts",
   alert_unevaluable_subtitle:
     "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+  alert_channel_stopped: "An alert channel stopped",
+  alert_channel_stopped_subtitle: "An alert channel stopped.",
+  alert_channel_no_recipient: "An alert channel has no recipient",
+  alert_channel_no_recipient_subtitle: "An alert channel has no recipient.",
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
   share_link_rotated: "Your sharing link has been replaced",

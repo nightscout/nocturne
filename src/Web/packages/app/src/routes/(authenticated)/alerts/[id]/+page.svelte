@@ -52,6 +52,7 @@
   import RuleBuilder from "#lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
+  import { isNotSending } from "#lib/components/alerts/channelState.svelte.js";
   import AdvancedSection from "#lib/components/alerts/AdvancedSection.svelte";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
@@ -475,6 +476,7 @@
             <ChannelsSection
               bind:channels={editor.channels}
               severity={editor.severity}
+              {ruleId}
             />
             <OpenOnlyWarning channels={editor.channels} />
           </CardContent>
@@ -603,6 +605,9 @@
             <p class="flex items-center gap-1.5 text-sm text-success" role="status">
               <Check class="size-4" aria-hidden="true" />
               Test alert sent. Make sure that it arrived.
+              {#if editor.channels.some(isNotSending)}
+                Channels that do not send did not get it.
+              {/if}
             </p>
           {:else if isDirty && !loading}
             <p class="text-sm text-muted-foreground">

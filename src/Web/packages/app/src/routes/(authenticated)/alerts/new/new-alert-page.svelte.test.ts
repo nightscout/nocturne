@@ -15,6 +15,7 @@ const calls = vi.hoisted(() => ({
   searched: [] as unknown[],
   tested: [] as unknown[],
   createError: null as unknown,
+  dryRun: { success: true } as unknown,
   search: null as unknown,
   trackers: [] as unknown[],
   opposites: [] as unknown[],
@@ -36,9 +37,10 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   }),
   testFireDryRun: remoteCommand((body: unknown) => {
     calls.tested.push(body);
-    return Promise.resolve({ success: true });
+    return Promise.resolve(calls.dryRun);
   }),
   getInAppRecipients: () => remoteQuery(() => []),
+  keepChannel: remoteCommand(() => Promise.reject(new Error("not under test"))),
 }));
 
 vi.mock("#lib/api/generated/alertReplays.generated.remote.js", () => ({
@@ -109,6 +111,7 @@ describe("new alert wizard", () => {
     calls.searched.length = 0;
     calls.tested.length = 0;
     calls.createError = null;
+    calls.dryRun = { success: true };
     calls.search = noFirings;
     calls.trackers = [];
   });
@@ -253,6 +256,75 @@ describe("new alert wizard", () => {
       name: "Low: below 70 mg/dL",
       channels: [{ channelType: "in_app" }],
     });
+  });
+
+  it("states each channel the test would not send, and does not say the test arrived", async () => {
+    calls.dryRun = {
+      notSent: [
+        { index: 0, channelType: "in_app", state: "no_recipient" },
+        { index: 1, channelType: "webhook", state: "stopped" },
+      ],
+    };
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect
+      .element(page.getByText("In-app (channel 1) would not send: it has no recipient."))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Webhook (channel 2) would not send: it has stopped."))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("The test alert did not go to every channel."))
+      .toBeVisible();
+    expect(page.getByText("Test alert sent. Make sure that it arrived.").elements()).toHaveLength(0);
+  });
+
+  it("states a channel it cannot word, and does not say the test arrived", async () => {
+    calls.dryRun = { notSent: [{ index: 0, channelType: "carrier_pigeon", state: "grounded" }] };
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect.element(page.getByText("A channel would not send.")).toBeVisible();
+    await expect
+      .element(page.getByText("The test alert did not go to every channel."))
+      .toBeVisible();
+    expect(page.getByText("Test alert sent. Make sure that it arrived.").elements()).toHaveLength(0);
+  });
+
+  it("states a state it cannot word under the channel's name", async () => {
+    calls.dryRun = { notSent: [{ index: 0, channelType: "in_app", state: "grounded" }] };
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect.element(page.getByText("In-app (channel 1) would not send.")).toBeVisible();
+  });
+
+  it("lists nothing when every channel would send the test", async () => {
+    calls.dryRun = { notSent: [] };
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect.element(page.getByText("Test alert sent. Make sure that it arrived.")).toBeVisible();
+    expect(page.getByTestId("alert-test-not-sent").elements()).toHaveLength(0);
+  });
+
+  it("states no channel state for the channel a new alert starts with", async () => {
+    render(NewAlertPage, {});
+
+    await page.getByTestId("alert-type-low").click();
+    await next().click();
+    await expect.element(page.getByText("In-app", { exact: true })).toBeVisible();
+
+    expect(page.getByTestId("channel-state").elements()).toHaveLength(0);
   });
 
   it("creates the alert under the suggested name", async () => {

@@ -15,6 +15,7 @@ import type {
 	AlertRuleSettingOptionsResponse,
 	ReplayRuleDefinition,
 	AlertRuleChannelResponse,
+	AlertChannelState,
 	CreateAlertRuleChannelRequest,
 	InAppRecipientResponse,
 	ThresholdCondition,
@@ -826,8 +827,19 @@ export function toChannelRequest(c: ChannelDef): CreateAlertRuleChannelRequest {
 	};
 }
 
+export function channelStateOf(c: AlertRuleChannelResponse): ChannelState {
+	return {
+		state: c.state,
+		memberName: c.memberName,
+		addedByName: c.addedByName,
+		stopsAt: c.stopsAt,
+	};
+}
+
 export function toChannelDef(c: AlertRuleChannelResponse): ChannelDef {
 	return {
+		...channelStateOf(c),
+		id: c.id,
 		_uid: newUid(),
 		channelType: c.channelType ?? ChannelType.InApp,
 		destination: c.destination ?? "",
@@ -917,7 +929,17 @@ export interface ClientConfiguration {
  * causes Svelte 5 to re-bind input elements to the wrong row when channels
  * are removed mid-list. Stripped before sending over the wire.
  */
-export interface ChannelDef {
+export interface ChannelState {
+	state?: AlertChannelState;
+	memberName?: string;
+	addedByName?: string;
+	/** An ISO instant. */
+	stopsAt?: string;
+}
+
+export interface ChannelDef extends ChannelState {
+	/** Set for a stored channel only; a channel the editor has not saved has no state either. */
+	id?: string;
 	_uid?: string;
 	channelType: ChannelType;
 	destination: string;
