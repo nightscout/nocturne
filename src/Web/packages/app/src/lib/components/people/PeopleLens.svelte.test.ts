@@ -18,8 +18,9 @@ import {
   makeStatistics,
 } from "./people-fixtures.js";
 
-const overview = $state<{ data: TenantOverviewResponse | undefined }>({
+const overview = $state<{ data: TenantOverviewResponse | undefined; error: unknown }>({
   data: undefined,
+  error: undefined,
 });
 
 const review = $state<{
@@ -70,7 +71,9 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
     get current() {
       return overview.data;
     },
-    error: undefined,
+    get error() {
+      return overview.error;
+    },
     loading: false,
     refresh: () => overviewRefresh.run(),
   }),
@@ -134,6 +137,7 @@ beforeEach(async () => {
   pageState.url = new URL("http://localhost/");
   nav.address = new URL(pageState.url.href);
   overview.data = undefined;
+  overview.error = undefined;
   review.data = undefined;
   for (const key of Object.keys(byDays)) delete byDays[Number(key)];
   review.error = undefined;
@@ -158,6 +162,36 @@ describe("PeoplePage lens", () => {
     expect(checked("Now")).toBe("true");
     expect(page.getByRole("radio", { name: "14 days" }).elements()).toHaveLength(0);
     expect(reviewCalls.args).toHaveLength(0);
+  });
+
+  it("offers the wall display in the Now lens only", async () => {
+    const people = crowd(5);
+    overview.data = { tenants: people };
+    review.data = reviewOf(people);
+    render(PeoplePage);
+
+    await expect
+      .element(page.getByRole("link", { name: "Wall display" }))
+      .toHaveAttribute("href", "/tenants/wall");
+
+    await page.getByRole("radio", { name: "Review" }).click();
+    await expect.element(page.getByText("Distribution")).toBeVisible();
+    expect(page.getByRole("link", { name: "Wall display" }).elements()).toHaveLength(0);
+
+    await page.getByRole("radio", { name: "Now" }).click();
+    await expect.element(page.getByRole("link", { name: "Wall display" })).toBeVisible();
+  });
+
+  it("draws no reading as current once the overview read has failed", async () => {
+    overview.data = { tenants: crowd(5) };
+    render(PeoplePage);
+    await expect.element(page.getByText("Reading age")).toBeVisible();
+    expect(document.body.innerHTML).toContain("bg-glucose-in-range");
+
+    overview.error = new Error("The read failed.");
+
+    await expect.element(page.getByText("The list of people did not load.")).toBeVisible();
+    expect(document.body.innerHTML).not.toContain("bg-glucose-in-range");
   });
 
   it("switches the data columns without changing the people, and offers the three periods", async () => {
