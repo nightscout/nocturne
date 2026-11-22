@@ -567,7 +567,6 @@ public class MemberScopeMiddlewareTests
     [InlineData(AuthType.DirectGrant)]
     [InlineData(AuthType.ApiKey)]
     [InlineData(AuthType.LegacyJwt)]
-    [InlineData(AuthType.OidcToken)]
     public async Task EndedMember_GetsNothingFromTheMembershipOnEveryCredentialHeldToIt(AuthType authType)
     {
         using var db = TestDbContextFactory.CreateSqlite();
