@@ -456,6 +456,12 @@ public class SubjectRepository : ISubjectRepository
                     return new SubjectChange.LastOwnerOf(lastOwnerOf);
             }
 
+            var (soleMemberOf, lastManagerOf) = await db.LockTeamsOfSubjectAsync(subjectId, ct);
+            if (lastManagerOf.Count > 0)
+                return new SubjectChange.LastManagerOf(lastManagerOf);
+            foreach (var team in soleMemberOf)
+                TeamRepository.Remove(db, team);
+
             // One statement per column set: the audit trail of a long-lived subject is every
             // sign-in it ever made, which is not loaded into the tracker to null two columns.
             await db.AuthAuditLog

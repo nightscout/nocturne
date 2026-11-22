@@ -85,6 +85,10 @@ public class PlatformPolicyEntity : ISystemTimestamped
     [Column("allow_owner_slug_change")]
     public bool AllowOwnerSlugChange { get; set; }
 
+    /// <inheritdoc cref="Nocturne.Core.Models.Identity.PlatformPolicy.RestrictTeamCreationToAdmins"/>
+    [Column("restrict_team_creation_to_admins")]
+    public bool RestrictTeamCreationToAdmins { get; set; }
+
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; }
 

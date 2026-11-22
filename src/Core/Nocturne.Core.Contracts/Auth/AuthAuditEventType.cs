@@ -186,4 +186,29 @@ public static class AuthAuditEventType
     /// Event type when a subject stops trusting one device, or all of them.
     /// </summary>
     public const string DeviceTrustRevoked = "trusted_device_revoked";
+
+    /// <summary>Event type when a subject creates a team.</summary>
+    public const string TeamCreated = "team_created";
+
+    /// <summary>Event type when a manager renames a team. The details hold the old and the new name.</summary>
+    public const string TeamRenamed = "team_renamed";
+
+    /// <summary>
+    /// Event type when a team is deleted: by a manager, or with the deletion of its one remaining member.
+    /// </summary>
+    public const string TeamDeleted = "team_deleted";
+
+    /// <summary>Event type when a subject becomes a manager of a team. The target is that subject.</summary>
+    public const string TeamManagerAdded = "team_manager_added";
+
+    /// <summary>
+    /// Event type when a manager leaves a team or is removed from it. The target is that manager.
+    /// </summary>
+    public const string TeamManagerRemoved = "team_manager_removed";
+
+    /// <summary>Event type when a manager makes an invite link for a team.</summary>
+    public const string TeamInviteCreated = "team_invite_created";
+
+    /// <summary>Event type when a manager revokes a team's invite link.</summary>
+    public const string TeamInviteRevoked = "team_invite_revoked";
 }

@@ -75,6 +75,18 @@ public class RequireInteractiveSessionTests
         { typeof(RecoveryEmailController), nameof(RecoveryEmailController.GetRecoveryEmail) },
         { typeof(RecoveryEmailController), nameof(RecoveryEmailController.SetRecoveryEmail) },
         { typeof(RecoveryEmailController), nameof(RecoveryEmailController.DeleteRecoveryEmail) },
+
+        // A team is run by a person, never by a key or a device token.
+        { typeof(TeamsController), nameof(TeamsController.GetMyTeams) },
+        { typeof(TeamsController), nameof(TeamsController.CreateTeam) },
+        { typeof(TeamsController), nameof(TeamsController.GetTeam) },
+        { typeof(TeamsController), nameof(TeamsController.RenameTeam) },
+        { typeof(TeamsController), nameof(TeamsController.RemoveManager) },
+        { typeof(TeamsController), nameof(TeamsController.CreateManagerInvite) },
+        { typeof(TeamsController), nameof(TeamsController.RevokeManagerInvite) },
+        { typeof(TeamsController), nameof(TeamsController.GetInviteInfo) },
+        { typeof(TeamsController), nameof(TeamsController.AcceptInvite) },
+        { typeof(TeamsController), nameof(TeamsController.DeleteTeam) },
     };
 
     [Theory]

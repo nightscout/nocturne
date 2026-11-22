@@ -281,6 +281,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<PlatformPolicyEntity> PlatformPolicy { get; set; } = null!;
 
+    public DbSet<TeamEntity> Teams { get; set; } = null!;
+
+    public DbSet<TeamMemberEntity> TeamMembers { get; set; } = null!;
+
+    public DbSet<TeamInviteEntity> TeamInvites { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }

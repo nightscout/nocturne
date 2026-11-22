@@ -1,10 +1,7 @@
 using System.Globalization;
-using System.Text.Json;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Services;
 
@@ -44,11 +41,8 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// row with no target subject, naming the role under <c>role_id</c> and <c>role</c> and the permissions
 /// under <c>gained</c> and <c>lost</c>; a global role's row says <c>kind</c> = <c>global</c>.
 /// <para>
-/// The target is the member's subject, except on the role row, which has none. The actor is the <see cref="MemberAccessSource"/> when the
-/// writer passes one, else the scope's <see cref="IAuditContext"/> named as
-/// <see cref="AuthAuditActor.From(IAuditContext)"/> names it, else the system when the scope has no
-/// actor or is system-attributed. A scope with no caller at all, and no source, is recorded as
-/// <c>anonymous</c>, never as a credential.
+/// The target is the member's subject, except on the role row, which has none. The actor is named by
+/// <see cref="AuthAuditRows"/>.
 /// </para>
 /// </remarks>
 internal static class MemberAccessAudit
@@ -56,7 +50,6 @@ internal static class MemberAccessAudit
     internal const string RoleKey = "role";
     internal const string TenantKind = "tenant";
     private const string GlobalKind = "global";
-    internal const string KindKey = "kind";
     internal const string GainedKey = "gained";
     internal const string LostKey = "lost";
     internal const string PermissionKey = "permission";
@@ -67,9 +60,6 @@ internal static class MemberAccessAudit
     internal const string InviteKey = "invite";
     internal const string TwentyFourHours = "24_hours";
     internal const string FullHistory = "full";
-    internal const string System = "system";
-    internal const string Anonymous = "anonymous";
-    private const int CredentialLength = 64;
 
     /// <summary>Stages a row for each role slug in <paramref name="removed"/>, then each in <paramref name="added"/>.</summary>
     public static void StageRoles(
@@ -109,7 +99,7 @@ internal static class MemberAccessAudit
         var details = new Dictionary<string, object?>
         {
             [AccessEndsAtKey] = after is { } end ? DateTime.SpecifyKind(end, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture) : null,
-            [KindKey] = TenantKind,
+            [AuthAuditRows.KindKey] = TenantKind,
         };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
@@ -130,7 +120,7 @@ internal static class MemberAccessAudit
             {
                 [GrantKey] = grantId.ToString(),
                 [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
-                [KindKey] = TenantKind,
+                [AuthAuditRows.KindKey] = TenantKind,
             }, source: null);
 
     /// <summary>
@@ -142,7 +132,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.DeviceCredentialKept, tenantId, makerSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [KindKey] = TenantKind,
+            [AuthAuditRows.KindKey] = TenantKind,
         }, source: null);
 
     /// <summary>
@@ -154,7 +144,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.GuestLinkRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [KindKey] = TenantKind,
+            [AuthAuditRows.KindKey] = TenantKind,
         }, source: null);
 
     /// <summary>
@@ -191,7 +181,7 @@ internal static class MemberAccessAudit
             [RoleKey] = role,
             [GainedKey] = gained,
             [LostKey] = lost,
-            [KindKey] = kind,
+            [AuthAuditRows.KindKey] = kind,
         }, source: null);
     }
 
@@ -209,7 +199,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object?> { [key] = item, [KindKey] = TenantKind };
+        var details = new Dictionary<string, object?> { [key] = item, [AuthAuditRows.KindKey] = TenantKind };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 
@@ -218,36 +208,6 @@ internal static class MemberAccessAudit
 
     private static void Add(
         NocturneDbContext db, string eventType, Guid? tenantId, Guid? targetSubjectId,
-        Dictionary<string, object?> details, MemberAccessSource? source)
-    {
-        var audit = db.AuditContext;
-        var actor = ActorOf(audit, source);
-
-        db.AuthAuditLog.Add(new AuthAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            EventType = eventType,
-            TargetSubjectId = targetSubjectId,
-            ActorSubjectId = actor.SubjectId,
-            ActorCredential = actor.Credential is { Length: > CredentialLength } credential ? credential[..CredentialLength] : actor.Credential,
-            TenantId = tenantId,
-            Success = true,
-            IpAddress = audit?.IpAddress,
-            UserAgent = audit?.UserAgent,
-            TraceId = audit?.TraceId,
-            DetailsJson = JsonSerializer.Serialize(details),
-        });
-    }
-
-    private static AuthAuditActor ActorOf(IAuditContext? audit, MemberAccessSource? source)
-    {
-        if (source is not null)
-            return new AuthAuditActor(source.ActorSubjectId, source.ActorSubjectId is null ? System : null);
-        if (audit is null or { IsSystem: true })
-            return new AuthAuditActor(null, audit?.AuthType ?? System);
-        if (audit is { SubjectId: null, CredentialFingerprint: null, TokenId: null }
-            && audit.AuthType is null or nameof(AuthType.None))
-            return new AuthAuditActor(null, Anonymous);
-        return AuthAuditActor.From(audit);
-    }
+        Dictionary<string, object?> details, MemberAccessSource? source) =>
+        AuthAuditRows.Stage(db, eventType, tenantId, teamId: null, targetSubjectId, details, source);
 }

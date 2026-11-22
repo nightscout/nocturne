@@ -117,9 +117,13 @@ public abstract record EmailConfirmation
 /// <summary>A tenant whose last owner a subject is, by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.</summary>
 public sealed record LastOwnerTenant(Guid TenantId, string Slug);
 
+/// <summary>A team whose last manager a subject is, by <c>TeamManagerFilter.IsLastManagerAsync</c>.</summary>
+public sealed record LastManagerTeam(Guid TeamId, string Name);
+
 /// <summary>
 /// What a change to a subject that may not leave a tenant without an owner found. It is refused
-/// with <see cref="LastOwnerOf"/> while the subject is the last owner of any tenant.
+/// with <see cref="LastOwnerOf"/> while the subject is the last owner of any tenant, and a deletion
+/// with <see cref="LastManagerOf"/> while the subject is the last manager of a team others belong to.
 /// </summary>
 public abstract record SubjectChange
 {
@@ -130,6 +134,8 @@ public abstract record SubjectChange
     public sealed record NotFound : SubjectChange;
 
     public sealed record LastOwnerOf(IReadOnlyList<LastOwnerTenant> OwnedTenants) : SubjectChange;
+
+    public sealed record LastManagerOf(IReadOnlyList<LastManagerTeam> ManagedTeams) : SubjectChange;
 }
 
 /// <summary>What keeps a subject's credentials valid between requests.</summary>

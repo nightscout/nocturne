@@ -35,7 +35,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
     ];
 
     private const string MemberChangeRows =
-        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{MemberAccessAudit.KindKey}' = '{MemberAccessAudit.TenantKind}'";
+        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditRows.KindKey}' = '{MemberAccessAudit.TenantKind}'";
 
     public async Task<PaginatedResponse<MemberHistoryEntry>> GetAsync(
         Guid tenantId, Guid? memberSubjectId, int limit, int offset, CancellationToken ct = default)
@@ -132,8 +132,8 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
         var kind = row.ActorCredential?.Split(':', 2)[0] switch
         {
-            MemberAccessAudit.System => MemberHistoryActorKind.System,
-            MemberAccessAudit.Anonymous or nameof(AuthType.None) => MemberHistoryActorKind.Anonymous,
+            AuthAuditRows.System => MemberHistoryActorKind.System,
+            AuthAuditRows.Anonymous or nameof(AuthType.None) => MemberHistoryActorKind.Anonymous,
             nameof(AuthType.ApiKey) or nameof(AuthType.DirectGrant) => MemberHistoryActorKind.ApiKey,
             nameof(AuthType.OAuthAccessToken) or StoredProviderTokenCredential
                 or nameof(AuthType.LegacyJwt) or nameof(AuthType.SessionCookie) => MemberHistoryActorKind.AccessToken,

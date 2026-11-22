@@ -389,7 +389,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     }
 
     /// <summary>The tables <see cref="CleanupDatabaseAsync"/> empties between tests.</summary>
-    private static string[] DataTables => [.. RecordTables, .. CredentialTables];
+    private static string[] DataTables => [.. RecordTables, .. CredentialTables, .. TeamTables];
 
     /// <summary>
     /// The tables holding a tenant's records, as opposed to its members and their credentials.
@@ -455,6 +455,12 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "migration_runs",
         "migration_sources",
     ];
+
+    /// <summary>
+    /// Teams, which belong to no tenant and outlive one: a team one test makes would be in the next
+    /// test's list of the same subject's teams.
+    /// </summary>
+    private static readonly string[] TeamTables = ["team_invites", "team_members", "teams"];
 
     /// <summary>The tables holding credentials, which the fixture restores its own into.</summary>
     private static readonly string[] CredentialTables =

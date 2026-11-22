@@ -79,6 +79,9 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/v4/me/tenants/overview/review", "GET")]
     [InlineData("/api/v4/me/tenants/overview/person", "GET")]
     [InlineData("/api/v4/me/overview-admission", "GET")]
+    [InlineData("/api/v4/me/teams", "GET")]
+    [InlineData("/api/v4/me/teams", "POST")]
+    [InlineData("/api/v4/me/teams/invites/a-token/accept", "POST")]
     [InlineData("/api/v4/admin/tenants", "GET")]
     [InlineData("/api/v4/setup/status", "GET")]
     public async Task Apex_cross_tenant_path_stays_tenantless_on_a_single_tenant_install(string path, string method)

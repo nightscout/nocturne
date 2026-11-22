@@ -63,6 +63,13 @@ public class AuthAuditLogEntity : IEntityCreated
     public Guid? TenantId { get; set; }
 
     /// <summary>
+    /// The team this event targeted, if any. A column rather than a detail because deleting a subject
+    /// clears the details of its rows, and a team's history must still be found.
+    /// </summary>
+    [Column("team_id")]
+    public Guid? TeamId { get; set; }
+
+    /// <summary>
     /// Foreign key to the refresh token involved in this event (if applicable)
     /// </summary>
     [Column("refresh_token_id")]

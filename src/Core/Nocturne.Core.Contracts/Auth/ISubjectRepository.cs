@@ -153,6 +153,12 @@ public interface ISubjectRepository
     /// its membership. An inactive subject is never refused, since it counts as no owner. The check
     /// holds the owner lock of each tenant the subject belongs to, in ascending tenant id, until the
     /// delete commits.
+    /// <para>
+    /// A team the subject is the only member of is deleted with them. A team with other members is
+    /// refused with <see cref="SubjectChange.LastManagerOf"/> while the subject is its last manager by
+    /// <c>TeamManagerFilter.IsLastManagerAsync</c>. Both hold the manager lock of each team the subject
+    /// belongs to, in ascending team id, until the delete commits.
+    /// </para>
     /// </remarks>
     Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct);
 
