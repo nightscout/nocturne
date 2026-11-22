@@ -172,7 +172,7 @@ describe("PeoplePage lens", () => {
 
     await expect
       .element(page.getByRole("link", { name: "Wall display" }))
-      .toHaveAttribute("href", "/tenants/wall");
+      .toHaveAttribute("href", "/people/wall");
 
     await page.getByRole("radio", { name: "Review" }).click();
     await expect.element(page.getByText("Distribution")).toBeVisible();

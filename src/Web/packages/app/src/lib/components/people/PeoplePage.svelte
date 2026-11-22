@@ -224,7 +224,7 @@
         <Button
           variant="outline"
           size="sm"
-          href={resolve("/(authenticated)/tenants/wall")}
+          href={resolve("/(authenticated)/people/wall")}
         >
           <Monitor class="size-4" aria-hidden="true" />
           Wall display
