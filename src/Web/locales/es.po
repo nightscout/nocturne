@@ -26601,7 +26601,7 @@ msgstr "Enfoque {0}–{1} {2}"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Band"
-msgstr ""
+msgstr "Banda"
 
 #: src/lib/coach-marks/TourScrollHarness.test.svelte
 msgid "Near target"
@@ -42689,1078 +42689,1078 @@ msgstr "Tasa estimada"
 #. 0: activeWithinMinutes
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "No record arrived in the last {0} minutes. This connection sends glucose or device status all the time. It is possible that it stopped."
-msgstr ""
+msgstr "No se han recibido datos en los últimos {0} minutos. Esta conexión envía datos de glucemia o del estado del dispositivo continuamente. Puede que haya dejado de funcionar."
 
 #. 0: activeWithinMinutes
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "No record arrived in the last {0} minutes. This connection sends only records that come from time to time, such as treatments. This is normal."
-msgstr ""
+msgstr "No se han recibido datos en los últimos {0} minutos. Esta conexión solo envía datos puntuales, como los tratamientos. Es normal."
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Why one app can show more than one source"
-msgstr ""
+msgstr "Por qué una aplicación puede mostrar más de un origen"
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "AAPSClient"
-msgstr ""
+msgstr "AAPSClient"
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "Could not make the QR code. Try again."
-msgstr ""
+msgstr "No se ha podido generar el código QR. Inténtalo de nuevo."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "Connect AAPSClient with a QR code"
-msgstr ""
+msgstr "Conectar AAPSClient con un código QR"
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "For a follower phone with AAPSClient 4.0 or later. The phone gets its own API token and can read your data."
-msgstr ""
+msgstr "Para un teléfono seguidor con AAPSClient 4.0 o posterior. El teléfono recibe su propio token de API y puede consultar tus datos."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "QR code to connect AAPSClient"
-msgstr ""
+msgstr "Código QR para conectar AAPSClient"
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "This phone can read your data and send commands to your AAPS phone."
-msgstr ""
+msgstr "Este teléfono puede consultar tus datos y enviar órdenes al teléfono que ejecuta AAPS."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "This phone can only read your data."
-msgstr ""
+msgstr "Este teléfono solo puede consultar tus datos."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "In AAPSClient, open the setup wizard or Pair with master, then select Scan the QR code."
-msgstr ""
+msgstr "En AAPSClient, abre el asistente de configuración o «Pair with master» (Vincular con el dispositivo principal) y selecciona «Scan the QR code» (Escanear el código QR)."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "Anyone who sees this code gets the same access. Show it only to the new phone. It cannot be shown again."
-msgstr ""
+msgstr "Cualquiera que vea este código obtiene el mismo acceso. Muéstralo solo al nuevo teléfono. El código solo se muestra una vez."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "Let this phone send commands to your AAPS phone"
-msgstr ""
+msgstr "Permitir que este teléfono envíe órdenes al teléfono que ejecuta AAPS"
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "After you pair it in AAPS, the phone can ask your AAPS phone for a bolus, a temporary target, or a profile switch. Your AAPS phone checks each command before it does it. The API token can then also change the treatment profiles in Nocturne. When this is off, the phone cannot pair and can only read your data."
-msgstr ""
+msgstr "Una vez vinculado en AAPS, este teléfono puede solicitar al teléfono que ejecuta AAPS un bolus, un objetivo temporal o un cambio de perfil. El teléfono que ejecuta AAPS comprueba cada orden antes de ejecutarla. El token de API también puede modificar los perfiles de tratamiento en Nocturne. Con esta opción desactivada, el teléfono solo puede consultar tus datos y no se puede vincular."
 
 #: src/lib/components/AapsClientSetupCode.svelte
 msgid "<0/> Make QR code"
-msgstr ""
+msgstr "<0/> Generar código QR"
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "You cannot delete this data"
-msgstr ""
+msgstr "No puedes eliminar estos datos"
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "A credential of this connection is not yours, or it was removed."
-msgstr ""
+msgstr "Una credencial de esta conexión no te pertenece o se ha eliminado."
 
 #. 0: name
 #: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Nocturne imports the records that {0} sends again. This includes the records that you deleted before."
-msgstr ""
+msgstr "Nocturne volverá a importar los registros que {0} reenvíe, incluidos los que hayas eliminado."
 
 #. 0: name
 #: src/lib/components/connectors/DeleteRecordsConfirmDialog.svelte
 msgid "Nocturne does not import the deleted records again, even if {0} sends them."
-msgstr ""
+msgstr "Nocturne no volverá a importar los registros eliminados, aunque {0} los reenvíe."
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "We could not send your request. Try again."
-msgstr ""
+msgstr "No se ha podido enviar tu solicitud. Inténtalo de nuevo."
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "Request sent"
-msgstr ""
+msgstr "Solicitud enviada"
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "The owner must approve your request before you can sign in. After approval, sign in with the passkey you made."
-msgstr ""
+msgstr "El propietario debe aprobar tu solicitud para que puedas iniciar sesión. Cuando la apruebe, inicia sesión con la clave de acceso que has creado."
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "This browser cannot make a passkey. To send a request, use a browser or device that supports passkeys."
-msgstr ""
+msgstr "Este navegador no puede crear una clave de acceso. Para enviar una solicitud, usa un navegador o dispositivo compatible con las claves de acceso."
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "Tell the owner who you are. You make a passkey to send the request. The owner must approve the request before you can sign in."
-msgstr ""
+msgstr "Dile al propietario quién eres. Crea una clave de acceso para enviar la solicitud. El propietario debe aprobarla para que puedas iniciar sesión."
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "Message to the owner"
-msgstr ""
+msgstr "Mensaje para el propietario"
 
 #: src/lib/components/members/RequestMembershipDialog.svelte
 msgid "<0/> Send request"
-msgstr ""
+msgstr "<0/> Enviar solicitud"
 
 #. 0: formatClock(waitUntil)
 #: src/lib/components/tenants/SiteAddressCard.svelte
 msgid "You can change the address one time each hour. You can change it again at {0}."
-msgstr ""
+msgstr "Puedes cambiar la dirección una vez por hora. Podrás volver a cambiarla a las {0}."
 
 #: src/lib/components/alerts/ReplayView.svelte
 #: src/lib/components/alerts/RuleSidebar.svelte
 msgid "This alert"
-msgstr ""
+msgstr "Esta alerta"
 
 #: src/lib/components/alerts/RuleSidebar.svelte
 msgid "The alert you are editing"
-msgstr ""
+msgstr "La alerta que estás editando"
 
 #: src/lib/components/alerts/RuleSidebar.svelte
 msgid "Your other alerts"
-msgstr ""
+msgstr "Tus otras alertas"
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "The alert is on."
-msgstr ""
+msgstr "La alerta está activada."
 
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "Alert when the battery is this old, or older"
-msgstr ""
+msgstr "Avisar cuando la batería lleve este tiempo en uso o más"
 
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "Choose a tracker"
-msgstr ""
+msgstr "Elige un seguimiento"
 
 #. 0: lifespanText(tracker.lifespanHours)
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "The tracker lasts {0}."
-msgstr ""
+msgstr "El seguimiento dura {0}."
 
 #. 0: tracker.name
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "Nocturne reads the age from the tracker {0}. <0/>"
-msgstr ""
+msgstr "Nocturne obtiene el tiempo transcurrido del seguimiento {0}. <0/>"
 
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "There is no tracker for the infusion site. The alert uses the site change that your uploader records."
-msgstr ""
+msgstr "No hay ningún seguimiento del lugar de infusión. La alerta usa el cambio de lugar de infusión que registra la aplicación que envía tus datos."
 
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "There is no tracker for the sensor. The alert uses the sensor start that your uploader records."
-msgstr ""
+msgstr "No hay ningún seguimiento del sensor. La alerta usa el inicio del sensor que registra la aplicación que envía tus datos."
 
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 msgid "Open Trackers"
-msgstr ""
+msgstr "Abrir Seguimientos"
 
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Battery change due"
-msgstr ""
+msgstr "Toca cambiar la batería"
 
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "The battery is older than the age you set."
-msgstr ""
+msgstr "La batería lleva en uso más tiempo del que has indicado."
 
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Choose a tracker."
-msgstr ""
+msgstr "Elige un seguimiento."
 
 #. 0: tracker.name; 1: daysText(ageDays(draft.leaf))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "{0} change due: {1}"
-msgstr ""
+msgstr "Toca cambiar {0}: {1}"
 
 #. 0: daysText(ageDays(leaf))
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Battery change due: {0}"
-msgstr ""
+msgstr "Toca cambiar la batería: {0}"
 
 #: src/lib/components/alerts/AutoResolveSection.svelte
 msgid "These conditions have no opposite. Add a closing condition yourself."
-msgstr ""
+msgstr "Estas condiciones no tienen un equivalente inverso. Añade una condición de cierre manualmente."
 
 #: src/lib/components/alerts/AutoResolveSection.svelte
 msgid "Could not get a suggestion. Try again."
-msgstr ""
+msgstr "No se ha podido obtener una sugerencia. Inténtalo de nuevo."
 
 #: src/routes/(authenticated)/alerts/new/+page.svelte
 msgid "Could not load the alert types. Load the page again."
-msgstr ""
+msgstr "No se han podido cargar los tipos de alerta. Vuelve a cargar la página."
 
 #. 0: summarizeCondition(autoResolve)
 #: src/lib/components/alerts/wizard/CheckStep.svelte
 msgid "The alert closes when this is true: {0}."
-msgstr ""
+msgstr "La alerta se cierra cuando se cumple esta condición: {0}."
 
 #: src/lib/components/trackers/TrackerDefinitionsTab.svelte
 msgid "<0/> New tracker"
-msgstr ""
+msgstr "<0/> Nuevo seguimiento"
 
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Set how long the tracker lasts before you use a time before its end."
-msgstr ""
+msgstr "Indica cuánto dura el seguimiento antes de configurar un recordatorio previo al final."
 
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "This time is before the tracker starts. Use a time shorter than the tracker lasts."
-msgstr ""
+msgstr "Este momento es anterior al inicio del seguimiento. Indica un intervalo más corto que su duración."
 
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "The text of the notification"
-msgstr ""
+msgstr "Texto de la notificación"
 
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Message (optional)"
-msgstr ""
+msgstr "Mensaje (opcional)"
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "From a start"
-msgstr ""
+msgstr "Desde el inicio"
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "You start it, and it counts the time since then."
-msgstr ""
+msgstr "Lo pones en marcha y mide el tiempo transcurrido desde entonces."
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "To a date"
-msgstr ""
+msgstr "Hasta una fecha"
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "You give it a date and a time, and it counts down to them."
-msgstr ""
+msgstr "Indicas una fecha y una hora e inicia una cuenta atrás hasta ese momento."
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "How it counts"
-msgstr ""
+msgstr "Cómo cuenta el tiempo"
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "How long it lasts"
-msgstr ""
+msgstr "Cuánto dura"
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "<0/> Enter days or hours, for example 10d or 72h. Leave it empty if there is no limit."
-msgstr ""
+msgstr "<0/> Indica días u horas, por ejemplo, 10d o 72h. Déjalo en blanco si no hay límite."
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "You set the date and the time when you start the tracker."
-msgstr ""
+msgstr "Indica la fecha y la hora al iniciar el seguimiento."
 
 #. 0: eventList(draft.triggerEventTypes)
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "The tracker starts again when your pump, loop or a connector records one of these events: {0}."
-msgstr ""
+msgstr "El seguimiento se reinicia cuando tu bomba, sistema de lazo cerrado o un conector registra uno de estos eventos: {0}."
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "You start the tracker again yourself each time."
-msgstr ""
+msgstr "Tú reinicias el seguimiento cada vez."
 
 #: src/lib/components/trackers/wizard/TrackerSettingsStep.svelte
 msgid "<0/> More settings"
-msgstr ""
+msgstr "<0/> Más ajustes"
 
 #: src/lib/components/trackers/wizard/TrackerTypeStep.svelte
 msgid "Tracker types"
-msgstr ""
+msgstr "Tipos de seguimiento"
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "CGM sensor"
-msgstr ""
+msgstr "Sensor de MCG"
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "Something else"
-msgstr ""
+msgstr "Otra cosa"
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "The age of the sensor, and when to change it."
-msgstr ""
+msgstr "Cuánto tiempo lleva puesto el sensor y cuándo cambiarlo."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "The age of the infusion set, and when to change it."
-msgstr ""
+msgstr "Cuánto tiempo lleva puesto el equipo de infusión y cuándo cambiarlo."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "The age of the pod, and when to change it."
-msgstr ""
+msgstr "Cuánto tiempo lleva puesto el pod y cuándo cambiarlo."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "The age of the insulin in the pump, and when to change it."
-msgstr ""
+msgstr "Cuánto tiempo lleva la insulina en la bomba y cuándo cambiarla."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "The age of the pump battery, and when to change it."
-msgstr ""
+msgstr "Cuánto tiempo lleva en uso la batería de la bomba y cuándo cambiarla."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "A date and a time, with a reminder before it."
-msgstr ""
+msgstr "Una fecha y una hora, con un recordatorio previo."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "A task that you do again after a set time."
-msgstr ""
+msgstr "Una tarea que repites tras un intervalo fijo."
 
 #: src/lib/components/trackers/wizard/templates.svelte.ts
 msgid "A tracker with no settings filled in."
-msgstr ""
+msgstr "Un seguimiento sin configurar."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Reminders"
-msgstr ""
+msgstr "Recordatorios"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Choose a tracker type."
-msgstr ""
+msgstr "Elige un tipo de seguimiento."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Change the time of the reminder that is marked."
-msgstr ""
+msgstr "Cambia la hora del recordatorio seleccionado."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Could not create the tracker. Try again."
-msgstr ""
+msgstr "No se ha podido crear el seguimiento. Inténtalo de nuevo."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "The tracker is ready."
-msgstr ""
+msgstr "El seguimiento está listo."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Leave without creating this tracker?"
-msgstr ""
+msgstr "¿Salir sin crear este seguimiento?"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Name and settings"
-msgstr ""
+msgstr "Nombre y ajustes"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "When does it remind you?"
-msgstr ""
+msgstr "¿Cuándo quieres recibir el recordatorio?"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "What do you want to track?"
-msgstr ""
+msgstr "¿Qué quieres seguir?"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "New tracker · Nocturne"
-msgstr ""
+msgstr "Nuevo seguimiento · Nocturne"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Close and go back to trackers"
-msgstr ""
+msgstr "Cerrar y volver a Seguimientos"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "New tracker"
-msgstr ""
+msgstr "Nuevo seguimiento"
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "Could not load the tracker types."
-msgstr ""
+msgstr "No se han podido cargar los tipos de seguimiento."
 
 #: src/routes/(authenticated)/trackers/new/+page.svelte
 msgid "<0/> Create tracker"
-msgstr ""
+msgstr "<0/> Crear seguimiento"
 
 #: src/routes/(authenticated)/+layout.svelte
 msgid "Skip to main content"
-msgstr ""
+msgstr "Saltar al contenido principal"
 
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Custom reports"
-msgstr ""
+msgstr "Informes personalizados"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Reports that you make from the charts and figures of your data"
-msgstr ""
+msgstr "Informes que puedes crear a partir de los gráficos y las cifras de tus datos"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "New custom report"
-msgstr ""
+msgstr "Nuevo informe personalizado"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Make a report from the charts and figures of your data"
-msgstr ""
+msgstr "Crea un informe con los gráficos y las cifras de tus datos"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Edit custom report"
-msgstr ""
+msgstr "Editar informe personalizado"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Change the blocks of a saved custom report"
-msgstr ""
+msgstr "Modifica los bloques de un informe personalizado guardado"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Custom report"
-msgstr ""
+msgstr "Informe personalizado"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "A saved custom report, run on your current data"
-msgstr ""
+msgstr "Un informe personalizado guardado que se genera con tus datos actuales"
 
 #: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "The range that you selected ends before the last hour. You can see only the last hour, so this card has no data for this range."
 msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this card has no data for this range."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "El intervalo que has seleccionado termina antes de la última hora. Tu acceso se limita a la última hora, así que esta tarjeta no tiene datos para ese intervalo."
+msgstr[1] "El intervalo que has seleccionado termina antes de las últimas # horas. Tu acceso se limita a las últimas # horas, así que esta tarjeta no tiene datos para ese intervalo."
 
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 msgid "All custom reports"
-msgstr ""
+msgstr "Todos los informes personalizados"
 
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 msgid "New report"
-msgstr ""
+msgstr "Nuevo informe"
 
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 msgid "Other reports <0/>"
-msgstr ""
+msgstr "Otros informes <0/>"
 
 #: src/lib/components/reports/ReportPageSwitcher.svelte
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "<0/> New report"
-msgstr ""
+msgstr "<0/> Nuevo informe"
 
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
 #: src/lib/server/report-image/report-image-words.svelte.ts
 msgid "No data in this range."
-msgstr ""
+msgstr "Sin datos en este intervalo."
 
 #. 0: count
 #: src/lib/server/report-image/report-image-words.svelte.ts
 msgid "This image does not show {0} of the figures. The summary has all of them."
-msgstr ""
+msgstr "En esta imagen faltan {0} cifras. El resumen las incluye todas."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Could not load the custom reports"
-msgstr ""
+msgstr "No se han podido cargar los informes personalizados"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne deleted the report."
-msgstr ""
+msgstr "Nocturne ha eliminado el informe."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Could not delete the report. Try again."
-msgstr ""
+msgstr "No se ha podido eliminar el informe. Inténtalo de nuevo."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Saved custom reports"
-msgstr ""
+msgstr "Informes personalizados guardados"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "A custom report shows the charts and figures of your data that you select. Each member of this account sees the same list."
-msgstr ""
+msgstr "Un informe personalizado muestra los gráficos y las cifras que elijas de entre tus datos. Todos los miembros de esta cuenta ven la misma lista."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Your access is limited to the last 24 hours. It cannot create reports."
-msgstr ""
+msgstr "Tu acceso se limita a las últimas 24 horas. Con este acceso no puedes crear informes."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "To make a report, select New report."
-msgstr ""
+msgstr "Para crear un informe, selecciona «Nuevo informe»."
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "No custom reports. <0/>"
-msgstr ""
+msgstr "No hay informes personalizados. <0/>"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Actions"
-msgstr ""
+msgstr "Acciones"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Last changed"
-msgstr ""
+msgstr "Último cambio"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 msgid "Blocks"
-msgstr ""
+msgstr "Bloques"
 
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Delete this custom report?"
-msgstr ""
+msgstr "¿Eliminar este informe personalizado?"
 
 #. 0: pendingDelete?.name
 #. 0: report?.name
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne will delete \"{0}\" for every member of this account. Your data stays."
-msgstr ""
+msgstr "Nocturne eliminará «{0}» para todos los miembros de esta cuenta. Tus datos se conservarán."
 
 #: src/lib/components/reports/custom/CustomReportQuery.svelte
 msgid "Could not run the report. Try again."
-msgstr ""
+msgstr "No se ha podido generar el informe. Inténtalo de nuevo."
 
 #: src/lib/components/reports/custom/CustomReportQuery.svelte
 msgid "<0/> Nocturne is running the report."
-msgstr ""
+msgstr "<0/> Nocturne está generando el informe."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "Only a member who is signed in can download an image."
-msgstr ""
+msgstr "Solo los miembros que hayan iniciado sesión pueden descargar imágenes."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "You made many images in the last minute. Wait a minute and try again."
-msgstr ""
+msgstr "Has generado muchas imágenes en el último minuto. Espera un minuto e inténtalo de nuevo."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "This block has too much data for an image. Choose a shorter range."
-msgstr ""
+msgstr "Este bloque contiene demasiados datos para generar una imagen. Elige un intervalo más corto."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "The image renderer is busy. Try again."
-msgstr ""
+msgstr "El generador de imágenes está ocupado. Inténtalo de nuevo."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "This block cannot be made into an image."
-msgstr ""
+msgstr "No se puede convertir este bloque en una imagen."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "The image could not be made."
-msgstr ""
+msgstr "No se ha podido generar la imagen."
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "<0/> Open the matching report"
-msgstr ""
+msgstr "<0/> Abrir el informe correspondiente"
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "Making the image"
-msgstr ""
+msgstr "Generando la imagen"
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "Download PNG"
-msgstr ""
+msgstr "Descargar PNG"
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "The report data has a form that this page cannot show."
-msgstr ""
+msgstr "Esta página no puede mostrar los datos del informe en este formato."
 
 #: src/lib/components/reports/custom/SpecErrorList.svelte
 msgid "Show the technical details"
-msgstr ""
+msgstr "Mostrar los detalles técnicos"
 
 #: src/lib/components/reports/custom/SpecErrorList.svelte
 msgid "<0/> This report cannot run."
-msgstr ""
+msgstr "<0/> No se puede generar este informe."
 
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
 msgid "Full summary"
-msgstr ""
+msgstr "Resumen completo"
 
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
 msgid "Use the left and right arrow keys to read the values. Use the up and down arrow keys to go to a different axis. Press Escape to stop."
-msgstr ""
+msgstr "Usa las flechas izquierda y derecha para leer los valores. Usa las flechas arriba y abajo para cambiar de eje. Pulsa Escape para salir."
 
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Any food"
-msgstr ""
+msgstr "Cualquier alimento"
 
 #. 0: i + 1
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Cohort {0} foods"
-msgstr ""
+msgstr "Alimentos del grupo {0}"
 
 #. 0: i + 1
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Cohort {0} food category"
-msgstr ""
+msgstr "Categoría de alimentos del grupo {0}"
 
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Any category"
-msgstr ""
+msgstr "Cualquier categoría"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Food category"
-msgstr ""
+msgstr "Categoría de alimento"
 
 #. 0: i + 1; 1: label
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Cohort {0} {1}"
-msgstr ""
+msgstr "Grupo {0}: {1}"
 
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day. A food filter uses only meals with a food record. Meals with only carbs are not included, and the page shows how many there are."
-msgstr ""
+msgstr "Un evento se considera aislado si en su intervalo no hay otra comida, ningún bolus de corrección ni ninguna subida sin anunciar. Si el intervalo pasa de medianoche, por ejemplo de 22:00 a 02:00, continúa al día siguiente. El filtro de alimentos solo incluye comidas con algún alimento registrado. Las comidas que solo tienen hidratos de carbono registrados quedan fuera y la página indica cuántas son."
 
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 msgid "# meal with a food record"
 msgid_plural "# meals with a food record"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "# comida con algún alimento registrado"
+msgstr[1] "# comidas con algún alimento registrado"
 
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 msgid "# meal with only carbs not included because the food filter cannot apply to it"
 msgid_plural "# meals with only carbs not included because the food filter cannot apply to them"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Se ha excluido # comida con solo hidratos de carbono registrados porque no se le puede aplicar el filtro de alimentos"
+msgstr[1] "Se han excluido # comidas con solo hidratos de carbono registrados porque no se les puede aplicar el filtro de alimentos"
 
 #: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
 msgid "The range that you selected ends before the last hour. You can see only the last hour, so this page has no data for this range."
 msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this page has no data for this range."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "El intervalo que has seleccionado termina antes de la última hora. Tu acceso se limita a la última hora, así que esta página no tiene datos para ese intervalo."
+msgstr[1] "El intervalo que has seleccionado termina antes de las últimas # horas. Tu acceso se limita a las últimas # horas, así que esta página no tiene datos para ese intervalo."
 
 #: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
 msgid "This page uses only the data from the last hour in each range that you select."
 msgid_plural "This page uses only the data from the last # hours in each range that you select."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Esta página solo usa los datos de la última hora de cada intervalo que selecciones."
+msgstr[1] "Esta página solo usa los datos de las últimas # horas de cada intervalo que selecciones."
 
 #. 0: food.map(ignoredFilterLabel).join(", ")
 #: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
 msgid "Your access does not include food data, so these cohorts show no events: {0}."
-msgstr ""
+msgstr "Tu acceso no incluye los datos de alimentos, así que estos grupos no muestran ningún evento: {0}."
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Low starts"
-msgstr ""
+msgstr "Inicios de bajada"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "High starts"
-msgstr ""
+msgstr "Inicios de episodios de glucemia alta"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Sleep starts"
-msgstr ""
+msgstr "Inicios del sueño"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Wake-ups"
-msgstr ""
+msgstr "Despertares"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Low treatments"
-msgstr ""
+msgstr "Tratamientos de bajadas"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Low start"
-msgstr ""
+msgstr "Inicio de una bajada"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "High start"
-msgstr ""
+msgstr "Inicio de un episodio de glucemia alta"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Sleep start"
-msgstr ""
+msgstr "Inicio del sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Wake-up"
-msgstr ""
+msgstr "Despertar"
 
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Low treatment"
-msgstr ""
+msgstr "Tratamiento de una bajada"
 
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 msgid "Needs access to food"
-msgstr ""
+msgstr "Requiere acceso a los datos de alimentos"
 
 #. 0: foodIds[1]
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 msgid "Cohort {0}, foods"
-msgstr ""
+msgstr "Grupo {0}, alimentos"
 
 #. 0: foodCategory[1]
 #: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 msgid "Cohort {0}, food category"
-msgstr ""
+msgstr "Grupo {0}, categoría de alimentos"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Could not load the custom report"
-msgstr ""
+msgstr "No se ha podido cargar el informe personalizado"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 #: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Could not load what a report can show"
-msgstr ""
+msgstr "No se ha podido cargar la lista de opciones disponibles para el informe"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne renamed the report."
-msgstr ""
+msgstr "Nocturne ha cambiado el nombre del informe."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Could not rename the report. Try again."
-msgstr ""
+msgstr "No se ha podido cambiar el nombre del informe. Inténtalo de nuevo."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne copied the link."
-msgstr ""
+msgstr "Nocturne ha copiado el enlace."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Could not copy the link. Copy it from the address bar."
-msgstr ""
+msgstr "No se ha podido copiar el enlace. Cópialo desde la barra de direcciones."
 
 #. 0: formatMediumDateTime(renameConflict.changedAt); 1: renameConflict.name
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "The report was saved again on {0}. Its name is now \"{1}\"."
-msgstr ""
+msgstr "El informe se volvió a guardar el {0}. Ahora se llama «{1}»."
 
 #. 0: renameConflict.name
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Its name is now \"{0}\"."
-msgstr ""
+msgstr "Ahora se llama «{0}»."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Rename it"
-msgstr ""
+msgstr "<0/> Cambiar el nombre"
 
 #. 0: renameConflict.name
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Keep the name \"{0}\""
-msgstr ""
+msgstr "<0/> Conservar el nombre «{0}»"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne did not rename the report. It changed somewhere else after you opened it."
-msgstr ""
+msgstr "Nocturne no ha cambiado el nombre del informe porque se modificó desde otro sitio después de que lo abrieras."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Range to show"
-msgstr ""
+msgstr "Intervalo que se mostrará"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Dates to show"
-msgstr ""
+msgstr "Fechas que se mostrarán"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Choose dates"
-msgstr ""
+msgstr "Elegir fechas"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Edit a copy"
-msgstr ""
+msgstr "<0/> Editar una copia"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "More actions"
-msgstr ""
+msgstr "Más acciones"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Copy link"
-msgstr ""
+msgstr "<0/> Copiar enlace"
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Nocturne could not read the patient's time zone, so it cannot show the dates you chose. The report shows its saved range."
-msgstr ""
+msgstr "Nocturne no ha podido leer la zona horaria del paciente y no puede mostrar las fechas que has elegido. El informe muestra el intervalo guardado."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Reading the patient's time zone for the dates you chose."
-msgstr ""
+msgstr "Consultando la zona horaria del paciente para las fechas que has elegido."
 
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Replace the name?"
-msgstr ""
+msgstr "¿Reemplazar el nombre?"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Replace"
-msgstr ""
+msgstr "Reemplazar"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "Do not replace"
-msgstr ""
+msgstr "No reemplazar"
 
 #. 0: name.trim(); 1: renameConflict?.name
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "The name \"{0}\" replaces the name \"{1}\" saved somewhere else. Nothing else in the report changes."
-msgstr ""
+msgstr "El nombre «{0}» sustituirá al nombre «{1}» que se guardó desde otro sitio. El resto del informe seguirá igual."
 
 #: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Could not load the ready-made reports"
-msgstr ""
+msgstr "No se han podido cargar los informes predefinidos"
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 #: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Nocturne saved the report."
-msgstr ""
+msgstr "Nocturne ha guardado el informe."
 
 #: src/routes/(authenticated)/reports/custom/new/+page.svelte
 msgid "Discard and start again"
-msgstr ""
+msgstr "Descartar y volver a empezar"
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "One against another"
-msgstr ""
+msgstr "Una variable frente a otra"
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 msgid "Along the axis:"
-msgstr ""
+msgstr "Eje horizontal:"
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 msgid "Up:"
-msgstr ""
+msgstr "Eje vertical:"
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 msgid "Select two signals: the first on the horizontal axis, the second on the vertical axis."
-msgstr ""
+msgstr "Selecciona dos variables: la primera para el eje horizontal y la segunda para el vertical."
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 msgid "Find the lag"
-msgstr ""
+msgstr "Buscar el desfase"
 
 #: src/lib/components/reports/custom/workspace/AgainstStrip.svelte
 msgid "Adds a second chart: how the two correlate when one is shifted earlier or later."
-msgstr ""
+msgstr "Añade un segundo gráfico que muestra cómo se correlacionan las dos variables al adelantar o retrasar una de ellas."
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Untitled figures"
-msgstr ""
+msgstr "Cifras sin título"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Untitled table"
-msgstr ""
+msgstr "Tabla sin título"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Untitled comparison"
-msgstr ""
+msgstr "Comparación sin título"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Range of this block"
-msgstr ""
+msgstr "Intervalo de este bloque"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 msgid "Figures from"
-msgstr ""
+msgstr "Cifras de"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Figures to show"
-msgstr ""
+msgstr "Cifras que se mostrarán"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 msgid "One row for"
-msgstr ""
+msgstr "Una fila por"
 
 #. 0: block.columns.length; 1: report.columns(block).length
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 msgid "<0/> Columns ({0} of {1})"
-msgstr ""
+msgstr "<0/> Columnas ({0} de {1})"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Columns to show"
-msgstr ""
+msgstr "Columnas que se mostrarán"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Compare"
-msgstr ""
+msgstr "Comparar"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/SinceCarbsEditor.svelte
 msgid "<0/> More"
-msgstr ""
+msgstr "<0/> Más"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Period A"
-msgstr ""
+msgstr "Periodo A"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Pick period A"
-msgstr ""
+msgstr "Elegir el periodo A"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Period B"
-msgstr ""
+msgstr "Periodo B"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Pick period B"
-msgstr ""
+msgstr "Elegir el periodo B"
 
 #: src/lib/components/reports/custom/workspace/BlockEditors.svelte
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Two periods of your own"
-msgstr ""
+msgstr "Dos periodos a elegir"
 
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "Untitled chart"
-msgstr ""
+msgstr "Gráfico sin título"
 
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Chart title"
-msgstr ""
+msgstr "Título del gráfico"
 
 #: src/lib/components/reports/custom/workspace/BlockTitleRange.svelte
 msgid "Range of this chart"
-msgstr ""
+msgstr "Intervalo de este gráfico"
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "Chart updated."
-msgstr ""
+msgstr "Gráfico actualizado."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "Figures updated."
-msgstr ""
+msgstr "Cifras actualizadas."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "Table updated."
-msgstr ""
+msgstr "Tabla actualizada."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "Comparison updated."
-msgstr ""
+msgstr "Comparación actualizada."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "The chart could not be shown."
-msgstr ""
+msgstr "No se ha podido mostrar el gráfico."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "The figures could not be shown."
-msgstr ""
+msgstr "No se han podido mostrar las cifras."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "The table could not be shown."
-msgstr ""
+msgstr "No se ha podido mostrar la tabla."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "The comparison could not be shown."
-msgstr ""
+msgstr "No se ha podido mostrar la comparación."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "The preview could not be made. Nocturne will try again when you make a change."
-msgstr ""
+msgstr "No se ha podido generar la vista previa. Nocturne lo volverá a intentar cuando hagas un cambio."
 
 #: src/lib/components/reports/custom/workspace/BlockPreview.svelte
 msgid "<0/> Checking the change"
-msgstr ""
+msgstr "<0/> Comprobando el cambio"
 
 #. 0: label
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Remove: {0}"
-msgstr ""
+msgstr "Quitar: {0}"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Before each event"
-msgstr ""
+msgstr "Antes de cada evento"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "After each event"
-msgstr ""
+msgstr "Después de cada evento"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Only events with nothing else near them"
-msgstr ""
+msgstr "Solo eventos sin otros eventos cercanos"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Only rises the loop answered with extra insulin"
-msgstr ""
+msgstr "Solo las subidas a las que el sistema de lazo cerrado respondió con insulina adicional"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Compared with"
-msgstr ""
+msgstr "En comparación con"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Pick the earlier period"
-msgstr ""
+msgstr "Elegir el periodo anterior"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Remove the earlier period"
-msgstr ""
+msgstr "Quitar el periodo anterior"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "<0/> Options"
-msgstr ""
+msgstr "<0/> Opciones"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Compare with an earlier period"
-msgstr ""
+msgstr "Comparar con un periodo anterior"
 
 #. 0: ws.comparisonReason
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Compare with an earlier period: {0}"
-msgstr ""
+msgstr "Comparar con un periodo anterior: {0}"
 
 #. 0: ws.profileName
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Time when {0} was not active"
-msgstr ""
+msgstr "Tiempo en que {0} no estuvo activo"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "<0/> Leave out"
-msgstr ""
+msgstr "<0/> Excluir"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Time when a profile was not active"
-msgstr ""
+msgstr "Tiempo en que un perfil no estuvo activo"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Only while this profile is active"
-msgstr ""
+msgstr "Solo mientras este perfil esté activo"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Use this profile"
-msgstr ""
+msgstr "Usar este perfil"
 
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "Leave out"
-msgstr ""
+msgstr "Excluir"
 
 #. 0: ws.leaveOutMisses.map((id) => signalLabel(id)).join(", ")
 #: src/lib/components/reports/custom/workspace/ChartOptions.svelte
 msgid "{0}: all time is shown. These signals cannot leave time out."
-msgstr ""
+msgstr "{0}: se muestra todo el intervalo. Estas variables no permiten excluir franjas de tiempo."
 
 #. 0: days.kept; 1: days.total
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "{0} of {1} days."
-msgstr ""
+msgstr "{0} de {1} días."
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "One day is only partly in the range and is in neither group."
-msgstr ""
+msgstr "Un día solo está parcialmente dentro del intervalo y no se incluye en ningún grupo."
 
 #. 0: days.partial
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "{0} days are only partly in the range and are in neither group."
-msgstr ""
+msgstr "Hay {0} días que solo están parcialmente dentro del intervalo y no se incluyen en ningún grupo."
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "One day is before the history your access reads."
-msgstr ""
+msgstr "Hay un día anterior al historial al que tienes acceso."
 
 #. 0: days.undecided
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "{0} days are before the history your access reads."
-msgstr ""
+msgstr "Hay {0} días anteriores al historial al que tienes acceso."
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "Weekday"
-msgstr ""
+msgstr "Día de la semana"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "Every day alike"
-msgstr ""
+msgstr "Todos los días por igual"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "What happened"
-msgstr ""
+msgstr "Qué ocurrió"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "Group days by"
-msgstr ""
+msgstr "Agrupar los días por"
 
 #. 0: modeReason
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "What happened: {0}"
-msgstr ""
+msgstr "Qué ocurrió: {0}"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "Groups of days"
-msgstr ""
+msgstr "Grupos de días"
 
 #. 0: GROUP_LETTERS[g]
 #. 0: GROUP_LETTERS[g]
@@ -43769,856 +43769,856 @@ msgstr ""
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Group {0}"
-msgstr ""
+msgstr "Grupo {0}"
 
 #. 0: GROUP_LETTERS[g]; 1: weekdaysText(days, ws.vocab.weekdays)
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "Weekdays of group {0}: {1}"
-msgstr ""
+msgstr "Días de la semana del grupo {0}: {1}"
 
 #. 0: GROUP_LETTERS[g]
 #. 0: LETTERS[i]
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Weekdays of group {0}"
-msgstr ""
+msgstr "Días de la semana del grupo {0}"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 msgid "What the days had"
-msgstr ""
+msgstr "Qué se registró esos días"
 
 #: src/lib/components/reports/custom/workspace/DayGroups.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days by total carbs"
-msgstr ""
+msgstr "Días según el total de hidratos de carbono"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Nocturne did not save your changes. This report changed somewhere else after you opened it."
-msgstr ""
+msgstr "Nocturne no ha guardado tus cambios. El informe se modificó desde otro sitio después de que lo abrieras."
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "This report changed somewhere else after you made your unsaved changes."
-msgstr ""
+msgstr "El informe se ha modificado desde otro sitio después de que hicieras tus cambios sin guardar."
 
 #. 0: when
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "The report was saved again on {0}."
-msgstr ""
+msgstr "El informe se volvió a guardar el {0}."
 
 #. 0: theirs.name; 1: mine.name
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "The saved name is \"{0}\". Your name is \"{1}\"."
-msgstr ""
+msgstr "El nombre guardado es «{0}». El tuyo es «{1}»."
 
 #. 0: theirs.title || "(no title)"; 1: mine.title || "(no title)"
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "The saved title is \"{0}\". Your title is \"{1}\"."
-msgstr ""
+msgstr "El título guardado es «{0}». El tuyo es «{1}»."
 
 #. 0: onlyTheirs.join(", ")
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Only the saved report has these blocks: {0}."
-msgstr ""
+msgstr "Estos bloques solo están en el informe guardado: {0}."
 
 #. 0: onlyMine.join(", ")
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Only your changes have these blocks: {0}."
-msgstr ""
+msgstr "Estos bloques solo están en tus cambios: {0}."
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "The blocks have the same names, but their settings are different."
-msgstr ""
+msgstr "Los bloques tienen los mismos nombres, pero sus ajustes son distintos."
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Your changes stay on this page. If you save them, they replace the other changes. If you discard your changes, the report opens as it is now."
-msgstr ""
+msgstr "Tus cambios siguen en esta página. Si los guardas, sustituirán el resto de los cambios. Si los descartas, se abrirá la versión actual del informe."
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "If you keep your changes and save them, they replace the other changes. If you discard your changes, the report opens as it is now."
-msgstr ""
+msgstr "Si conservas y guardas tus cambios, sustituirán el resto de los cambios. Si los descartas, se abrirá la versión actual del informe."
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "<0/> Save my changes"
-msgstr ""
+msgstr "<0/> Guardar mis cambios"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "<0/> Keep my changes"
-msgstr ""
+msgstr "<0/> Conservar mis cambios"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "<0/> Discard my changes"
-msgstr ""
+msgstr "<0/> Descartar mis cambios"
 
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Replace the other changes?"
-msgstr ""
+msgstr "¿Reemplazar el resto de los cambios?"
 
 #. 0: theirs.name; 1: when
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Your changes replace the version of \"{0}\" saved on {1}. The changes in that version are lost."
-msgstr ""
+msgstr "Tus cambios sustituirán la versión de «{0}» que se guardó el {1}. Se perderán los cambios de esa versión."
 
 #. 0: theirs.name
 #: src/lib/components/reports/custom/workspace/DraftConflict.svelte
 msgid "Your changes replace the saved version of \"{0}\". The changes in that version are lost."
-msgstr ""
+msgstr "Tus cambios sustituirán la versión guardada de «{0}». Se perderán los cambios de esa versión."
 
 #: src/lib/components/reports/custom/workspace/DraftNotice.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Discard changes"
-msgstr ""
+msgstr "Descartar cambios"
 
 #: src/lib/components/reports/custom/workspace/DraftNotice.svelte
 msgid "Restored your unsaved changes."
-msgstr ""
+msgstr "Se han recuperado tus cambios sin guardar."
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "What the chart shows"
-msgstr ""
+msgstr "Qué muestra el gráfico"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "Up"
-msgstr ""
+msgstr "Eje vertical"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "Along"
-msgstr ""
+msgstr "Eje horizontal"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "Line through the points"
-msgstr ""
+msgstr "Línea de ajuste"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "No line along the time of day"
-msgstr ""
+msgstr "Sin línea por hora del día"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "Figure"
-msgstr ""
+msgstr "Cifra"
 
 #: src/lib/components/reports/custom/workspace/EventViewRail.svelte
 msgid "Count the events"
-msgstr ""
+msgstr "Contar los eventos"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Weekdays"
-msgstr ""
+msgstr "Días de la semana"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Meal size"
-msgstr ""
+msgstr "Cantidad de hidratos de carbono de la comida"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 #: src/lib/components/reports/custom/workspace/SinceCarbsEditor.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time since the last carbs"
-msgstr ""
+msgstr "Tiempo desde la última ingesta de hidratos de carbono"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose at the event"
-msgstr ""
+msgstr "Glucemia en el momento del evento"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Insulin on board at the event"
-msgstr ""
+msgstr "Insulina activa en el momento del evento"
 
 #. 0: SCOPE_WORDS[omitted.scope] ?? omitted.scope
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Not shown: your access does not include {0}."
-msgstr ""
+msgstr "No se muestra porque tu acceso no incluye {0}."
 
 #. 0: LETTERS[omitted.group - 1] ?? omitted.group
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Not shown: group {0} is not shown."
-msgstr ""
+msgstr "No se muestra porque el grupo {0} está oculto."
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Pick a food"
-msgstr ""
+msgstr "Elegir un alimento"
 
 #. 0: moment.foodCategory.trim()
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Category: {0}"
-msgstr ""
+msgstr "Categoría: {0}"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Pick a category"
-msgstr ""
+msgstr "Elegir una categoría"
 
 #. 0: g.min; 1: g.max
 #. 0: g.min; 1: g.max
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} to {1} g"
-msgstr ""
+msgstr "De {0} a {1} g"
 
 #. 0: g.min
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "At least {0} g"
-msgstr ""
+msgstr "Al menos {0} g"
 
 #. 0: g.max
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "At most {0} g"
-msgstr ""
+msgstr "Como máximo {0} g"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Any size"
-msgstr ""
+msgstr "Cualquier cantidad"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Time since the last carbs: not set"
-msgstr ""
+msgstr "Tiempo desde la última ingesta de hidratos de carbono: sin especificar"
 
 #. 0: text
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Glucose {0}"
-msgstr ""
+msgstr "Glucemia {0}"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Glucose at the event: not set"
-msgstr ""
+msgstr "Glucemia en el momento del evento: sin especificar"
 
 #. 0: text
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Insulin on board {0}"
-msgstr ""
+msgstr "Insulina activa {0}"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Insulin on board at the event: not set"
-msgstr ""
+msgstr "Insulina activa en el momento del evento: sin especificar"
 
 #. 0: anchorPhrase(moment.what)
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "All other {0}"
-msgstr ""
+msgstr "Resto de {0}"
 
 #. 0: anchorLabel(moment.what)
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Events: {0}"
-msgstr ""
+msgstr "Eventos: {0}"
 
 #. 0: label( kind ).toLowerCase(); 1: LETTERS[i]
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Remove {0} from group {1}"
-msgstr ""
+msgstr "Quitar {0} del grupo {1}"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "<0/> Narrow"
-msgstr ""
+msgstr "<0/> Acotar"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "At the event"
-msgstr ""
+msgstr "En el momento del evento"
 
 #. 0: LETTERS[i]
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "Remove group {0}"
-msgstr ""
+msgstr "Quitar el grupo {0}"
 
 #. 0: anchorPhrase(moment.what)
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "<0/> How Nocturne finds {0}"
-msgstr ""
+msgstr "<0/> Cómo identifica Nocturne {0}"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "<0/> Compare with another group"
-msgstr ""
+msgstr "<0/> Comparar con otro grupo"
 
 #: src/lib/components/reports/custom/workspace/EventGroups.svelte
 msgid "<0/> Compare with everything else"
-msgstr ""
+msgstr "<0/> Comparar con todo lo demás"
 
 #: src/lib/components/reports/custom/workspace/FoodCategoryInput.svelte
 msgid "Your access does not include food data, so no categories are offered."
-msgstr ""
+msgstr "Tu acceso no incluye datos de alimentos, así que no hay categorías disponibles."
 
 #: src/lib/components/reports/custom/workspace/FoodCategoryInput.svelte
 msgid "Nocturne could not load the food categories. You can type a category."
-msgstr ""
+msgstr "Nocturne no ha podido cargar las categorías de alimentos. Puedes escribir una categoría."
 
 #: src/lib/components/reports/custom/workspace/FoodNarrowing.svelte
 msgid "A food"
-msgstr ""
+msgstr "Un alimento"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "Foods picked"
-msgstr ""
+msgstr "Alimentos seleccionados"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "A food that no longer exists"
-msgstr ""
+msgstr "Un alimento que ya no existe"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "A food you cannot read"
-msgstr ""
+msgstr "Un alimento cuyos datos no puedes consultar"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "A food that Nocturne could not load"
-msgstr ""
+msgstr "Un alimento que Nocturne no ha podido cargar"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "Find a food"
-msgstr ""
+msgstr "Buscar un alimento"
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "Your access does not include food data, so you cannot pick foods."
-msgstr ""
+msgstr "Tu acceso no incluye datos de alimentos, así que no puedes seleccionar alimentos."
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "The food search did not work. Try again."
-msgstr ""
+msgstr "No se ha podido realizar la búsqueda de alimentos. Inténtalo de nuevo."
 
 #. 0: find
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "No food matches \"{0}\"."
-msgstr ""
+msgstr "No hay alimentos que coincidan con «{0}»."
 
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 msgid "Foods found"
-msgstr ""
+msgstr "Alimentos encontrados"
 
 #. 0: layer.name
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Remove {0} from the chart"
-msgstr ""
+msgstr "Quitar {0} del gráfico"
 
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 #: src/lib/components/reports/custom/workspace/SignalRail.svelte
 msgid "<0/> Add a signal"
-msgstr ""
+msgstr "<0/> Añadir una variable"
 
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 #: src/lib/components/reports/custom/workspace/SignalRail.svelte
 msgid "On this chart"
-msgstr ""
+msgstr "En este gráfico"
 
 #: src/lib/components/reports/custom/workspace/GivenBlockView.svelte
 msgid "Title and range"
-msgstr ""
+msgstr "Título e intervalo"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "No signal on this chart has numbers to calculate from."
-msgstr ""
+msgstr "Ninguna variable de este gráfico tiene valores numéricos para hacer el cálculo."
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Same as the chart"
-msgstr ""
+msgstr "Igual que el gráfico"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Name in the legend"
-msgstr ""
+msgstr "Nombre en la leyenda"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Draw as"
-msgstr ""
+msgstr "Representar como"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Own scale"
-msgstr ""
+msgstr "Escala propia"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Kind of calculated line"
-msgstr ""
+msgstr "Tipo de línea calculada"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "First signal"
-msgstr ""
+msgstr "Primera variable"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Choose a signal"
-msgstr ""
+msgstr "Elegir una variable"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Second signal"
-msgstr ""
+msgstr "Segunda variable"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Over"
-msgstr ""
+msgstr "Durante"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "Add a calculated line"
-msgstr ""
+msgstr "Añadir una línea calculada"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 msgid "<0/> Add the line"
-msgstr ""
+msgstr "<0/> Añadir la línea"
 
 #. 0: lowest; 1: highest; 2: unit
 #: src/lib/components/reports/custom/workspace/MealSizeEditor.svelte
 msgid "{0} to {1} {2}. Leave a field empty for no limit."
-msgstr ""
+msgstr "De {0} a {1} {2}. Deja un campo en blanco para que ese límite no se aplique."
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "This report has too many blocks and groups to save. Remove a block first."
-msgstr ""
+msgstr "Este informe tiene demasiados bloques y grupos para poder guardarlo. Quita primero un bloque."
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "Could not save the copy. Try again."
-msgstr ""
+msgstr "No se ha podido guardar la copia. Inténtalo de nuevo."
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "Could not save the report. Try again."
-msgstr ""
+msgstr "No se ha podido guardar el informe. Inténtalo de nuevo."
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "<0/> Save as"
-msgstr ""
+msgstr "<0/> Guardar como"
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "Name of the copy"
-msgstr ""
+msgstr "Nombre de la copia"
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "<0/> Save the copy"
-msgstr ""
+msgstr "<0/> Guardar la copia"
 
 #: src/lib/components/reports/custom/workspace/SaveControl.svelte
 msgid "<0/> Save the report"
-msgstr ""
+msgstr "<0/> Guardar el informe"
 
 #. 0: name
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Change \"{0}\" first. The report engine cannot run its settings."
-msgstr ""
+msgstr "Modifica «{0}» primero. El generador de informes no admite sus ajustes."
 
 #. 0: name
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Nocturne removed \"{0}\"."
-msgstr ""
+msgstr "Nocturne ha quitado «{0}»."
 
 #. 0: KIND_NAMES[shownKind(block)].toLowerCase()
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Nocturne removed the {0}."
-msgstr ""
+msgstr "Nocturne ha quitado {0}."
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Chart"
-msgstr ""
+msgstr "Gráfico"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Figures"
-msgstr ""
+msgstr "Cifras"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Table"
-msgstr ""
+msgstr "Tabla"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Add a chart"
-msgstr ""
+msgstr "Añadir un gráfico"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Add figures"
-msgstr ""
+msgstr "Añadir cifras"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Add a table"
-msgstr ""
+msgstr "Añadir una tabla"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Add a comparison"
-msgstr ""
+msgstr "Añadir una comparación"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Report title"
-msgstr ""
+msgstr "Título del informe"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Untitled report"
-msgstr ""
+msgstr "Informe sin título"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Range of the report"
-msgstr ""
+msgstr "Intervalo del informe"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "<0/> Start again"
-msgstr ""
+msgstr "<0/> Volver a empezar"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Show fewer figures"
-msgstr ""
+msgstr "Mostrar menos cifras"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Show all figures"
-msgstr ""
+msgstr "Mostrar todas las cifras"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Start again?"
-msgstr ""
+msgstr "¿Volver a empezar?"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "Start again"
-msgstr ""
+msgstr "Volver a empezar"
 
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 msgid "This report is not saved. If you start again, Nocturne discards it."
-msgstr ""
+msgstr "Este informe está sin guardar. Si vuelves a empezar, Nocturne lo descartará."
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Add a signal first."
-msgstr ""
+msgstr "Añade primero una variable."
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "Nocturne changed the chart signal by signal."
-msgstr ""
+msgstr "Nocturne ha activado la edición por variable en el gráfico."
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "To draw each signal in a different way, give it its own scale, or add a calculated line from any two signals, change the chart signal by signal."
-msgstr ""
+msgstr "Edita el gráfico por variable para representar cada una de forma distinta, darle su propia escala o añadir una línea calculada a partir de dos variables."
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "<0/> Change signal by signal"
-msgstr ""
+msgstr "<0/> Editar por variable"
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "Change this chart signal by signal?"
-msgstr ""
+msgstr "¿Editar este gráfico por variable?"
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "Change signal by signal"
-msgstr ""
+msgstr "Editar por variable"
 
 #: src/lib/components/reports/custom/workspace/SignalChartAdvanced.svelte
 msgid "The chart keeps everything that it shows. After this, you cannot change its view or its groups. To go back, select Undo on the message that follows."
-msgstr ""
+msgstr "El gráfico conserva todo lo que muestra. Después, no podrás cambiar la vista ni los grupos. Para volver atrás, selecciona «Deshacer» en el mensaje que aparece a continuación."
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Search every signal in every view."
-msgstr ""
+msgstr "Buscar en todas las variables de todas las vistas."
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Search the signals this chart can show."
-msgstr ""
+msgstr "Buscar entre las variables que puede mostrar este gráfico."
 
 #. 0: signalLabel(e.id)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "{0} is on the chart."
-msgstr ""
+msgstr "{0} aparece en el gráfico."
 
 #. 0: signalLabel(e.id)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "{0} is off the chart."
-msgstr ""
+msgstr "{0} no aparece en el gráfico."
 
 #. 0: daysText(e.upTo)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Up to {0}"
-msgstr ""
+msgstr "Hasta {0}"
 
 #. 0: lenses.map((l) => lensLabel(l)).join(", ")
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Views: {0}"
-msgstr ""
+msgstr "Vistas: {0}"
 
 #. 0: signalLabel(id)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Star {0}"
-msgstr ""
+msgstr "Marcar {0} como favorita"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Add as a new chart"
-msgstr ""
+msgstr "Añadir como gráfico nuevo"
 
 #. 0: daysText(source.placeInRange(id, e.otherLenses[0]) ?? 0)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "The view shows at most {0} with this signal."
-msgstr ""
+msgstr "Con esta variable, la vista muestra como máximo {0}."
 
 #. 0: lensLabel(source.lens)
 #. 0: lensLabel(d.lens)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} cannot show this signal."
-msgstr ""
+msgstr "{0} no puede mostrar esta variable."
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Add a signal"
-msgstr ""
+msgstr "Añadir una variable"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Name, abbreviation or kind of data"
-msgstr ""
+msgstr "Nombre, abreviatura o tipo de datos"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Search signals"
-msgstr ""
+msgstr "Buscar variables"
 
 #. 0: found.length
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "{0} signals found."
-msgstr ""
+msgstr "Variables encontradas: {0}."
 
 #. 0: need.signals.length
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "{0} signals need"
-msgstr ""
+msgstr "Requisitos de {0} variables"
 
 #. 0: rangeLabel(need.preset.id)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Use {0}"
-msgstr ""
+msgstr "Usar {0}"
 
 #. 0: need.signals.length === 1 ? "1 signal needs" \\: `${need.signals.length} signals need`; 1: daysText(need.hours)
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "{0} {1} or less."
-msgstr ""
+msgstr "Como máximo {0} {1}."
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "No signal has that name. Try a different word."
-msgstr ""
+msgstr "Ninguna variable tiene ese nombre. Prueba con otra palabra."
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Results"
-msgstr ""
+msgstr "Resultados"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Not in your access"
-msgstr ""
+msgstr "Fuera de tu acceso"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Starred"
-msgstr ""
+msgstr "Favoritas"
 
 #: src/lib/components/reports/custom/workspace/SignalCatalogue.svelte
 msgid "Recently used"
-msgstr ""
+msgstr "Usadas recientemente"
 
 #. 0: signalLabel(id)
 #. 0: signalLabel(id)
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/SignalRail.svelte
 msgid "Nocturne removed {0} from the chart."
-msgstr ""
+msgstr "Nocturne ha quitado {0} del gráfico."
 
 #: src/lib/components/reports/custom/workspace/SignalRail.svelte
 msgid "No signals yet."
-msgstr ""
+msgstr "Aún no hay variables."
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Line"
-msgstr ""
+msgstr "Línea"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Area"
-msgstr ""
+msgstr "Área"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Bars"
-msgstr ""
+msgstr "Barras"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Points"
-msgstr ""
+msgstr "Puntos"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Signals"
-msgstr ""
+msgstr "Variables"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Own row"
-msgstr ""
+msgstr "Fila propia"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Nocturne removed the line from the chart."
-msgstr ""
+msgstr "Nocturne ha quitado la línea del gráfico."
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Could not put the line back. The chart changed after you removed it. Add the line again."
-msgstr ""
+msgstr "No se ha podido restaurar la línea porque el gráfico cambió después de quitarla. Vuelve a añadirla."
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Remove from chart"
-msgstr ""
+msgstr "Quitar del gráfico"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Combined"
-msgstr ""
+msgstr "Combinadas"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Smooth"
-msgstr ""
+msgstr "Suavizar"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Trend line"
-msgstr ""
+msgstr "Línea de tendencia"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "From the start value"
-msgstr ""
+msgstr "Desde el valor inicial"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Mean and standard deviation"
-msgstr ""
+msgstr "Media y desviación estándar"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "95% confidence interval of the trend"
-msgstr ""
+msgstr "Intervalo de confianza del 95 % de la tendencia"
 
 #. 0: lowerFirst(signalLabel(other))
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Subtract {0}"
-msgstr ""
+msgstr "Restar {0}"
 
 #. 0: lowerFirst(signalLabel(other))
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Divide by {0}"
-msgstr ""
+msgstr "Dividir entre {0}"
 
 #: src/lib/components/reports/custom/workspace/SignalChips.svelte
 msgid "Combine with"
-msgstr ""
+msgstr "Combinar con"
 
 #: src/lib/components/reports/custom/workspace/SinceCarbsEditor.svelte
 msgid "Minutes from the last carbs to the event"
-msgstr ""
+msgstr "Minutos desde la última ingesta de hidratos de carbono hasta el evento"
 
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "Start with a question"
-msgstr ""
+msgstr "Empezar con una pregunta"
 
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "Choose a question to start from. You can change everything in it after."
-msgstr ""
+msgstr "Elige una pregunta como punto de partida. Luego podrás cambiarlo todo."
 
 #. 0: all.length - STARTERS_SHOWN
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "<0/> More questions ({0})"
-msgstr ""
+msgstr "<0/> Más preguntas ({0})"
 
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "Ready-made reports"
-msgstr ""
+msgstr "Informes predefinidos"
 
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "Blank report"
-msgstr ""
+msgstr "Informe en blanco"
 
 #: src/lib/components/reports/custom/workspace/StarterList.svelte
 msgid "A report with one empty chart. Select the signals that you want."
-msgstr ""
+msgstr "Un informe con un gráfico vacío. Selecciona las variables que quieras mostrar."
 
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "Morning"
-msgstr ""
+msgstr "Mañana"
 
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "Afternoon"
-msgstr ""
+msgstr "Tarde"
 
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "Evening"
-msgstr ""
+msgstr "Noche"
 
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "Full day"
-msgstr ""
+msgstr "Día completo"
 
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "End"
-msgstr ""
+msgstr "Fin"
 
 #. 0: minuteLabel(from); 1: minuteLabel(end)
 #: src/lib/components/reports/custom/workspace/TimeOfDayEditor.svelte
 msgid "{0} to {1}, past midnight"
-msgstr ""
+msgstr "De {0} a {1}, pasada la medianoche"
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 msgid "Leave without saving?"
-msgstr ""
+msgstr "¿Salir sin guardar?"
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 msgid "Leave"
-msgstr ""
+msgstr "Salir"
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Stay"
-msgstr ""
+msgstr "Quedarse"
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 msgid "Your changes are not saved. Nocturne keeps unsaved changes in the browser only for a signed-in member, so you lose them when you leave."
-msgstr ""
+msgstr "Tus cambios están sin guardar. Nocturne solo conserva los cambios en el navegador si has iniciado sesión. Si sales, los perderás."
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 msgid "Your changes are not saved. This browser keeps them, and the report opens with them when you come back."
-msgstr ""
+msgstr "Tus cambios están sin guardar. El navegador los conserva y, cuando vuelvas, el informe se abrirá con ellos."
 
 #: src/lib/components/reports/custom/workspace/UnsavedGuard.svelte
 msgid "Your changes are not saved. This browser could not keep them, so you lose them when you leave."
-msgstr ""
+msgstr "Tus cambios están sin guardar. El navegador no ha podido conservarlos. Si sales, los perderás."
 
 #. 0: untrack(() => ws.captionText())
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "Chart updated. {0}."
-msgstr ""
+msgstr "Gráfico actualizado. {0}."
 
 #. 0: ws.shown.length + ws.againstPair.length
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "Signals ({0} on the chart)"
-msgstr ""
+msgstr "Variables ({0} en el gráfico)"
 
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "How time is shown"
-msgstr ""
+msgstr "Cómo se muestra el tiempo"
 
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "The earlier period was removed. This view shows the events of the range only."
-msgstr ""
+msgstr "Se ha quitado el periodo anterior. Esta vista solo muestra los eventos del intervalo."
 
 #. 0: ws.optionsSummary
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "Options: {0}"
-msgstr ""
+msgstr "Opciones: {0}"
 
 #. 0: ws.title.trim() || "Untitled chart"; 1: lowerFirst(report.blockRanges(block).find((o) => o.id === report.blockRangeId(block))?.label ?? "")
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
 msgid "Title and range: {0}, {1}"
-msgstr ""
+msgstr "Título e intervalo: {0}, {1}"
 
 #. 0: a
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Calculated from {0}"
-msgstr ""
+msgstr "Calculada a partir de {0}"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Calculated signal"
-msgstr ""
+msgstr "Variable calculada"
 
 #. 0: a; 1: b
 #. 0: a; 1: b
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} minus {1}"
-msgstr ""
+msgstr "{0} menos {1}"
 
 #. 0: a; 1: b
 #. 0: a; 1: b
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} divided by {1}"
-msgstr ""
+msgstr "{0} entre {1}"
 
 #. 0: b; 1: a
 #. 0: this.dates(block.a); 1: this.dates(block.b)
@@ -44627,124 +44627,124 @@ msgstr ""
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} against {1}"
-msgstr ""
+msgstr "{0} frente a {1}"
 
 #. 0: a; 1: b
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "How {0} and {1} move together when one is shifted"
-msgstr ""
+msgstr "Cómo se relacionan {0} y {1} al desplazar una en el tiempo"
 
 #. 0: a
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Rolling average of {0}"
-msgstr ""
+msgstr "Media móvil de {0}"
 
 #. 0: a; 1: window
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Rolling average of {0} over {1}"
-msgstr ""
+msgstr "Media móvil de {0} durante {1}"
 
 #. 0: a
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Trend of {0}"
-msgstr ""
+msgstr "Tendencia de {0}"
 
 #. 0: a
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Average and spread of {0}"
-msgstr ""
+msgstr "Media y dispersión de {0}"
 
 #. 0: a; 1: window
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Average and spread of {0} over {1}"
-msgstr ""
+msgstr "Media y dispersión de {0} durante {1}"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Difference of two signals"
-msgstr ""
+msgstr "Diferencia entre dos variables"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Ratio of two signals"
-msgstr ""
+msgstr "Cociente entre dos variables"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Rolling average"
-msgstr ""
+msgstr "Media móvil"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Average and spread"
-msgstr ""
+msgstr "Media y dispersión"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "One signal against another"
-msgstr ""
+msgstr "Una variable frente a otra"
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "How two signals move together when one is shifted"
-msgstr ""
+msgstr "Cómo se relacionan dos variables al desplazar una en el tiempo"
 
 #. 0: maxTracks
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "A chart has at most {0} scales. Give another signal a shared scale first."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} escalas. Primero asigna una escala compartida a otra variable."
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "No other signal is on this chart to share a scale with."
-msgstr ""
+msgstr "No hay otra variable con la que compartir escala en este gráfico."
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "The signal next to it has another horizontal axis, so they cannot share a scale."
-msgstr ""
+msgstr "La variable de al lado tiene otro eje horizontal, así que no pueden compartir la escala."
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "A chart keeps at least one signal. To remove the chart, remove the block."
-msgstr ""
+msgstr "El gráfico conserva al menos una variable. Para quitar el gráfico, quita el bloque."
 
 #: src/lib/components/reports/custom/workspace/given.svelte.ts
 msgid "Two periods side by side"
-msgstr ""
+msgstr "Dos periodos en paralelo"
 
 #. 0: c.maxPanels
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A report has at most {0} parts. The lag chart is a part of its own."
-msgstr ""
+msgstr "Un informe admite como máximo {0} partes. El gráfico de desfase cuenta como una parte independiente."
 
 #. 0: c.maxPanels
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A report has at most {0} parts."
-msgstr ""
+msgstr "Un informe admite como máximo {0} partes."
 
 #. 0: c.maxReads
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A report reads at most {0} sets of data. Remove a block or a signal first."
-msgstr ""
+msgstr "Un informe admite como máximo {0} conjuntos de datos. Quita primero un bloque o una variable."
 
 #. 0: maxComparisons
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A report has at most {0} comparisons."
-msgstr ""
+msgstr "Un informe admite como máximo {0} comparaciones."
 
 #. 0: upperFirst(sourceLabel(source)); 1: days; 2: rangeText(hours, this.#vocab.rangePresets).replace(/^over /, "")
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "{0} covers at most {1}, so this block shows {2}."
-msgstr ""
+msgstr "{0} abarca como máximo {1}, así que este bloque muestra {2}."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "You cannot read the data for figures."
-msgstr ""
+msgstr "No tienes acceso a los datos necesarios para mostrar cifras."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "You cannot read the data for a table."
-msgstr ""
+msgstr "No tienes acceso a los datos necesarios para mostrar una tabla."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "You cannot read the data for a comparison."
-msgstr ""
+msgstr "No tienes acceso a los datos necesarios para mostrar una comparación."
 
 #. 0: upperFirst(signalLabel(id)); 1: daysText(limit); 2: rangeText(own, this.#vocab.rangePresets).replace(/^over /, "")
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "{0} covers at most {1}, so this chart shows {2}."
-msgstr ""
+msgstr "{0} abarca como máximo {1}, así que este gráfico muestra {2}."
 
 #. 0: upperFirst(this.blockTitle(block).trim() || this.caption(block)); 1: daysText(max)
 #. 0: this.sourceLabel(block); 1: daysText(dataset.maxRangeHours)
@@ -44753,1118 +44753,1118 @@ msgstr ""
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} shows at most {1}. Choose a shorter range first."
-msgstr ""
+msgstr "{0} muestra como máximo {1}. Elige primero un intervalo más corto."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Each block's own range"
-msgstr ""
+msgstr "El intervalo de cada bloque"
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Same as the report"
-msgstr ""
+msgstr "Igual que el informe"
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Keep at least one figure."
-msgstr ""
+msgstr "Conserva al menos una cifra."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Keep at least one column."
-msgstr ""
+msgstr "Conserva al menos una columna."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "No such column."
-msgstr ""
+msgstr "Esa columna no existe."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "No signals yet"
-msgstr ""
+msgstr "Aún no hay variables"
 
 #. 0: this.sourceLabel(block); 1: labels.length; 2: range
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "{0}: {1} figures {2}"
-msgstr ""
+msgstr "{0}: {1} cifras {2}"
 
 #. 0: upperFirst(texts.join(" against ")); 1: range
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "{0}, one row for each event {1}"
-msgstr ""
+msgstr "{0}, una fila por cada evento {1}"
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Choose two periods"
-msgstr ""
+msgstr "Elige dos periodos"
 
 #. 0: c.maxTracks
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A chart has at most {0} scales."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} escalas."
 
 #. 0: c.maxLayers
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "A chart has at most {0} signals."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} variables."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "It cannot be drawn that way."
-msgstr ""
+msgstr "No se puede representar de esa forma."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Choose the signal to calculate from first."
-msgstr ""
+msgstr "Elige primero la variable a partir de la cual se hará el cálculo."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Choose the second signal first."
-msgstr ""
+msgstr "Elige primero la segunda variable."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "This chart cannot show it."
-msgstr ""
+msgstr "Este gráfico no puede mostrarlo."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Could not undo. You changed or removed its blocks after the change."
-msgstr ""
+msgstr "No se ha podido deshacer el cambio porque después has modificado o quitado los bloques afectados."
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Add a signal or a block first."
-msgstr ""
+msgstr "Añade primero una variable o un bloque."
 
 #. 0: at + 1; 1: this.incomplete(this.state.blocks[at])
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Finish or remove block {0} first. {1}"
-msgstr ""
+msgstr "Termina o quita primero el bloque {0}. {1}"
 
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "Pick both periods."
-msgstr ""
+msgstr "Elige ambos periodos."
 
 #: src/lib/components/reports/custom/workspace/undo.svelte.ts
 msgid "Undo"
-msgstr ""
+msgstr "Deshacer"
 
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "As saved"
-msgstr ""
+msgstr "Tal como se guardó"
 
 #. 0: daysText(max)
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "This report shows at most {0}."
-msgstr ""
+msgstr "Este informe muestra como máximo {0}."
 
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "A block with a range of its own keeps it. Nothing in the saved report changes."
-msgstr ""
+msgstr "Los bloques con un intervalo propio lo conservan. El informe guardado sigue igual."
 
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "Nothing in the saved report changes."
-msgstr ""
+msgstr "El informe guardado sigue igual."
 
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "There is no data after today. Choose a first date of today or before."
-msgstr ""
+msgstr "No hay datos posteriores a hoy. Elige como fecha de inicio hoy o un día anterior."
 
 #. 0: daysText(max)
 #: src/lib/components/reports/custom/workspace/viewer-range.svelte.ts
 msgid "This report shows at most {0}. Choose fewer days."
-msgstr ""
+msgstr "Este informe muestra como máximo {0}. Elige menos días."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose, 10 to 90 percent"
-msgstr ""
+msgstr "Glucemia entre los percentiles 10 y 90"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time above range"
-msgstr ""
+msgstr "Tiempo por encima del rango"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time in each range"
-msgstr ""
+msgstr "Tiempo en cada rango"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Basal delivered"
-msgstr ""
+msgstr "Basal administrada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Basal scheduled"
-msgstr ""
+msgstr "Basal programada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Long-acting injections"
-msgstr ""
+msgstr "Inyecciones de insulina de acción prolongada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Insulin the loop added or removed"
-msgstr ""
+msgstr "Insulina añadida o restada por el sistema de lazo cerrado"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Total bolus"
-msgstr ""
+msgstr "Bolus total"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Basal rate in data and profile"
-msgstr ""
+msgstr "Tasa basal en los datos y en el perfil"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "ISF in data and profile"
-msgstr ""
+msgstr "Factor de sensibilidad a la insulina en los datos y en el perfil"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Carb ratio in data and profile"
-msgstr ""
+msgstr "Ratio de hidratos de carbono en los datos y en el perfil"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Meter readings from the pump"
-msgstr ""
+msgstr "Lecturas del glucómetro registradas por la bomba"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose rate of change"
-msgstr ""
+msgstr "Velocidad de cambio de la glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lows and highs"
-msgstr ""
+msgstr "Bajadas y subidas de glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lab HbA1c"
-msgstr ""
+msgstr "HbA1c de laboratorio"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Site and insulin changes"
-msgstr ""
+msgstr "Cambios del lugar de infusión y de insulina"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Pump events"
-msgstr ""
+msgstr "Eventos de la bomba"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Pump connection"
-msgstr ""
+msgstr "Conexión de la bomba"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Sleep stages"
-msgstr ""
+msgstr "Fases del sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Sleep efficiency"
-msgstr ""
+msgstr "Eficiencia del sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time to fall asleep"
-msgstr ""
+msgstr "Tiempo hasta conciliar el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Restless periods"
-msgstr ""
+msgstr "Periodos de sueño inquieto"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart rate each night"
-msgstr ""
+msgstr "Frecuencia cardiaca cada noche"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "HRV each night"
-msgstr ""
+msgstr "Variabilidad de la frecuencia cardiaca cada noche"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Blood oxygen each night"
-msgstr ""
+msgstr "Oxígeno en sangre cada noche"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Breathing rate each night"
-msgstr ""
+msgstr "Frecuencia respiratoria cada noche"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart rate in sleep"
-msgstr ""
+msgstr "Frecuencia cardiaca durante el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "HRV in sleep"
-msgstr ""
+msgstr "Variabilidad de la frecuencia cardiaca durante el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Blood oxygen in sleep"
-msgstr ""
+msgstr "Oxígeno en sangre durante el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Breathing rate in sleep"
-msgstr ""
+msgstr "Frecuencia respiratoria durante el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lean mass"
-msgstr ""
+msgstr "Masa magra"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Alert periods"
-msgstr ""
+msgstr "Periodos de alerta"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Alerts raised"
-msgstr ""
+msgstr "Alertas disparadas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Device alarms"
-msgstr ""
+msgstr "Alarmas del dispositivo"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Data left out"
-msgstr ""
+msgstr "Datos excluidos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Sensor noise"
-msgstr ""
+msgstr "Ruido del sensor"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each sensor reading."
-msgstr ""
+msgstr "Cada lectura del sensor."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The low and high limits of your target range."
-msgstr ""
+msgstr "Los límites inferior y superior de tu rango objetivo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The band that holds 80 percent of the readings."
-msgstr ""
+msgstr "La banda que contiene el 80 % de las lecturas."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The mean of the readings."
-msgstr ""
+msgstr "La media de las lecturas."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of readings in the target range."
-msgstr ""
+msgstr "El porcentaje de lecturas en el rango objetivo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of readings below the target range."
-msgstr ""
+msgstr "El porcentaje de lecturas por debajo del rango objetivo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of readings above the target range."
-msgstr ""
+msgstr "El porcentaje de lecturas por encima del rango objetivo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of readings in each glucose range."
-msgstr ""
+msgstr "El porcentaje de lecturas en cada rango de glucemia."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How many sensor readings there are. Gaps show missing data."
-msgstr ""
+msgstr "Cuántas lecturas del sensor hay. Los huecos indican que faltan datos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The insulin that is still active."
-msgstr ""
+msgstr "La insulina que sigue activa."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The basal insulin the pump gave."
-msgstr ""
+msgstr "La insulina basal que administró la bomba."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The basal rate of the profile."
-msgstr ""
+msgstr "La tasa basal del perfil."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each bolus and its units."
-msgstr ""
+msgstr "Cada bolus y sus unidades."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each injection of long-acting insulin."
-msgstr ""
+msgstr "Cada inyección de insulina de acción prolongada."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The insulin the loop added to or removed from the scheduled basal."
-msgstr ""
+msgstr "La cantidad de insulina que el sistema de lazo cerrado añadió a la basal programada o restó de ella."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "All insulin given in the day."
-msgstr ""
+msgstr "Toda la insulina administrada durante el día."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "All bolus insulin given in the day."
-msgstr ""
+msgstr "Toda la insulina administrada en forma de bolus durante el día."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "All basal insulin given in the day."
-msgstr ""
+msgstr "Toda la insulina basal administrada durante el día."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The carbs that are not yet absorbed."
-msgstr ""
+msgstr "Los hidratos de carbono que aún no se han absorbido."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each entry of carbs and its grams."
-msgstr ""
+msgstr "Cada registro de hidratos de carbono y su cantidad en gramos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The units of insulin left in the pump."
-msgstr ""
+msgstr "Las unidades de insulina que quedan en la bomba."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The charge of the pump battery."
-msgstr ""
+msgstr "La carga de la batería de la bomba."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The charge of the phone or device that uploads the data."
-msgstr ""
+msgstr "La carga del teléfono o dispositivo que envía los datos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The basal rate the data shows, beside the rate of the profile."
-msgstr ""
+msgstr "La tasa basal registrada, junto a la tasa del perfil."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The insulin sensitivity the data shows, beside the value of the profile."
-msgstr ""
+msgstr "El factor de sensibilidad a la insulina registrado, junto al valor del perfil."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The carb ratio the data shows, beside the value of the profile."
-msgstr ""
+msgstr "La ratio de hidratos de carbono registrada, junto al valor del perfil."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Beats each minute."
-msgstr ""
+msgstr "Latidos por minuto."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The steps you took."
-msgstr ""
+msgstr "Los pasos que has dado."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each sleep session and its stages."
-msgstr ""
+msgstr "Cada sesión de sueño y sus fases."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "When the pump was in automatic, manual or other modes."
-msgstr ""
+msgstr "Cuándo estuvo la bomba en modo automático, manual o en otros modos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Which profile was active."
-msgstr ""
+msgstr "Qué perfil estaba activo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each override."
-msgstr ""
+msgstr "Cada anulación."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Exercise, illness and travel that you marked."
-msgstr ""
+msgstr "Los periodos de ejercicio, enfermedad y viaje que hayas marcado."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each temp basal and its rate."
-msgstr ""
+msgstr "Cada basal temporal y su tasa."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each meter reading."
-msgstr ""
+msgstr "Cada lectura del glucómetro."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each meter reading that the pump or uploader sent."
-msgstr ""
+msgstr "Cada lectura del glucómetro que envió la bomba o la aplicación que envía los datos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How fast glucose changed, as the sensor reported it."
-msgstr ""
+msgstr "La velocidad a la que cambió la glucemia, según el sensor."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each low and high that lasted 15 minutes or more."
-msgstr ""
+msgstr "Cada episodio de glucemia baja o alta que duró 15 minutos o más."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each HbA1c result from a lab."
-msgstr ""
+msgstr "Cada resultado de HbA1c obtenido en el laboratorio."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each sensor start, change and stop."
-msgstr ""
+msgstr "Cada inicio, cambio y parada del sensor."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each site, pod, reservoir and insulin change."
-msgstr ""
+msgstr "Cada cambio de zona de infusión, pod, reservorio o insulina."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each pump suspend, resume and battery change."
-msgstr ""
+msgstr "Cada suspensión, reanudación y cambio de batería de la bomba."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "When the pump was connected or disconnected."
-msgstr ""
+msgstr "Cuándo se conectó o desconectó la bomba."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each tracked sensor, site or other item, and how many days it lasted."
-msgstr ""
+msgstr "Cada sensor, zona de infusión u otro elemento del que haces seguimiento, y cuántos días duró."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The stages of sleep in each night: awake, REM, light and deep."
-msgstr ""
+msgstr "Los estados y fases de cada noche: vigilia, REM, sueño ligero y sueño profundo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The score that the device gave each night."
-msgstr ""
+msgstr "La puntuación que asignó el dispositivo cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of each night that you were asleep."
-msgstr ""
+msgstr "El porcentaje de cada noche que pasaste durmiendo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The minutes from bed to sleep, each night."
-msgstr ""
+msgstr "Los minutos que tardaste en dormirte desde que te acostaste, cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How many restless periods each night had."
-msgstr ""
+msgstr "Cuántos periodos de sueño inquieto hubo cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The mean and lowest heart rate of each night."
-msgstr ""
+msgstr "La frecuencia cardiaca media y mínima de cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The mean heart rate variability of each night."
-msgstr ""
+msgstr "La variabilidad media de la frecuencia cardiaca de cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The mean blood oxygen of each night."
-msgstr ""
+msgstr "La saturación media de oxígeno en sangre de cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The mean breathing rate of each night."
-msgstr ""
+msgstr "La frecuencia respiratoria media de cada noche."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart rate that the wearable recorded during sleep."
-msgstr ""
+msgstr "La frecuencia cardiaca que registró el dispositivo durante el sueño."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart rate variability that the wearable recorded during sleep."
-msgstr ""
+msgstr "La variabilidad de la frecuencia cardiaca que registró el dispositivo durante el sueño."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Blood oxygen that the wearable recorded during sleep."
-msgstr ""
+msgstr "La saturación de oxígeno en sangre que registró el dispositivo durante el sueño."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Breathing rate that the wearable recorded during sleep."
-msgstr ""
+msgstr "La frecuencia respiratoria que registró el dispositivo durante el sueño."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Walking, still or in a vehicle, as the phone found it."
-msgstr ""
+msgstr "Si ibas a pie, estabas en reposo o ibas en un vehículo, según lo detectado por el teléfono."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each body weight record."
-msgstr ""
+msgstr "Cada registro de peso corporal."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The percent of body weight that is fat."
-msgstr ""
+msgstr "El porcentaje del peso corporal que corresponde a grasa."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The body weight that is not fat."
-msgstr ""
+msgstr "La parte del peso corporal que no corresponde a grasa."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each temporary target."
-msgstr ""
+msgstr "Cada objetivo temporal."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each period when the condition of an alert was true."
-msgstr ""
+msgstr "Cada periodo en el que se cumplió la condición de una alerta."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each alert that Nocturne raised, and its snoozes."
-msgstr ""
+msgstr "Cada alerta que activó Nocturne y sus aplazamientos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each do-not-disturb period."
-msgstr ""
+msgstr "Cada periodo en modo No molestar."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each alarm, warning and notice from the pump, sensor or uploader."
-msgstr ""
+msgstr "Cada alarma, advertencia y aviso de la bomba, el sensor o la aplicación que envía los datos."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The periods that you left out of the glucose data."
-msgstr ""
+msgstr "Los periodos que excluiste de los datos de glucemia."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each false low at night from pressure on the sensor."
-msgstr ""
+msgstr "Cada lectura baja falsa durante la noche por presión sobre el sensor."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The noise level of each sensor reading, from 0 to 4."
-msgstr ""
+msgstr "El nivel de ruido de cada lectura del sensor, de 0 a 4."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Loop and automation"
-msgstr ""
+msgstr "Lazo cerrado y automatización"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Pump and devices"
-msgstr ""
+msgstr "Bomba y dispositivos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Activity and body"
-msgstr ""
+msgstr "Actividad y datos corporales"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Meter"
-msgstr ""
+msgstr "Glucómetro"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time in ranges"
-msgstr ""
+msgstr "Tiempo en los rangos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "On board"
-msgstr ""
+msgstr "Cantidades activas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Totals"
-msgstr ""
+msgstr "Totales"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Insulin changes"
-msgstr ""
+msgstr "Cambios de insulina"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Modes"
-msgstr ""
+msgstr "Modos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Phone and uploader"
-msgstr ""
+msgstr "Teléfono y envío de datos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart"
-msgstr ""
+msgstr "Corazón"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Movement"
-msgstr ""
+msgstr "Movimiento"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Settings against the data"
-msgstr ""
+msgstr "Ajustes frente a datos registrados"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Marked periods"
-msgstr ""
+msgstr "Periodos marcados"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Coverage"
-msgstr ""
+msgstr "Cobertura"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Consumables"
-msgstr ""
+msgstr "Consumibles"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each night"
-msgstr ""
+msgstr "Cada noche"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Body during sleep"
-msgstr ""
+msgstr "Datos corporales durante el sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Your alerts"
-msgstr ""
+msgstr "Tus alertas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Bluetooth"
-msgstr ""
+msgstr "Bluetooth"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "A1c"
-msgstr ""
+msgstr "A1c"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "HbA1c"
-msgstr ""
+msgstr "HbA1c"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "SpO2"
-msgstr ""
+msgstr "SpO2"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Around an event"
-msgstr ""
+msgstr "En torno a un evento"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Day by day"
-msgstr ""
+msgstr "Día a día"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each value at the time it occurred."
-msgstr ""
+msgstr "Cada valor en el momento en que se registró."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "All days put on top of one day, as the median and middle half."
-msgstr ""
+msgstr "Todos los días superpuestos en un solo día, con la mediana y el 50 % central de los valores."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The hours before and after each event, put on top of each other."
-msgstr ""
+msgstr "Las horas anteriores y posteriores a cada evento, superpuestas."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "One value for each day."
-msgstr ""
+msgstr "Un valor por día."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Two signals as points, each 15 minutes, one along each axis."
-msgstr ""
+msgstr "Dos variables representadas con puntos cada 15 minutos, una en cada eje."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Rises with no carbs"
-msgstr ""
+msgstr "Subidas sin hidratos de carbono"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lows"
-msgstr ""
+msgstr "Bajadas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Highs"
-msgstr ""
+msgstr "Glucemias altas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Carbs taken in a low"
-msgstr ""
+msgstr "Hidratos de carbono que tomaste durante una bajada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Food and insulin"
-msgstr ""
+msgstr "Alimentos e insulina"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Devices and modes"
-msgstr ""
+msgstr "Dispositivos y modos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Every day"
-msgstr ""
+msgstr "Todos los días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Weekdays and the weekend"
-msgstr ""
+msgstr "Días laborables y fin de semana"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Monday to Thursday, Friday, and the weekend"
-msgstr ""
+msgstr "De lunes a jueves, viernes y fin de semana"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Manual mode"
-msgstr ""
+msgstr "Modo manual"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time back to the start value"
-msgstr ""
+msgstr "Tiempo hasta volver al valor inicial"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lowest reading"
-msgstr ""
+msgstr "Lectura mínima"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Drop"
-msgstr ""
+msgstr "Descenso"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time to the lowest reading"
-msgstr ""
+msgstr "Tiempo hasta la lectura mínima"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose 2 hours after"
-msgstr ""
+msgstr "Glucemia 2 horas después"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Net insulin"
-msgstr ""
+msgstr "Insulina neta"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Carbs for each unit"
-msgstr ""
+msgstr "Hidratos de carbono por unidad"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Over time"
-msgstr ""
+msgstr "A lo largo del tiempo"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each event"
-msgstr ""
+msgstr "Cada evento"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Spread"
-msgstr ""
+msgstr "Dispersión"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Stacked bars"
-msgstr ""
+msgstr "Barras apiladas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Median and middle half"
-msgstr ""
+msgstr "Mediana y 50 % central"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lowest to highest"
-msgstr ""
+msgstr "Del mínimo al máximo"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Markers"
-msgstr ""
+msgstr "Marcadores"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Spans"
-msgstr ""
+msgstr "Tramos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose statistics"
-msgstr ""
+msgstr "Estadísticas de glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time in each glucose range"
-msgstr ""
+msgstr "Tiempo en cada rango de glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each day"
-msgstr ""
+msgstr "Cada día"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each glucose reading"
-msgstr ""
+msgstr "Cada lectura de glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Basal rates over time"
-msgstr ""
+msgstr "Tasas basales a lo largo del tiempo"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Modes, profiles and overrides"
-msgstr ""
+msgstr "Modos, perfiles y anulaciones"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Each 5 minutes of a typical day"
-msgstr ""
+msgstr "Cada 5 minutos de un día típico"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Meals and insulin"
-msgstr ""
+msgstr "Comidas e insulina"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Body and devices"
-msgstr ""
+msgstr "Datos corporales y dispositivos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The last 24 hours"
-msgstr ""
+msgstr "Las últimas 24 horas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose, insulin, carbs and modes as they occurred."
-msgstr ""
+msgstr "Glucemia, insulina, hidratos de carbono y modos en el momento en que se registraron."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Is there a dawn rise?"
-msgstr ""
+msgstr "¿Sube la glucemia al amanecer?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose over a typical day, with the 10 to 90 percent band and the target range."
-msgstr ""
+msgstr "Glucemia de un día típico, con la banda entre los percentiles 10 y 90 y el rango objetivo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Weekdays against the weekend"
-msgstr ""
+msgstr "De lunes a viernes frente al fin de semana"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose over a typical day, Monday to Friday against Saturday and Sunday."
-msgstr ""
+msgstr "Glucemia de un día típico: de lunes a viernes frente al sábado y el domingo."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Is time in range changing week by week?"
-msgstr ""
+msgstr "¿Cambia el tiempo en rango de una semana a otra?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Time in range for each day, its mean over 7 days and a trend line, over 90 days."
-msgstr ""
+msgstr "Tiempo en rango de cada día, su media de 7 días y una línea de tendencia en un periodo de 90 días."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What does the first day of a sensor look like?"
-msgstr ""
+msgstr "¿Cómo es el primer día de uso del sensor?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose from 1 hour before to 8 hours after each sensor start."
-msgstr ""
+msgstr "Glucemia desde 1 hora antes hasta 8 horas después de iniciar cada sensor."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What happens before a low?"
-msgstr ""
+msgstr "¿Qué pasa antes de una bajada?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose, insulin on board and carbs on board from 4 hours before each low."
-msgstr ""
+msgstr "Glucemia, insulina activa e hidratos de carbono activos desde 4 horas antes de cada bajada."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How far do lows go, and what was on board?"
-msgstr ""
+msgstr "¿Hasta dónde baja la glucemia y qué quedaba activo?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The lowest reading of each low against the insulin on board when it started."
-msgstr ""
+msgstr "La lectura mínima de cada bajada frente a la insulina activa al comienzo de la bajada."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What time of day do lows and highs start?"
-msgstr ""
+msgstr "¿A qué hora del día empiezan las bajadas y los episodios de glucemia alta?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Lows and highs counted by the hour of the day they started."
-msgstr ""
+msgstr "Número de bajadas y episodios de glucemia alta por hora del día en que empezaron."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What does a later breakfast do?"
-msgstr ""
+msgstr "¿Qué pasa si desayunas más tarde?"
 
 #. 0: clock(360); 1: clock(510); 2: clock(510); 3: clock(660)
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose after meals from {0} to {1} against meals from {2} to {3}."
-msgstr ""
+msgstr "Glucemia después de las comidas de {0} a {1} frente a las de {2} a {3}."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "One food against everything else"
-msgstr ""
+msgstr "Comidas con un alimento frente al resto"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The change in glucose after meals with one food against all other meals."
-msgstr ""
+msgstr "El cambio de glucemia después de las comidas con un alimento concreto frente al resto de comidas."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Does glucose at the start change the peak after a meal?"
-msgstr ""
+msgstr "¿Influye la glucemia inicial en el pico después de comer?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The peak rise of each meal against the glucose when the meal started, with a line through the points."
-msgstr ""
+msgstr "El aumento máximo de glucemia de cada comida frente a la glucemia al empezar a comer, con una línea de ajuste."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How much do meals raise glucose: no carbs in the 4 hours before against other meals"
-msgstr ""
+msgstr "Cuánto sube la glucemia con las comidas: sin hidratos de carbono en las 4 horas previas frente al resto"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How many meals had each peak rise, for meals with no carbs in the 4 hours before against all other meals."
-msgstr ""
+msgstr "Número de comidas por aumento máximo de glucemia, comparando las que no tuvieron ingesta de hidratos de carbono en las 4 horas previas con el resto."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Meals that start in range against meals that start high"
-msgstr ""
+msgstr "Comidas que empiezan con la glucemia en rango frente a las que empiezan por encima del rango"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The change in glucose after meals that start in range against meals that start above range."
-msgstr ""
+msgstr "Cambio de glucemia después de comer, comparando las comidas que empiezan con la glucemia en rango con las que empiezan por encima."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Exercise with no carbs in the 4 hours before, against other exercise"
-msgstr ""
+msgstr "Ejercicio sin hidratos de carbono en las 4 horas previas frente al resto de sesiones"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose around exercise that starts 4 hours or more after the last carbs, against all other exercise."
-msgstr ""
+msgstr "Glucemia en torno al ejercicio que empieza al menos 4 horas después de la última ingesta de hidratos de carbono, frente al resto de sesiones."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Do corrections work differently at night?"
-msgstr ""
+msgstr "¿Funcionan de otra forma las correcciones por la noche?"
 
 #. 0: clock(1320); 1: clock(360)
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The change in glucose after correction boluses from {0} to {1} against the rest of the day."
-msgstr ""
+msgstr "Cambio de glucemia después de los bolus de corrección de {0} a {1}, frente al resto del día."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How does glucose follow insulin?"
-msgstr ""
+msgstr "¿Cómo responde la glucemia a la insulina?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose against insulin on board, and how long glucose takes to follow it."
-msgstr ""
+msgstr "Glucemia frente a insulina activa y cuánto tarda en responder la glucemia."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "How much does the loop add or remove, by hour?"
-msgstr ""
+msgstr "¿Cuánta insulina añade o resta el lazo cerrado por hora?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The insulin the loop added or removed over a typical day, beside the scheduled basal."
-msgstr ""
+msgstr "Insulina añadida o restada por el lazo cerrado en un día típico, junto a la basal programada."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What do the settings look like against the data?"
-msgstr ""
+msgstr "¿Cómo quedan los ajustes al compararlos con los datos registrados?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Basal rate, ISF and carb ratio as the data shows them, beside the values of the profile."
-msgstr ""
+msgstr "Tasa basal, factor de sensibilidad a la insulina y ratio de hidratos de carbono registrados, junto a los valores del perfil."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Reservoir and batteries"
-msgstr ""
+msgstr "Reservorio y baterías"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "The pump reservoir and the pump and uploader batteries over the last 7 days."
-msgstr ""
+msgstr "Reservorio de la bomba y carga de las baterías de la bomba y del dispositivo que envía los datos durante los últimos 7 días."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Days with a low against all other days"
-msgstr ""
+msgstr "Días con alguna bajada frente al resto de días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose over a typical day, on the days with a low against all other days."
-msgstr ""
+msgstr "Glucemia de un día típico, comparando los días con alguna bajada con el resto."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What happens after a low is treated?"
-msgstr ""
+msgstr "¿Qué pasa después de tratar una bajada?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose and carbs on board from 30 minutes before to 3 hours after the first carbs taken in each low."
-msgstr ""
+msgstr "Glucemia e hidratos de carbono activos desde 30 minutos antes hasta 3 horas después de la primera ingesta de hidratos de carbono durante cada bajada."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Heart rate and glucose"
-msgstr ""
+msgstr "Frecuencia cardiaca y glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose and heart rate over the last 24 hours."
-msgstr ""
+msgstr "Glucemia y frecuencia cardiaca durante las últimas 24 horas."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Sleep and the next day"
-msgstr ""
+msgstr "Sueño y día siguiente"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Hours of sleep each night beside the time in range of the day the night ended."
-msgstr ""
+msgstr "Horas de sueño de cada noche junto al tiempo en rango del día en que te despertaste."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "What does a site change do?"
-msgstr ""
+msgstr "¿Qué pasa cuando cambias la zona de infusión?"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Glucose from 1 hour before to 8 hours after each site change."
-msgstr ""
+msgstr "Glucemia desde 1 hora antes hasta 8 horas después de cada cambio de zona de infusión."
 
 #. 0: formatList(words, "disjunction")
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Your access cannot read {0}, which this needs."
-msgstr ""
+msgstr "Tu acceso no incluye {0}, un dato necesario para mostrar esto."
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Your access cannot read the data this needs."
-msgstr ""
+msgstr "Tu acceso no incluye los datos necesarios para mostrar esto."
 
 #. 0: phrase
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "When {0} start"
-msgstr ""
+msgstr "Inicio de {0}"
 
 #. 0: phrase
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "When {0} happen"
-msgstr ""
+msgstr "Momento en que se producen {0}"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "By hour of day"
-msgstr ""
+msgstr "Por hora del día"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "By weekday"
-msgstr ""
+msgstr "Por día de la semana"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days with exercise"
-msgstr ""
+msgstr "Días con ejercicio"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days with illness"
-msgstr ""
+msgstr "Días con enfermedad"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days with a low"
-msgstr ""
+msgstr "Días con alguna bajada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Days with a low overnight"
-msgstr ""
+msgstr "Días con alguna bajada nocturna"
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This view shows two signals. Remove one first."
-msgstr ""
+msgstr "Esta vista admite dos variables. Quita primero una."
 
 #. 0: clock(0); 1: clock(360)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days with a low from {0} to {1}"
-msgstr ""
+msgstr "Días con alguna bajada entre {0} y {1}"
 
 #. 0: b
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Days with {0} of carbs"
-msgstr ""
+msgstr "Días con {0} de hidratos de carbono"
 
 #. 0: minutesText(after)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "From the event to {0} after"
-msgstr ""
+msgstr "Desde el evento hasta {0} después"
 
 #. 0: minutesText(before); 1: minutesText(after)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} before to {1} after"
-msgstr ""
+msgstr "Desde {0} antes hasta {1} después"
 
 #. 0: b.min; 1: b.max; 2: unit
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} to {1} {2}"
-msgstr ""
+msgstr "De {0} a {1} {2}"
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This report engine cannot show this."
-msgstr ""
+msgstr "El generador de informes no puede mostrar esto."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Your access cannot read treatments, which this needs."
-msgstr ""
+msgstr "Tu acceso no incluye los tratamientos, que son necesarios para mostrar esto."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Each event, Spread and When show the events of the range only."
-msgstr ""
+msgstr "Las vistas «Cada evento», «Dispersión» y «Cuándo» solo muestran los eventos del intervalo."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "All other days"
-msgstr ""
+msgstr "Resto de días"
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Select one more signal."
-msgstr ""
+msgstr "Selecciona otra variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Select a signal."
-msgstr ""
+msgstr "Selecciona una variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Pick a food. Until then, the group shows all meals."
-msgstr ""
+msgstr "Elige un alimento. Hasta entonces, el grupo mostrará todas las comidas."
 
 #. 0: c.maxTracks
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A chart has at most {0} rows. Remove a signal first."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} filas. Quita primero una variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "The chart has too many signals and options to draw. Remove a signal or an option first."
-msgstr ""
+msgstr "El gráfico tiene demasiadas variables y opciones para poder dibujarlo. Quita primero una variable o una opción."
 
 #. 0: c.maxReads
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A report reads at most {0} sets of data."
-msgstr ""
+msgstr "Un informe admite como máximo {0} conjuntos de datos."
 
 #. 0: this.maxMoments
 #. 0: this.maxMoments
@@ -45873,286 +45873,286 @@ msgstr ""
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A chart has at most {0} groups of events."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} grupos de eventos."
 
 #. 0: MAX_DAY_GROUPS
 #. 0: MAX_DAY_GROUPS
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A chart has at most {0} groups of days."
-msgstr ""
+msgstr "Un gráfico admite como máximo {0} grupos de días."
 
 #. 0: daysText(limit.hours)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A report covers at most {0}."
-msgstr ""
+msgstr "Un informe abarca como máximo {0}."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Place the signal first."
-msgstr ""
+msgstr "Coloca primero la variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This signal cannot be drawn that way here."
-msgstr ""
+msgstr "Aquí no se puede representar esta variable de esa forma."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This signal cannot be smoothed so here."
-msgstr ""
+msgstr "Aquí no se puede suavizar esta variable de esa forma."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This signal has no mean and standard deviation here."
-msgstr ""
+msgstr "Aquí no se pueden mostrar la media y la desviación estándar de esta variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This signal has no trend here."
-msgstr ""
+msgstr "Aquí no se puede mostrar la tendencia de esta variable."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Only glucose around an event can start from zero."
-msgstr ""
+msgstr "Solo la glucemia en torno a un evento puede partir de cero."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "These signals cannot be combined here."
-msgstr ""
+msgstr "Aquí no se pueden combinar estas variables."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Subtract takes two signals in one unit."
-msgstr ""
+msgstr "Para restar, las dos variables deben tener la misma unidad."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "The chart already shows this."
-msgstr ""
+msgstr "El gráfico ya muestra esto."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "No such line."
-msgstr ""
+msgstr "Esa línea no existe."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "This line cannot be drawn that way."
-msgstr ""
+msgstr "No se puede representar esta línea de esa forma."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Select two signals."
-msgstr ""
+msgstr "Selecciona dos variables."
 
 #. 0: lensLabel(id)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} cannot show any signal on this chart. Add a new chart for it."
-msgstr ""
+msgstr "{0} no puede mostrar ninguna variable de este gráfico. Añade un gráfico nuevo para esa vista."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Remove everything else first. It can go with at most two other groups."
-msgstr ""
+msgstr "Quita primero el grupo «Todo lo demás». Solo se puede combinar con otros dos grupos como máximo."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Each kind of event here already has its everything else."
-msgstr ""
+msgstr "Cada tipo de evento ya tiene su grupo «Todo lo demás»."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Everything else can go with at most two other groups."
-msgstr ""
+msgstr "El grupo «Todo lo demás» solo se puede combinar con otros dos grupos como máximo."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "A chart around an event has at least one group."
-msgstr ""
+msgstr "Un gráfico en torno a un evento tiene al menos un grupo."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "No such group."
-msgstr ""
+msgstr "Ese grupo no existe."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Everything else has no settings of its own."
-msgstr ""
+msgstr "El grupo «Todo lo demás» no tiene ajustes propios."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Only meals can be narrowed by size or food."
-msgstr ""
+msgstr "Solo puedes filtrar las comidas por cantidad de hidratos de carbono o por alimento."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Each group has at least one day."
-msgstr ""
+msgstr "Cada grupo tiene al menos un día."
 
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "Choose one of the windows given."
-msgstr ""
+msgstr "Elige uno de los intervalos que se ofrecen."
 
 #. 0: phrase; 1: lowerFirst(outcomeLabel(this.figure))
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "How many {0} had each {1}"
-msgstr ""
+msgstr "Número de {0} para cada valor de {1}"
 
 #. 0: lowerFirst(dayFilterText(s.dayFilter, this.clock))
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "{0} against all other days"
-msgstr ""
+msgstr "{0} frente al resto de días"
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "This report changed somewhere else. Read what changed above the report, then choose."
-msgstr ""
+msgstr "Este informe se ha modificado desde otro sitio. Revisa los cambios encima del informe y elige qué hacer."
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Nocturne saved a copy of the report."
-msgstr ""
+msgstr "Nocturne ha guardado una copia del informe."
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Your access is limited to the last 24 hours. It cannot change or copy reports."
-msgstr ""
+msgstr "Tu acceso se limita a las últimas 24 horas. Con este acceso no puedes modificar ni copiar informes."
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Another member made this report, so you cannot change it. You can save a copy with Save as."
-msgstr ""
+msgstr "El informe lo creó otro miembro. Puedes guardar una copia con «Guardar como»."
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Opening the report"
-msgstr ""
+msgstr "Abriendo el informe"
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Could not check how this report opens. Your report is not changed."
-msgstr ""
+msgstr "No se ha podido comprobar cómo se abre este informe. El informe sigue tal como estaba."
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Discard your changes?"
-msgstr ""
+msgstr "¿Descartar tus cambios?"
 
 #: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
 msgid "Nocturne discards the changes that are not saved, also in this browser. The report opens as it was saved."
-msgstr ""
+msgstr "Nocturne descarta los cambios sin guardar, incluidos los de este navegador. El informe se abre tal como se guardó."
 
 #: src/lib/components/auth/LoginForm.svelte
 msgid "Trust this device for 1 day"
-msgstr ""
+msgstr "Confiar en este dispositivo durante 1 día"
 
 #. 0: trustDays
 #: src/lib/components/auth/LoginForm.svelte
 msgid "Trust this device for {0} days"
-msgstr ""
+msgstr "Confiar en este dispositivo durante {0} días"
 
 #: src/lib/components/auth/LoginForm.svelte
 msgid "You will not need a code on this device during that time. Select this only on a device that only you use."
-msgstr ""
+msgstr "Durante ese tiempo no necesitarás ningún código en este dispositivo. Selecciona esta opción solo si eres la única persona que usa el dispositivo."
 
 #. 0: otherSessionCount; 1: otherSessionCount === 1 ? "other session" \\: "other sessions"
 #: src/lib/components/settings/ActiveSessions.svelte
 msgid "Sign out {0} {1}? This device stays signed in. The other devices will need to sign in again, and Nocturne stops trusting them."
-msgstr ""
+msgstr "¿Cerrar la sesión en los demás dispositivos ({0} {1})? La sesión de este dispositivo seguirá abierta. Tendrás que volver a iniciar sesión en los demás y Nocturne dejará de confiar en ellos."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Device removed."
-msgstr ""
+msgstr "Dispositivo eliminado."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Could not remove the device. Try again."
-msgstr ""
+msgstr "No se ha podido eliminar el dispositivo. Inténtalo de nuevo."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "All trusted devices removed."
-msgstr ""
+msgstr "Se han eliminado todos los dispositivos de confianza."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Could not remove the trusted devices. Try again."
-msgstr ""
+msgstr "No se han podido eliminar los dispositivos de confianza. Inténtalo de nuevo."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Trusted devices"
-msgstr ""
+msgstr "Dispositivos de confianza"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Devices that sign in without an authenticator code"
-msgstr ""
+msgstr "Dispositivos que pueden iniciar sesión sin un código de autenticación"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Remove all trusted devices"
-msgstr ""
+msgstr "Eliminar todos los dispositivos de confianza"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Remove all"
-msgstr ""
+msgstr "Eliminar todos"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "<0/> Remove all"
-msgstr ""
+msgstr "<0/> Eliminar todos"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "The next sign-in on each device will need an authenticator code. The devices stay signed in."
-msgstr ""
+msgstr "La próxima vez que inicies sesión en cada dispositivo necesitarás un código de autenticación. Las sesiones actuales seguirán abiertas."
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "No trusted devices"
-msgstr ""
+msgstr "No hay dispositivos de confianza"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "To trust a device, select “Trust this device” when you enter your authenticator code."
-msgstr ""
+msgstr "Para marcar un dispositivo como de confianza, selecciona «Confiar en este dispositivo» al introducir el código de autenticación."
 
 #. 0: formatMediumDate(device.createdAt)
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Trusted {0}"
-msgstr ""
+msgstr "De confianza desde {0}"
 
 #. 0: formatMediumDate(device.expiresAt)
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "<0/> Expires {0}"
-msgstr ""
+msgstr "<0/> Caduca {0}"
 
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "Remove trusted device"
-msgstr ""
+msgstr "Eliminar dispositivo de confianza"
 
 #. 0: device.deviceDescription ?? "this device"
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "The next sign-in on {0} will need an authenticator code. The device stays signed in."
-msgstr ""
+msgstr "La próxima vez que inicies sesión en {0} necesitarás un código de autenticación. La sesión actual seguirá abierta."
 
 #. 0: totpRemoveTarget?.label ?? "Unnamed authenticator"
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Are you sure you want to remove \"{0}\"? You will no longer be able to sign in with this authenticator app. This also removes your trusted devices."
-msgstr ""
+msgstr "¿Seguro que quieres eliminar «{0}»? Ya no podrás iniciar sesión con esta aplicación de autenticación. También se eliminarán tus dispositivos de confianza."
 
 #. 0: rule.name
 #. 0: editor.name
 #: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Disable \"{0}\"?"
-msgstr ""
+msgstr "¿Desactivar «{0}»?"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "<0/> This rule will stop firing immediately. Existing alert history is preserved. This action cannot be undone."
-msgstr ""
+msgstr "<0/> Esta regla dejará de generar alertas de inmediato. Se conservará el historial de alertas. Esta acción no se puede deshacer."
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "<0/> Add a low alert"
-msgstr ""
+msgstr "<0/> Añadir una alerta de glucemia baja"
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "No alert is on for low glucose. Nocturne will not tell you when glucose is low."
-msgstr ""
+msgstr "No hay ninguna alerta de glucemia baja activada. Nocturne no te avisará si la glucemia está baja."
 
 #: src/lib/forms/submit-messages.svelte.ts
 msgid "You do not have permission to do this."
-msgstr ""
+msgstr "No tienes permiso para hacer esto."
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Only members who can manage this site's settings can change glucose processing."
-msgstr ""
+msgstr "Solo los miembros con permiso para gestionar los ajustes de este sitio pueden cambiar cómo se procesan los datos de glucemia."
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "People"
-msgstr ""
+msgstr "Personas"
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "People - Nocturne"
-msgstr ""
+msgstr "Personas - Nocturne"
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "# person."
 msgid_plural "# people."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "# persona."
+msgstr[1] "# personas."
 
 #~ msgid "<0/> Readings refresh every minute."
 #~ msgstr ""
@@ -46160,737 +46160,737 @@ msgstr[1] ""
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
 msgid "The list of people did not load."
-msgstr ""
+msgstr "No se ha podido cargar la lista de personas."
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "You follow no other people"
-msgstr ""
+msgstr "No sigues a nadie"
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "When a person gives you access to their data, they show here."
-msgstr ""
+msgstr "Cuando alguien te dé acceso a sus datos, aparecerá aquí."
 
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Person"
-msgstr ""
+msgstr "Persona"
 
 #. 0: bgLabel()
 #. 0: bgLabel()
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/WallLegend.svelte
 msgid "Glucose, {0}"
-msgstr ""
+msgstr "Glucemia, {0}"
 
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Reading age"
-msgstr ""
+msgstr "Tiempo desde la lectura"
 
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Last 3 hours"
-msgstr ""
+msgstr "Últimas 3 horas"
 
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Flagged"
-msgstr ""
+msgstr "Con avisos"
 
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Other people"
-msgstr ""
+msgstr "Otras personas"
 
 #: src/lib/components/people/PersonAlerts.svelte
 #: src/lib/components/people/PersonAlerts.svelte
 msgid "You do not have access to this person's alerts"
-msgstr ""
+msgstr "No tienes acceso a las alertas de esta persona"
 
 #: src/lib/components/people/PersonAlerts.svelte
 msgid "Active alerts:"
-msgstr ""
+msgstr "Alertas activas:"
 
 #: src/lib/components/people/PersonSummary.svelte
 msgid "3 h ago"
-msgstr ""
+msgstr "Hace 3 h"
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/people/PersonSummary.svelte
 msgid "Now"
-msgstr ""
+msgstr "Ahora"
 
 #: src/lib/components/people/PersonTrace.svelte
 msgid "Glucose over the last 3 hours"
-msgstr ""
+msgstr "Glucemia de las últimas 3 horas"
 
 #: src/lib/components/people/ReadingAge.svelte
 msgid "No reading"
-msgstr ""
+msgstr "Sin lectura"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very low, rising fast"
-msgstr ""
+msgstr "Muy baja, subiendo rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very low, rising"
-msgstr ""
+msgstr "Muy baja, subiendo"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very low, steady"
-msgstr ""
+msgstr "Muy baja, estable"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very low, falling"
-msgstr ""
+msgstr "Muy baja, bajando"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very low, falling fast"
-msgstr ""
+msgstr "Muy baja, bajando rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Low, rising fast"
-msgstr ""
+msgstr "Baja, subiendo rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Low, rising"
-msgstr ""
+msgstr "Baja, subiendo"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Low, steady"
-msgstr ""
+msgstr "Baja, estable"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Low, falling"
-msgstr ""
+msgstr "Baja, bajando"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Low, falling fast"
-msgstr ""
+msgstr "Baja, bajando rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "High, rising fast"
-msgstr ""
+msgstr "Alta, subiendo rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "High, rising"
-msgstr ""
+msgstr "Alta, subiendo"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "High, steady"
-msgstr ""
+msgstr "Alta, estable"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "High, falling"
-msgstr ""
+msgstr "Alta, bajando"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "High, falling fast"
-msgstr ""
+msgstr "Alta, bajando rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very high, rising fast"
-msgstr ""
+msgstr "Muy alta, subiendo rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very high, rising"
-msgstr ""
+msgstr "Muy alta, subiendo"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very high, steady"
-msgstr ""
+msgstr "Muy alta, estable"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very high, falling"
-msgstr ""
+msgstr "Muy alta, bajando"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Very high, falling fast"
-msgstr ""
+msgstr "Muy alta, bajando rápido"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Out of range"
-msgstr ""
+msgstr "Fuera de rango"
 
 #. 0: name
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "{0} due"
-msgstr ""
+msgstr "{0} vence ahora"
 
 #. 0: name
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "{0} overdue"
-msgstr ""
+msgstr "{0} ya ha vencido"
 
 #. 0: name; 1: durationText(Math.max(1, Math.round(hours * 60)))
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "{0} due in {1}"
-msgstr ""
+msgstr "{0} vence en {1}"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "Active alert"
-msgstr ""
+msgstr "Alerta activa"
 
 #: src/lib/components/people/attention-phrases.svelte.ts
 msgid "# active alert"
 msgid_plural "# active alerts"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "# alerta activa"
+msgstr[1] "# alertas activas"
 
 #: src/lib/constants/scope-labels.svelte.ts
 msgid "View which data sources are connected and whether they are syncing"
-msgstr ""
+msgstr "Ver qué fuentes de datos están conectadas y si se están sincronizando"
 
 #: src/lib/constants/scope-labels.svelte.ts
 msgid "Connect, change and remove data sources. Data from a connected source is added to your record"
-msgstr ""
+msgstr "Conectar, cambiar y quitar fuentes de datos. Los datos de las fuentes conectadas se añaden a tu historial"
 
 #: src/lib/components/people/LimitedData.svelte
 #: src/lib/components/people/LimitedData.svelte
 msgid "Limited data"
-msgstr ""
+msgstr "Datos limitados"
 
 #: src/lib/components/people/NoFigure.svelte
 #: src/lib/components/people/ReviewSummary.svelte
 #: src/lib/components/people/ReviewSummary.svelte
 #: src/lib/components/people/ReviewSummary.svelte
 msgid "No figure"
-msgstr ""
+msgstr "Sin valor"
 
 #. 0: formatMediumDateRange( new Date(reviewData.from), new Date(reviewData.to) )
 #: src/lib/components/people/PeoplePage.svelte
 msgid "Statistics for {0}."
-msgstr ""
+msgstr "Estadísticas de {0}."
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
 msgid "Readings refresh every minute."
-msgstr ""
+msgstr "Las lecturas se actualizan cada minuto."
 
 #: src/lib/components/people/PeoplePage.svelte
 msgid "View"
-msgstr ""
+msgstr "Ver"
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/ReviewNotice.svelte
 msgid "The statistics did not load."
-msgstr ""
+msgstr "No se han podido cargar las estadísticas."
 
 #: src/lib/components/people/PeopleRoster.svelte
 msgid "Distribution"
-msgstr ""
+msgstr "Distribución"
 
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/people/ReviewRow.svelte
 msgid "Wear"
-msgstr ""
+msgstr "Uso del sensor"
 
 #: src/lib/components/people/ReviewNotice.svelte
 msgid "Loading statistics"
-msgstr ""
+msgstr "Cargando estadísticas"
 
 #: src/lib/components/people/ReviewNotice.svelte
 msgid "24 hours only. Statistics for a period are not available."
-msgstr ""
+msgstr "Solo se muestran las últimas 24 horas. Las estadísticas del periodo no están disponibles."
 
 #: src/lib/components/people/ReviewNotice.svelte
 msgid "You do not have access to this person's reports."
-msgstr ""
+msgstr "No tienes acceso a los informes de esta persona."
 
 #: src/lib/components/people/ReviewNotice.svelte
 msgid "No readings in this period."
-msgstr ""
+msgstr "No hay lecturas en este periodo."
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Up less than 1 point from the previous {0} days"
-msgstr ""
+msgstr "Sube menos de 1 punto respecto a los {0} días anteriores"
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Down less than 1 point from the previous {0} days"
-msgstr ""
+msgstr "Baja menos de 1 punto respecto a los {0} días anteriores"
 
 #: src/lib/components/people/review-phrases.svelte.ts
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "# point"
 msgid_plural "# points"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "# punto"
+msgstr[1] "# puntos"
 
 #. 0: amount; 1: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Up {0} from the previous {1} days"
-msgstr ""
+msgstr "Sube {0} respecto a los {1} días anteriores"
 
 #. 0: amount; 1: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Down {0} from the previous {1} days"
-msgstr ""
+msgstr "Baja {0} respecto a los {1} días anteriores"
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "No change from the previous {0} days"
-msgstr ""
+msgstr "Sin cambios respecto a los {0} días anteriores"
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Up less than 1 point from the previous {0} days."
-msgstr ""
+msgstr "Sube menos de 1 punto respecto a los {0} días anteriores."
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Down less than 1 point from the previous {0} days."
-msgstr ""
+msgstr "Baja menos de 1 punto respecto a los {0} días anteriores."
 
 #. 0: amount; 1: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Up {0} from the previous {1} days."
-msgstr ""
+msgstr "Sube {0} respecto a los {1} días anteriores."
 
 #. 0: amount; 1: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "Down {0} from the previous {1} days."
-msgstr ""
+msgstr "Baja {0} respecto a los {1} días anteriores."
 
 #. 0: days
 #: src/lib/components/people/review-phrases.svelte.ts
 msgid "No change from the previous {0} days."
-msgstr ""
+msgstr "Sin cambios respecto a los {0} días anteriores."
 
 #: src/lib/components/people/ReviewSummary.svelte
 msgid "Sensor wear"
-msgstr ""
+msgstr "Uso del sensor"
 
 #: src/lib/components/people/PersonDayTrace.svelte
 msgid "Glucose over the last 24 hours"
-msgstr ""
+msgstr "Glucemia de las últimas 24 horas"
 
 #: src/lib/components/people/PersonDayTrace.svelte
 msgid "No readings in the last 24 hours."
-msgstr ""
+msgstr "No hay lecturas en las últimas 24 horas."
 
 #: src/lib/components/people/PersonEntries.svelte
 msgid "<0/> You do not have access to this person's treatments."
-msgstr ""
+msgstr "<0/> No tienes acceso a los tratamientos de esta persona."
 
 #: src/lib/components/people/PersonEntries.svelte
 msgid "No boluses or carbs in the last 24 hours."
-msgstr ""
+msgstr "No hay registros de bolus ni de hidratos de carbono en las últimas 24 horas."
 
 #. 0: name
 #: src/lib/components/people/PersonPanel.svelte
 msgid "Open {0}'s site <0/>"
-msgstr ""
+msgstr "Abrir el sitio de {0} <0/>"
 
 #: src/lib/components/people/PersonPanel.svelte
 msgid "This person's data did not load."
-msgstr ""
+msgstr "No se han podido cargar los datos de esta persona."
 
 #: src/lib/components/people/PersonPanel.svelte
 msgid "Recent entries"
-msgstr ""
+msgstr "Registros recientes"
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
 msgid "Readings update as they arrive."
-msgstr ""
+msgstr "Las lecturas se actualizan a medida que llegan."
 
 #: src/lib/components/account/SecurityCredentialCard.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 msgid "Added just now"
-msgstr ""
+msgstr "Añadida ahora mismo"
 
 #: src/lib/components/auth/RecoveryNextStep.svelte
 msgid "<0>Request a new link</0> by email, or ask an administrator for a new code."
-msgstr ""
+msgstr "<0>Solicita un nuevo enlace</0> por correo electrónico o pide un nuevo código a un administrador."
 
 #: src/lib/components/auth/RecoveryNextStep.svelte
 msgid "Ask an administrator for a new code."
-msgstr ""
+msgstr "Pide un nuevo código a un administrador."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "You are back in your account."
-msgstr ""
+msgstr "Ya has recuperado el acceso a tu cuenta."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "The passkey you just added is marked \"Added just now\". Remove any older sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
-msgstr ""
+msgstr "La clave de acceso que acabas de añadir aparece marcada como «Añadida ahora mismo». Elimina los métodos de inicio de sesión antiguos que ya no tengas, como la clave de acceso de un teléfono perdido. Solo se eliminarán los que tú elijas."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Check your sign-in methods."
-msgstr ""
+msgstr "Revisa tus métodos de inicio de sesión."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Remove any sign-in method you no longer have, such as the passkey on a lost phone. Nothing is removed unless you remove it."
-msgstr ""
+msgstr "Elimina los métodos de inicio de sesión que ya no tengas, como la clave de acceso de un teléfono perdido. Solo se eliminarán los que tú elijas."
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "Confirm your email address - Nocturne"
-msgstr ""
+msgstr "Confirma tu dirección de correo electrónico - Nocturne"
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "Checking your link"
-msgstr ""
+msgstr "Comprobando tu enlace"
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "Your email address is confirmed"
-msgstr ""
+msgstr "Tu dirección de correo electrónico está confirmada"
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "This link does not work"
-msgstr ""
+msgstr "Este enlace no funciona"
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "This takes a moment."
-msgstr ""
+msgstr "Tardará un momento."
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "You can close this page or carry on below."
-msgstr ""
+msgstr "Puedes cerrar esta página o continuar más abajo."
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "The link has expired or was already used."
-msgstr ""
+msgstr "El enlace ha caducado o ya se ha utilizado."
 
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
 msgid "Open Nocturne"
-msgstr ""
+msgstr "Abrir Nocturne"
 
 #: src/routes/(unauthenticated)/auth/error/+page.svelte
 msgid "Recovery ended"
-msgstr ""
+msgstr "La recuperación ha terminado"
 
 #: src/routes/(unauthenticated)/auth/error/+page.svelte
 msgid "The recovery session has ended. Start again with a new link or code."
-msgstr ""
+msgstr "La sesión de recuperación ha terminado. Vuelve a empezar con un enlace o código nuevo."
 
 #: src/routes/(unauthenticated)/auth/error/+page.svelte
 msgid "Back to add a way to sign in"
-msgstr ""
+msgstr "Volver para añadir un método de inicio de sesión"
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Cannot sign in?"
-msgstr ""
+msgstr "¿No puedes iniciar sesión?"
 
 #: src/routes/(unauthenticated)/auth/help/+page.svelte
 msgid "A code does not sign you in on its own. It gives you ten minutes to add one new way to sign in, and you sign in with that."
-msgstr ""
+msgstr "El código te da diez minutos para añadir un nuevo método de inicio de sesión. Después, inicia sesión con ese método."
 
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "That recovery code or link has expired or was already used."
-msgstr ""
+msgstr "Ese código o enlace de recuperación ha caducado o ya se ha utilizado."
 
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Recover your account - Nocturne"
-msgstr ""
+msgstr "Recupera tu cuenta - Nocturne"
 
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "Recover your account"
-msgstr ""
+msgstr "Recupera tu cuenta"
 
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "Use a recovery code from an administrator, or open the link sent to your email. It lets you add one new way to sign in."
-msgstr ""
+msgstr "Usa un código de recuperación que te haya dado un administrador o abre el enlace que se ha enviado a tu correo. Así podrás añadir un nuevo método de inicio de sesión."
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "We could not send a link just now. Try again."
-msgstr ""
+msgstr "No hemos podido enviar el enlace. Inténtalo de nuevo."
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Recovery by email is not available on this site."
-msgstr ""
+msgstr "La recuperación por correo electrónico no está disponible en este sitio."
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "Enter the email address on your account. If you confirmed it, we send a link that lets you add a new way to sign in."
-msgstr ""
+msgstr "Introduce la dirección de correo electrónico de tu cuenta. Si ya la has confirmado, te enviaremos un enlace para añadir un nuevo método de inicio de sesión."
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "If that address is confirmed on an account here, we have sent a link to it. It works for 30 minutes."
-msgstr ""
+msgstr "Si esa dirección está confirmada en una cuenta de este sitio, le hemos enviado un enlace. Es válido durante 30 minutos."
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "<0/> Sending..."
-msgstr ""
+msgstr "<0/> Enviando…"
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "<0/> Send link"
-msgstr ""
+msgstr "<0/> Enviar enlace"
 
 #: src/routes/(unauthenticated)/auth/recovery/email/+page.svelte
 msgid "An administrator of this site can also issue a recovery code. <0>Enter a recovery code</0>"
-msgstr ""
+msgstr "Un administrador de este sitio también puede emitir un código de recuperación. <0>Introduce un código de recuperación</0>"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "The recovery session has ended."
-msgstr ""
+msgstr "La sesión de recuperación ha terminado."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "We could not register a passkey. Try again. This screen works for ten minutes after the code is accepted."
-msgstr ""
+msgstr "No hemos podido registrar la clave de acceso. Inténtalo de nuevo. Esta pantalla está disponible durante diez minutos desde que se acepta el código."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "We could not link that provider. Try again, or create a passkey."
-msgstr ""
+msgstr "No hemos podido vincular ese proveedor. Inténtalo de nuevo o crea una clave de acceso."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Add a way to sign in - Nocturne"
-msgstr ""
+msgstr "Añadir un método de inicio de sesión - Nocturne"
 
 #. 0: username || "your account"
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your recovery code was accepted. It lets you add one way to sign in for {0} and nothing else. This screen works for ten minutes."
-msgstr ""
+msgstr "Tu código de recuperación se ha aceptado. Solo permite añadir un método de inicio de sesión para {0}. Esta pantalla está disponible durante diez minutos."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your passkey is ready. One more step finishes signing in."
-msgstr ""
+msgstr "Tu clave de acceso está lista. Queda un paso para iniciar sesión."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your passkey is ready. Confirm it to finish signing in."
-msgstr ""
+msgstr "Tu clave de acceso está lista. Confírmala para terminar de iniciar sesión."
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Add a way to sign in"
-msgstr ""
+msgstr "Añadir un método de inicio de sesión"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Or create a passkey"
-msgstr ""
+msgstr "O crea una clave de acceso"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "<0/> Create a passkey"
-msgstr ""
+msgstr "<0/> Crear una clave de acceso"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Sign in on the sign-in page"
-msgstr ""
+msgstr "Inicia sesión en la página de acceso"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "rising extremely fast"
-msgstr ""
+msgstr "subiendo a un ritmo extremo"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "rising very fast"
-msgstr ""
+msgstr "subiendo muy rápido"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "rising"
-msgstr ""
+msgstr "subiendo"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "rising slowly"
-msgstr ""
+msgstr "subiendo despacio"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "stable"
-msgstr ""
+msgstr "estable"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "falling slowly"
-msgstr ""
+msgstr "bajando despacio"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "falling"
-msgstr ""
+msgstr "bajando"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "falling very fast"
-msgstr ""
+msgstr "bajando muy rápido"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "falling extremely fast"
-msgstr ""
+msgstr "bajando a un ritmo extremo"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "out of range"
-msgstr ""
+msgstr "fuera de rango"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "sensor error"
-msgstr ""
+msgstr "error del sensor"
 
 #: src/lib/utils/direction-info.svelte.ts
 msgid "unknown"
-msgstr ""
+msgstr "desconocida"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "meals"
-msgstr ""
+msgstr "comidas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "correction boluses"
-msgstr ""
+msgstr "bolus de corrección"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "boluses"
-msgstr ""
+msgstr "bolus"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "rises with no carbs"
-msgstr ""
+msgstr "subidas sin hidratos de carbono"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "lows"
-msgstr ""
+msgstr "bajadas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "highs"
-msgstr ""
+msgstr "episodios de glucemia alta"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "carbs taken in a low"
-msgstr ""
+msgstr "hidratos de carbono que tomaste durante una bajada"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "exercise"
-msgstr ""
+msgstr "ejercicio"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "sleep starts"
-msgstr ""
+msgstr "inicios del sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "wake-ups"
-msgstr ""
+msgstr "despertares"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "sensor starts"
-msgstr ""
+msgstr "inicios del sensor"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "site changes"
-msgstr ""
+msgstr "cambios de zona de infusión"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "overrides"
-msgstr ""
+msgstr "anulaciones"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "temporary targets"
-msgstr ""
+msgstr "objetivos temporales"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "6h"
-msgstr ""
+msgstr "6 h"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "24h"
-msgstr ""
+msgstr "24 h"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "7d"
-msgstr ""
+msgstr "7 d"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "7 days"
-msgstr ""
+msgstr "7 días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "14d"
-msgstr ""
+msgstr "14 d"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "14 days"
-msgstr ""
+msgstr "14 días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "28d"
-msgstr ""
+msgstr "28 d"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "28 days"
-msgstr ""
+msgstr "28 días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "90d"
-msgstr ""
+msgstr "90 d"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "90 days"
-msgstr ""
+msgstr "90 días"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgid "1 day"
-msgstr ""
+msgstr "1 día"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "glucose.read"
-msgstr ""
+msgstr "glucose.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "glucose"
-msgstr ""
+msgstr "glucemia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "treatments.read"
-msgstr ""
+msgstr "treatments.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "treatments"
-msgstr ""
+msgstr "tratamientos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "food.read"
-msgstr ""
+msgstr "food.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "food"
-msgstr ""
+msgstr "alimentos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "therapy.read"
-msgstr ""
+msgstr "therapy.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "therapy settings"
-msgstr ""
+msgstr "ajustes de terapia"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "devices.read"
-msgstr ""
+msgstr "devices.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "devices"
-msgstr ""
+msgstr "dispositivos"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "heartrate.read"
-msgstr ""
+msgstr "heartrate.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "heart rate"
-msgstr ""
+msgstr "frecuencia cardiaca"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "sleep.read"
-msgstr ""
+msgstr "sleep.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "sleep"
-msgstr ""
+msgstr "sueño"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "stepcount.read"
-msgstr ""
+msgstr "stepcount.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "alerts.read"
-msgstr ""
+msgstr "alerts.read"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "alerts"
-msgstr ""
+msgstr "alertas"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "by hour of day"
-msgstr ""
+msgstr "por hora del día"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "by weekday"
-msgstr ""
+msgstr "por día de la semana"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "BG"
