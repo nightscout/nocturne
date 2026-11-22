@@ -369,7 +369,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             name, description, conditionType, conditionParams, scopeClass, severity,
             IsEnabled: true, SortOrder: 0, AllowThroughDnd: false,
             AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
-        [new AlertRuleChannelWrite(ChannelType.InApp, recipient)],
+        [new AlertRuleChannelWrite(ChannelType.InApp, recipient, AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null)],
         ManagedBy: tag);
 
     /// <summary>

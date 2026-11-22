@@ -40,7 +40,7 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public Task<ActionResult<AlertSetupStatus>> SaveAlertSetup(
         [FromBody] SaveAlertSetupRequest request, CancellationToken ct) =>
-        Run(caller => alerts.SaveAsync(caller, request, ct));
+        Run(caller => alerts.SaveAsync(caller, HttpContext.CallerAccessEndsAt(), request, ct));
 
     /// <summary>Sends a test alert where the starter rules send.</summary>
     [DenyDemoSubject]

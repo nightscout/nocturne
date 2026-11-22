@@ -21,6 +21,18 @@ public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertCondit
 /// Webhook signing secret as ciphertext; the dispatching provider decrypts it. Null for every
 /// other channel type and for a webhook whose receiver does not verify signatures.
 /// </param>
+/// <param name="AddedBySubjectId">
+/// Who added a channel whose destination was typed in. Null for every other channel type, and for
+/// one saved by no member or before the column existed.
+/// </param>
+/// <param name="StopsAt">
+/// When such a channel stops delivering: the end of the access of the member who added it. Null
+/// when it does not stop.
+/// </param>
+/// <param name="RecipientSubjectId">
+/// The member a direct message's linked chat account belonged to when the channel was saved, so the
+/// channel can still name them once the link is gone.
+/// </param>
 public record AlertRuleChannelSnapshot(
     Guid Id,
     Guid AlertRuleId,
@@ -29,7 +41,10 @@ public record AlertRuleChannelSnapshot(
     string? DestinationLabel,
     int SortOrder,
     string? Metadata = null,
-    string? Secret = null);
+    string? Secret = null,
+    Guid? AddedBySubjectId = null,
+    DateTime? StopsAt = null,
+    Guid? RecipientSubjectId = null);
 
 /// <summary>
 /// A channel that carries a signing secret, with the name of the rule it belongs to.

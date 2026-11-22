@@ -46,6 +46,6 @@ internal static class InAppRecipients
         return owners.FirstOrDefault(MayReceive)?.SubjectId;
     }
 
-    private static bool MayReceive(TenantMemberRecord membership) =>
+    internal static bool MayReceive(TenantMemberRecord membership) =>
         membership.EffectivePermissions().Any();
 }

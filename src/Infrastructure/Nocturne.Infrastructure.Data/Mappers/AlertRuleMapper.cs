@@ -14,7 +14,8 @@ public static class AlertRuleMapper
 
     public static AlertRuleChannelSnapshot ToSnapshot(AlertRuleChannelEntity c) => new(
         c.Id, c.AlertRuleId, c.ChannelType,
-        c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret);
+        c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret,
+        c.AddedBySubjectId, c.StopsAt, c.RecipientSubjectId);
 
     /// <summary>The rule with its loaded channels in <c>SortOrder</c>.</summary>
     public static AlertRuleRecord ToRecord(AlertRuleEntity r) => new(

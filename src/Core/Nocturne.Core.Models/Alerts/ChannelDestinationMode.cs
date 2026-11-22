@@ -13,12 +13,16 @@ public enum ChannelDestinationMode
     /// </summary>
     Member,
 
-    /// <summary>The user types the destination and it is shape-checked on save.</summary>
+    /// <summary>
+    /// The user types the destination and it is shape-checked on save. It names no member, so it
+    /// stops when the access of the member who added it ends.
+    /// </summary>
     UserSupplied,
 
     /// <summary>
     /// Filled in on save from the caller's active link in the chat identity directory for the
-    /// channel's platform.
+    /// channel's platform. Delivered only while it is the linked account, in the rule's tenant, of
+    /// a member whose membership is live.
     /// </summary>
     LinkedIdentity,
 

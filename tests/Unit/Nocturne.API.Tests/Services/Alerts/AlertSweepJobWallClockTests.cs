@@ -859,6 +859,7 @@ public class AlertSweepJobWallClockTests
             services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
             services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
             services.AddSingleton(ClockNotice.Object);
+            services.AddSingleton(Mock.Of<IAlertChannelNotice>());
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 
             _services = services.BuildServiceProvider();

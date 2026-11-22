@@ -22,6 +22,7 @@ namespace Nocturne.API.Services.Alerts;
 ///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
 ///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
+///   <item>Tell the owners of each channel of an enabled rule that does not send (<see cref="IAlertChannelNotice"/>).</item>
 ///   <item>Archive a clock-anomaly notification once no stored reading is ahead of the clock (<see cref="IClockAnomalyNotice.RefreshAsync"/>).</item>
 ///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="RuleTrees.ReferencesWallClock"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
@@ -104,6 +105,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                      (CloseHysteresisWindowsAsync, "closing hysteresis windows"),
                      (CheckSnoozedInstancesAsync, "checking snoozed instances"),
                      (CheckRuleConditionsAsync, "checking rule conditions"),
+                     (CheckAlertChannelsAsync, "checking alert channels"),
                      (CheckClockAnomaliesAsync, "checking clock-anomaly notifications"),
                      (EvaluateWallClockRulesAsync, "evaluating wall-clock rules"),
                      (EvaluateAutoResolveAsync, "evaluating auto-resolve"),
@@ -506,6 +508,10 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     private static async Task CheckRuleConditionsAsync(Sweep sweep, CancellationToken ct) =>
         await sweep.Services.GetRequiredService<IUnevaluableRuleNotice>()
             .CheckAsync(await sweep.ReadEnabledRulesAsync(ct), ct);
+
+    private static async Task CheckAlertChannelsAsync(Sweep sweep, CancellationToken ct) =>
+        await sweep.Services.GetRequiredService<IAlertChannelNotice>()
+            .CheckAsync(await sweep.EnabledRulesAsync(ct), sweep.Now, ct);
 
     private static Task CheckClockAnomaliesAsync(Sweep sweep, CancellationToken ct) =>
         sweep.Services.GetRequiredService<IClockAnomalyNotice>().RefreshAsync(sweep.Now, ct);

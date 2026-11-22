@@ -629,7 +629,7 @@ public class SampleDataSeeder
         CancellationToken ct)
     {
         IReadOnlyList<AlertRuleChannelWrite> channels = ownerSubjectId is { } owner
-            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString())]
+            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString(), AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null)]
             : [];
         var seeded = await _alertRules.CreateMissingByNameAsync(
             DemoAlertSeeds.Defaults

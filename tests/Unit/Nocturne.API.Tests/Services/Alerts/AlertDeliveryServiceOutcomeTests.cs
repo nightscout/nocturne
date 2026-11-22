@@ -278,4 +278,45 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_dispatch", It.IsAny<object>()), Times.Never);
         (await SingleDeliveryAsync()).ChannelType.Should().Be(ChannelType.InApp);
     }
+
+    [Fact]
+    public async Task A_test_fire_through_a_stopped_channel_is_recorded_failed_with_the_stop()
+    {
+        var stopsAt = DateTime.UtcNow.AddMinutes(-1);
+        var stopped = Channel(ChannelType.DiscordChannel, "1234567890123456789") with
+        {
+            AddedBySubjectId = Member,
+            StopsAt = stopsAt,
+        };
+
+        await CreateService().TestFireAsync(Guid.NewGuid(), [stopped], Payload(Guid.Empty), CancellationToken.None);
+
+        var delivery = await SingleDeliveryAsync();
+        delivery.IsTest.Should().BeTrue();
+        delivery.Status.Should().Be("failed");
+        delivery.LastError.Should().StartWith($"Stopped at {stopsAt:O}");
+    }
+
+    [Fact]
+    public async Task A_test_fire_through_a_direct_message_no_member_has_linked_is_recorded_failed_with_no_recipient()
+    {
+        await CreateService().TestFireAsync(
+            Guid.NewGuid(), [Channel(ChannelType.DiscordDm, "1234567890123456789")], Payload(Guid.Empty), CancellationToken.None);
+
+        var delivery = await SingleDeliveryAsync();
+        delivery.Status.Should().Be("failed");
+        delivery.LastError.Should().StartWith("No recipient");
+    }
+
+    [Fact]
+    public async Task A_dry_run_reports_a_channel_it_did_not_send_and_records_nothing()
+    {
+        var notSent = await CreateService().TestFireDryRunAsync(
+            [Channel(ChannelType.WebPush, string.Empty), Channel(ChannelType.DiscordDm, "1234567890123456789")],
+            Payload(Guid.Empty), CancellationToken.None);
+
+        notSent.Should().Equal(new AlertChannelNotSent(1, ChannelType.DiscordDm, AlertChannelState.NoRecipient));
+        await using var db = await _factory.CreateDbContextAsync();
+        (await db.AlertDeliveries.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
+    }
 }

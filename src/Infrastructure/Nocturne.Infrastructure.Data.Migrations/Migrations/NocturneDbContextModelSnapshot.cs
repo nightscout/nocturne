@@ -506,6 +506,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AddedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by_subject_id");
+
                     b.Property<Guid>("AlertRuleId")
                         .HasColumnType("uuid")
                         .HasColumnName("alert_rule_id");
@@ -537,6 +541,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
 
+                    b.Property<Guid?>("RecipientSubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_subject_id");
+
                     b.Property<string>("Secret")
                         .HasMaxLength(1536)
                         .HasColumnType("character varying(1536)")
@@ -545,6 +553,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
+
+                    b.Property<DateTime?>("StopsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stops_at");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

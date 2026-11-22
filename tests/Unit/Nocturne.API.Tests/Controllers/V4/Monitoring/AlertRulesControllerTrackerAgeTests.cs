@@ -39,6 +39,7 @@ public class AlertRulesControllerTrackerAgeTests
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
             new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
             MockTenantAccessor.Create(db.TenantId).Object,

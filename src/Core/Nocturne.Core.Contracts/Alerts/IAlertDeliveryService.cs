@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
 
@@ -48,7 +49,8 @@ public interface IAlertDeliveryService
     /// <c>alert_deliveries</c> rows — there is no rule to attribute them to. Use
     /// <see cref="TestFireAsync"/> for saved rules.
     /// </summary>
-    Task TestFireDryRunAsync(
+    /// <returns>The channels it did not send because they do not deliver, with their state.</returns>
+    Task<IReadOnlyList<AlertChannelNotSent>> TestFireDryRunAsync(
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
         CancellationToken ct);

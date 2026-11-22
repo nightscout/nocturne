@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -23,8 +24,9 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     /// rejects a channel list whose destinations cannot deliver: an in-app channel naming no
     /// member, a <c>device_action</c> channel naming an unknown kind or capability, a channel type
     /// with no delivery path, a channel type that needs a destination and was given none, or a
-    /// destination the platform adapter cannot address. Nothing downstream inspects a destination,
-    /// so an unrejected one becomes a channel that stores fine and never delivers. Returns why the
+    /// destination the platform adapter cannot address. Delivery inspects only who a destination
+    /// reaches (<see cref="AlertChannelStates"/>), never its shape, so an unrejected one becomes a
+    /// channel that stores fine and never delivers. Returns why the
     /// first offender is rejected, or null when all channels are valid. <paramref name="subjectId"/>
     /// is the caller, whose linked identities fill in a DM destination.
     /// </summary>
@@ -111,7 +113,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
                 ch.Destination = await ResolveLinkedPlatformUserIdAsync(db, platform, subjectId, ct);
                 if (ch.Destination is null)
                 {
-                    var name = char.ToUpperInvariant(platform[0]) + platform[1..];
+                    var name = PlatformDisplayName(platform);
                     return $"No linked {name} account for this user. Link {name} under "
                         + $"Connectors & Apps, or enter a {name} user ID as the destination.";
                 }
@@ -196,12 +198,8 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             return null;
         }
 
-        var tenantId = db.TenantId;
-        return await db.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId
-                        && d.NocturneUserId == subjectId.Value
-                        && d.Platform == platform
-                        && d.IsActive)
+        return await ChatIdentityDirectoryService.ActiveLinksOfTenant(db, db.TenantId)
+            .Where(d => d.NocturneUserId == subjectId.Value && d.Platform == platform)
             .OrderBy(d => d.CreatedAt)
             .Select(d => d.PlatformUserId)
             .FirstOrDefaultAsync(ct);
@@ -241,26 +239,68 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
 
     public static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
 
+    /// <summary>A chat platform's name as a person reads it.</summary>
+    internal static string PlatformDisplayName(string platform) =>
+        char.ToUpperInvariant(platform[0]) + platform[1..];
+
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
     private static string WireName(ChannelType channelType) =>
         JsonSerializer.Serialize(channelType).Trim('"');
 
     /// <summary>
-    /// The channel as stored. A secret omitted from the request keeps the one stored against this
-    /// channel type and destination (<see cref="AlertRuleChannelWrite.KeepsStoredSecret"/>); one
-    /// that is empty once trimmed clears it.
+    /// The channels as stored, once <see cref="ResolveAndValidateAsync"/> has accepted them. A
+    /// secret omitted from the request keeps the one stored against its channel type and
+    /// destination (<see cref="AlertRuleChannelWrite.KeepsStoredSecret"/>); one that is empty once
+    /// trimmed clears it.
     /// </summary>
-    public AlertRuleChannelWrite ToWrite(CreateAlertRuleChannelRequest req) => new(
-        req.ChannelType,
-        req.Destination ?? string.Empty,
-        req.DestinationLabel,
-        SerializeMetadata(req.Metadata),
-        Secret: req.Secret is null ? null : EncryptSecret(req.Secret),
-        KeepsStoredSecret: req.Secret is null);
+    /// <remarks>
+    /// A channel whose destination was typed in is stamped with <paramref name="saverId"/>, the
+    /// caller, and <paramref name="saverAccessEndsAt"/>, when the caller's access ends
+    /// (<see cref="Extensions.HttpContextExtensions.CallerAccessEndsAt"/>), so it stops then; a
+    /// write no member makes stamps nothing. The repository keeps the stamps of a channel the rule
+    /// already holds (<see cref="AlertRuleChannelWrite.AddedBySubjectId"/>). A direct message is
+    /// stamped with the member its linked account belongs to, read from the chat links of
+    /// <paramref name="db"/>'s tenant, so it can still name them once the link is gone.
+    /// </remarks>
+    public async Task<List<AlertRuleChannelWrite>> ToWritesAsync(
+        IEnumerable<CreateAlertRuleChannelRequest> requests,
+        Guid? saverId,
+        DateTime? saverAccessEndsAt,
+        NocturneDbContext db,
+        CancellationToken ct)
+    {
+        var channels = requests.ToList();
+        var links = new Dictionary<(string Platform, string PlatformUserId), Guid>();
+        if (channels.Any(c => ChannelDestinations.ResolvesFromLinkedIdentity(c.ChannelType)))
+        {
+            foreach (var link in await ChatIdentityDirectoryService.ActiveLinksOfTenant(db, db.TenantId)
+                         .AsNoTracking()
+                         .Select(d => new { d.Platform, d.PlatformUserId, d.NocturneUserId })
+                         .ToListAsync(ct))
+                links.TryAdd((link.Platform, link.PlatformUserId), link.NocturneUserId);
+        }
 
-    /// <inheritdoc cref="ToWrite(CreateAlertRuleChannelRequest)"/>
-    public List<AlertRuleChannelWrite> ToWrites(IEnumerable<CreateAlertRuleChannelRequest> requests) =>
-        requests.Select(ToWrite).ToList();
+        return channels.Select(req =>
+        {
+            var destination = req.Destination ?? string.Empty;
+            var mode = ChannelDestinations.ModeOf(req.ChannelType);
+            var stamped = mode == ChannelDestinationMode.UserSupplied && saverId is not null;
+            Guid? recipient = mode == ChannelDestinationMode.LinkedIdentity
+                              && links.TryGetValue((ChannelDestinations.PlatformOf(req.ChannelType)!, destination), out var linked)
+                ? linked
+                : null;
+            return new AlertRuleChannelWrite(
+                req.ChannelType,
+                destination,
+                AddedBySubjectId: stamped ? saverId : null,
+                StopsAt: stamped ? saverAccessEndsAt : null,
+                RecipientSubjectId: recipient,
+                req.DestinationLabel,
+                SerializeMetadata(req.Metadata),
+                Secret: req.Secret is null ? null : EncryptSecret(req.Secret),
+                KeepsStoredSecret: req.Secret is null);
+        }).ToList();
+    }
 
     /// <summary>
     /// Ciphertext for a caller-supplied secret, or null when it is blank. Surrounding whitespace is
