@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -41,11 +42,12 @@ public class TotpControllerLoginGateTests
         => new(
             _totpService.Object,
             _trustedDevices.Object,
-            _sessionService.Object,
+            new SignInCompletion(
+                _totpService.Object, _tenantMemberService.Object, _sessionService.Object,
+                _subjectService.Object, _auditService.Object),
             _subjectService.Object,
             _auditService.Object,
             _tenantAccessor.Object,
-            _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = Apex }),
             NullLogger<TotpController>.Instance)
@@ -183,6 +185,70 @@ public class TotpControllerLoginGateTests
             a => a.LogAsync(AuthAuditEventType.Logout, subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
                 null, It.Is<string?>(d => d != null && d.Contains("replaced_by_sign_in")), null, null, null),
             handedOff ? Times.Once() : Times.Never());
+    }
+
+    /// <summary>
+    /// The sign-in is complete, and logged, before the cookies it calls for are written, so the
+    /// handed-off session it replaces is ended after the login row.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_OverAHandedOffSession_LogsTheSignInBeforeEndingTheReplacedSession()
+    {
+        var subjectId = Guid.NewGuid();
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(subjectId, "previous-session", true));
+        var events = new List<string>();
+        _auditService
+            .Setup(a => a.LogAsync(It.IsAny<string>(), subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()))
+            .Callback((string type, Guid? _, bool _, string? _, string? _, string? _, string? _, Guid? _,
+                AuthAuditActor? _, Guid? _) => events.Add(type))
+            .Returns(Task.CompletedTask);
+        _requestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+
+        await SignInAsync(subjectId, trustDevice: false,
+            presentedCookie: $"{new OidcOptions().Cookie.RefreshTokenName}=presented");
+
+        events.Should().Equal(AuthAuditEventType.Login, AuthAuditEventType.Logout);
+    }
+
+    /// <summary>
+    /// The sign-in is recorded before its cookies are written, so a failure ending the handed-off
+    /// session leaves the success row and last-login behind an error answer. The session cookies
+    /// already appended are never sent: the exception handler clears the unsent response.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Login_WhenEndingTheHandedOffSessionFails_LeavesALoginSuccessRowAndLastLoginBehindTheError()
+    {
+        var subjectId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        OnHost(tenantId);
+        TokenBoundTo(subjectId, tenantId);
+        SetupMembership(subjectId, tenantId, isMember: true);
+        SetupSessionIssuance();
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+        _requestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+
+        var controller = CreateController();
+        controller.HttpContext.Request.Headers.Cookie = $"{new OidcOptions().Cookie.RefreshTokenName}=presented";
+
+        var act = () => controller.Login(new TotpLoginRequest { StepUpToken = "step-up", Code = "123456" });
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(subjectId), Times.Once);
+        _auditService.Verify(a => a.LogAsync(
+            AuthAuditEventType.Login, subjectId, true,
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()), Times.Once);
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]

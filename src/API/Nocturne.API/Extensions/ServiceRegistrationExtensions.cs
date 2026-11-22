@@ -593,6 +593,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<ISubjectService, SubjectService>();
         services.AddScoped<ISessionService, SessionService>();
+        services.AddScoped<SignInCompletion>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IOidcProviderService, OidcProviderService>();
         services.AddScoped<IOidcAuthService, OidcAuthService>();

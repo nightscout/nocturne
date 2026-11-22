@@ -32,7 +32,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// here with an earlier code (<see cref="ITotpService.GetSecondFactorRequirementAsync"/>).
 /// </remarks>
 /// <seealso cref="ITotpService"/>
-/// <seealso cref="ISessionService"/>
+/// <seealso cref="SignInCompletion"/>
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="IAuthAuditService"/>
 [ApiController]
@@ -56,11 +56,10 @@ public class TotpController : ControllerBase
 
     private readonly ITotpService _totpService;
     private readonly ITrustedDeviceService _trustedDevices;
-    private readonly ISessionService _sessionService;
+    private readonly SignInCompletion _signIn;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _oidcOptions;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<TotpController> _logger;
@@ -71,22 +70,20 @@ public class TotpController : ControllerBase
     public TotpController(
         ITotpService totpService,
         ITrustedDeviceService trustedDevices,
-        ISessionService sessionService,
+        SignInCompletion signIn,
         ISubjectService subjectService,
         IAuthAuditService auditService,
         ITenantAccessor tenantAccessor,
-        ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<TotpController> logger)
     {
         _totpService = totpService;
         _trustedDevices = trustedDevices;
-        _sessionService = sessionService;
+        _signIn = signIn;
         _subjectService = subjectService;
         _auditService = auditService;
         _tenantAccessor = tenantAccessor;
-        _tenantMemberService = tenantMemberService;
         _oidcOptions = oidcOptions.Value;
         _baseDomain = baseDomainOptions.Value;
         _logger = logger;
@@ -306,10 +303,7 @@ public class TotpController : ControllerBase
         // The primary factor decided who may sign in where, and the token carries that decision:
         // redeem it only on the host it was minted for. A membership revoked since then still
         // denies, unless the primary factor admitted this subject on an invite.
-        if (!IsMintingHost(result.TenantId)
-            || (result.TenantId is { } tenantId
-                && !result.AdmittedByInvite
-                && !await _tenantMemberService.IsMemberAsync(result.SubjectId, tenantId)))
+        if (!IsMintingHost(result.TenantId))
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
                 ipAddress: ip, userAgent: ua,
@@ -317,22 +311,24 @@ public class TotpController : ControllerBase
             return Problem(detail: NotAMember, statusCode: 403, title: "Forbidden");
         }
 
-        var session = await _sessionService.IssueSessionAsync(
+        SignInAdmission admission = result switch
+        {
+            { AdmittedByInvite: true } => new SignInAdmission.Invite(result.TenantId),
+            { TenantId: { } tenantId } => new SignInAdmission.Member(tenantId),
+            _ => new SignInAdmission.Account(),
+        };
+
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
             result.SubjectId,
-            new SessionContext(
-                DeviceDescription: "TOTP",
-                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                UserAgent: Request.Headers.UserAgent.ToString()));
+            SignInMethod.Totp,
+            admission,
+            new SecondFactorProof.CodeVerified(result),
+            new SessionContext(DeviceDescription: "TOTP", IpAddress: ip, UserAgent: ua)));
 
-        // The sign-in hint names the primary factor, which wrote it when it minted the step-up token.
-        Response.SetSessionCookies(session, _oidcOptions);
-        await HttpContext.EndReplacedHandedOffSessionAsync(_oidcOptions);
+        if (outcome is not SignInOutcome.SignedIn signedIn)
+            return Problem(detail: NotAMember, statusCode: 403, title: "Forbidden");
 
-        await _subjectService.UpdateLastLoginAsync(result.SubjectId);
-
-        await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: true,
-            ipAddress: ip, userAgent: ua,
-            detailsJson: JsonSerializer.Serialize(new { method = "totp" }));
+        await HttpContext.ApplySignInAsync(signedIn, _oidcOptions);
 
         if (request.TrustDevice
             && await _trustedDevices.TrustAsync(
@@ -350,8 +346,8 @@ public class TotpController : ControllerBase
         return Ok(new TotpLoginResponse
         {
             Success = true,
-            AccessToken = session.AccessToken,
-            ExpiresIn = session.ExpiresInSeconds,
+            AccessToken = signedIn.Session.AccessToken,
+            ExpiresIn = signedIn.Session.ExpiresInSeconds,
         });
     }
 

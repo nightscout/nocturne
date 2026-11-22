@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -42,11 +43,12 @@ public class TotpControllerSetupFailureTests
         return new TotpController(
             _totpService.Object,
             new Mock<ITrustedDeviceService>().Object,
-            _sessionService.Object,
+            new SignInCompletion(
+                _totpService.Object, _tenantMemberService.Object, _sessionService.Object,
+                _subjectService.Object, _auditService.Object),
             _subjectService.Object,
             _auditService.Object,
             _tenantAccessor.Object,
-            _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions()),
             NullLogger<TotpController>.Instance)
