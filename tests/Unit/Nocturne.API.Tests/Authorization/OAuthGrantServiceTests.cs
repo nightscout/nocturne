@@ -69,6 +69,7 @@ public class OAuthGrantServiceTests : IDisposable
             _mockClientService.Object,
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
+            TimeProvider.System,
             _mockLogger.Object);
     }
 

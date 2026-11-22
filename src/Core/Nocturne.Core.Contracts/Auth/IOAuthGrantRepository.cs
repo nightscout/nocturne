@@ -89,8 +89,12 @@ public interface IOAuthGrantRepository
     /// </summary>
     Task<OAuthGrantRecord?> FindLiveDirectGrantAsync(DirectGrantLookup lookup, DateTime now, CancellationToken ct);
 
-    /// <summary>Whether an unrevoked direct grant matches the legacy secret hash <paramref name="legacySecretHash"/>.</summary>
-    Task<bool> HasUnrevokedLegacySecretAsync(string legacySecretHash, CancellationToken ct);
+    /// <summary>
+    /// The oldest direct grant live at <paramref name="now"/> that matches the legacy secret hash
+    /// <paramref name="legacySecretHash"/>, or null when none does: a revoked or expired one no longer
+    /// holds the secret.
+    /// </summary>
+    Task<OAuthGrantRecord?> FindLiveLegacySecretAsync(string legacySecretHash, DateTime now, CancellationToken ct);
 
     /// <summary>The token hashes of every grant of the tenant that has one.</summary>
     Task<IReadOnlySet<string>> GetTokenHashesAsync(CancellationToken ct);
@@ -107,15 +111,28 @@ public interface IOAuthGrantRepository
         Guid createdBySubjectId, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link <paramref name="createdBySubjectId"/>
-    /// made that is live at <paramref name="now"/> and expires later, and stages a
-    /// <c>guest_link_capped</c> audit row for each. A link that expires sooner is left alone. Stages on
-    /// the caller's unit of work and does not save.
+    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link and device credential
+    /// <paramref name="createdBySubjectId"/> made that is live at <paramref name="now"/> and expires
+    /// later or never, and stages a <c>guest_link_capped</c> or <c>device_credential_capped</c> audit row
+    /// for each. A grant that expires sooner is left alone, and so is one whose revocation is already
+    /// staged on the unit. Stages on the caller's unit of work and does not save.
     /// </summary>
-    /// <returns>The links it lowered, for the caller to evict their sessions once the unit commits.</returns>
+    /// <returns>The grants it lowered, for the caller to evict their sessions once the unit commits.</returns>
     /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
-    Task<IReadOnlyList<OAuthGrantRecord>> CapGuestLinksCreatedByAsync(
+    Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
         Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Removes the expiry and the maker's stamp of device credential <paramref name="grantId"/>, an
+    /// unrevoked direct grant a member made for the tenant's device subject, and stages a
+    /// <c>device_credential_kept</c> audit row naming that member. With the stamp gone no later end
+    /// date, removal or rejoin of the maker caps it again.
+    /// </summary>
+    /// <returns>
+    /// False when <paramref name="grantId"/> is not an unrevoked device credential of the tenant that
+    /// carries a maker's stamp, such as one a platform administrator gave an expiry.
+    /// </returns>
+    Task<bool> KeepDeviceCredentialAsync(Guid grantId, CancellationToken ct);
 
     /// <summary>
     /// Stages a <c>guest_link_revoked</c> audit row for each of <paramref name="links"/>, which the

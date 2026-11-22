@@ -49,6 +49,7 @@ public class ConnectorConfigurationEnabledFlagTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

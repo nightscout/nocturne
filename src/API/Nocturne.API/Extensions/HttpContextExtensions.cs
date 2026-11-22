@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
@@ -244,6 +246,52 @@ public static class HttpContextExtensions
         context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
             ? RequestMembership.Of(context, subjectId, tenantId)?.Membership?.Access.AccessEndsAt
             : null;
+
+    /// <summary>
+    /// The maker a device credential this caller creates is stamped with, or null when no subject is
+    /// authenticated. Its end is the earlier of the caller's own access end
+    /// (<see cref="CallerAccessEndsAt"/>) and the expiry of the grant the request presented, so a
+    /// credential cannot make one that outlasts itself. A presented grant that a member made for
+    /// another subject, a device credential, passes its maker on, so the member stays the one whose
+    /// end date and removal reach what it makes.
+    /// </summary>
+    public static async Task<CredentialMaker?> CredentialMakerAsync(this HttpContext context, CancellationToken ct)
+    {
+        if (context.GetAuthContext() is not { SubjectId: { } subjectId } auth)
+            return null;
+
+        var accessEndsAt = context.CallerAccessEndsAt();
+        if (auth is not { TokenId: { } grantId, TenantId: { } tenantId }
+            || await context.RequestServices.GetRequiredService<IOAuthGrantRepository>()
+                .GetStateAsync(tenantId, grantId, ct) is not { } presented)
+            return new CredentialMaker(subjectId, accessEndsAt);
+
+        var endsAt = Earlier(accessEndsAt, presented.ExpiresAt);
+        return presented.CreatedBySubjectId is { } maker && maker != subjectId
+            ? new CredentialMaker(maker, endsAt)
+            : new CredentialMaker(subjectId, endsAt);
+    }
+
+    private static DateTime? Earlier(DateTime? first, DateTime? second) =>
+        first is { } a && second is { } b ? (a < b ? a : b) : first ?? second;
+
+    /// <summary>
+    /// Whether the caller may remove the expiry of a device credential, so it outlasts the member who
+    /// set it up: an interactive session (<see cref="RequireInteractiveSessionAttribute"/>) of a caller
+    /// who manages the members and whose own access does not end (<see cref="CallerAccessEndsAt"/>).
+    /// The keep endpoint and the connections list's <c>CanKeep</c> both read this.
+    /// </summary>
+    public static bool MayKeepDeviceCredentials(this HttpContext context) =>
+        !RequireInteractiveSessionAttribute.Refuses(context)
+        && context.HasScope(Scope.MembersManage)
+        && context.CallerAccessEndsAt() is null;
+
+
+    /// <summary>
+    /// The refusal a caller whose own access ends reads when they try to keep a device credential.
+    /// </summary>
+    public const string KeepDeviceCredentialEndDateDetail =
+        "Your access ends on a date, so you cannot keep a connection after the date it stops.";
 
     /// <summary>The end a membership this caller creates carries: the requested one, or the caller's own (<see cref="CallerAccessEndsAt"/>).</summary>
     public static DateTime? InheritAccessEnd(this HttpContext context, DateTime? requested) =>

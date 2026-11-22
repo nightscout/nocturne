@@ -174,7 +174,7 @@ public partial class CareLinkConnectController : ControllerBase
         if (!string.IsNullOrEmpty(result.Audience))
             secrets["audience"] = result.Audience;
 
-        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", ct);
+        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", maker: null, ct);
 
         // Best-effort: auto-fill username/country from the profile so setup is one click.
         string? username = null, country = null;

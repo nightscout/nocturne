@@ -19,18 +19,20 @@ public class OAuthGrantService : IOAuthGrantService
     private readonly IOAuthClientService _clientService;
     private readonly GuestSessionCacheService _guestSessionCache;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TimeProvider _time;
     private readonly ILogger<OAuthGrantService> _logger;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
     /// <param name="contexts">Opens the unit of work a revoke runs on.</param>
-    /// <param name="grants">The stored grants. <see cref="IsGrantRevokedAsync"/> pins the token's
+    /// <param name="grants">The stored grants. <see cref="IsGrantLiveAsync"/> pins the token's
     /// tenant rather than reading its scope's: it runs inside the authentication handlers, which may
     /// hold a scope with no tenant resolved.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
+    /// <param name="time">The clock a grant's expiry is judged against.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         INocturneDbContextFactory contexts,
@@ -38,8 +40,10 @@ public class OAuthGrantService : IOAuthGrantService
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
+        TimeProvider time,
         ILogger<OAuthGrantService> logger)
     {
+        _time = time;
         _contexts = contexts;
         _grants = grants;
         _clientService = clientService;
@@ -157,7 +161,7 @@ public class OAuthGrantService : IOAuthGrantService
     }
 
     /// <inheritdoc />
-    public async Task<bool> IsGrantRevokedAsync(
+    public async Task<bool> IsGrantLiveAsync(
         Guid grantId,
         Guid tenantId,
         CancellationToken ct = default)
@@ -165,7 +169,7 @@ public class OAuthGrantService : IOAuthGrantService
         var state = await _grants.GetStateAsync(tenantId, grantId, ct);
 
         // No row means the grant was deleted, belongs to another tenant, or never existed.
-        return state is null || state.RevokedAt != null;
+        return state is not null && state.IsLiveAt(_time.GetUtcNow().UtcDateTime);
     }
 
     /// <inheritdoc />
@@ -198,6 +202,7 @@ public class OAuthGrantService : IOAuthGrantService
             LastUsedIp = grant.LastUsedIp,
             LastUsedUserAgent = grant.LastUsedUserAgent,
             IsRevoked = grant.IsRevoked,
+            ExpiresAt = grant.ExpiresAt,
             LimitTo24Hours = grant.LimitTo24Hours,
         };
     }

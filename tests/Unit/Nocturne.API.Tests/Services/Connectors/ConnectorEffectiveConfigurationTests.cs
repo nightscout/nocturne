@@ -56,6 +56,7 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
             configuration,
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
 
     [Fact]

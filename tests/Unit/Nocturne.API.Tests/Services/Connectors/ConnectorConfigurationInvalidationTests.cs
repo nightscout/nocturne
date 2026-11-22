@@ -74,6 +74,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [new RecordingInvalidator(_invalidated), nudge],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 
@@ -95,7 +96,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     [Fact]
     public async Task SaveSecretsAsync_InvalidatesForTheTenant()
     {
-        await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" });
+        await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" }, modifiedBy: null, maker: null);
 
         _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
         _nudged.Should().ContainSingle().Which.Should().Be(_tenantId);

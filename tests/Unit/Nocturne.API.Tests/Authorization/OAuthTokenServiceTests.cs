@@ -351,6 +351,7 @@ public class OAuthTokenServiceTests : IDisposable
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
             new GrantRevocationService(guestSessionCache),
+            TimeProvider.System,
             Mock.Of<ILogger<OAuthGrantService>>());
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(

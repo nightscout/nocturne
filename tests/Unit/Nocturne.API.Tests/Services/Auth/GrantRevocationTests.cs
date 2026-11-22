@@ -104,6 +104,7 @@ public class GrantRevocationTests : IDisposable
                     _sessionCache,
                     new GrantRevocationService(
                         _sessionCache),
+                    TimeProvider.System,
                     NullLogger<OAuthGrantService>.Instance);
                 await grants.RevokeGrantAsync(grantId);
                 break;

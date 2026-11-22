@@ -343,7 +343,8 @@ public class OAuthTokenRepository : IOAuthTokenRepository
                 token.Grant.Scopes,
                 token.Grant.Client?.ClientId,
                 token.Grant.LimitTo24Hours,
-                token.Grant.IsRevoked));
+                token.Grant.IsRevoked,
+                token.Grant.ExpiresAt));
 
     private static DeviceCodeRecord? ToRecord(OAuthDeviceCodeEntity? code) =>
         code is null ? null : new DeviceCodeRecord(

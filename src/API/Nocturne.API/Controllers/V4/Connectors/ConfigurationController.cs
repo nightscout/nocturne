@@ -475,10 +475,11 @@ public class ConfigurationController : ControllerBase
     /// <param name="connectorName">The connector name</param>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="ct">Cancellation token</param>
+    /// <returns>Whether a live credential already held a saved Nightscout API secret, and when it stops.</returns>
     [HttpPut("{connectorName}/secrets")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [RequireScope(Scope.ConnectorsReadWrite)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ConnectorSecretsSaveResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> SaveSecrets(
@@ -493,8 +494,8 @@ public class ConfigurationController : ControllerBase
 
         // Saving a Nightscout API secret adopts it as a working credential (see
         // RequireInteractiveSessionAttribute); other connector credentials hand out nothing.
-        if (ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null
-            && RequireInteractiveSessionAttribute.Refuses(HttpContext))
+        var adopts = ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null;
+        if (adopts && RequireInteractiveSessionAttribute.Refuses(HttpContext))
         {
             return RequireInteractiveSessionAttribute.IsHandedOff(HttpContext)
                 ? RequireInteractiveSessionAttribute.SignInRequired(HttpContext)
@@ -507,8 +508,8 @@ public class ConfigurationController : ControllerBase
 
         try
         {
-            await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, ct);
-            return NoContent();
+            var maker = adopts ? await HttpContext.CredentialMakerAsync(ct) : null;
+            return Ok(await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, maker, ct));
         }
         catch (InvalidOperationException ex)
         {

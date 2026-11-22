@@ -41,6 +41,9 @@
 
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Clock from "@lucide/svelte/icons/clock";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
   import ConnectorDangerZone from "#lib/components/connectors/ConnectorDangerZone.svelte";
@@ -145,6 +148,13 @@
   const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
   const dataSummary = $derived(dataSummaryQuery?.current ?? null);
   const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
+  const savedSecretStopsAt = $derived(
+    connectorCapabilities?.savedSecretStopsAt
+      ? formatMediumDate(accessEndDate(connectorCapabilities.savedSecretStopsAt))
+      : null
+  );
+  /** When the credential that already held a secret this page saved stops, as the save reported it. */
+  let secretInUseStopsAt = $state<string | null>(null);
 
   const connectorStatus = $derived.by(() => {
     const statuses = statusQuery?.current;
@@ -267,10 +277,14 @@
       });
 
       if (Object.keys(newSecrets).length > 0) {
-        await saveSecrets({
+        const saved = await saveSecrets({
           connectorName: connectorInfo.id,
           request: newSecrets,
         });
+        secretInUseStopsAt =
+          saved?.secretAlreadyInUse && saved.secretInUseStopsAt
+            ? formatMediumDate(accessEndDate(saved.secretInUseStopsAt))
+            : null;
       }
 
       // In wizard/setup mode, activate the connector after saving
@@ -427,6 +441,27 @@
           enable this connector.
         </ReadOnlyNotice>
       {:else if showConfiguration && hasRuntimeConfig}
+        {#if secretInUseStopsAt}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-in-use"
+          >
+            <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              This secret is already in use. It stops on {secretInUseStopsAt}.
+            </span>
+          </p>
+        {:else if savedSecretStopsAt}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-stops"
+          >
+            <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Your access ends on {savedSecretStopsAt}. This credential stops then.
+            </span>
+          </p>
+        {/if}
         <ConnectorConfigForm
           {schema}
           bind:configuration

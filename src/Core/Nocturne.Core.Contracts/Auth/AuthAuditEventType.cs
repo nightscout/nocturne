@@ -82,6 +82,21 @@ public static class AuthAuditEventType
     public const string GuestLinkRevoked = "guest_link_revoked";
 
     /// <summary>
+    /// Event type when a member's access end date set or moved earlier, or their removal while it
+    /// ends, lowers the expiry of a device credential they made. The target is the member; the details
+    /// name the credential under <c>grant</c> and its new expiry under <c>expires_at</c> as an ISO 8601
+    /// UTC instant.
+    /// </summary>
+    public const string DeviceCredentialCapped = "device_credential_capped";
+
+    /// <summary>
+    /// Event type when a member whose access does not end removes the expiry of a device credential.
+    /// The target is the member who made it, when it is known; the details name the credential under
+    /// <c>grant</c>.
+    /// </summary>
+    public const string DeviceCredentialKept = "device_credential_kept";
+
+    /// <summary>
     /// Event type when a subject (user) is created.
     /// </summary>
     public const string SubjectCreated = "subject_created";

@@ -497,7 +497,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             await FluentActions.Awaiting(() => unit.CommitAsync(async ct =>
             {
                 await members.SetAccessEndUnlessOwnerAsync(seeded.Tenant, memberId, Now.UtcDateTime.AddHours(1), Now.UtcDateTime, ct);
-                await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(seeded.Guest, Now.UtcDateTime.AddHours(1), Now.UtcDateTime, ct);
+                await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(seeded.Guest, Now.UtcDateTime.AddHours(1), Now.UtcDateTime, ct);
                 await unit.Context.SaveChangesAsync(ct);
                 throw new InvalidOperationException("rolled back");
             })).Should().ThrowAsync<InvalidOperationException>();

@@ -73,6 +73,7 @@ public class TenantDirectGrantController : ControllerBase
             request.LimitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
+            createdBySubjectId: null,
             actor: Actor,
             ct: ct);
 

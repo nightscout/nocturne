@@ -1,7 +1,21 @@
 using System.Text.Json;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Contracts.Connectors;
+
+/// <summary>What a secrets save did with a Nightscout API secret it carried.</summary>
+public class ConnectorSecretsSaveResult
+{
+    /// <summary>
+    /// Whether a live credential already held the API secret, so the save adopted nothing and that
+    /// credential still governs.
+    /// </summary>
+    public bool SecretAlreadyInUse { get; set; }
+
+    /// <summary>When the credential that already holds the secret stops; null when it does not.</summary>
+    public DateTime? SecretInUseStopsAt { get; set; }
+}
 
 /// <summary>
 /// Response model for connector configuration retrieval.
@@ -118,8 +132,18 @@ public interface IConnectorConfigurationService
     /// </summary>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="modifiedBy">Who is making the change</param>
+    /// <param name="maker">
+    /// The member saving a Nightscout API secret, which is adopted as a device credential that stops
+    /// when their access ends. With no maker no secret is adopted.
+    /// </param>
+    /// <returns>Whether a live credential already held the saved API secret, and when it stops.</returns>
     /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
-    Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
+    Task<ConnectorSecretsSaveResult> SaveSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        string? modifiedBy,
+        CredentialMaker? maker,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Saves the secrets a connector rotates or derives during its own run, attributed to

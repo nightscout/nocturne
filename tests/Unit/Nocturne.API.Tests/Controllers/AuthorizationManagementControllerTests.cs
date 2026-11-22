@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -23,7 +24,10 @@ public class AuthorizationManagementControllerTests
         _controller = new AuthorizationController(
             _mockAuthorizationService.Object,
             _mockLogger.Object
-        );
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
     }
 
     #region Subject Management Tests
@@ -78,7 +82,7 @@ public class AuthorizationManagementControllerTests
             Modified = DateTime.UtcNow,
         };
         _mockAuthorizationService
-            .Setup(s => s.CreateSubjectAsync(It.IsAny<Subject>()))
+            .Setup(s => s.CreateSubjectAsync(It.IsAny<Subject>(), It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>()))
             .ReturnsAsync(createdSubject);
 
         // Act

@@ -11,6 +11,7 @@ import {
 
 let deleteArgs: unknown[];
 let deleteImpl: () => Promise<unknown>;
+const keepDeviceCredential = vi.hoisted(() => vi.fn(() => Promise.resolve({ success: true })));
 
 vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   deleteConnectionRecords: (args: unknown) => {
@@ -23,6 +24,7 @@ vi.mock("#lib/api/generated/connectedApps.generated.remote.js", () => ({
 }));
 vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   revoke: vi.fn(),
+  keep: keepDeviceCredential,
 }));
 
 const toastSuccess = vi.hoisted(() => vi.fn());
@@ -178,5 +180,64 @@ describe("ConnectionDetailDialog", () => {
     expect(
       page.getByRole("button", { name: "Delete data..." }).elements()
     ).toHaveLength(0);
+  });
+
+  describe("a device credential a member set up", () => {
+    const campGrant = "33333333-3333-3333-3333-333333333333";
+
+    function camp(credential: Partial<NonNullable<Connection["credentials"]>[number]>): Connection {
+      return {
+        ...token,
+        id: `token:${campGrant}`,
+        name: "Camp uploader",
+        canDeleteRecords: false,
+        credentials: [
+          {
+            grantId: campGrant,
+            label: "Camp uploader",
+            isOwn: false,
+            stopsAt: "2026-12-02T00:00:00Z",
+            setUpByName: "Sam",
+            ...credential,
+          },
+        ],
+      };
+    }
+
+    beforeEach(() => keepDeviceCredential.mockClear());
+
+    it("says when it stops and who set it up", async () => {
+      renderDialog(camp({ hasStopped: false }));
+
+      await expect
+        .element(page.getByTestId("credential-stop"))
+        .toHaveTextContent(/^Stops on .+\. Sam set it up\.$/);
+    });
+
+    it("says when it stopped, in the warning tone", async () => {
+      renderDialog(camp({ hasStopped: true }));
+
+      const line = page.getByTestId("credential-stop");
+      await expect.element(line).toHaveTextContent(/^Stopped on .+\. Sam set it up\.$/);
+      await expect.element(line).toHaveClass(/text-warning/);
+    });
+
+    it("keeps it when the API says the viewer may", async () => {
+      renderDialog(camp({ canKeep: true }));
+
+      await page.getByRole("button", { name: "Keep this connection" }).click();
+
+      await expect.poll(() => keepDeviceCredential.mock.calls).toEqual([[campGrant]]);
+      expect(toastSuccess).toHaveBeenCalledWith("Connection kept.");
+    });
+
+    it("shows no keep control when the API says the viewer may not", async () => {
+      renderDialog(camp({ canKeep: false }));
+
+      await expect.element(page.getByTestId("credential-stop")).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: "Keep this connection" }))
+        .not.toBeInTheDocument();
+    });
   });
 });

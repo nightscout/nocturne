@@ -249,8 +249,8 @@ public class HubTokenAuthorizerTests
         var grantId = Guid.CreateVersion7();
         SetupValidJwt(Tenant, grantId, Scope.GlucoseRead);
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .Setup(g => g.IsGrantLiveAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(

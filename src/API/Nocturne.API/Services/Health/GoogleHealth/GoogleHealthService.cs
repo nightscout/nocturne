@@ -200,7 +200,7 @@ public sealed class GoogleHealthService(
         var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, expires, platform.ClientId, platform.RedirectUri);
         var secrets = await connectorConfigurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
         secrets["oauthFlow"] = JsonSerializer.Serialize(flow, Json);
-        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), ct);
+        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), maker: null, ct);
         var parameters = new Dictionary<string, string?>
         {
             ["client_id"] = platform.ClientId,
@@ -582,7 +582,7 @@ public sealed class GoogleHealthService(
     {
         var secrets = await connectorConfigurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
         if (!secrets.Remove("oauthFlow")) return;
-        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, ct: ct);
+        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, modifiedBy: null, maker: null, ct);
     }
 
     private void LogFailure(Exception ex, GoogleHealthException error) => logger.LogError(ex,

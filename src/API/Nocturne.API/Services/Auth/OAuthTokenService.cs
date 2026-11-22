@@ -237,7 +237,7 @@ public class OAuthTokenService : IOAuthTokenService
         }
 
         // Verify grant is still active
-        if (oauthToken.Grant == null || oauthToken.Grant.IsRevoked)
+        if (oauthToken.Grant == null || oauthToken.Grant.IsRevoked || oauthToken.Grant.ExpiresAt <= UtcNow)
         {
             return RevokedGrantFailure();
         }
@@ -298,17 +298,19 @@ public class OAuthTokenService : IOAuthTokenService
         // Update grant last used
         await _grantService.UpdateLastUsedAsync(oauthToken.GrantId, null, null, ct);
 
+        var lifetime = GrantTokenLifetime.Of(_jwtService.GetAccessTokenLifetime(), grant.ExpiresAt, _timeProvider.GetUtcNow());
         var accessToken = await GenerateAccessTokenAsync(
-            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject);
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject, lifetime);
 
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+        var expiresIn = (int)lifetime.TotalSeconds;
         var scopeStr = string.Join(" ", grant.Scopes);
 
         return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
     }
 
     private async Task<string> GenerateAccessTokenAsync(
-        Guid grantId, Guid tenantId, IReadOnlyList<string> scopes, string? clientId, bool limitTo24Hours, Subject subject)
+        Guid grantId, Guid tenantId, IReadOnlyList<string> scopes, string? clientId, bool limitTo24Hours, Subject subject,
+        TimeSpan lifetime)
     {
         var subjectInfo = new SubjectInfo
         {
@@ -328,6 +330,7 @@ public class OAuthTokenService : IOAuthTokenService
             clientId,
             limitTo24Hours: limitTo24Hours,
             tenantId: tenantId,
+            lifetime: lifetime,
             grantId: grantId
         );
     }
@@ -643,8 +646,9 @@ public class OAuthTokenService : IOAuthTokenService
     private async Task<OAuthTokenResult> MintTokenPairAsync(
         OAuthGrantInfo grant, Subject subject, CancellationToken ct)
     {
+        var lifetime = GrantTokenLifetime.Of(_jwtService.GetAccessTokenLifetime(), grant.ExpiresAt, _timeProvider.GetUtcNow());
         var accessToken = await GenerateAccessTokenAsync(
-            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject);
+            grant.Id, grant.TenantId, grant.Scopes, grant.ClientId, grant.LimitTo24Hours, subject, lifetime);
 
         // Generate and store refresh token
         var refreshToken = _jwtService.GenerateRefreshToken();
@@ -660,7 +664,7 @@ public class OAuthTokenService : IOAuthTokenService
             "OAuthAudit: {Event} grant_id={GrantId} client_id={ClientId} subject_id={SubjectId} scopes={Scopes}",
             "token_issued", grant.Id, grant.ClientId, grant.SubjectId, string.Join(" ", grant.Scopes));
 
-        var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
+        var expiresIn = (int)lifetime.TotalSeconds;
         var scope = string.Join(" ", grant.Scopes);
 
         return OAuthTokenResult.Ok(accessToken, refreshToken, expiresIn, scope);

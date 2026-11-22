@@ -33,10 +33,12 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// <c>history_limit</c>. An end date that moved is one <see cref="AuthAuditEventType.AccessEndChanged"/>
 /// row naming the end after it under <c>access_ends_at</c>, as an ISO 8601 UTC instant or null when
 /// the membership no longer ends; the date passing writes nothing. A guest link the member made that
-/// an end date lowered is one <see cref="AuthAuditEventType.GuestLinkCapped"/> row, and one that removing
-/// the member revoked is one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row, each naming the link
+/// an end date lowered is one <see cref="AuthAuditEventType.GuestLinkCapped"/> row, a device credential
+/// one <see cref="AuthAuditEventType.DeviceCredentialCapped"/> row, and a guest link that removing the
+/// member revoked is one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row, each naming the grant
 /// under <c>grant</c> (a cap also its new expiry under <c>expires_at</c>), with the member as the
-/// target. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c> when an invite
+/// target. A device credential whose expiry was removed is one
+/// <see cref="AuthAuditEventType.DeviceCredentialKept"/> row with its maker as the target. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c> when an invite
 /// caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
 /// row with no target subject, naming the role under <c>role_id</c> and <c>role</c> and the permissions
@@ -116,15 +118,30 @@ internal static class MemberAccessAudit
     }
 
     /// <summary>
-    /// Stages one <see cref="AuthAuditEventType.GuestLinkCapped"/> row for a guest link the member made
-    /// whose expiry their access end date lowered to <paramref name="expiresAt"/>.
+    /// Stages one row for a grant the member made whose expiry their access end lowered to
+    /// <paramref name="expiresAt"/>: <see cref="AuthAuditEventType.GuestLinkCapped"/> for a guest link,
+    /// <see cref="AuthAuditEventType.DeviceCredentialCapped"/> for a device credential.
     /// </summary>
-    public static void StageGuestLinkCapped(
-        NocturneDbContext db, Guid tenantId, Guid memberSubjectId, Guid grantId, DateTime expiresAt) =>
-        Add(db, AuthAuditEventType.GuestLinkCapped, tenantId, memberSubjectId, new Dictionary<string, object?>
+    public static void StageGrantCapped(
+        NocturneDbContext db, string grantType, Guid tenantId, Guid memberSubjectId, Guid grantId, DateTime expiresAt) =>
+        Add(db,
+            grantType == OAuthGrantTypes.Guest ? AuthAuditEventType.GuestLinkCapped : AuthAuditEventType.DeviceCredentialCapped,
+            tenantId, memberSubjectId, new Dictionary<string, object?>
+            {
+                [GrantKey] = grantId.ToString(),
+                [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
+                [KindKey] = TenantKind,
+            }, source: null);
+
+    /// <summary>
+    /// Stages one <see cref="AuthAuditEventType.DeviceCredentialKept"/> row for a device credential whose
+    /// expiry was removed, with the member who made it as the target when it is known.
+    /// </summary>
+    public static void StageDeviceCredentialKept(
+        NocturneDbContext db, Guid tenantId, Guid? makerSubjectId, Guid grantId) =>
+        Add(db, AuthAuditEventType.DeviceCredentialKept, tenantId, makerSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
             [KindKey] = TenantKind,
         }, source: null);
 

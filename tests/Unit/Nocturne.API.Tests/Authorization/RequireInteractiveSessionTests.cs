@@ -32,6 +32,7 @@ public class RequireInteractiveSessionTests
         { typeof(DirectGrantController), nameof(DirectGrantController.Create) },
         { typeof(DirectGrantController), nameof(DirectGrantController.List) },
         { typeof(DirectGrantController), nameof(DirectGrantController.Revoke) },
+        { typeof(DirectGrantController), nameof(DirectGrantController.Keep) },
 
         { typeof(EmailConfirmationController), nameof(EmailConfirmationController.Send) },
 

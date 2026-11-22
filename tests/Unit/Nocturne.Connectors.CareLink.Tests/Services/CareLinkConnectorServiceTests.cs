@@ -491,7 +491,7 @@ public class CareLinkConnectorServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
         fixture.ConfigService.Verify(s => s.SaveSecretsAsync(
             It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string?>(), It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>(), It.IsAny<CancellationToken>()), Times.Never);
         handler.Requests.Count(r => r.Url == CareLinkFakeHandler.TokenUrl).Should().Be(1);
     }
 

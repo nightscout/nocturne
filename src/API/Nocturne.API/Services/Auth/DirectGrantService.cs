@@ -44,6 +44,10 @@ public interface IDirectGrantService
     /// </param>
     /// <param name="ipAddress">The caller's IP address, for the audit trail.</param>
     /// <param name="userAgent">The caller's user agent, for the audit trail.</param>
+    /// <param name="createdBySubjectId">
+    /// The member who made the grant for <paramref name="subjectId"/>, a device credential's maker;
+    /// null for a grant the subject makes for itself.
+    /// </param>
     /// <param name="actor">
     /// Who performed the action when it was not the grant's own subject. Leave null on the
     /// self-service path, where the subject acts for themselves; supplying an actor also files the
@@ -60,6 +64,7 @@ public interface IDirectGrantService
         bool limitTo24Hours,
         string? ipAddress,
         string? userAgent,
+        Guid? createdBySubjectId,
         AuthAuditActor? actor = null,
         CancellationToken ct = default);
 
@@ -97,6 +102,14 @@ public interface IDirectGrantService
         string? userAgent,
         AuthAuditActor? actor = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes the expiry of device credential <paramref name="grantId"/> on the request's tenant, so
+    /// it does not stop when the member who set it up leaves, as
+    /// <see cref="IOAuthGrantRepository.KeepDeviceCredentialAsync"/> does.
+    /// </summary>
+    /// <returns>False when it is not an unrevoked device credential.</returns>
+    Task<bool> KeepDeviceCredentialAsync(Guid grantId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -147,6 +160,7 @@ public class DirectGrantService : IDirectGrantService
         bool limitTo24Hours,
         string? ipAddress,
         string? userAgent,
+        Guid? createdBySubjectId,
         AuthAuditActor? actor = null,
         CancellationToken ct = default)
     {
@@ -184,7 +198,8 @@ public class DirectGrantService : IDirectGrantService
                 // before sending — authenticate with this same token via ApiKeyHandler's legacy path.
                 LegacySecretHash: HashUtils.Sha1Hex(plaintextToken),
                 expiresAt,
-                limitTo24Hours),
+                limitTo24Hours,
+                CreatedBySubjectId: createdBySubjectId),
             ct);
         await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
         var grant = await grants.GetAsync(grantId, ct)
@@ -279,6 +294,15 @@ public class DirectGrantService : IDirectGrantService
             tenantId: unit.Context.TenantIdOrNull);
 
         return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> KeepDeviceCredentialAsync(Guid grantId, CancellationToken ct = default)
+    {
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var kept = await new OAuthGrantRepository(unit).KeepDeviceCredentialAsync(grantId, ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        return kept;
     }
 
     private static string Base64UrlEncode(byte[] bytes)

@@ -392,7 +392,7 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
             holder = await db.DeviceSubjectOf(TestDatabaseSeeder.TenantId);
         using var scope = _factory.Services.CreateScope();
         var created = await scope.ServiceProvider.GetRequiredService<IDirectGrantService>().CreateAsync(
-            TestDatabaseSeeder.TenantId, holder, "Loop", [Scope.GlucoseReadWrite], null, false, null, null);
+            TestDatabaseSeeder.TenantId, holder, "Loop", [Scope.GlucoseReadWrite], null, false, null, null, createdBySubjectId: null);
         return created.Response!.Token;
     }
 

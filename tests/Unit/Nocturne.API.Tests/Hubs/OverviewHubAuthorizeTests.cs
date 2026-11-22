@@ -64,8 +64,8 @@ public class OverviewHubAuthorizeTests
         // chain, and stubbing it would stop them seeing the grant-revocation check the hub used to
         // skip. Unrevoked is the default so existing cases read unchanged.
         grants
-            .Setup(g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(false);
+            .Setup(g => g.IsGrantLiveAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(true);
 
         var validator = new JwtCredentialValidator(
             jwt.Object, grants.Object, revocation.Object,
