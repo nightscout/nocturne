@@ -159,7 +159,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
                 AccountLinkRoutes.Off),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>()),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))

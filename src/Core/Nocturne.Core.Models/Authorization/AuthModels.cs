@@ -149,6 +149,22 @@ public class AuthContext
     /// </summary>
     public bool LimitTo24Hours { get; set; }
 
+    private bool? _credentialLimitTo24Hours;
+
+    /// <summary>
+    /// The credential's own 24-hour limit: <see cref="LimitTo24Hours"/> as the credential set it,
+    /// before <see cref="FoldMembershipLimit"/> folded the request tenant's membership into it. A
+    /// decision about a tenant other than the request's reads this.
+    /// </summary>
+    public bool CredentialLimitTo24Hours => _credentialLimitTo24Hours ?? LimitTo24Hours;
+
+    /// <summary>Sets <see cref="LimitTo24Hours"/> to the clamp the request tenant's membership resolved to.</summary>
+    public void FoldMembershipLimit(bool clamped)
+    {
+        _credentialLimitTo24Hours ??= LimitTo24Hours;
+        LimitTo24Hours = clamped;
+    }
+
     /// <summary>
     /// Whether this subject has platform-level admin access.
     /// Set by AuthenticationMiddleware from the subject's IsPlatformAdmin flag.

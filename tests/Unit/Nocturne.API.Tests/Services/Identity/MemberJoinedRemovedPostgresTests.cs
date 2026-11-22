@@ -525,5 +525,8 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         deleted.DetailsJson.Should().Contain("Night shift");
         (await RowsAsync(s.Tenant, s.Person)).Should().ContainSingle(r => r.EventType == AuthAuditEventType.MemberRemoved)
             .Which.Details.Should().BeNull();
+        var history = await new MemberHistoryReader(Contexts(s.Tenant)).GetAsync(s.Tenant, null, 50, 0, Now.UtcDateTime, Ct);
+        history.Data.Should().NotContain(e => e.Team != null,
+            "a team's own rows name no site, and the team never had access to this one");
     }
 }

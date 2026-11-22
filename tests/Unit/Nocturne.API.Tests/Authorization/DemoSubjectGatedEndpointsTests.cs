@@ -59,6 +59,11 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(TeamsController), nameof(TeamsController.GetInviteInfo) },
         { typeof(TeamsController), nameof(TeamsController.AcceptInvite) },
         { typeof(TeamsController), nameof(TeamsController.DeleteTeam) },
+        { typeof(TeamsController), nameof(TeamsController.CreateAccessLink) },
+        { typeof(TeamsController), nameof(TeamsController.RevokeAccessLink) },
+        // The demo subject owns the demo site, so it could give any team access to it.
+        { typeof(TeamsController), nameof(TeamsController.GetAccessLinkInfo) },
+        { typeof(TeamsController), nameof(TeamsController.ApproveAccessLink) },
 
         // Accumulating an external identity on the shared subject.
         { typeof(OidcController), nameof(OidcController.Link) },

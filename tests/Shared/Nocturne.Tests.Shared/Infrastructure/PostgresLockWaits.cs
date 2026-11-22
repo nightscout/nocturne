@@ -38,4 +38,33 @@ public static class PostgresLockWaits
 
         throw new TimeoutException("The contender never waited on the held lock.");
     }
+
+    /// <summary>
+    /// Returns once <paramref name="sessions"/> sessions in the connection's database are waiting on a
+    /// lock, and throws if any of <paramref name="contenders"/> finishes first. The database must hold
+    /// no other test's sessions at the time, as for <see cref="UntilBlockedAsync"/>.
+    /// </summary>
+    public static async Task UntilWaitingAsync(string connectionString, int sessions, params Task[] contenders)
+    {
+        await using var observer = new NpgsqlConnection(connectionString);
+        await observer.OpenAsync();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (contenders.FirstOrDefault(c => c.IsCompleted) is { } finished)
+                throw new InvalidOperationException("A contender finished while the lock was held.", finished.Exception);
+
+            await using var command = observer.CreateCommand();
+            command.CommandText = """
+                SELECT count(*) FROM pg_stat_activity
+                WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'
+                """;
+            if (Convert.ToInt32(await command.ExecuteScalarAsync()) >= sessions)
+                return;
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException("The contenders never waited on the held lock.");
+    }
 }

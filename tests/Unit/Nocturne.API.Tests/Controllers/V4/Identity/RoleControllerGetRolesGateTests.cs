@@ -6,6 +6,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -19,7 +20,7 @@ public sealed class RoleControllerGetRolesGateTests
     {
         _roles
             .Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RoleHolders([], [], []));
+            .ReturnsAsync(new RoleHolders([], [], [], new HashSet<Guid>()));
     }
 
     private static TenantRoleDto Role(string slug, params string[] permissions) =>
@@ -50,7 +51,7 @@ public sealed class RoleControllerGetRolesGateTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([viewer]);
 
-        var result = await BuildController(Scope.MembersInvite, "glucose.read").GetRoles(CancellationToken.None);
+        var result = await BuildController(Scope.MembersInvite, "glucose.read").GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeEquivalentTo(new List<TenantRoleDto> { viewer });
@@ -69,7 +70,7 @@ public sealed class RoleControllerGetRolesGateTests
                 _tenantId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([viewer]);
 
-        var result = await BuildController(Scope.MembersManage).GetRoles(CancellationToken.None);
+        var result = await BuildController(Scope.MembersManage).GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -85,7 +86,7 @@ public sealed class RoleControllerGetRolesGateTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(all);
 
-        var result = await BuildController(Scope.RolesManage).GetRoles(CancellationToken.None);
+        var result = await BuildController(Scope.RolesManage).GetRoles(Mock.Of<ITenantMembershipRepository>(), TimeProvider.System, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(all);
         _roles.Verify(
@@ -118,4 +119,35 @@ public sealed class RoleControllerGetRolesGateTests
             action,
             new HashSet<string>(grantedScopes),
             new AuthContext { IsAuthenticated = true });
+
+    [Theory]
+    [InlineData(RoleSeeds.Owner, false)]
+    [InlineData(RoleSeeds.Admin, true)]
+    public async Task GetRoles_tellsANonOwnerThatARoleATeamHoldsMayOnlyBeNarrowed(string callerRole, bool onlyOwnersMayWiden)
+    {
+        var held = Role("nights", "glucose.read");
+        var free = Role("days", "glucose.read");
+        var caller = Guid.CreateVersion7();
+        _roles.Setup(s => s.GetRolesAsync(_tenantId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([held, free]);
+        _roles.Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RoleHolders([], [], [], new HashSet<Guid> { held.Id }));
+        var members = new Mock<ITenantMembershipRepository>();
+        members.Setup(m => m.FindMemberAsync(_tenantId, caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMemberRecord(
+                Guid.CreateVersion7(), _tenantId, caller, "Sam", null, true, false, false, false, false,
+                [new TenantMemberRoleRecord(Guid.CreateVersion7(), callerRole, callerRole, RoleSeeds.Permissions[callerRole])],
+                null, null, null, false, null, null, null, DateTime.UtcNow));
+        var controller = BuildController(Scope.RolesManage);
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = caller,
+        };
+
+        var result = await controller.GetRoles(members.Object, TimeProvider.System, CancellationToken.None);
+
+        var roles = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<List<TenantRoleDto>>().Subject;
+        roles.Single(r => r.Id == held.Id).Should().Match<TenantRoleDto>(r => r.HeldByTeam && r.OnlyOwnersMayWiden == onlyOwnersMayWiden);
+        roles.Single(r => r.Id == free.Id).Should().Match<TenantRoleDto>(r => !r.HeldByTeam && !r.OnlyOwnersMayWiden);
+    }
 }

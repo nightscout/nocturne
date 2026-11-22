@@ -812,43 +812,98 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<TenantRoleRecord?> UpdateRoleAsync(
-        Guid tenantId, Guid roleId, TenantRoleEdit edit, DateTime now, CancellationToken ct)
+    public virtual async Task<TenantRoleUpdate> UpdateRoleAsync(
+        Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now, CancellationToken ct)
     {
-        await using var lease = await OpenForTenantAsync(tenantId, ct);
-        var entity = await lease.Context.TenantRoles
-            .Include(r => r.MemberRoles)
-            .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
-        if (entity is null)
-            return null;
+        TenantRoleRecord? updated = null;
+        var outcome = await UnderTeamAccessLockAsync(tenantId, async (db, token) =>
+        {
+            var entity = await db.TenantRoles
+                .Include(r => r.MemberRoles)
+                .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, token);
+            if (entity is null)
+                return RoleChangeOutcome.NotFound;
+            if (await HeldByTeamAsync(db, tenantId, roleId, token))
+            {
+                if (!Scope.IsDataOnly(edit.Permissions))
+                    return RoleChangeOutcome.HeldByTeam;
+                if (Scope.ValidateGrant(edit.Permissions, entity.Permissions) is not null
+                    && !(editorSubjectId is { } editor && await IsOwnerInForceAsync(db, tenantId, editor, now, token)))
+                    return RoleChangeOutcome.HeldByTeamOwnerOnly;
+            }
 
-        MemberAccessAudit.StageRolePermissions(lease.Context, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
-        entity.Name = edit.Name;
-        entity.Slug = edit.Slug;
-        entity.Description = edit.Description;
-        entity.Permissions = [.. edit.Permissions];
-        entity.SysUpdatedAt = now;
-        await SaveAsync(lease.Context, ct);
-        return ToRole(entity, entity.MemberRoles.Count);
+            MemberAccessAudit.StageRolePermissions(db, tenantId, roleId, edit.Slug, entity.Permissions, edit.Permissions);
+            entity.Name = edit.Name;
+            entity.Slug = edit.Slug;
+            entity.Description = edit.Description;
+            entity.Permissions = [.. edit.Permissions];
+            entity.SysUpdatedAt = now;
+            updated = ToRole(entity, entity.MemberRoles.Count);
+            return RoleChangeOutcome.Changed;
+        }, ct);
+        return new TenantRoleUpdate(outcome, outcome == RoleChangeOutcome.Changed ? updated : null);
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct)
-    {
-        await using var lease = await OpenForTenantAsync(tenantId, ct);
-        var db = lease.Context;
-        var role = await db.TenantRoles
-            .Include(r => r.MemberRoles).ThenInclude(mr => mr.TenantMember)
-            .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
-        if (role is null)
-            return false;
+    public virtual Task<RoleChangeOutcome> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct) =>
+        UnderTeamAccessLockAsync(tenantId, async (db, token) =>
+        {
+            var role = await db.TenantRoles
+                .Include(r => r.MemberRoles).ThenInclude(mr => mr.TenantMember)
+                .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, token);
+            if (role is null)
+                return RoleChangeOutcome.NotFound;
+            if (await HeldByTeamAsync(db, tenantId, roleId, token))
+                return RoleChangeOutcome.HeldByTeam;
 
-        foreach (var holder in role.MemberRoles)
-            MemberAccessAudit.StageRoles(db, tenantId, holder.TenantMember.SubjectId, [], [role.Slug]);
-        await MembershipReasons.RemoveRoleAsync(db, role.Id, ct);
-        db.TenantRoles.Remove(role);
-        await SaveAsync(db, ct);
-        return true;
+            foreach (var holder in role.MemberRoles)
+                MemberAccessAudit.StageRoles(db, tenantId, holder.TenantMember.SubjectId, [], [role.Slug]);
+            await MembershipReasons.RemoveRoleAsync(db, role.Id, token);
+            db.TenantRoles.Remove(role);
+            return RoleChangeOutcome.Changed;
+        }, ct);
+
+    private static Task<bool> HeldByTeamAsync(NocturneDbContext db, Guid tenantId, Guid roleId, CancellationToken ct) =>
+        TeamRepository.RolesHeldByTeams(db, tenantId).AnyAsync(id => id == roleId, ct);
+
+    private static Task<bool> IsOwnerInForceAsync(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct) =>
+        db.TenantMembers.AsNoTracking()
+            .LiveAt(now)
+            .AnyAsync(m => m.TenantId == tenantId
+                && m.SubjectId == subjectId
+                && m.MemberRoles.Any(r => r.TenantRole!.Slug == RoleSeeds.Owner), ct);
+
+    /// <summary>
+    /// Runs <paramref name="change"/> under the tenant's owners lock and team access lock, in the order
+    /// <see cref="TeamAccessLock"/> states, and saves it when it reports
+    /// <see cref="RoleChangeOutcome.Changed"/>: on this repository's unit, whose owner commits it, else
+    /// on a new unit pinned to <paramref name="tenantId"/>.
+    /// </summary>
+    private async Task<RoleChangeOutcome> UnderTeamAccessLockAsync(
+        Guid tenantId,
+        Func<NocturneDbContext, CancellationToken, Task<RoleChangeOutcome>> change,
+        CancellationToken ct)
+    {
+        if (_unit is not null)
+        {
+            await _unit.Context.LockTenantOwnersAsync(tenantId, ct);
+            await _unit.Context.LockTeamAccessAsync(tenantId, ct);
+            return await change(_unit.Context, ct);
+        }
+
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(Pinnable, tenantId, ct);
+        return await unit.CommitAsync(
+            async token =>
+            {
+                await unit.Context.LockTenantOwnersAsync(tenantId, token);
+                await unit.Context.LockTeamAccessAsync(tenantId, token);
+                var outcome = await change(unit.Context, token);
+                if (outcome == RoleChangeOutcome.Changed)
+                    await unit.Context.SaveChangesAsync(token);
+                return outcome;
+            },
+            ct: ct);
     }
 
     /// <inheritdoc/>

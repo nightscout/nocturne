@@ -223,4 +223,24 @@ public static class AuthAuditEventType
 
     /// <summary>Event type when a manager revokes a team's invite link.</summary>
     public const string TeamInviteRevoked = "team_invite_revoked";
+
+    /// <summary>Event type when a manager makes a link that gives the team access to a site.</summary>
+    public const string TeamAccessLinkCreated = "team_access_link_created";
+
+    /// <summary>
+    /// Event type when a team's access link is revoked: by a manager, or because its maker left the team.
+    /// </summary>
+    public const string TeamAccessLinkRevoked = "team_access_link_revoked";
+
+    /// <summary>
+    /// Event type when an owner of a site gives a team access to it. The row names the tenant and the
+    /// team, and no target.
+    /// </summary>
+    public const string TeamAccessGiven = "team_access_given";
+
+    /// <summary>
+    /// Event type when a team's access to a site stops: the site stopped it, or the team was deleted.
+    /// The row names the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamAccessStopped = "team_access_stopped";
 }

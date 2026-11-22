@@ -20,7 +20,7 @@ public sealed class RoleControllerNameCollisionTests
     {
         _roles
             .Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RoleHolders([], [], []));
+            .ReturnsAsync(new RoleHolders([], [], [], new HashSet<Guid>()));
     }
 
     private RoleController BuildController()
@@ -76,11 +76,36 @@ public sealed class RoleControllerNameCollisionTests
         _roles
             .Setup(s => s.UpdateRoleAsync(
                 _tenantId, roleId, "Day Shift", null, It.IsAny<List<string>>(),
-                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(refusal);
 
         var result = await BuildController()
             .UpdateRole(roleId, new UpdateRoleRequest("Day Shift", null, ["glucose.read"]), TestPublicAccessCache.Create(), CancellationToken.None);
+
+        ShouldBeProblem(result, refusal);
+    }
+
+    [Theory]
+    [InlineData(SaveRoleResult.RoleHeldByTeam)]
+    [InlineData(SaveRoleResult.RoleHeldByTeamOwnerOnly)]
+    public async Task UpdateRole_ofARoleATeamHolds_isAConflictProblemWithItsCode(string code)
+    {
+        var refusal = code == SaveRoleResult.RoleHeldByTeam ? SaveRoleResult.HeldByTeam : SaveRoleResult.HeldByTeamOwnerOnly;
+        var roleId = Guid.CreateVersion7();
+        var editor = Guid.CreateVersion7();
+        _roles
+            .Setup(s => s.UpdateRoleAsync(
+                _tenantId, roleId, "Nights", null, It.IsAny<List<string>>(),
+                It.IsAny<IReadOnlyCollection<string>>(), editor, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(refusal);
+        var controller = BuildController();
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = editor,
+        };
+
+        var result = await controller
+            .UpdateRole(roleId, new UpdateRoleRequest("Nights", null, ["glucose.read"]), TestPublicAccessCache.Create(), CancellationToken.None);
 
         ShouldBeProblem(result, refusal);
     }
@@ -109,7 +134,7 @@ public sealed class RoleControllerNameCollisionTests
         _roles
             .Setup(s => s.UpdateRoleAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<List<string>>(),
-                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SaveRoleResult?)null);
 
         var result = await BuildController()

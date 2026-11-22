@@ -20,7 +20,9 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// The teams the signed-in person is a member of, and running them: creating one, renaming it,
-/// adding managers by invite link, removing them, and deleting it.
+/// adding managers by invite link, removing them, making links that let an owner of a site give the
+/// team access to it, and deleting it. Also the other side of such a link: the person who opens it
+/// reads it and approves it for a site they own.
 /// </summary>
 /// <remarks>
 /// Run by a person in a browser session, never by an API key or a device token
@@ -47,6 +49,9 @@ public class TeamsController(
 
     public const string TokenQueryParameter = "token";
 
+    /// <summary>The web path an access link opens, with the token in <see cref="TokenQueryParameter"/>.</summary>
+    public const string AccessPath = "/teams/access";
+
     public const int MaxLabelLength = 255;
 
     internal const string CreationRestrictedDetail = "Only a platform administrator can create a team on this site.";
@@ -67,7 +72,7 @@ public class TeamsController(
 
     /// <summary>Creates a team, with the caller as its manager.</summary>
     [HttpPost]
-    [LimitTeamCreationPerPerson]
+    [LimitPerPerson<TeamCreationLimiter>]
     [RemoteCommand(Invalidates = ["GetMyTeams"])]
     [ProducesResponseType(typeof(TeamSummary), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -89,7 +94,9 @@ public class TeamsController(
     }
 
     /// <summary>
-    /// The team's name, managers and live manager invites, and what the caller may do to it.
+    /// The team's name, managers, and what the caller may do to it. A manager also reads the live
+    /// manager invites and access links, and the sites the team has access to: their names, the roles
+    /// given, the limit and the end, never who approved or who is in the site.
     /// </summary>
     [HttpGet("{teamId:guid}")]
     [RemoteQuery]
@@ -103,13 +110,17 @@ public class TeamsController(
         return await teams.GetAsync(teamId, subjectId, Now, ct) is { } team ? Ok(team) : NotFound();
     }
 
-    /// <summary>Renames the team.</summary>
+    /// <summary>
+    /// Renames the team, and tells each person who gave it access to a site that is still theirs.
+    /// </summary>
     [HttpPut("{teamId:guid}/name")]
+    [LimitPerPerson<TeamRenameLimiter>]
     [RemoteCommand(Invalidates = ["GetMyTeams", "GetTeam"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RenameTeam(Guid teamId, [FromBody] TeamNameRequest request, CancellationToken ct)
+    public async Task<IActionResult> RenameTeam(
+        Guid teamId, [FromBody] TeamNameRequest request, [FromServices] TeamRenameAnnouncer announcer, CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
@@ -117,7 +128,12 @@ public class TeamsController(
         if (TeamName(request.Name) is not { } name)
             return NameProblem();
 
-        return await teams.RenameAsync(teamId, subjectId, name, ct) ? NoContent() : NotFound();
+        if (await teams.RenameAsync(teamId, subjectId, name, ct) is not { } oldName)
+            return NotFound();
+
+        if (oldName != name)
+            await announcer.AnnounceAsync(teamId, oldName);
+        return NoContent();
     }
 
     /// <summary>
@@ -159,24 +175,8 @@ public class TeamsController(
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
-        if (request.ExpiresInDays is < 1 or > TenantCreationInviteService.MaxExpiresInDays)
-            return this.ProblemWithCode(
-                TeamProblemCodes.ExpiryInvalid,
-                $"Expiry must be between 1 and {TenantCreationInviteService.MaxExpiresInDays} days.",
-                StatusCodes.Status400BadRequest);
-
-        if (request.MaxUses is < 1 or > TenantCreationInviteService.MaxUsesCeiling)
-            return this.ProblemWithCode(
-                TeamProblemCodes.UsesInvalid,
-                $"The number of uses must be between 1 and {TenantCreationInviteService.MaxUsesCeiling}.",
-                StatusCodes.Status400BadRequest);
-
-        var label = string.IsNullOrWhiteSpace(request.Label) ? null : request.Label.Trim();
-        if (label is { Length: > MaxLabelLength })
-            return this.ProblemWithCode(
-                TeamProblemCodes.LabelInvalid,
-                $"The label must be {MaxLabelLength} characters or fewer.",
-                StatusCodes.Status400BadRequest);
+        if (LinkProblem(request.ExpiresInDays, request.MaxUses, request.Label, out var label) is { } problem)
+            return problem;
 
         var token = jwtService.GenerateRefreshToken();
         var expiresAt = Now.AddDays(request.ExpiresInDays);
@@ -185,8 +185,7 @@ public class TeamsController(
         if (inviteId is not { } id)
             return NotFound();
 
-        var url = $"{Request.PublicScheme()}://{Request.Host}{JoinPath}?{TokenQueryParameter}={Uri.EscapeDataString(token)}";
-        return StatusCode(StatusCodes.Status201Created, new TeamInviteCreated(id, token, url, expiresAt));
+        return StatusCode(StatusCodes.Status201Created, new TeamInviteCreated(id, token, LinkUrl(JoinPath, token), expiresAt));
     }
 
     /// <summary>Revokes one of the team's manager invites.</summary>
@@ -257,7 +256,111 @@ public class TeamsController(
         };
     }
 
-    /// <summary>Deletes the team, its managers and its invites. Allowed when <see cref="TeamDetail.CanDelete"/> is.</summary>
+    /// <summary>
+    /// Makes a link that lets whoever opens it, signed in, give the team access to a site they own,
+    /// within the role, limit and end it suggests. The token is in this response only.
+    /// </summary>
+    [HttpPost("{teamId:guid}/access-links")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(typeof(TeamAccessLinkCreated), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CreateAccessLink(
+        Guid teamId, [FromBody] CreateTeamAccessLinkRequest request, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        if (LinkProblem(request.ExpiresInDays, request.MaxUses, request.Label, out var label) is { } problem)
+            return problem;
+
+        if (!RoleSeeds.Permissions.TryGetValue(request.RoleSlug, out var suggested) || !Scope.IsDataOnly(suggested))
+            return this.ProblemWithCode(
+                TeamProblemCodes.AccessRoleInvalid,
+                "The role must be a role for data only.",
+                StatusCodes.Status400BadRequest);
+
+        var suggestedEnd = AccessEndRequest.Instant(request.AccessEndsAt);
+        if (suggestedEnd is { } end && MembershipLiveness.HasEnded(end, Now))
+            return AccessProblem(TeamAccessRefusal.EndInPast);
+
+        var token = jwtService.GenerateRefreshToken();
+        var expiresAt = Now.AddDays(request.ExpiresInDays);
+        var suggestion = new TeamAccessSuggestion(request.RoleSlug, request.LimitTo24Hours, suggestedEnd);
+        var linkId = await teams.CreateAccessLinkAsync(
+            teamId, subjectId, new NewTeamAccessLink(HashUtils.Sha256Hex(token), label, expiresAt, request.MaxUses, suggestion), ct);
+        if (linkId is not { } id)
+            return NotFound();
+
+        return StatusCode(StatusCodes.Status201Created, new TeamAccessLinkCreated(id, token, LinkUrl(AccessPath, token), expiresAt));
+    }
+
+    /// <summary>Revokes one of the team's access links. Access already given stays.</summary>
+    [HttpDelete("{teamId:guid}/access-links/{linkId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeAccessLink(Guid teamId, Guid linkId, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return await teams.RevokeAccessLinkAsync(teamId, subjectId, linkId, Now, ct) ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// The team an access link is for, who made it, what it suggests, and the caller's own sites they
+    /// may give the team access to. A link that can no longer be used answers with the reason alone.
+    /// </summary>
+    [HttpGet("access-links/{token}")]
+    [EnableRateLimiting("invite-lookup")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TeamAccessLinkDetails), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAccessLinkInfo(
+        [CredentialRouteValue] string token, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (ApproverCredential() is not { } caller)
+            return Unauthorized();
+
+        var (details, refusal) = await access.GetLinkAsync(HashUtils.Sha256Hex(token), caller, ct);
+        return details is not null ? Ok(details) : AccessProblem(refusal ?? TeamAccessRefusal.NotFound);
+    }
+
+    /// <summary>
+    /// Gives the link's team access to a site the caller owns, with the chosen roles, limit and end:
+    /// never wider than the link suggests, than the roles the caller could grant, or than the caller's
+    /// own access to the site.
+    /// </summary>
+    [HttpPost("access-links/{token}/approve")]
+    [EnableRateLimiting("invite-lookup")]
+    [RemoteCommand(Invalidates = ["GetAccessLinkInfo", "MemberInvite_GetTeamAccess"])]
+    [ProducesResponseType(typeof(TeamAccessGiven), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApproveAccessLink(
+        [CredentialRouteValue] string token,
+        [FromBody] ApproveTeamAccessRequest request,
+        [FromServices] TeamAccessService access,
+        CancellationToken ct)
+    {
+        if (ApproverCredential() is not { } caller)
+            return Unauthorized();
+
+        var grant = new TeamAccessGrant(
+            request.TenantId, request.RoleIds, request.LimitTo24Hours, AccessEndRequest.Instant(request.AccessEndsAt));
+        var approval = await access.ApproveAsync(HashUtils.Sha256Hex(token), caller, grant, ct);
+        return approval.Refusal is { } refusal
+            ? AccessProblem(refusal)
+            : Ok(new TeamAccessGiven(approval.AccessId!.Value, request.TenantId));
+    }
+
+    /// <summary>
+    /// Deletes the team, its managers, its invites and links, and its access to sites. Allowed when
+    /// <see cref="TeamDetail.CanDelete"/> is.
+    /// </summary>
     [HttpDelete("{teamId:guid}")]
     [RemoteCommand(Invalidates = ["GetMyTeams"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -282,6 +385,78 @@ public class TeamsController(
         !policy.RestrictTeamCreationToAdmins || caller is { IsPlatformAdmin: true };
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
+
+    private string LinkUrl(string path, string token) =>
+        $"{Request.PublicScheme()}://{Request.Host}{path}?{TokenQueryParameter}={Uri.EscapeDataString(token)}";
+
+    private TeamAccessApproverCredential? ApproverCredential() =>
+        HttpContext.GetSubjectId() is { } subjectId && HttpContext.GetAuthContext() is { } auth
+            ? new TeamAccessApproverCredential(subjectId, auth.AuthType, HttpContext.GetGrantedScopes(), auth.CredentialLimitTo24Hours)
+            : null;
+
+    /// <summary>The refusal of a link's expiry, number of uses or label, or null with the trimmed label.</summary>
+    private ObjectResult? LinkProblem(int expiresInDays, int? maxUses, string? requestedLabel, out string? label)
+    {
+        label = string.IsNullOrWhiteSpace(requestedLabel) ? null : requestedLabel.Trim();
+
+        if (expiresInDays is < 1 or > TenantCreationInviteService.MaxExpiresInDays)
+            return this.ProblemWithCode(
+                TeamProblemCodes.ExpiryInvalid,
+                $"Expiry must be between 1 and {TenantCreationInviteService.MaxExpiresInDays} days.",
+                StatusCodes.Status400BadRequest);
+
+        if (maxUses is < 1 or > TenantCreationInviteService.MaxUsesCeiling)
+            return this.ProblemWithCode(
+                TeamProblemCodes.UsesInvalid,
+                $"The number of uses must be between 1 and {TenantCreationInviteService.MaxUsesCeiling}.",
+                StatusCodes.Status400BadRequest);
+
+        if (label is { Length: > MaxLabelLength })
+            return this.ProblemWithCode(
+                TeamProblemCodes.LabelInvalid,
+                $"The label must be {MaxLabelLength} characters or fewer.",
+                StatusCodes.Status400BadRequest);
+
+        return null;
+    }
+
+    private IActionResult AccessProblem(TeamAccessRefusal refusal) => refusal switch
+    {
+        TeamAccessRefusal.NotFound => NotFound(),
+        TeamAccessRefusal.Expired => this.ProblemWithCode(
+            TeamProblemCodes.Expired, "This link has expired.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.Revoked => this.ProblemWithCode(
+            TeamProblemCodes.Revoked, "This link has been revoked.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.UsedUp => this.ProblemWithCode(
+            TeamProblemCodes.UsedUp, "This link has reached its maximum uses.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.NoLongerValid => this.ProblemWithCode(
+            TeamProblemCodes.NoLongerValid, "This link is no longer valid.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.AlreadyGiven => this.ProblemWithCode(
+            TeamProblemCodes.AccessAlreadyGiven, "This team already has access to this site.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.NotOwner => this.ProblemWithCode(
+            TeamProblemCodes.AccessNotOwner, "Only an owner of the site can give a team access to it.", StatusCodes.Status403Forbidden),
+        TeamAccessRefusal.NoRoles => this.ProblemWithCode(
+            TeamProblemCodes.AccessRolesRequired, "Choose at least one role.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.RoleNotInTenant => this.ProblemWithCode(
+            TeamProblemCodes.AccessRoleNotInSite, "A role is not one of this site's roles.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.RoleAdministrative => this.ProblemWithCode(
+            TeamProblemCodes.AccessRoleAdministrative, "A team can be given only roles for data.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.RoleWiderThanLink => this.ProblemWithCode(
+            TeamProblemCodes.AccessRoleWiderThanLink, "A role gives more than this link allows.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.RoleWiderThanApprover => this.ProblemWithCode(
+            TeamProblemCodes.AccessRoleWiderThanApprover, "A role gives more than you hold.", StatusCodes.Status403Forbidden),
+        TeamAccessRefusal.LimitRequired => this.ProblemWithCode(
+            TeamProblemCodes.AccessLimitRequired, "The access must be limited to the last 24 hours.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.EndLaterThanLink => this.ProblemWithCode(
+            TeamProblemCodes.AccessEndLaterThanLink, "The access must end no later than this link allows.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.EndOutlastsApprover => this.ProblemWithCode(
+            TeamProblemCodes.AccessEndOutlastsApprover, HttpContextExtensions.AccessEndCeilingDetail, StatusCodes.Status403Forbidden),
+        TeamAccessRefusal.EndInPast => this.ProblemWithCode(
+            TeamProblemCodes.AccessEndInvalid, "The end must be in the future.", StatusCodes.Status400BadRequest),
+        TeamAccessRefusal.SuggestedEndPassed => this.ProblemWithCode(
+            TeamProblemCodes.AccessLinkEndPassed, "The latest end this link allows has passed.", StatusCodes.Status400BadRequest),
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, null),
+    };
 
     private static string? TeamName(string? name) =>
         name?.Trim() is { Length: > 0 and <= TeamEntity.NameMaxLength } trimmed ? trimmed : null;
@@ -322,6 +497,33 @@ public sealed record CreateTeamInviteRequest(
 /// <summary>A new manager invite. <paramref name="Token"/> is never returned again.</summary>
 public sealed record TeamInviteCreated(Guid Id, string Token, string InviteUrl, DateTime ExpiresAt);
 
+/// <summary>
+/// An access link to make. <paramref name="RoleSlug"/> is the suggested role, a seed role for data
+/// only (<see cref="Scope.IsDataOnly"/>); <paramref name="LimitTo24Hours"/> makes the 24-hour limit
+/// required; <paramref name="AccessEndsAt"/> is the latest the access may end, null for no end; and
+/// <paramref name="MaxUses"/> is how many sites the link may be used for, null for no cap.
+/// </summary>
+public sealed record CreateTeamAccessLinkRequest(
+    [property: MaxLength(TeamsController.MaxLabelLength)] string? Label,
+    [property: Required] string RoleSlug,
+    bool LimitTo24Hours,
+    DateTimeOffset? AccessEndsAt,
+    int ExpiresInDays = 7,
+    int? MaxUses = 1);
+
+/// <summary>A new access link. <paramref name="Token"/> is never returned again.</summary>
+public sealed record TeamAccessLinkCreated(Guid Id, string Token, string LinkUrl, DateTime ExpiresAt);
+
+/// <summary>
+/// An approval: <paramref name="TenantId"/> is a site the caller owns, <paramref name="RoleIds"/> are at
+/// least one of its roles, and <paramref name="AccessEndsAt"/> is when the access ends, null for no end.
+/// </summary>
+public sealed record ApproveTeamAccessRequest(
+    Guid TenantId, [property: Required] IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTimeOffset? AccessEndsAt);
+
+/// <summary>The access an approval made.</summary>
+public sealed record TeamAccessGiven(Guid AccessId, Guid TenantId);
+
 /// <param name="AlreadyMember">Whether the caller is already a member, so accepting changes nothing.</param>
 /// <param name="Kind">What accepting makes the caller, a <see cref="TeamMemberKind"/> value.</param>
 public sealed record TeamInviteDetails(
@@ -342,6 +544,19 @@ public static class TeamProblemCodes
     public const string UsedUp = "team_invite_used_up";
     public const string NoLongerValid = "team_invite_no_longer_valid";
     public const string AlreadyMember = "team_invite_already_member";
+    public const string AccessRoleInvalid = "team_access_role_invalid";
+    public const string AccessEndInvalid = "team_access_end_invalid";
+    public const string AccessAlreadyGiven = "team_access_already_given";
+    public const string AccessNotOwner = "team_access_not_owner";
+    public const string AccessRolesRequired = "team_access_roles_required";
+    public const string AccessRoleNotInSite = "team_access_role_not_in_site";
+    public const string AccessRoleAdministrative = "team_access_role_administrative";
+    public const string AccessRoleWiderThanLink = "team_access_role_wider_than_link";
+    public const string AccessRoleWiderThanApprover = "team_access_role_wider_than_approver";
+    public const string AccessLimitRequired = "team_access_limit_required";
+    public const string AccessEndLaterThanLink = "team_access_end_later_than_link";
+    public const string AccessEndOutlastsApprover = "team_access_end_outlasts_approver";
+    public const string AccessLinkEndPassed = "team_access_link_end_passed";
 }
 
 public sealed record TeamInviteAccepted(Guid TeamId);

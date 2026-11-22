@@ -75,11 +75,30 @@ public class TeamMemberEntity : ISystemTimestamped
 }
 
 /// <summary>
+/// What every kind of team link has: a manager invite and an access link live and die by the same
+/// columns.
+/// </summary>
+public interface ITeamLink
+{
+    Guid TeamId { get; }
+
+    Guid CreatedBySubjectId { get; }
+
+    DateTime ExpiresAt { get; }
+
+    int? MaxUses { get; }
+
+    int UseCount { get; }
+
+    DateTime? RevokedAt { get; }
+}
+
+/// <summary>
 /// A link that makes whoever opens it, signed in, a member of a team. Not tenant-scoped, like
 /// <see cref="TenantCreationInviteEntity"/>.
 /// </summary>
 [Table("team_invites")]
-public class TeamInviteEntity : ISystemCreated
+public class TeamInviteEntity : ISystemCreated, ITeamLink
 {
     [Key]
     [Column("id")]

@@ -363,7 +363,7 @@ public sealed class DemoTenantService
         await members.UpdateRoleAsync(
             tenantId, roleId.Value,
             new TenantRoleEdit("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]),
-            _time.GetUtcNow().UtcDateTime, ct);
+            null, _time.GetUtcNow().UtcDateTime, ct);
         return roleId.Value;
     }
 

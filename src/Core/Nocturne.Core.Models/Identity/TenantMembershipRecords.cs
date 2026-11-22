@@ -151,6 +151,22 @@ public sealed record NewTenantRole(
 
 public sealed record TenantRoleEdit(string Name, string Slug, string? Description, IReadOnlyList<string> Permissions);
 
+/// <summary>What a role edit or deletion found.</summary>
+public enum RoleChangeOutcome
+{
+    Changed,
+    NotFound,
+
+    /// <summary>A team's access gives the role, which may then be neither deleted nor given a permission that runs the site.</summary>
+    HeldByTeam,
+
+    /// <summary>A team's access gives the role, and only an owner of the site may widen it.</summary>
+    HeldByTeamOwnerOnly,
+}
+
+/// <summary>What a role edit found, and the role after it when it changed.</summary>
+public sealed record TenantRoleUpdate(RoleChangeOutcome Outcome, TenantRoleRecord? Role);
+
 /// <summary>A row of <c>membership_requests</c>.</summary>
 public sealed record MembershipRequestRecord(
     Guid Id,

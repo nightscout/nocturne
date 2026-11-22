@@ -133,7 +133,8 @@ public sealed class RoleControllerAccessEndTests : IDisposable
 
         return new RoleController(
             new TenantRoleService(
-                new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new FakeTimeProvider(Now), _invites.Object),
+                new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new FakeTimeProvider(Now), _invites.Object,
+                new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
             tenantAccessor.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
@@ -269,7 +270,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
     [Fact]
     public async Task GetRoles_marksTheRolesAMemberWhoOutlastsACallerWhoseAccessEndsHolds_andHidesNone()
     {
-        var result = await BuildController(CallerEnd).GetRoles(CancellationToken.None);
+        var result = await BuildController(CallerEnd).GetRoles(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, CancellationToken.None);
 
         var roles = result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeAssignableTo<List<TenantRoleDto>>().Subject;
@@ -282,7 +283,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
     [Fact]
     public async Task GetRoles_forACallerWithNoEnd_marksNone()
     {
-        var result = await BuildController(null).GetRoles(CancellationToken.None);
+        var result = await BuildController(null).GetRoles(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, CancellationToken.None);
 
         var roles = result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeAssignableTo<List<TenantRoleDto>>().Subject;

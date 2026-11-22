@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -49,7 +50,8 @@ public class RoleController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantRoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetRoles(CancellationToken ct)
+    public async Task<IActionResult> GetRoles(
+        [FromServices] ITenantMembershipRepository members, [FromServices] TimeProvider time, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var roles = HttpContext.HasScope(Scope.RolesManage)
@@ -57,11 +59,16 @@ public class RoleController : ControllerBase
             : await _roleService.GetAssignableRolesAsync(tenantId, HttpContext.GetGrantedScopes(), ct);
 
         var holders = await _roleService.GetRoleHoldersAsync(tenantId, HttpContext.CallerAccessEndsAt(), ct);
+        var callerIsOwner = HttpContext.GetSubjectId() is { } subjectId
+            && await members.FindMemberAsync(tenantId, subjectId, ct) is { IsOwner: true } member
+            && !MembershipLiveness.HasEnded(member.AccessEndsAt, time.GetUtcNow().UtcDateTime);
         return Ok(roles
             .Select(r => r with
             {
                 OutlastsCaller = holders.HeldPast.Contains(r.Id),
                 InviteOutlastsCaller = holders.InvitedPast.Contains(r.Id),
+                HeldByTeam = holders.HeldByTeam.Contains(r.Id),
+                OnlyOwnersMayWiden = holders.HeldByTeam.Contains(r.Id) && !callerIsOwner,
             })
             .ToList());
     }
@@ -85,11 +92,13 @@ public class RoleController : ControllerBase
 
         var result = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, grantedScopes, ct);
-        return result.Role is null ? NameProblem(result) : StatusCode(StatusCodes.Status201Created, result.Role);
+        return result.Role is null ? SaveProblem(result) : StatusCode(StatusCodes.Status201Created, result.Role);
     }
 
     /// <summary>
-    /// Update a role.
+    /// Update a role. A role a team's access gives cannot be given a permission that runs the site
+    /// (409, <c>role_held_by_team</c>), and only an owner may add a permission to it
+    /// (409, <c>role_held_by_team_owner_only</c>).
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.UpdateRoleAsync"/>
     [HttpPut("{id:guid}")]
@@ -118,12 +127,13 @@ public class RoleController : ControllerBase
         try
         {
             var result = await _roleService.UpdateRoleAsync(
-                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, grantedScopes, ct);
+                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, grantedScopes,
+                HttpContext.GetSubjectId(), ct);
             if (result == null)
                 return NotFound();
 
             if (result.Role is null)
-                return NameProblem(result);
+                return SaveProblem(result);
 
             if (holders.HeldByPublic.Contains(id))
                 publicAccessCache.Evict(_tenantAccessor.TenantId);
@@ -137,7 +147,7 @@ public class RoleController : ControllerBase
     }
 
     /// <summary>
-    /// Delete a role.
+    /// Delete a role. Refused while a team's access gives it (400, <c>role_held_by_team</c>).
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.DeleteRoleAsync"/>
     [HttpDelete("{id:guid}")]
@@ -156,7 +166,8 @@ public class RoleController : ControllerBase
 
         var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
         if (!result.Success)
-            return Problem(detail: result.ErrorDescription, statusCode: 400, title: result.ErrorCode);
+            return this.ProblemWithCode(
+                result.ErrorCode!, result.ErrorDescription, StatusCodes.Status400BadRequest, title: result.ErrorCode);
 
         if (holders.HeldByPublic.Contains(id))
             publicAccessCache.Evict(_tenantAccessor.TenantId);
@@ -176,7 +187,7 @@ public class RoleController : ControllerBase
                 ? Problem(detail: HttpContextExtensions.RoleInvitedPastCallerDetail, statusCode: StatusCodes.Status403Forbidden)
                 : null;
 
-    private ObjectResult NameProblem(SaveRoleResult result) =>
+    private ObjectResult SaveProblem(SaveRoleResult result) =>
         this.ProblemWithCode(
             result.ErrorCode!, result.ErrorDescription, StatusCodes.Status409Conflict, title: result.ErrorCode);
 

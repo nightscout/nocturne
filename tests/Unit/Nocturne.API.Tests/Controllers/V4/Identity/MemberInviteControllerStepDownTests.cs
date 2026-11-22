@@ -100,7 +100,7 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>()),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_db.AsFactory())),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
             new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))
