@@ -21,7 +21,8 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// <summary>
 /// A hub connection stays open while the server-side records behind its credential stand, however
 /// short-lived the access token it connected with, and <see cref="HubConnectionRevalidator"/>
-/// closes it once they do not: a revoked grant, a removed member or a deactivated tenant. Covers a credential presented
+/// closes it once they do not: a revoked grant, a removed member, a membership whose end has passed
+/// or a deactivated tenant. Covers a credential presented
 /// on the upgrade request and one presented in-band.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
@@ -232,6 +233,36 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
 
         await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member was removed");
         await ShouldCloseAsync(inBandClosed, "the in-band credential's member was removed");
+    }
+
+    [Fact]
+    public async Task Every_connection_closes_when_its_members_access_ends_and_nothing_is_revoked()
+    {
+        var (grantId, secret) = await SeedSecretAsync();
+        var token = AccessToken(grantId, TimeSpan.FromMinutes(15));
+        var secretClosed = ClosedAsync(await AlertHubWithSecretAsync(secret));
+        var upgradeClosed = ClosedAsync(await AlertHubWithTokenAsync(token));
+        var inBandClosed = ClosedAsync(await DataHubWithTokenAsync(token));
+
+        await ExecuteAsync(
+            "UPDATE tenant_members SET access_ends_at = now() - interval '1 second' WHERE subject_id = @id;", _subjectId);
+        await RevalidateAsync();
+
+        await ShouldCloseAsync(secretClosed, "the api-secret's member's access ended");
+        await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member's access ended");
+        await ShouldCloseAsync(inBandClosed, "the in-band credential's member's access ended");
+        await using var conn = await OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenantId, false);
+            SELECT revoked_at IS NULL FROM oauth_grants WHERE id = @id;
+            """;
+        cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
+        cmd.Parameters.AddWithValue("id", grantId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+        reader.GetBoolean(0).Should().BeTrue("an ended membership revokes nothing");
     }
 
     [Fact]

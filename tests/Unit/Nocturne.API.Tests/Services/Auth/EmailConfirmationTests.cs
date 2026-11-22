@@ -69,7 +69,7 @@ public class EmailConfirmationTests : IDisposable
 
     private AccountLinkService Links() => new(
         _contexts, _loginCodes, new SubjectRepository(_contexts, AccountLinkRoutes.Off), _delivery,
-        Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }));
+        Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }), TimeProvider.System);
 
     private async Task<Guid> SeedMemberAsync(string? email = Address, bool confirmed = false)
     {

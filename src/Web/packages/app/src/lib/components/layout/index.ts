@@ -6,3 +6,4 @@ export { default as MobileHeader } from "./MobileHeader.svelte";
 export { default as EditorActionBar } from "./EditorActionBar.svelte";
 export { default as UserMenu } from "./UserMenu.svelte";
 export { default as BackupSignInPrompt } from "./BackupSignInPrompt.svelte";
+export { default as RecoveryEmailPrompt } from "./RecoveryEmailPrompt.svelte";

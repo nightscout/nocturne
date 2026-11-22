@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -60,7 +61,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     {
         await using var db = await OpenForTenantAsync(tenantId, ct);
         var grants = Match(PinnedGrants(db, tenantId).Where(IsLiveDirectGrant(now)), lookup);
-        var row = await WithMembership(grants, db, tenantId).FirstOrDefaultAsync(ct);
+        var row = await WithMembership(grants, db, tenantId, now).FirstOrDefaultAsync(ct);
         return row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership());
     }
 
@@ -430,13 +431,14 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     /// <summary>
     /// Pairs each grant with its subject's membership of <paramref name="tenantId"/> as a left join,
     /// so an authenticating request reads both in one statement, as the host's
-    /// <c>RequestMembership</c> does for a subject.
+    /// <c>RequestMembership</c> does for a subject. A membership that has ended at
+    /// <paramref name="now"/> joins as none.
     /// </summary>
     private static IQueryable<AuthenticatedRow> WithMembership(
-        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId) =>
+        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId, DateTime now) =>
         grants
             .GroupJoin(
-                db.TenantMembers.AsNoTracking().Where(m => m.TenantId == tenantId),
+                db.TenantMembers.AsNoTracking().LiveAt(now).Where(m => m.TenantId == tenantId),
                 g => g.SubjectId,
                 m => m.SubjectId,
                 (g, members) => new { g, members })
@@ -458,6 +460,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
                     DirectPermissions = m.DirectPermissions,
                     RolePermissions = m.MemberRoles.Select(mr => mr.TenantRole.Permissions).ToList(),
                     MemberLimitTo24Hours = (bool?)m.LimitTo24Hours,
+                    MemberAccessEndsAt = m.AccessEndsAt,
                     MemberLastUsedAt = m.LastUsedAt,
                 });
 
@@ -474,6 +477,8 @@ public class OAuthGrantRepository : IOAuthGrantRepository
 
         public bool? MemberLimitTo24Hours { get; init; }
 
+        public DateTime? MemberAccessEndsAt { get; init; }
+
         public DateTime? MemberLastUsedAt { get; init; }
 
         public DirectGrantMembership? Membership() => MemberId is { } id
@@ -481,7 +486,8 @@ public class OAuthGrantRepository : IOAuthGrantRepository
                 id,
                 new TenantMemberAccess(
                     MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
-                    MemberLimitTo24Hours == true),
+                    MemberLimitTo24Hours == true,
+                    MemberAccessEndsAt),
                 MemberLastUsedAt)
             : null;
     }

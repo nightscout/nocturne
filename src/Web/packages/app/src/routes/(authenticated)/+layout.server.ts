@@ -35,6 +35,19 @@ async function readShowBackupSignInPrompt(apiClient: App.Locals["apiClient"]): P
   }
 }
 
+/** A failed read hides the reminder, for the same reason. */
+async function readRecoveryEmailPrompt(
+  apiClient: App.Locals["apiClient"]
+): Promise<{ show: boolean; hasAddress: boolean }> {
+  try {
+    const prompt = await apiClient.recoveryEmailPrompt.getRecoveryEmailPrompt();
+    return { show: prompt.show ?? false, hasAddress: prompt.hasAddress ?? false };
+  } catch (error) {
+    console.error("Failed to read the recovery email prompt:", error);
+    return { show: false, hasAddress: false };
+  }
+}
+
 /** A failed read hides the switcher: it is navigation, and must not take the shell down with it. */
 async function readTenantTargets(
   apiClient: App.Locals["apiClient"]
@@ -72,6 +85,10 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     locals.user && !locals.isGuestSession
       ? readShowBackupSignInPrompt(locals.apiClient)
       : Promise.resolve(false);
+  const recoveryEmailPrompt =
+    locals.user && !locals.isGuestSession
+      ? readRecoveryEmailPrompt(locals.apiClient)
+      : Promise.resolve({ show: false, hasAddress: false });
   const tenantTargets =
     locals.user && !locals.isGuestSession
       ? readTenantTargets(locals.apiClient)
@@ -166,6 +183,10 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
 
   const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
   const resolvedTenantTargets = await tenantTargets;
+  // One banner at a time: the backup sign-in prompt is the more urgent, so the reminder waits for it.
+  const recoveryEmail = await recoveryEmailPrompt;
+  const showRecoveryEmailPrompt =
+    !tenantless && !isDemo && !showBackupSignInPrompt && recoveryEmail.show;
 
   return {
     user: locals.user ?? null,
@@ -173,6 +194,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     guestExpiresAt: locals.guestExpiresAt ?? null,
     canViewRealtimeData,
     showBackupSignInPrompt,
+    showRecoveryEmailPrompt,
+    recoveryEmailHasAddress: recoveryEmail.hasAddress,
     tenantTargets: resolvedTenantTargets,
     isDemo,
     nextResetAt,

@@ -70,6 +70,9 @@ public class RequireInteractiveSessionTests
         { typeof(MemberInviteController), nameof(MemberInviteController.CreateInvite) },
         { typeof(MemberInviteController), nameof(MemberInviteController.StepDown) },
         { typeof(MemberRecoveryController), nameof(MemberRecoveryController.IssueRecoveryCode) },
+        { typeof(RecoveryEmailController), nameof(RecoveryEmailController.GetRecoveryEmail) },
+        { typeof(RecoveryEmailController), nameof(RecoveryEmailController.SetRecoveryEmail) },
+        { typeof(RecoveryEmailController), nameof(RecoveryEmailController.DeleteRecoveryEmail) },
     };
 
     [Theory]

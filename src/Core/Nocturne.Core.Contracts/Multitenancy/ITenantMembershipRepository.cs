@@ -22,9 +22,15 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// method runs on the unit's context, whose pin the owner set, and stages its write for the
 /// owner's commit.
 /// <para>
-/// Every write of a membership's roles, direct permissions or 24-hour limit that changes them,
+/// Every write of a membership's roles, direct permissions, 24-hour limit or end date that changes them,
 /// including removing a membership and deleting a role members hold, also records one
-/// <c>auth_audit_log</c> row per role, permission or limit that moved, saved with the write.
+/// <c>auth_audit_log</c> row per role, permission, limit or end date that moved, saved with the write.
+/// </para>
+/// <para>
+/// A membership whose end date has passed is absent to every method that takes a <c>now</c>: those
+/// decide what a subject may do on a tenant, which tenants a subject has, or who receives something
+/// for a tenant. The management reads (<see cref="FindMemberAsync"/>, <see cref="GetMemberAsync"/>,
+/// <see cref="ListMembersAsync"/>), the setup gate and the owner reads still return it.
 /// </para>
 /// </remarks>
 public interface ITenantMembershipRepository
@@ -60,14 +66,20 @@ public interface ITenantMembershipRepository
     /// </summary>
     Task<TenantMemberAccess?> GetMemberAccessAsync(Guid memberId, CancellationToken ct);
 
-    /// <summary>What the membership of <paramref name="tenantId"/> held by <paramref name="subjectId"/> grants; null when there is none.</summary>
-    Task<TenantMemberAccess?> GetMemberAccessAsync(Guid tenantId, Guid subjectId, CancellationToken ct);
+    /// <summary>
+    /// What the membership of <paramref name="tenantId"/> held by <paramref name="subjectId"/> grants;
+    /// null when there is none or it has ended at <paramref name="now"/>.
+    /// </summary>
+    Task<TenantMemberAccess?> GetMemberAccessAsync(Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct);
 
-    /// <summary>Whether <paramref name="subjectId"/> holds a membership of <paramref name="tenantId"/>.</summary>
-    Task<bool> IsMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct);
+    /// <summary>Whether <paramref name="subjectId"/> holds a membership of <paramref name="tenantId"/> that has not ended at <paramref name="now"/>.</summary>
+    Task<bool> IsMemberAsync(Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct);
 
-    /// <summary>The names of the tenant roles <paramref name="subjectId"/> holds on <paramref name="tenantId"/>.</summary>
-    Task<IReadOnlyList<string>> GetMemberRoleNamesAsync(Guid tenantId, Guid subjectId, CancellationToken ct);
+    /// <summary>
+    /// The names of the tenant roles <paramref name="subjectId"/> holds on <paramref name="tenantId"/>;
+    /// none when the membership has ended at <paramref name="now"/>.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetMemberRoleNamesAsync(Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct);
 
     /// <summary>Every membership of the tenant, with its subject and roles.</summary>
     Task<IReadOnlyList<TenantMemberRecord>> ListMembersAsync(Guid tenantId, CancellationToken ct);
@@ -77,6 +89,9 @@ public interface ITenantMembershipRepository
     /// joined.
     /// </summary>
     Task<IReadOnlyList<TenantMemberRecord>> ListPeopleAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary><see cref="ListPeopleAsync"/> without the memberships that have ended at <paramref name="now"/>.</summary>
+    Task<IReadOnlyList<TenantMemberRecord>> ListLivePeopleAsync(Guid tenantId, DateTime now, CancellationToken ct);
 
     /// <summary>The tenant's owning memberships among <see cref="ListPeopleAsync"/>, longest-standing first.</summary>
     Task<IReadOnlyList<TenantMemberRecord>> ListOwnersAsync(Guid tenantId, CancellationToken ct);
@@ -119,6 +134,15 @@ public interface ITenantMembershipRepository
     /// <summary>Sets the membership's 24-hour history limit and stamps it updated at <paramref name="now"/>.</summary>
     Task<bool> SetLimitTo24HoursAsync(Guid tenantId, Guid memberId, bool limitTo24Hours, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// Sets when the membership ends, null clearing it, and stamps it updated at
+    /// <paramref name="now"/> when the date moved. Refused with
+    /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it would give an owner an end date.
+    /// </summary>
+    /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does, so it and a role change cannot race.</remarks>
+    Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(
+        Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct);
+
     /// <summary>Sets the membership's per-tenant sign-in name.</summary>
     Task<bool> SetUsernameAsync(Guid tenantId, Guid memberId, string? username, CancellationToken ct);
 
@@ -133,7 +157,9 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// <see cref="ReplaceRolesAsync"/>, refused with <see cref="OwnerGuardedChange.LastOwner"/> when
-    /// it removes the owner role from a membership <c>TenantOwnerFilter.IsLastOwnerAsync</c> says is the last owner.
+    /// it removes the owner role from a membership <c>TenantOwnerFilter.IsLastOwnerAsync</c> says is the last owner,
+    /// and with <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it gives the owner role to a
+    /// membership that has an end date.
     /// </summary>
     /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does.</remarks>
     Task<OwnerGuardedChange> ReplaceRolesUnlessLastOwnerAsync(
@@ -148,28 +174,32 @@ public interface ITenantMembershipRepository
     Task RecordUseAsync(Guid tenantId, Guid memberId, DateTime at, string? ipAddress, string? userAgent, CancellationToken ct);
 
     /// <summary>
-    /// The subject's platform-admin flag and their membership of <paramref name="tenantId"/>, read
-    /// in one statement for the authentication of every request; null when there is no such subject.
+    /// The subject's platform-admin flag and their membership of <paramref name="tenantId"/> unless it
+    /// has ended at <paramref name="now"/>, read in one statement for the authentication of every
+    /// request; null when there is no such subject.
     /// </summary>
-    Task<SubjectMembershipRead?> ReadSubjectMembershipAsync(Guid subjectId, Guid tenantId, CancellationToken ct);
+    Task<SubjectMembershipRead?> ReadSubjectMembershipAsync(Guid subjectId, Guid tenantId, DateTime now, CancellationToken ct);
 
-    /// <summary>The tenants <paramref name="subjectId"/> is a member of.</summary>
+    /// <summary>The tenants <paramref name="subjectId"/> is a member of, ended memberships included.</summary>
     /// <remarks>
+    /// Its readers refuse something to a subject who belongs to a tenant, so leaving out an ended
+    /// membership would widen what they allow.
     /// Pinned to the subject: the answer spans tenants for one person, which no tenant pin can
     /// express, and the <c>subject_pin</c> policy gives reach over their own rows only.
     /// </remarks>
     Task<IReadOnlyList<Guid>> ListTenantIdsOfSubjectAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
-    /// The tenants <paramref name="subjectId"/> is a member of, or with <paramref name="activeOnly"/>
-    /// the active ones: those they own first, then by when they joined, then by slug.
+    /// The tenants <paramref name="subjectId"/> holds a membership of that has not ended at
+    /// <paramref name="now"/>, or with <paramref name="activeOnly"/> the active ones: those they own
+    /// first, then by when they joined, then by slug.
     /// </summary>
     /// <remarks>Pinned to the subject, as <see cref="ListTenantIdsOfSubjectAsync"/> is.</remarks>
-    Task<IReadOnlyList<TenantRecord>> ListTenantsOfSubjectAsync(Guid subjectId, bool activeOnly, CancellationToken ct);
+    Task<IReadOnlyList<TenantRecord>> ListTenantsOfSubjectAsync(Guid subjectId, bool activeOnly, DateTime now, CancellationToken ct);
 
-    /// <summary>Every membership <paramref name="subjectId"/> holds, with its tenant and roles.</summary>
+    /// <summary>Every membership <paramref name="subjectId"/> holds that has not ended at <paramref name="now"/>, with its tenant and roles.</summary>
     /// <remarks>Pinned to the subject, as <see cref="ListTenantIdsOfSubjectAsync"/> is.</remarks>
-    Task<IReadOnlyList<SubjectMembership>> ListMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct);
+    Task<IReadOnlyList<SubjectMembership>> ListMembershipsOfSubjectAsync(Guid subjectId, DateTime now, CancellationToken ct);
 
     /// <summary>
     /// Whether any member of <paramref name="tenantId"/> holds a passkey or a working OIDC identity,
@@ -182,7 +212,12 @@ public interface ITenantMembershipRepository
     /// which read as a share and are hidden every table no category governs. The callers are
     /// pinned by <c>SystemPinnedAllowlistTests</c>.
     /// </remarks>
-    Task<SetupGate?> ReadSetupGateAsync(Guid tenantId, CancellationToken ct);
+    /// <param name="now">
+    /// Judges only who can still administer the site for recovery mode: an administrator whose
+    /// membership has ended at <paramref name="now"/> cannot sign in. Whether any member holds a
+    /// credential reads every membership, ended ones included.
+    /// </param>
+    Task<SetupGate?> ReadSetupGateAsync(Guid tenantId, DateTime now, CancellationToken ct);
 
     /// <summary>How many members, passkeys and working OIDC identities the tenant has, for the log line of a refused setup gate.</summary>
     /// <remarks>System-pinned, as <see cref="ReadSetupGateAsync"/> is.</remarks>

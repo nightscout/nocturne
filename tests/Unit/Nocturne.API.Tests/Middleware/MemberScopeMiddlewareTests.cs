@@ -566,6 +566,43 @@ public class MemberScopeMiddlewareTests
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]
     [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.LegacyJwt)]
+    [InlineData(AuthType.OidcToken)]
+    public async Task EndedMember_GetsNothingFromTheMembershipOnEveryCredentialHeldToIt(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(-1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetPermissionTrie()!.Check("api:entries:read").Should().BeFalse();
+        context.GetGrantedScopes().Should().NotContain(Scope.FullAccess);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership.Should().BeNull(
+            "an ended membership reads as no membership, which AuthenticationMiddleware refuses");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task MemberWhoseEndIsStillAhead_ResolvesTheirRole(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetGrantedScopes().Should().Contain(Scope.GlucoseRead);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership!.Access.AccessEndsAt
+            .Should().NotBeNull("the request carries the caller's end as its access ceiling");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
     public async Task ClampedFollower_IsHistoryClampedOnBothCarriers(AuthType authType)
     {
         using var db = TestDbContextFactory.CreateSqlite();
@@ -832,9 +869,12 @@ public class MemberScopeMiddlewareTests
         HttpContext context, ITenantMembershipRepository members, Guid subjectId)
     {
         var (membership, _) = await RequestMembership.ReadAsync(
-            members, subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None);
+            members, subjectId, TestDatabaseSeeder.TenantId, MembershipNow, CancellationToken.None);
         membership.StoreOn(context);
     }
+
+    /// <summary>The instant the request's membership read judges end dates at.</summary>
+    private static readonly DateTime MembershipNow = new(2026, 11, 22, 9, 0, 0, DateTimeKind.Utc);
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
     private static List<string> OwnerPermissions =>
@@ -852,7 +892,7 @@ public class MemberScopeMiddlewareTests
     /// permission atoms. Returns the member's subject id.
     /// </summary>
     private static Guid SeedMemberWithRole(
-        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false)
+        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false, DateTime? accessEndsAt = null)
     {
         var subjectId = Guid.CreateVersion7();
         using var seed = db.CreateContext();
@@ -872,6 +912,7 @@ public class MemberScopeMiddlewareTests
             TenantId = TestDatabaseSeeder.TenantId,
             SubjectId = subjectId,
             LimitTo24Hours = limitTo24Hours,
+            AccessEndsAt = accessEndsAt,
         });
         var roleId = Guid.CreateVersion7();
         seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity

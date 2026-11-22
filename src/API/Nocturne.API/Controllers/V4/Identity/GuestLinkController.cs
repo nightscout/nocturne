@@ -69,6 +69,7 @@ public class GuestLinkController : ControllerBase
                 request.Label,
                 baseUrl,
                 HttpContext.GetGrantedScopes(),
+                HttpContext.CallerAccessEndsAt(),
                 request.Scopes,
                 limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
                 ct: ct);

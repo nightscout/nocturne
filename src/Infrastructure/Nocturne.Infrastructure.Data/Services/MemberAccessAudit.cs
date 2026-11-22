@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Auth;
@@ -19,8 +20,8 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 
 /// <summary>
 /// The one writer of the <c>auth_audit_log</c> rows that record a change to what a member can read:
-/// the roles they hold, their direct permissions, their 24-hour history limit and the permissions a
-/// role itself grants.
+/// the roles they hold, their direct permissions, their 24-hour history limit, the date their access
+/// ends and the permissions a role itself grants.
 /// </summary>
 /// <remarks>
 /// Rows are staged on the context that stages the membership write, so one save commits both and a
@@ -29,7 +30,9 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// <see cref="AuthAuditEventType.RoleAssigned"/> for each it gave, named in the details under
 /// <c>role</c> or <c>permission</c>. A history limit that moved is one
 /// <see cref="AuthAuditEventType.HistoryLimitChanged"/> row naming the limit after it under
-/// <c>history_limit</c>. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c>
+/// <c>history_limit</c>. An end date that moved is one <see cref="AuthAuditEventType.AccessEndChanged"/>
+/// row naming the end after it under <c>access_ends_at</c>, as an ISO 8601 UTC instant or null when
+/// the membership no longer ends; the date passing writes nothing. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c>
 /// when an invite caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
 /// row with no target subject, naming the role under <c>role_id</c> and <c>role</c> and the permissions
@@ -52,6 +55,7 @@ internal static class MemberAccessAudit
     internal const string LostKey = "lost";
     internal const string PermissionKey = "permission";
     internal const string HistoryLimitKey = "history_limit";
+    internal const string AccessEndsAtKey = "access_ends_at";
     internal const string InviteKey = "invite";
     internal const string TwentyFourHours = "24_hours";
     internal const string FullHistory = "full";
@@ -86,6 +90,25 @@ internal static class MemberAccessAudit
             after ? TwentyFourHours : FullHistory, source);
     }
 
+    /// <summary>Stages one row when the end date moved, and none when it did not.</summary>
+    public static void StageAccessEnd(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime? before, DateTime? after,
+        MemberAccessSource? source = null)
+    {
+        if (before == after)
+            return;
+
+        var details = new Dictionary<string, object?>
+        {
+            [AccessEndsAtKey] = after is { } end ? DateTime.SpecifyKind(end, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture) : null,
+            [KindKey] = TenantKind,
+        };
+        if (source?.InviteId is { } inviteId)
+            details[InviteKey] = inviteId.ToString();
+
+        Add(db, AuthAuditEventType.AccessEndChanged, tenantId, subjectId, details, source);
+    }
+
     /// <summary>
     /// Stages one <see cref="AuthAuditEventType.RolePermissionsChanged"/> row when the role's permission set
     /// moved, and none when it did not. The role is the target, so the row has no target subject.
@@ -114,7 +137,7 @@ internal static class MemberAccessAudit
         if (gained.Count == 0 && lost.Count == 0)
             return;
 
-        Add(db, AuthAuditEventType.RolePermissionsChanged, tenantId, null, new Dictionary<string, object>
+        Add(db, AuthAuditEventType.RolePermissionsChanged, tenantId, null, new Dictionary<string, object?>
         {
             ["role_id"] = roleId.ToString(),
             [RoleKey] = role,
@@ -138,7 +161,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object> { [key] = item, [KindKey] = TenantKind };
+        var details = new Dictionary<string, object?> { [key] = item, [KindKey] = TenantKind };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 
@@ -147,7 +170,7 @@ internal static class MemberAccessAudit
 
     private static void Add(
         NocturneDbContext db, string eventType, Guid? tenantId, Guid? targetSubjectId,
-        Dictionary<string, object> details, MemberAccessSource? source)
+        Dictionary<string, object?> details, MemberAccessSource? source)
     {
         var audit = db.AuditContext;
         var actor = ActorOf(audit, source);

@@ -29,3 +29,8 @@ export const PERSON_POLL_MS = 60_000;
 
 /** The id of the open person's name in the panel, which names the side panel's landmark. */
 export const PERSON_PANEL_HEADING_ID = "person-panel-title";
+
+/** Whether the API gave the person a reason to need attention. */
+export function isFlagged(person: TenantOverviewItem): boolean {
+  return (person.attention?.length ?? 0) > 0;
+}

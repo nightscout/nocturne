@@ -5,7 +5,7 @@ import {
   MemberHistoryActorKind,
   MemberHistoryKind,
   type MemberHistoryEntry,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({

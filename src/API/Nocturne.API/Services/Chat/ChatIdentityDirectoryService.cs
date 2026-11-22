@@ -1,5 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -39,6 +41,7 @@ namespace Nocturne.API.Services.Chat;
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 public sealed class ChatIdentityDirectoryService(
     INocturneDbContextFactory contextFactory,
+    ITenantMembershipRepository members,
     TimeProvider time,
     ILogger<ChatIdentityDirectoryService> logger)
 {
@@ -49,18 +52,38 @@ public sealed class ChatIdentityDirectoryService(
     /// </summary>
     private const int MaxCreateAttempts = 5;
 
-    /// <summary>Returns all active directory entries for a platform user, ordered by creation date.</summary>
+    /// <summary>
+    /// Returns the active directory entries for a platform user whose subject still holds a
+    /// membership of the entry's tenant that has not ended, ordered by creation date.
+    /// </summary>
+    /// <remarks>
+    /// These are what the bot answers a command through, with the instance key, so an entry of an
+    /// ended membership would keep reading the tenant. The entry is kept rather than removed, so a
+    /// later end date restores it.
+    /// </remarks>
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetCandidatesAsync(
         string platform, string platformUserId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreatePlatformAsync(ct);
-        return await db.ChatIdentityDirectory
-            .Where(d => d.Platform == platform
-                        && d.PlatformUserId == platformUserId
-                        && d.IsActive)
-            .OrderBy(d => d.CreatedAt)
-            .ToListAsync(ct);
+        List<ChatIdentityDirectoryEntry> links;
+        await using (var db = await contextFactory.CreatePlatformAsync(ct))
+        {
+            links = await ActiveLinksOf(db, platform, platformUserId).AsNoTracking().OrderBy(d => d.CreatedAt).ToListAsync(ct);
+        }
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var live = new List<ChatIdentityDirectoryEntry>(links.Count);
+        foreach (var link in links)
+        {
+            if (await members.IsMemberAsync(link.TenantId, link.NocturneUserId, now, ct))
+                live.Add(link);
+        }
+
+        return live;
     }
+
+    /// <summary>Every active entry of a platform user, whether or not its membership has ended.</summary>
+    private static IQueryable<ChatIdentityDirectoryEntry> ActiveLinksOf(NocturneDbContext db, string platform, string platformUserId) =>
+        db.ChatIdentityDirectory.Where(d => d.Platform == platform && d.PlatformUserId == platformUserId && d.IsActive);
 
     /// <summary>
     /// Returns the active entry a bare bot invocation resolves to for a platform user, or
@@ -274,7 +297,7 @@ public sealed class ChatIdentityDirectoryService(
             return deleted;
         }
 
-        var survivors = await GetCandidatesAsync(target.Platform, target.PlatformUserId, ct);
+        var survivors = await ActiveLinksOf(db, target.Platform, target.PlatformUserId).AsNoTracking().ToListAsync(ct);
         if (survivors is [{ IsDefault: false } survivor])
         {
             await SetDefaultAsync(survivor.Id, ChatLinkScope.Unscoped, ct);

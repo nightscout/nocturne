@@ -296,6 +296,8 @@ public class V4WriteScopeGatingTests
             ["DebugController.PreviewEntries"] = NotDataCategory.ComputesAndReturns,
             ["SupportController.CreateIssue"] = NotDataCategory.OutboundOnly,
 
+            ["RecoveryEmailController.SetRecoveryEmail"] = NotDataCategory.OwnIdentity,
+            ["RecoveryEmailController.DeleteRecoveryEmail"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Upload"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Delete"] = NotDataCategory.OwnIdentity,
             ["ChatIdentityController.SetDefault"] = NotDataCategory.OwnIdentity,

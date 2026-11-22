@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Hubs;
@@ -57,7 +58,7 @@ public class HubCredentialVerifierTests
     private void Member(IReadOnlySet<string>? permissions, bool limitTo24Hours) =>
         _members
             .Setup(m => m.GetMemberAccessAsync(_subject, Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(permissions is null ? null : new TenantMemberAccess(permissions, limitTo24Hours));
+            .ReturnsAsync(permissions is null ? null : new TenantMemberAccess(permissions, limitTo24Hours, null));
 
     private async Task SeedAsync(
         bool subjectActive = true,
@@ -103,22 +104,21 @@ public class HubCredentialVerifierTests
         await db.SaveChangesAsync();
     }
 
-    private HubCredentialVerifier Verifier()
-    {
-        var services = new ServiceCollection()
+    private HubCredentialVerifier Verifier() => new(VerifierServices(_members.Object), TimeProvider.System);
+
+    private ServiceProvider VerifierServices(ITenantMemberService members) =>
+        new ServiceCollection()
             .AddSingleton(_contexts.AsNocturneFactory())
             .AddSingleton<ISubjectRepository>(new SubjectRepository(_contexts.AsNocturneFactory(), AccountLinkRoutes.Off))
             .AddSingleton<ITenantRepository>(new TenantRepository(_contexts.AsNocturneFactory()))
             .AddSingleton<IOAuthGrantRepository>(new OAuthGrantRepository(_contexts.AsNocturneFactory()))
             .AddSingleton<IFirstPartyTokenRepository>(new EfFirstPartyTokenRepository(_contexts.AsNocturneFactory()))
-            .AddSingleton(_members.Object)
+            .AddSingleton(members)
             .AddSingleton(_guestLinks.Object)
             .AddSingleton(_overview.Object)
             .AddSingleton(_revokedTokens.Object)
             .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
             .BuildServiceProvider();
-        return new HubCredentialVerifier(services, TimeProvider.System);
-    }
 
     private HubAuthorization Credential(
         AuthType authType, Guid? grantId, HubCredentialKind kind = HubCredentialKind.Subject, TimeSpan? expiresIn = null,
@@ -237,13 +237,57 @@ public class HubCredentialVerifierTests
     }
 
     [Fact]
-    public async Task An_api_secret_needs_no_membership_and_keeps_its_grants_scopes()
+    public async Task An_api_secret_is_held_to_its_subjects_membership()
     {
         await SeedAsync();
-        Member(null, limitTo24Hours: false);
         var admitted = await AdmittedAsync(Credential(AuthType.ApiKey, _grant));
-
         (await StillCoveredAsync(admitted)).Should().BeTrue();
+
+        Member(null, limitTo24Hours: false);
+
+        (await Verifier().ProveAsync(admitted, TenantContext)).Should().BeNull(
+            "over HTTP an api-secret whose subject holds no membership authenticates as no one");
+    }
+
+    [Theory]
+    [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.SessionCookie)]
+    public async Task A_membership_whose_end_passes_withdraws_the_credential_until_the_end_moves_later(AuthType authType)
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero));
+        await SeedAsync(sessions: ["laptop"]);
+        await using (var db = await _contexts.CreateDbContextAsync())
+        {
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = Tenant,
+                SubjectId = _subject,
+                DirectPermissions = [.. MemberPermissions],
+                AccessEndsAt = clock.GetUtcNow().UtcDateTime.AddMinutes(1),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var members = new TenantMemberService(new TenantMembershipRepository(_contexts.AsNocturneFactory(), AccountLinkRoutes.Off), clock);
+        HubCredentialVerifier Verify() => new(VerifierServices(members), clock);
+        var credential = Credential(
+            authType,
+            authType is AuthType.SessionCookie ? null : _grant,
+            expiresIn: TimeSpan.FromMinutes(30),
+            sessionId: authType is AuthType.SessionCookie ? "laptop" : null);
+
+        var admitted = await Verify().ProveAsync(credential, TenantContext);
+        admitted.Should().NotBeNull();
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        (await Verify().ProveAsync(admitted!, TenantContext)).Should().BeNull("the end instant itself has ended");
+
+        await UpdateAsync(db => db.TenantMembers.Single().AccessEndsAt = clock.GetUtcNow().UtcDateTime.AddDays(1));
+        admitted!.IsCoveredBy(await Verify().ProveAsync(admitted, TenantContext)).Should().BeTrue(
+            "nothing was revoked, so a later end restores the same access");
     }
 
     [Fact]
