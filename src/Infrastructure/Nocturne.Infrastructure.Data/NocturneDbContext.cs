@@ -375,6 +375,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TenantMemberRoleEntity> TenantMemberRoles { get; set; } = null!;
 
+    public DbSet<TenantMemberReasonEntity> TenantMemberReasons { get; set; } = null!;
+
+    public DbSet<TenantMemberReasonRoleEntity> TenantMemberReasonRoles { get; set; } = null!;
+
     // Alert Engine entities
 
     public DbSet<AlertRuleEntity> AlertRules { get; set; }

@@ -5814,6 +5814,103 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("tenant_members");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AccessEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("access_ends_at");
+
+                    b.Property<Guid?>("CreatedFromInviteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_from_invite_id");
+
+                    b.PrimitiveCollection<string>("DirectPermissions")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("direct_permissions");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_member_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedFromInviteId");
+
+                    b.HasIndex(new[] { "TenantMemberId" }, "ix_tenant_member_reasons_one_direct")
+                        .IsUnique()
+                        .HasFilter("kind = 'direct'");
+
+                    b.HasIndex(new[] { "TenantMemberId", "Kind", "SourceId" }, "ix_tenant_member_reasons_one_per_source")
+                        .IsUnique()
+                        .HasFilter("source_id IS NOT NULL");
+
+                    b.HasIndex(new[] { "TenantMemberId" }, "ix_tenant_member_reasons_tenant_member_id");
+
+                    b.ToTable("tenant_member_reasons");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonRoleEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantMemberReasonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_member_reason_id");
+
+                    b.Property<Guid>("TenantRoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_role_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantRoleId");
+
+                    b.HasIndex("TenantMemberReasonId", "TenantRoleId")
+                        .IsUnique();
+
+                    b.ToTable("tenant_member_reason_roles");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberRoleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11182,6 +11279,43 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.MemberInviteEntity", "CreatedFromInvite")
+                        .WithMany()
+                        .HasForeignKey("CreatedFromInviteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", "TenantMember")
+                        .WithMany()
+                        .HasForeignKey("TenantMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedFromInvite");
+
+                    b.Navigation("TenantMember");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonRoleEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity", "TenantMemberReason")
+                        .WithMany("ReasonRoles")
+                        .HasForeignKey("TenantMemberReasonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantRoleEntity", "TenantRole")
+                        .WithMany()
+                        .HasForeignKey("TenantRoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TenantMemberReason");
+
+                    b.Navigation("TenantRole");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberRoleEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", "TenantMember")
@@ -11776,6 +11910,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", b =>
                 {
                     b.Navigation("MemberRoles");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity", b =>
+                {
+                    b.Navigation("ReasonRoles");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantRoleEntity", b =>
