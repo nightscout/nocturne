@@ -13,7 +13,9 @@ namespace Nocturne.API.Services.Identity;
 /// <summary>
 /// Removes a membership with what it leaves behind: its roles and their audit rows, the subject's
 /// chat links to the tenant, every live grant of the subject on it, and every live guest link the
-/// subject made, whoever the link's data owner is.
+/// subject made, whoever the link's data owner is. A membership with an end date also stops, at
+/// once, the alert channels the subject added (<see cref="AlertChannelStops"/>); one without keeps
+/// them, as a member who never had an end date added them to last.
 /// </summary>
 /// <remarks>
 /// Chat identity directory rows are global and carry no membership join, so a link left behind
@@ -54,6 +56,8 @@ internal static class MembershipRemoval
         var revoked = owned.Concat(handedOut.ExceptBy(owned.Select(g => g.Id), g => g.Id)).ToList();
 
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
+        if (member.AccessEndsAt is not null)
+            await AlertChannelStops.CapAsync(context, member.SubjectId, now, ct);
         await grantRevocation.StageAsync(unit, revoked, ct);
         grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
         await context.SaveChangesAsync(ct);

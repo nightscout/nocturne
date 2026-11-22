@@ -99,11 +99,14 @@ public sealed class ChatIdentityDirectoryService(
         Guid tenantId, CancellationToken ct)
     {
         await using var db = await contextFactory.CreatePlatformAsync(ct);
-        return await db.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId && d.IsActive)
+        return await ActiveLinksOfTenant(db, tenantId)
             .OrderBy(d => d.CreatedAt)
             .ToListAsync(ct);
     }
+
+    /// <summary>Every active entry linking a chat account to <paramref name="tenantId"/>, on a context of any tenant.</summary>
+    public static IQueryable<ChatIdentityDirectoryEntry> ActiveLinksOfTenant(NocturneDbContext db, Guid tenantId) =>
+        db.ChatIdentityDirectory.Where(d => d.TenantId == tenantId && d.IsActive);
 
     /// <summary>
     /// Returns a directory entry by its ID, or null if no entry with that ID is in

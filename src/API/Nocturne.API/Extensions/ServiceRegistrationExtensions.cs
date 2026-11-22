@@ -1155,6 +1155,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
         services.AddScoped<IClockAnomalyNotice, ClockAnomalyNotice>();
         services.AddSingleton<ClockAnomalyNoticeLog>();
+        services.AddScoped<IAlertChannelNotice, AlertChannelNotice>();
+        services.AddSingleton<AlertChannelNoticeLog>();
         services.AddScoped<IAlertDeliveryService, AlertDeliveryService>();
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
         services.AddScoped<AlertReceiptService>();

@@ -140,7 +140,8 @@ public class AlertSetupService(
     /// Creates the starter rules, or updates the ones already made, with the thresholds, switches
     /// and destination given. A threshold is read in the caller's units and stored in mg/dL; one
     /// that reads the same as the stored value keeps the stored value, so a round trip through
-    /// mmol/L never moves it.
+    /// mmol/L never moves it. A channel with a typed-in destination stops at
+    /// <paramref name="callerAccessEndsAt"/>, when the caller's access ends.
     /// </summary>
     /// <remarks>
     /// Urgent low always sounds through Do Not Disturb, and every rule does for a caregiver. Two
@@ -149,28 +150,30 @@ public class AlertSetupService(
     /// </remarks>
     /// <exception cref="ArgumentException">A threshold is missing or out of range, or a channel cannot deliver.</exception>
     /// <exception cref="InvalidOperationException">The onboarder is a helper, who leaves alerts to the recipient.</exception>
-    public async Task<AlertSetupStatus> SaveAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    public async Task<AlertSetupStatus> SaveAsync(
+        Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         try
         {
-            return await SaveOnceAsync(callerId, request, ct);
+            return await SaveOnceAsync(callerId, callerAccessEndsAt, request, ct);
         }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            return await SaveOnceAsync(callerId, request, ct);
+            return await SaveOnceAsync(callerId, callerAccessEndsAt, request, ct);
         }
     }
 
-    private async Task<AlertSetupStatus> SaveOnceAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    private async Task<AlertSetupStatus> SaveOnceAsync(
+        Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         await using (var unit = await DbUnitOfWork.OpenAsync(contexts, ct))
-            await SaveStartersAsync(unit, callerId, request, ct);
+            await SaveStartersAsync(unit, callerId, callerAccessEndsAt, request, ct);
 
         return await GetAsync(callerId, ct);
     }
 
     private async Task SaveStartersAsync(
-        DbUnitOfWork unit, Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+        DbUnitOfWork unit, Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         var db = unit.Context;
         var routing = await RoutingAsync(db, ct);
@@ -188,7 +191,7 @@ public class AlertSetupService(
         var writer = new AlertRuleRepository(unit, time);
         var starters = await writer.GetStarterRulesAsync(ct);
         var tenantId = db.TenantId;
-        var channelWrites = _channels.ToWrites(channelRequests);
+        var channelWrites = await _channels.ToWritesAsync(channelRequests, callerId, callerAccessEndsAt, db, ct);
         var rearmed = new List<Guid>();
         var retired = new List<Guid>();
 
@@ -355,7 +358,7 @@ public class AlertSetupService(
         var destination = memberId.ToString();
         var existing = urgentLow.Channels.FirstOrDefault(c => c.ChannelType == ChannelType.InApp && c.Destination == destination);
         if (alerted && existing is null)
-            await rules.AddChannelAsync(urgentLow.Rule.Id, new AlertRuleChannelWrite(ChannelType.InApp, destination), ct);
+            await rules.AddChannelAsync(urgentLow.Rule.Id, new AlertRuleChannelWrite(ChannelType.InApp, destination, AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null), ct);
         else if (!alerted && existing is not null)
             await rules.RemoveChannelAsync(urgentLow.Rule.Id, existing.Id, ct);
 

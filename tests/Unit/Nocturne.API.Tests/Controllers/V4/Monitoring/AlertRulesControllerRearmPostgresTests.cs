@@ -152,6 +152,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         var controller = new AlertRulesController(
             new Factory(() => Context(tenant, failure)),
             new TenantMembershipRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
+            new SubjectRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
             new AlertRepository(new Factory(() => Context(tenant, failure))),
             new AlertRuleRepository(new Factory(() => Context(tenant, failure))),
             MockTenantAccessor.Create(tenant).Object,

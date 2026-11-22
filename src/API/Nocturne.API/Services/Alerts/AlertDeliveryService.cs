@@ -16,7 +16,8 @@ namespace Nocturne.API.Services.Alerts;
 /// to the matching channel provider (<c>in_app</c>, <c>webhook</c>, chat-bot variants). Delivery
 /// rows are persisted before the provider call so the audit trail is complete on provider
 /// failure. A row is marked delivered only when its provider reached a recipient; a channel type
-/// no provider claims is marked failed.
+/// no provider claims is marked failed, and so is a channel <see cref="AlertChannelStates"/> finds
+/// does not deliver, without its provider being called.
 /// </summary>
 /// <remarks>
 /// DND suppression is the caller's responsibility — by the time DispatchAsync is called we
@@ -127,13 +128,15 @@ internal sealed class AlertDeliveryService(
         }
         await db.SaveChangesAsync(ct);
 
+        var states = await StatesAsync(channels, ct);
+
         // Hand each persisted row to its provider. Provider failures are caught and recorded
         // on the delivery row; one bad webhook does not abort the rest of the batch.
         foreach (var (delivery, channel) in deliveries)
         {
             try
             {
-                await DispatchToProviderAsync(delivery, channel, payload, ct);
+                await DispatchToProviderAsync(delivery, channel, states, payload, ct);
             }
             catch (Exception ex)
             {
@@ -281,12 +284,13 @@ internal sealed class AlertDeliveryService(
         }
         await db.SaveChangesAsync(ct);
 
+        var states = await StatesAsync(channels, ct);
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
             try
             {
-                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
+                await DispatchToProviderAsync(delivery, channels[i], states, payload, ct);
             }
             catch (Exception ex)
             {
@@ -299,7 +303,7 @@ internal sealed class AlertDeliveryService(
         return instance.Id;
     }
 
-    public async Task TestFireDryRunAsync(
+    public async Task<IReadOnlyList<AlertChannelNotSent>> TestFireDryRunAsync(
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
         CancellationToken ct)
@@ -316,8 +320,16 @@ internal sealed class AlertDeliveryService(
         // Push directly to providers without persisting delivery rows. Failures are logged
         // but not retryable — there's no row to mark failed. Dry-run callers know this is
         // an editor preview, not an audit-tracked send.
-        foreach (var channel in channels)
+        var states = await StatesAsync(channels, ct);
+        var notSent = new List<AlertChannelNotSent>();
+        foreach (var (channel, index) in channels.Select((c, i) => (c, i)))
         {
+            if (states.Of(channel) is { IsActive: false } verdict)
+            {
+                notSent.Add(new AlertChannelNotSent(index, channel.ChannelType, verdict.State));
+                continue;
+            }
+
             try
             {
                 var fauxDelivery = new AlertDeliveryEntity
@@ -326,13 +338,15 @@ internal sealed class AlertDeliveryService(
                     ChannelType = channel.ChannelType,
                     Destination = channel.Destination,
                 };
-                await DispatchToProviderAsync(fauxDelivery, channel, payload, ct);
+                await DispatchToProviderAsync(fauxDelivery, channel, states, payload, ct);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Test-fire dry-run dispatch via {ChannelType} failed", channel.ChannelType);
             }
         }
+
+        return notSent;
     }
 
     /// <summary>
@@ -384,34 +398,49 @@ internal sealed class AlertDeliveryService(
     }
 
     /// <summary>
-    /// Why an in-app channel cannot reach its recipient, or null when it can. Re-checked at
-    /// delivery, not only on save: the member a channel names may since have left the site.
+    /// The channels' states at dispatch, not only on save: the member a channel goes to may since
+    /// have left the site, and a channel's stop may have passed. A failed read of the members holds
+    /// back only the channels that go to a member (<see cref="AlertChannelStates.Unread"/>), so the
+    /// rest of an urgent low still goes out.
     /// </summary>
-    private async Task<string?> InAppRecipientProblemAsync(string destination, CancellationToken ct)
+    private async Task<AlertChannelStates> StatesAsync(IReadOnlyList<AlertRuleChannelSnapshot> channels, CancellationToken ct)
     {
-        if (!Guid.TryParse(destination, out _))
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        try
         {
-            return "In-app channel names no recipient";
+            return await AlertChannelStates.LoadAsync(channels, tenantAccessor.TenantId, now, members, contextFactory, ct);
         }
-
-        return await InAppRecipients.ResolveAsync(
-            members, tenantAccessor.TenantId, destination, timeProvider.GetUtcNow().UtcDateTime, ct) is null
-            ? "In-app recipient is not a member of this site who holds any access"
-            : null;
+        catch (Exception ex) when (StoreFailure.Is(ex))
+        {
+            logger.LogError(ex,
+                "The members of tenant {TenantId} could not be read; alert channels that go to a member are not sent",
+                tenantAccessor.TenantId);
+            return AlertChannelStates.Unread(now);
+        }
     }
 
     private async Task DispatchToProviderAsync(
-        AlertDeliveryEntity delivery, AlertRuleChannelSnapshot channel, AlertPayload payload, CancellationToken ct)
+        AlertDeliveryEntity delivery,
+        AlertRuleChannelSnapshot channel,
+        AlertChannelStates states,
+        AlertPayload payload,
+        CancellationToken ct)
     {
+        if (states.Of(channel) is { IsActive: false, Reason: var reason })
+        {
+            logger.LogInformation(
+                "Delivery {DeliveryId} via {ChannelType} not sent: {Reason}", delivery.Id, delivery.ChannelType, reason);
+            await MarkFailedAsync(delivery.Id, reason!, ct);
+            return;
+        }
+
         switch (delivery.ChannelType)
         {
             case ChannelType.InApp:
                 var inAppProvider = serviceProvider.GetService<Providers.InAppProvider>();
                 if (inAppProvider is not null)
                 {
-                    if (await InAppRecipientProblemAsync(delivery.Destination, ct) is { } problem)
-                        await MarkFailedAsync(delivery.Id, problem, ct);
-                    else if (await inAppProvider.SendAsync(delivery.Destination, payload, ct))
+                    if (await inAppProvider.SendAsync(delivery.Destination, payload, ct))
                         await MarkDeliveredAsync(delivery.Id, null, null, ct);
                     else
                         await MarkFailedAsync(delivery.Id, "In-app channel names no recipient", ct);

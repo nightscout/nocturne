@@ -423,6 +423,9 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 member.SysUpdatedAt = now;
             }
 
+            if (accessEndsAt is { } end)
+                await AlertChannelStops.CapAsync(db, member.SubjectId, end, token);
+
             return OwnerGuardedChange.Changed;
         }, ct);
 

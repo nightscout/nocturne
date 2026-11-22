@@ -63,6 +63,7 @@ public class AlertRulesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITenantMembershipRepository _members;
+    private readonly ISubjectRepository _subjects;
     private readonly IAlertRepository _alerts;
     private readonly IAlertRuleRepository _rules;
     private readonly ITenantAccessor _tenantAccessor;
@@ -82,6 +83,7 @@ public class AlertRulesController : ControllerBase
     public AlertRulesController(
         INocturneDbContextFactory contextFactory,
         ITenantMembershipRepository members,
+        ISubjectRepository subjects,
         IAlertRepository alerts,
         IAlertRuleRepository rules,
         ITenantAccessor tenantAccessor,
@@ -98,6 +100,7 @@ public class AlertRulesController : ControllerBase
         _time = timeProvider;
         _contextFactory = contextFactory;
         _members = members;
+        _subjects = subjects;
         _alerts = alerts;
         _rules = rules;
         _tenantAccessor = tenantAccessor;
@@ -230,6 +233,7 @@ public class AlertRulesController : ControllerBase
             return badTracker;
 
         var conditionParamsJson = trees.ConditionParams;
+        var channels = await ToWritesAsync(request.Channels ?? [], db, ct);
 
         var ruleId = await _rules.CreateAsync(
             new NewAlertRule(
@@ -248,7 +252,7 @@ public class AlertRulesController : ControllerBase
                     trees.ClientConfiguration ?? "{}",
                     OnUnknown: request.OnUnknown ?? AlertRuleOnUnknown.Hold,
                     GlucoseFreshnessMinutes: request.GlucoseFreshnessMinutes),
-                _channels.ToWrites(request.Channels ?? [])),
+                channels),
             ct);
 
         return CreatedAtAction(nameof(GetRule), new { id = ruleId }, await ReadBackAsync(ruleId, ct));
@@ -329,7 +333,7 @@ public class AlertRulesController : ControllerBase
         if (!await rules.UpdateAsync(id, write, ct))
             return NotFound();
         if (request.Channels is not null)
-            await rules.ReplaceChannelsAsync(id, _channels.ToWrites(request.Channels), kept: null, ct);
+            await rules.ReplaceChannelsAsync(id, await ToWritesAsync(request.Channels, db, ct), kept: null, ct);
 
         // A save without its clear would stand: a retried edit changes nothing, so it would not
         // clear the hold.
@@ -413,6 +417,42 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
+    /// Keep a channel that stops when the access of the member who added it ends: the caller
+    /// becomes the member who added it, so it stops when the caller's own access ends, or never
+    /// when the caller's access has no end. Only a channel whose destination was typed in can be
+    /// kept; a channel that goes to a member sends again once that member has access.
+    /// </summary>
+    [HttpPost("{ruleId:guid}/channels/{channelId:guid}/keep")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteCommand(Invalidates = ["GetRules", "GetRule"])]
+    [ErrorEnvelope]
+    [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertRuleResponse>> KeepChannel(Guid ruleId, Guid channelId, CancellationToken ct)
+    {
+        var channel = (await _alerts.GetRuleAsync(ruleId, ct))?.Channels.FirstOrDefault(c => c.Id == channelId);
+        if (channel is null)
+            return NotFound();
+
+        if (ChannelDestinations.ModeOf(channel.ChannelType) != ChannelDestinationMode.UserSupplied)
+            return Problem(detail: KeepMemberChannelDetail, statusCode: StatusCodes.Status400BadRequest);
+
+        if (HttpContext?.GetSubjectId() is not { } subjectId)
+            return Problem(detail: KeepWithoutMemberDetail, statusCode: StatusCodes.Status400BadRequest);
+
+        if (!await _rules.RestampChannelAsync(ruleId, channelId, subjectId, HttpContext.CallerAccessEndsAt(), ct))
+            return NotFound();
+
+        return Ok(await ReadBackAsync(ruleId, ct));
+    }
+
+    private const string KeepMemberChannelDetail =
+        "Only a channel with a typed-in destination can be kept. A channel to a member sends again when that member has access.";
+
+    private const string KeepWithoutMemberDetail = "Only a member can keep a channel.";
+
+    /// <summary>
     /// Fire a saved rule through its real channel list as a test. Writes a
     /// <c>is_test=true</c> instance + delivery rows so the user can verify their channels
     /// without polluting the active-alerts surface.
@@ -434,12 +474,13 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// Test-fire variant for the editor on an unsaved rule. Same provider chain, no
-    /// rule lookup — channels and metadata come straight from the request body.
+    /// rule lookup — channels and metadata come straight from the request body. The answer lists
+    /// the channels it did not send because they do not deliver, with their state.
     /// </summary>
     [HttpPost("test-fire-dry-run")]
     [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(TestFireDryRunResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
@@ -470,8 +511,8 @@ public class AlertRulesController : ControllerBase
 
         var payload = AlertPayloads.Test(AlertConditionType.Composite, request.Name, request.Severity, tenantId, DateTime.UtcNow);
 
-        await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
-        return Accepted();
+        var notSent = await _deliveryService.TestFireDryRunAsync(channels, payload, ct);
+        return Accepted(new TestFireDryRunResponse { NotSent = [.. notSent ?? []] });
     }
 
     #region Helpers
@@ -487,6 +528,11 @@ public class AlertRulesController : ControllerBase
             channels, storedRecipients, db, _members, HttpContext?.GetSubjectId(), _time.GetUtcNow().UtcDateTime, ct) is { } message
             ? BadRequest(new { message })
             : null;
+
+    /// <inheritdoc cref="AlertRuleChannelWriter.ToWritesAsync"/>
+    private Task<List<AlertRuleChannelWrite>> ToWritesAsync(
+        IEnumerable<CreateAlertRuleChannelRequest> channels, NocturneDbContext db, CancellationToken ct) =>
+        _channels.ToWritesAsync(channels, HttpContext?.GetSubjectId(), HttpContext?.CallerAccessEndsAt(), db, ct);
 
     private async Task<AlertRuleResponse> ToResponseAsync(AlertRuleRecord rule, CancellationToken ct) =>
         (await ToResponsesAsync([rule], ct, await _alerts.GetRulesAsync(ct)))[0];
@@ -520,28 +566,41 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// Maps rules to responses and, for a caller who may edit the rules, describes each in-app
-    /// channel's recipient. Only the rule editor reads it, so other callers are spared the lookup.
-    /// This is not a privacy boundary: member names are readable more widely (issue #2359).
+    /// channel's recipient and each channel's state with the members it names. Only the rule editor
+    /// reads it, so other callers are spared the lookup. This is not a privacy boundary: member
+    /// names are readable more widely (issue #2359).
     /// </summary>
     private async Task<List<AlertRuleResponse>> ToResponsesAsync(
         IReadOnlyList<AlertRuleRecord> rules, CancellationToken ct,
         IReadOnlyList<AlertRuleRecord>? tenantRules = null)
     {
-        var issues = (tenantRules ?? rules).ToDictionary(r => r.Rule.Id, r => StoredIssues(r.Rule));
-        var covering = LowCoverage.CoveringRuleIds((tenantRules ?? rules).Select(r => (r, issues[r.Rule.Id])));
+        var tenantId = _tenantAccessor.TenantId;
+        var now = _time.GetUtcNow().UtcDateTime;
+        var allRules = tenantRules ?? rules;
+        var issues = allRules.ToDictionary(r => r.Rule.Id, r => StoredIssues(r.Rule));
+        var states = await AlertChannelStates.LoadAsync(
+            allRules.Concat(rules).SelectMany(r => r.Channels), tenantId, now, _members, _contextFactory, ct);
+        var covering = LowCoverage.CoveringRuleIds(allRules.Select(r => (r, issues[r.Rule.Id])), states);
         var responses = rules
             .Select(r => MapToResponse(r, issues.TryGetValue(r.Rule.Id, out var found) ? found : StoredIssues(r.Rule), covering))
             .ToList();
-        var inApp = responses
-            .SelectMany(r => r.Channels)
-            .Where(c => c.ChannelType == ChannelType.InApp)
-            .ToList();
-        if (inApp.Count == 0 || HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
+        if (HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
         {
             return responses;
         }
 
-        var recipients = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, _time.GetUtcNow().UtcDateTime, ct);
+        await DescribeChannelStatesAsync(rules, responses, states, tenantId, ct);
+
+        var inApp = responses
+            .SelectMany(r => r.Channels)
+            .Where(c => c.ChannelType == ChannelType.InApp)
+            .ToList();
+        if (inApp.Count == 0)
+        {
+            return responses;
+        }
+
+        var recipients = await InAppRecipients.ListAsync(_members, tenantId, now, ct);
         foreach (var channel in inApp)
         {
             Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
@@ -556,6 +615,55 @@ public class AlertRulesController : ControllerBase
         }
 
         return responses;
+    }
+
+    /// <summary>
+    /// Sets each channel's state, the member a channel without a recipient goes to, and who added a
+    /// stamped channel and when it stops. A member is named by their label on the site, and one who
+    /// has since been removed by their own name.
+    /// </summary>
+    private async Task DescribeChannelStatesAsync(
+        IReadOnlyList<AlertRuleRecord> rules,
+        List<AlertRuleResponse> responses,
+        AlertChannelStates states,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var described = rules.SelectMany(r => r.Channels)
+            .Join(responses.SelectMany(r => r.Channels), c => c.Id, r => r.Id, (channel, response) =>
+                (Channel: channel, Response: response, Verdict: states.Of(channel)))
+            .ToList();
+
+        var named = described
+            .SelectMany(d => new[]
+            {
+                d.Verdict.State == AlertChannelState.NoRecipient ? d.Verdict.MemberSubjectId : null,
+                d.Channel.AddedBySubjectId,
+            })
+            .OfType<Guid>()
+            .ToHashSet();
+        var names = new Dictionary<Guid, string?>();
+        if (named.Count > 0)
+        {
+            foreach (var person in await _members.ListPeopleAsync(tenantId, ct))
+                names.TryAdd(person.SubjectId, person.Label ?? person.SubjectName);
+            var removed = named.Where(id => !names.ContainsKey(id)).ToList();
+            if (removed.Count > 0)
+            {
+                foreach (var subject in await _subjects.GetManyAsync(removed, ct))
+                    names.TryAdd(subject.Id, subject.Name);
+            }
+        }
+
+        foreach (var (channel, response, verdict) in described)
+        {
+            response.State = verdict.State;
+            response.MemberName = verdict is { State: AlertChannelState.NoRecipient, MemberSubjectId: { } member }
+                ? names.GetValueOrDefault(member)
+                : null;
+            response.AddedByName = channel.AddedBySubjectId is { } adder ? names.GetValueOrDefault(adder) : null;
+            response.StopsAt = channel.StopsAt;
+        }
     }
 
     /// <summary>
@@ -777,7 +885,7 @@ public class AlertRuleResponse
     /// resolves, and in its smart-snooze conditions the snooze clears.</summary>
     public List<RustValidationIssue> ConditionIssues { get; set; } = [];
     /// <summary>True when this rule alerts for low glucose: it is on, evaluates, is a low or
-    /// composite rule (<see cref="ScopeClass"/>), and has a delivery channel (<see cref="LowCoverage"/>).</summary>
+    /// composite rule (<see cref="ScopeClass"/>), and has a channel that delivers (<see cref="LowCoverage"/>).</summary>
     public bool CoversLow { get; set; }
     /// <summary>True when this is the only rule that covers low glucose, so turning it off or
     /// deleting it leaves the tenant with no low alert.</summary>
@@ -848,5 +956,12 @@ public record TestFireDryRunRequest(
     string Name,
     AlertRuleSeverity Severity,
     List<CreateAlertRuleChannelRequest> Channels);
+
+/// <summary>What a dry-run test fire found.</summary>
+public class TestFireDryRunResponse
+{
+    /// <summary>The request's channels that were not sent because they do not deliver.</summary>
+    public List<AlertChannelNotSent> NotSent { get; set; } = [];
+}
 
 #endregion

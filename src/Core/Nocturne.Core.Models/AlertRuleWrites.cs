@@ -72,9 +72,22 @@ public sealed record NewAlertRule(
 /// destination, if there is exactly one, because the editor cannot re-send what it was never shown.
 /// False stores <paramref name="Secret"/>, so a null clears it.
 /// </param>
+/// <param name="AddedBySubjectId">
+/// <see cref="AlertRuleChannelSnapshot.AddedBySubjectId"/> for a new channel. A channel the rule
+/// already holds under the same type and destination keeps its stored value, and its
+/// <see cref="AlertRuleChannelSnapshot.StopsAt"/>, whatever is given here.
+/// </param>
+/// <param name="StopsAt"><see cref="AlertRuleChannelSnapshot.StopsAt"/> for a new channel, as for <paramref name="AddedBySubjectId"/>.</param>
+/// <param name="RecipientSubjectId">
+/// <see cref="AlertRuleChannelSnapshot.RecipientSubjectId"/>; null keeps the one stored under the
+/// same type and destination.
+/// </param>
 public sealed record AlertRuleChannelWrite(
     ChannelType ChannelType,
     string Destination,
+    Guid? AddedBySubjectId,
+    DateTime? StopsAt,
+    Guid? RecipientSubjectId,
     string? DestinationLabel = null,
     string? Metadata = null,
     string? Secret = null,

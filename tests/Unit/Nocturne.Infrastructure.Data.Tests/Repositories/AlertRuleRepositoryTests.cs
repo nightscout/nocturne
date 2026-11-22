@@ -49,8 +49,8 @@ public class AlertRuleRepositoryTests
             new NewAlertRule(
                 Low(),
                 [
-                    new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", "A", "{\"k\":1}", "cipher-a"),
-                    new AlertRuleChannelWrite(ChannelType.InApp, "member"),
+                    new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, "A", "{\"k\":1}", "cipher-a"),
+                    new AlertRuleChannelWrite(ChannelType.InApp, "member", null, null, null),
                 ],
                 ManagedBy: "tracker:1",
                 StarterKind: StarterAlertKind.Low),
@@ -78,7 +78,7 @@ public class AlertRuleRepositoryTests
         await using var db = Db();
         var repo = Repository(db);
         var id = await repo.CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "member")], ManagedBy: "tracker:1"),
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "member", null, null, null)], ManagedBy: "tracker:1"),
             CancellationToken.None);
         _clock.Advance(TimeSpan.FromHours(1));
 
@@ -116,18 +116,18 @@ public class AlertRuleRepositoryTests
         var id = await repo.CreateAsync(
             new NewAlertRule(Low(),
             [
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", Secret: "cipher-a"),
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://b.example", Secret: "cipher-b"),
-                new AlertRuleChannelWrite(ChannelType.InApp, "other-member"),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, Secret: "cipher-a"),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://b.example", null, null, null, Secret: "cipher-b"),
+                new AlertRuleChannelWrite(ChannelType.InApp, "other-member", null, null, null),
             ]),
             CancellationToken.None);
 
         await repo.ReplaceChannelsAsync(
             id,
             [
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", KeepsStoredSecret: true),
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://b.example", Secret: null),
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://c.example", KeepsStoredSecret: true),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, KeepsStoredSecret: true),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://b.example", null, null, null, Secret: null),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://c.example", null, null, null, KeepsStoredSecret: true),
             ],
             kept: c => c.ChannelType == ChannelType.InApp,
             CancellationToken.None);
@@ -149,13 +149,13 @@ public class AlertRuleRepositoryTests
         var id = await repo.CreateAsync(
             new NewAlertRule(Low(),
             [
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", Secret: "cipher-1"),
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", Secret: "cipher-2"),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, Secret: "cipher-1"),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, Secret: "cipher-2"),
             ]),
             CancellationToken.None);
 
         await repo.ReplaceChannelsAsync(
-            id, [new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", KeepsStoredSecret: true)], null, CancellationToken.None);
+            id, [new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, KeepsStoredSecret: true)], null, CancellationToken.None);
 
         await using var check = Db();
         (await check.AlertRuleChannels.SingleAsync(c => c.AlertRuleId == id)).Secret.Should().BeNull();
@@ -243,10 +243,10 @@ public class AlertRuleRepositoryTests
         await using var db = Db();
         var repo = Repository(db);
         var id = await repo.CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "first")]), CancellationToken.None);
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "first", null, null, null)]), CancellationToken.None);
         var other = await repo.CreateAsync(new NewAlertRule(Low(), []), CancellationToken.None);
 
-        await repo.AddChannelAsync(id, new AlertRuleChannelWrite(ChannelType.InApp, "second"), CancellationToken.None);
+        await repo.AddChannelAsync(id, new AlertRuleChannelWrite(ChannelType.InApp, "second", null, null, null), CancellationToken.None);
 
         await using (var check = Db())
         {
@@ -268,7 +268,7 @@ public class AlertRuleRepositoryTests
         await using var db = Db();
         var repo = Repository(db);
         var managed = await repo.CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "m")], ManagedBy: "tracker:1"), CancellationToken.None);
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "m", null, null, null)], ManagedBy: "tracker:1"), CancellationToken.None);
         await repo.CreateAsync(new NewAlertRule(Low(), [], ManagedBy: "tracker:2"), CancellationToken.None);
         var starter = await repo.CreateAsync(new NewAlertRule(Low(), [], StarterKind: StarterAlertKind.High), CancellationToken.None);
         _clock.Advance(TimeSpan.FromMinutes(1));
@@ -290,9 +290,9 @@ public class AlertRuleRepositoryTests
         await using var db = Db();
         var repo = Repository(db);
         var a = await repo.CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "x"), new AlertRuleChannelWrite(ChannelType.Webhook, "https://w")]),
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "x", null, null, null), new AlertRuleChannelWrite(ChannelType.Webhook, "https://w", null, null, null)]),
             CancellationToken.None);
-        var b = await repo.CreateAsync(new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "x")]), CancellationToken.None);
+        var b = await repo.CreateAsync(new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "x", null, null, null)]), CancellationToken.None);
         var none = await repo.CreateAsync(new NewAlertRule(Low(), []), CancellationToken.None);
 
         var channels = await repo.GetChannelsAsync([a, none], CancellationToken.None);
@@ -310,7 +310,7 @@ public class AlertRuleRepositoryTests
         await using var db = Db();
         var repo = Repository(db);
         var ruleId = await repo.CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "member")]), CancellationToken.None);
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "member", null, null, null)]), CancellationToken.None);
         await using var seed = Db();
         var channelId = (await seed.AlertRuleChannels.SingleAsync(c => c.AlertRuleId == ruleId)).Id;
 
@@ -330,22 +330,22 @@ public class AlertRuleRepositoryTests
         var zed = await repo.CreateAsync(
             new NewAlertRule(Low() with { Name = "Zed" },
             [
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://z2.example", Secret: "cipher-z2"),
-                new AlertRuleChannelWrite(ChannelType.InApp, "member"),
-                new AlertRuleChannelWrite(ChannelType.Webhook, "https://z1.example", "Zed hook", Secret: "cipher-z1"),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://z2.example", null, null, null, Secret: "cipher-z2"),
+                new AlertRuleChannelWrite(ChannelType.InApp, "member", null, null, null),
+                new AlertRuleChannelWrite(ChannelType.Webhook, "https://z1.example", null, null, null, "Zed hook", Secret: "cipher-z1"),
             ]),
             CancellationToken.None);
         var alpha = await repo.CreateAsync(
             new NewAlertRule(Low() with { Name = "Alpha" },
-                [new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", Secret: "cipher-a")]),
+                [new AlertRuleChannelWrite(ChannelType.Webhook, "https://a.example", null, null, null, Secret: "cipher-a")]),
             CancellationToken.None);
         await repo.CreateAsync(
-            new NewAlertRule(Low() with { Name = "Plain" }, [new AlertRuleChannelWrite(ChannelType.Webhook, "https://p.example")]),
+            new NewAlertRule(Low() with { Name = "Plain" }, [new AlertRuleChannelWrite(ChannelType.Webhook, "https://p.example", null, null, null)]),
             CancellationToken.None);
         await using var other = new NocturneDbContext(_options) { TenantId = OtherTenant };
         await Repository(other).CreateAsync(
             new NewAlertRule(Low() with { Name = "Elsewhere" },
-                [new AlertRuleChannelWrite(ChannelType.Webhook, "https://e.example", Secret: "cipher-e")]),
+                [new AlertRuleChannelWrite(ChannelType.Webhook, "https://e.example", null, null, null, Secret: "cipher-e")]),
             CancellationToken.None);
 
         var secrets = await repo.GetChannelSecretsAsync(CancellationToken.None);
@@ -366,7 +366,7 @@ public class AlertRuleRepositoryTests
         var seeded = await repo.CreateMissingByNameAsync(
             [
                 new NewAlertRule(Low() with { Name = "Urgent low" }, []),
-                new NewAlertRule(Low() with { Name = "High" }, [new AlertRuleChannelWrite(ChannelType.InApp, "owner")]),
+                new NewAlertRule(Low() with { Name = "High" }, [new AlertRuleChannelWrite(ChannelType.InApp, "owner", null, null, null)]),
             ],
             CancellationToken.None);
 
@@ -387,7 +387,7 @@ public class AlertRuleRepositoryTests
         var repo = new AlertRuleRepository(unit, _clock);
         var created = await repo.CreateAsync(new NewAlertRule(Low() with { Name = "Staged" }, []), CancellationToken.None);
         (await repo.UpdateAsync(id, Low() with { Name = "Renamed" }, CancellationToken.None)).Should().BeTrue();
-        await repo.ReplaceChannelsAsync(created, [new AlertRuleChannelWrite(ChannelType.InApp, "on-staged")], null, CancellationToken.None);
+        await repo.ReplaceChannelsAsync(created, [new AlertRuleChannelWrite(ChannelType.InApp, "on-staged", null, null, null)], null, CancellationToken.None);
 
         await using (var before = Db())
         {
@@ -408,7 +408,7 @@ public class AlertRuleRepositoryTests
     {
         await using var seed = Db();
         var id = await Repository(seed).CreateAsync(
-            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "m")], ManagedBy: "tracker:1"), CancellationToken.None);
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "m", null, null, null)], ManagedBy: "tracker:1"), CancellationToken.None);
 
         await using var unit = await DbUnitOfWork.OpenAsync(new TestNocturneDbContextFactory(seed));
         var repo = new AlertRuleRepository(unit, _clock);
