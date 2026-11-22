@@ -23,6 +23,7 @@ The crate builds a `cdylib` and a `staticlib`, library name `nocturne_alerts`.
 char* nocturne_alerts_version(void);
 char* nocturne_alerts_tzdb_version(void);
 int64_t nocturne_alerts_clock_tolerance_ms(void);
+int64_t nocturne_alerts_hold_bound_ms(void);
 char* nocturne_alerts_evaluate(const char* request_json);
 char* nocturne_alerts_evaluate_node(const char* request_json);
 char* nocturne_alerts_leaf_paths(const char* condition_node_json);
@@ -48,7 +49,10 @@ void  nocturne_alerts_free_string(char* ptr);
   `nocturne_alerts_clock_tolerance_ms` returns how far ahead of `now` an anchor
   may be and still read as `now` (`docs/alerts/engine-semantics.md` §5.4), a
   plain integer that is not freed. A host selects the newest reading for an
-  alert context by it. Everything else returns a JSON envelope.
+  alert context by it. `nocturne_alerts_hold_bound_ms` returns how long a rule
+  may hold before its hold is reported (§6.4), likewise a plain integer: a host
+  that evaluates on a timer evaluates a held rule once its hold has lasted that
+  long. Everything else returns a JSON envelope.
 - The library never panics across the boundary and never crashes on bad
   input: panics, null pointers, invalid UTF-8 and malformed JSON all come
   back as the error envelope:
@@ -107,7 +111,8 @@ preserves sub-second precision when present.
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
     "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
     "awaiting_rearm": true,                 // present only when true; absent = armed (§6.3)
-    "last_excursion_ordinal": 3             // the rule's last opened excursion; absent = the active ordinal, or 0
+    "last_excursion_ordinal": 3,            // the rule's last opened excursion; absent = the active ordinal, or 0
+    "held_since": "2026-01-05T11:00:00Z"    // present only while held (§6.4); absent = not held, so a hold counts from the next held evaluation
   },
   "include_leaves": true                    // optional; default false
 }
@@ -129,10 +134,12 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
   "schema_version": 1,
   "ok": true,
   "result": { /* ExpectedRuleResult corpus shape:
-                 rule_id, skipped?, root, unknown?, leaves[{leaf_id, value,
-                 unknown?}], transition, close_reason?,
+                 rule_id, skipped?, root, unknown?, unknown_facts?,
+                 leaves[{leaf_id, value, unknown?}], transition,
+                 close_reason?, held_too_long?,
                  tracker {state, excursion?,
-                          hysteresis_started_at?, awaiting_rearm?},
+                          hysteresis_started_at?, awaiting_rearm?,
+                          held_since?},
                  auto_resolved?, timer_ops[], next_change_at?,
                  clock_anomaly? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
@@ -143,18 +150,30 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
     "updated_at": "2026-01-05T12:00:00Z",
     "hysteresis_started_at": "…",                     // present only while in hysteresis
     "awaiting_rearm": true,                            // present only when true
-    "last_excursion_ordinal": 3                        // present once the rule has opened one
+    "last_excursion_ordinal": 3,                       // present once the rule has opened one
+    "held_since": "…"                                  // present only while held
   }
 }
 ```
 
 A root or leaf that is unknown (`docs/alerts/engine-semantics.md` §2.4) reads
 `false` with `"unknown": true` beside it; the flag is absent otherwise, so a
-reader that ignores it sees a two-valued result. The rule's `on_unknown` decides
-what an unknown root does to the tracker (§6.4): under `hold` the tracker is not
-advanced, `transition` is `none` unless a hysteresis window has elapsed, and the
-returned `tracker` is the one sent (with no per-rule state for a rule never
-evaluated before).
+reader that ignores it sees a two-valued result. An unknown root also carries
+`unknown_facts`, `[{"fact": "glucose", "reason": "stale"}]`: the context facts
+(§5.2) whose unknown reached the root through the connectives, each with its
+reason (`absent`, `stale`, `ahead_of_clock`, `unrecognised`, `inexact`), in fact
+then reason order. It can be empty: a `sustained` run whose start is beyond the
+clock tolerance ahead names no fact.
+
+The rule's `on_unknown` decides what an unknown root does to the tracker (§6.4).
+Under `hold` the tracker is not advanced: `transition` is `none` unless a
+hysteresis window has elapsed, and the returned `tracker` is the one sent with
+`held_since` set from the first held evaluation, a rule never evaluated before
+then holding an idle state with only that. The evaluation at which a hold has
+lasted `nocturne_alerts_hold_bound_ms` (24 hours) carries `held_too_long: true`,
+once per hold; from it an open excursion reads its root as false, so it enters
+hysteresis and closes with `close_reason` `hold-bound`. Any evaluation whose root
+is known, or read as known, clears `held_since`.
 
 Envelope-level errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
 `schema_version`, unknown root `condition_type`, an `on_unknown` naming no choice, a
@@ -244,9 +263,12 @@ so `schema_version` stays 1.
   a false evaluation inside that lease records nothing.
 - **`tracker`** fields (`state`,
   `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
-  `awaiting_rearm`, `last_excursion_ordinal`) are the rule's alone: persist
-  the response object and send it back on the rule's next evaluation. They
-  are absent until the rule's first non-skipped evaluation.
+  `awaiting_rearm`, `last_excursion_ordinal`, `held_since`) are the rule's
+  alone: persist the response object and send it back on the rule's next
+  evaluation. They are absent until the rule's first non-skipped evaluation.
+  Dropping `held_since` starts the hold over, so its bound comes later. The
+  evaluation that reaches the bound sets `updated_at`, which is what keeps a
+  later evaluation of the same hold from reporting it again.
   `hysteresis_started_at` is what hysteresis expiry measures
   from; dropping it makes every restore adopt `updated_at`, which slides the
   window forward on each evaluation. `awaiting_rearm` holds an auto-resolved
@@ -654,16 +676,18 @@ the rule has never been evaluated):
 
 // nocturne_alerts_tracker_force_close: from any state holding an excursion (§6.2)
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
-  "reason": "manual" }                       // hysteresis | auto | manual | rule-disabled
+  "reason": "manual" }                       // hysteresis | auto | manual | rule-disabled | hold-bound
 
 // nocturne_alerts_tracker_close_elapsed_hysteresis: only in hysteresis, only once the window has elapsed (§6.1)
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
   "config": { "hysteresis_minutes": 30 } }
 ```
 
-`condition_met` is a known truth: an evaluation whose root the rule holds
-(`on_unknown` `hold`, §6.4) makes no `process` call, only
-`close_elapsed_hysteresis`. `auto_resolve_met` is the rule's auto-resolve tree
+`condition_met` is a known truth, so `process` clears `held_since`: an
+evaluation whose root the rule holds (`on_unknown` `hold`, §6.4) goes through
+`nocturne_alerts_evaluate`, not this call. A close of an elapsed window while
+held leaves `updated_at` as it is, and closes with `hold-bound` when the
+hysteresis began during the hold. `auto_resolve_met` is the rule's auto-resolve tree
 this evaluation, true unless the tree is known false (an unknown tree keeps the
 hold), and is read only while the tracker awaits re-arm (§6.3): the rule then
 stays held off when both it and `condition_met` are true, and otherwise re-arms and goes on through

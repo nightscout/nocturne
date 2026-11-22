@@ -265,6 +265,22 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         delivery.LastError.Should().Contain("No channel of the rule carries");
     }
 
+    [Theory]
+    [InlineData(AlertPayloadKind.Unevaluable, "No channel of the rule carries a notice that it cannot be evaluated")]
+    [InlineData(AlertPayloadKind.Held, "No channel of the rule carries a notice that it has waited for missing data")]
+    [InlineData(AlertPayloadKind.HeldClosed, "No channel of the rule carries a notice that it has waited for missing data")]
+    public async Task A_notice_with_only_device_action_channels_names_its_own_kind(AlertPayloadKind kind, string error)
+    {
+        var instanceId = await SeedInstanceAsync();
+
+        await CreateService().DispatchAsync(
+            instanceId, [Channel(ChannelType.DeviceAction, "companion")],
+            Payload(instanceId) with { Kind = kind, GlucoseValue = null },
+            CancellationToken.None);
+
+        (await SingleDeliveryAsync()).LastError.Should().Be(error);
+    }
+
     [Fact]
     public async Task A_notice_that_a_rule_cannot_be_evaluated_is_not_broadcast_to_the_alerts_hub()
     {

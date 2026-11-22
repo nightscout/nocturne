@@ -116,6 +116,10 @@ internal static class EngineTestHarness
             RuleId = rule.Id,
             Root = evaluation.ConditionMet,
             Unknown = evaluation.ConditionUnknown ? true : null,
+            UnknownFacts = evaluation.ConditionUnknown
+                ? evaluation.UnknownFacts.Select(f => new ExpectedUnknownFact(f.Fact, f.Reason)).ToList()
+                : null,
+            HeldTooLong = evaluation.HeldTooLong ? true : null,
             Leaves = (evaluation.LeafValues ?? new Dictionary<int, bool?>())
                 .OrderBy(kv => kv.Key)
                 .Select(kv => new ExpectedLeaf(kv.Key, kv.Value ?? false, kv.Value is null ? true : null))
@@ -130,6 +134,7 @@ internal static class EngineTestHarness
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
                     HysteresisStartedAt = state.HysteresisStartedAt,
                     AwaitingRearm = state.AwaitingRearm ? true : null,
+                    HeldSince = state.HeldSince,
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
             TimerOps = trackerRepo.Timers.DrainOps() is { Count: > 0 } ops ? ops : null,

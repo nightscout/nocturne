@@ -165,4 +165,20 @@ describe("AlertHistoryCard", () => {
 			.element(page.getByRole("button", { name: /Next/i }))
 			.toBeDisabled();
 	});
+
+	it("states that an alert closed because its data was missing for 24 hours", async () => {
+		render(AlertHistoryCard, {
+			history: history({
+				items: [excursion({ resolutionReason: "hold-bound" }), excursion({ id: "2", resolutionReason: "hysteresis" })],
+			}),
+			page: 1,
+			loading: false,
+			onLoadPage: () => {},
+		});
+
+		await expect
+			.element(page.getByText("Closed because its data was missing for 24 hours."))
+			.toBeVisible();
+		expect(page.getByTestId("history-hold-close").elements()).toHaveLength(1);
+	});
 });

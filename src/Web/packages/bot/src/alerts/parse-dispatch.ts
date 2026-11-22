@@ -1,9 +1,18 @@
+import type { HeldFact } from "@nocturne/api-client";
 import type { AlertDispatchEvent, AlertPayload } from "../types.js";
 
 const field = (source: object, name: string): unknown => (name in source ? Reflect.get(source, name) : undefined);
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 const asNumber = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/** The pairs that are objects; a field of another type is left out, and the card shows it raw. */
+const asHeldFacts = (value: unknown): HeldFact[] | undefined =>
+  Array.isArray(value)
+    ? value
+        .filter((f): f is object => typeof f === "object" && f !== null)
+        .map((f) => ({ fact: asString(field(f, "fact")), reason: asString(field(f, "reason")) }))
+    : undefined;
 
 /**
  * Reads the payload without judging its values: a chat alert that is refused is dropped, so only
@@ -28,6 +37,7 @@ function parseAlertPayload(raw: unknown): AlertPayload | undefined {
     glucoseValue: asNumber(field(raw, "glucoseValue")),
     trendRate: asNumber(field(raw, "trendRate")),
     trend: asString(field(raw, "trend")),
+    heldFacts: asHeldFacts(field(raw, "heldFacts")),
   };
 }
 

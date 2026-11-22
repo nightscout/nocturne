@@ -6,14 +6,17 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// A rule's tracker state after a decision, in engine-independent terms: the excursion is
-/// only present or absent, since the host owns excursion ids.
+/// only present or absent, since the host owns excursion ids. <c>HeldSince</c> is when the rule's
+/// hold began and <c>HeldFacts</c> what it waits for (docs/alerts/engine-semantics.md §6.4).
 /// </summary>
 internal sealed record TrackerPostState(
     string State,
     bool HasExcursion,
     DateTime UpdatedAt,
     DateTime? HysteresisStartedAt,
-    bool AwaitingRearm = false)
+    bool AwaitingRearm = false,
+    DateTime? HeldSince = null,
+    string? HeldFacts = null)
 {
     public const string Idle = "idle";
     public const string Active = "active";
@@ -36,8 +39,10 @@ internal sealed record TrackerPostState(
         return IsKnown(state.State)
             ? new TrackerPostState(
                 state.State, hasExcursion, state.UpdatedAt,
-                state.HysteresisStartedAt, state.AwaitingRearm)
-            : new TrackerPostState(hasExcursion ? Active : Idle, hasExcursion, state.UpdatedAt, null);
+                state.HysteresisStartedAt, state.AwaitingRearm, state.HeldSince, state.HeldFacts)
+            : new TrackerPostState(
+                hasExcursion ? Active : Idle, hasExcursion, state.UpdatedAt, null,
+                HeldSince: state.HeldSince, HeldFacts: state.HeldFacts);
     }
 }
 

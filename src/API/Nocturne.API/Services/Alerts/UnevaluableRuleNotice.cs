@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using NoticeRule = Nocturne.API.Services.Alerts.RuleNoticeDispatch.NoticeRule;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -63,7 +64,10 @@ public interface IUnevaluableRuleNotice
     /// </summary>
     Task CheckAsync(EnabledAlertRules enabled, CancellationToken ct);
 
-    /// <summary>Resolves the rule's standing notice, for a rule being disabled or deleted.</summary>
+    /// <summary>
+    /// Resolves the rule's standing notices, this one and <see cref="IHeldRuleNotice"/>'s, for a
+    /// rule being disabled or deleted.
+    /// </summary>
     Task ResolveAsync(Guid ruleId, ExcursionCloseReason reason, CancellationToken ct);
 }
 
@@ -93,15 +97,6 @@ internal sealed class UnevaluableRuleNotice(
     private static string Hash(string version) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(version)));
 
-    /// <summary>What a notice needs of a rule, which an unreadable rule has less of.</summary>
-    private sealed record NoticeRule(
-        Guid Id,
-        string Name,
-        AlertConditionType? ConditionType,
-        AlertRuleSeverity Severity,
-        bool AllowThroughDnd,
-        RuleScopeClass ScopeClass);
-
     public void Report(IReadOnlyList<AlertRuleSnapshot> rules)
     {
         var tenantId = tenantAccessor.TenantId;
@@ -124,7 +119,7 @@ internal sealed class UnevaluableRuleNotice(
 
             var version = issues.Any(i => i.Scope == BodyScope) ? VersionOf(rule) : null;
             await SendOnceAsync(
-                new NoticeRule(rule.Id, rule.Name, rule.ConditionType, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass),
+                NoticeRule.Of(rule),
                 version,
                 at => repository.RecordUnevaluableNoticeAsync(rule, version!, at, ct),
                 standing, tenantId, ct);
@@ -152,7 +147,7 @@ internal sealed class UnevaluableRuleNotice(
     private async Task SendOnceAsync(
         NoticeRule rule,
         string? version,
-        Func<DateTime, Task<UnevaluableNoticeRecorded?>> record,
+        Func<DateTime, Task<NoticeRecorded?>> record,
         IReadOnlyList<StandingUnevaluableNotice> standing,
         Guid tenantId,
         CancellationToken ct)
@@ -179,6 +174,8 @@ internal sealed class UnevaluableRuleNotice(
     public async Task ResolveAsync(Guid ruleId, ExcursionCloseReason reason, CancellationToken ct)
     {
         foreach (var notice in await repository.GetStandingUnevaluableNoticesAsync(ruleId, ct))
+            await ResolveNoticeAsync(notice.ExcursionId, reason, ct);
+        foreach (var notice in await repository.GetStandingHeldNoticesAsync(ruleId, ct))
             await ResolveNoticeAsync(notice.ExcursionId, reason, ct);
     }
 
@@ -233,7 +230,7 @@ internal sealed class UnevaluableRuleNotice(
 
     private async Task NotifyAsync(
         NoticeRule rule,
-        Func<DateTime, Task<UnevaluableNoticeRecorded?>> record,
+        Func<DateTime, Task<NoticeRecorded?>> record,
         Guid tenantId,
         CancellationToken ct)
     {
@@ -241,19 +238,13 @@ internal sealed class UnevaluableRuleNotice(
         if (await record(now) is not { Dispatched: false } notice)
             return;
 
-        var channels = (await ruleRepository.GetChannelsAsync([rule.Id], ct)).GetValueOrDefault(rule.Id) ?? [];
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
-        var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
-        var payload = AlertPayloads.Unevaluable(
-            rule.Name, rule.ConditionType, rule.Severity, tenantId, notice.ExcursionId, notice.InstanceId,
-            tenant, activeExcursionCount, now);
-
-        var dnd = await contextEnricher.EnrichAsync(
-            new SensorContext { LatestValue = null, LatestTimestamp = null, TrendRate = null, LastReadingAt = null }, [], ct);
-        await DndGatedDispatch.DispatchAsync(
-            rule.Name, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass, dnd.ActiveDndScopes, notice.InstanceId,
-            channels, payload, repository, deliveryService, logger, ct);
-        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, ct);
+        await RuleNoticeDispatch.DispatchAsync(
+            rule,
+            notice,
+            (tenant, activeExcursionCount) => AlertPayloads.Unevaluable(
+                rule.Name, rule.ConditionType, rule.Severity, tenantId, notice.ExcursionId, notice.InstanceId,
+                tenant, activeExcursionCount, now),
+            tenantId, repository, ruleRepository, deliveryService, contextEnricher, logger, ct);
 
         logger.LogInformation(
             "Notice {InstanceId} sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",
@@ -267,7 +258,7 @@ internal sealed class UnevaluableRuleNotice(
 
     private async Task ResolveNoticeAsync(Guid excursionId, ExcursionCloseReason reason, CancellationToken ct)
     {
-        await repository.EndUnevaluableNoticeAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct);
+        await repository.EndNoticeAsync(excursionId, timeProvider.GetUtcNow().UtcDateTime, ct);
         await resolutionHandler.HandleClosedAsync(
             new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, excursionId, reason),
             tenantAccessor.TenantId,

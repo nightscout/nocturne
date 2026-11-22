@@ -46,6 +46,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -56,7 +62,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 1
+            "excursion": 1,
+            "held_since": "2026-03-02T12:20:00Z"
           }
         },
         {
@@ -84,6 +91,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -94,7 +107,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 1
+            "excursion": 1,
+            "held_since": "2026-03-02T12:20:00Z"
           }
         },
         {
@@ -122,6 +136,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -132,13 +152,20 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 1
+            "excursion": 1,
+            "held_since": "2026-03-02T12:20:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -149,7 +176,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 2
+            "excursion": 2,
+            "held_since": "2026-03-02T12:30:01Z"
           }
         }
       ]

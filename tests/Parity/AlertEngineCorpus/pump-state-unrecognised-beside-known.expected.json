@@ -38,6 +38,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -45,12 +51,22 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -58,7 +74,11 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000005",
@@ -128,6 +148,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -135,12 +161,22 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -148,7 +184,11 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000005",
@@ -218,32 +258,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
           "unknown": true,
-          "leaves": [
+          "unknown_facts": [
             {
-              "leaf_id": 0,
-              "value": false,
-              "unknown": true
+              "fact": "state_spans",
+              "reason": "unrecognised"
             }
           ],
-          "transition": "none"
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
-          "unknown": true,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false,
-              "unknown": true
-            }
-          ],
-          "transition": "none"
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000005",
-          "root": false,
-          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
@@ -253,7 +273,54 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle"
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:30:00Z"
           }
         },
         {
@@ -280,6 +347,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -290,13 +363,20 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 1
+            "excursion": 1,
+            "held_since": "2026-01-05T12:35:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -306,39 +386,20 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle"
+            "state": "idle",
+            "held_since": "2026-01-05T12:35:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
           "unknown": true,
-          "leaves": [
+          "unknown_facts": [
             {
-              "leaf_id": 0,
-              "value": false,
-              "unknown": true
+              "fact": "state_spans",
+              "reason": "unrecognised"
             }
           ],
-          "transition": "none"
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
-          "unknown": true,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false,
-              "unknown": true
-            }
-          ],
-          "transition": "none"
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000005",
-          "root": false,
-          "unknown": true,
           "leaves": [
             {
               "leaf_id": 0,
@@ -348,13 +409,66 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle"
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:30:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000006",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -365,7 +479,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 2
+            "excursion": 2,
+            "held_since": "2026-01-05T12:35:00Z"
           }
         }
       ]

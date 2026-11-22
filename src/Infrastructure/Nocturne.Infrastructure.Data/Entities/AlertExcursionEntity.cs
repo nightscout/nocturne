@@ -60,14 +60,26 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     public DateTime? HysteresisStartedAt { get; set; }
 
     /// <summary>
-    /// Set only on the row of a notice that the rule's stored condition cannot be evaluated: the
-    /// version of the condition the notice was sent for (<c>UnevaluableRuleNotice.VersionOf</c>).
-    /// Its instance stays unresolved while the notice stands. Null on every excursion of a
-    /// condition; <see cref="Extensions.AlertExcursionQueries"/> tells the two apart.
+    /// Set only on the row of a notice about the rule: for a notice that its stored condition cannot
+    /// be evaluated, the version of the condition the notice was sent for
+    /// (<c>UnevaluableRuleNotice.VersionOf</c>); for a notice that its hold reached the bound, which
+    /// also has <see cref="HeldSince"/>, <c>held:</c> and that instant. Its instance stays unresolved
+    /// while the notice stands. Null on every excursion of a condition;
+    /// <see cref="Extensions.AlertExcursionQueries"/> tells the two apart.
     /// </summary>
     [Column("unevaluable_condition_version")]
     [MaxLength(64)]
     public string? UnevaluableConditionVersion { get; set; }
+
+    /// <summary>
+    /// Set only on the row of a notice that the rule's hold reached the engine's bound: the instant
+    /// the hold it is for began (<see cref="AlertTrackerStateEntity.HeldSince"/>). Its instance stays
+    /// unresolved while that hold goes on. Such a row carries an
+    /// <see cref="UnevaluableConditionVersion"/> as well (<c>held:</c> and the instant), so every
+    /// reader that excludes notices excludes it, an image that predates this column among them.
+    /// </summary>
+    [Column("held_since")]
+    public DateTime? HeldSince { get; set; }
 
     /// <summary>
     /// Set while the host still owes the work its opening calls for: the instance, its delivery on

@@ -195,6 +195,32 @@ On the wire (`evaluate`, `evaluate_node`, the replay output) a root, a leaf and 
 reader that ignores the flag reads unknown as false; in a leaf log it can then see a point
 whose `value` repeats the one before (unknown, then false), which changes nothing.
 
+**Why a root is unknown.** An evaluation whose root is unknown names the context facts (§5.2)
+that made it so, each with a reason, as `unknown_facts` beside the root in the `evaluate`
+result: `[{"fact": "glucose", "reason": "stale"}]`, in the order of §5.2's table, then of the
+reasons below. It is reported whatever `on_unknown` says, and is absent when the root is
+known. The same evaluation computes it: every node evaluates to its truth and, when unknown,
+the set of (fact, reason) pairs it is unknown by.
+
+- A leaf is unknown by the fact and reason its row in §3 gives: the fact its evaluator reads
+  (§5.2), and `absent` (the fact, its guard or a field it needs is missing), `stale` (a judged
+  glucose fact whose reading is past its freshness bound, §3), `ahead_of_clock` (an anchor
+  beyond the tolerance ahead of `now`, §5.4, named by the fact that holds it), `unrecognised`
+  (a pump mode the engine has no member for, §3) or `inexact` (a lower-bound `reservoir` reading
+  that does not decide the comparison). A bucket name the engine has no member for reads as an
+  absent bucket (§4), so it is `absent`. `pump_suspended` is unknown by `pump` when its guard
+  is false and by `state_spans` when its span starts beyond the tolerance ahead.
+- An `and` or `or` that is unknown is unknown by the union of its unknown children's sets: no
+  child is false (`and`) or true (`or`), so each unknown child reaches it. One that is known
+  names nothing, so an unknown leaf beside a false sibling of an `and`, or a true sibling of an
+  `or`, is not named.
+- `not` is unknown by its child's set; `sustained` over an unknown child by the child's set. A
+  `sustained` run whose start is beyond the tolerance ahead is unknown by nothing: its start is
+  the engine's own state, which `clock_anomaly` reports (§5.4), so the set can be empty.
+
+So a fact is named exactly when, for some known values of the other unknown leaves, the root
+would differ between that leaf true and false.
+
 The replay path additionally force-evaluates **every leaf in isolation** to build the per-leaf
 transition log; leaves are evaluated with the **rule-root context path**, not their tree path (irrelevant for stateless leaves;
 containers are never force-evaluated). A leaf evaluation that throws is recorded `false`. A
@@ -367,13 +393,16 @@ the reservoir holds at least `b`.
     lease did not record lies in that window, so the bound is never earlier than the last
     evaluation that found the child false, and is later than it by at most the lease. With
     neither a run nor a not-true instant, `bound` is the rule's `enabled_at` when the rule has
-    no state at all (no run or not-true instant at any path and no tracker state, so this is
-    its first evaluation, §6) and the host sends one, and `now` otherwise. A host that
-    recorded state before not-true instants existed holds runs only, so a path with no run
-    reads as `now` there, never as `enabled_at`; the one exception is a rule enabled before
-    then whose every evaluation was held, which has no tracker state and so reads as on its
-    first evaluation, bounded by `enabled_at` although an earlier evaluation may have found a
-    `sustained` child false. Then go on as for a run;
+    no state but a hold (no run or not-true instant at any path, and no tracker state or one
+    that records only a hold: idle, never opened, not awaiting re-arm, with a `HeldSince`, §6.4;
+    so every evaluation before this one was held, or there was none) and the host sends one,
+    and `now` otherwise. A host that recorded state before not-true instants existed holds runs
+    only, so a path with no run reads as `now` there, never as `enabled_at`; the one exception
+    is a rule enabled before then whose every evaluation was held, which reads as on its first
+    evaluation, bounded by `enabled_at` although an earlier evaluation may have found a
+    `sustained` child false. So does a rule whose stored state never opened and is held now,
+    since a host that does not store `LastExcursion` restores every idle state with ordinal 0.
+    Then go on as for a run;
   - child true, a run ⇒ return `(now - start).TotalMinutes >= minutes` (double), with
     `start` ahead of `now` read by §5.4: within 5 minutes it is zero elapsed, beyond that the
     node is **unknown** and the run is kept. A run started on this evaluation from an
@@ -577,15 +606,17 @@ there (§5.3). Going from known to unknown, a leaf
 cannot turn a known root into the other known value (Kleene's connectives are monotone in what
 is known, and `sustained` returns unknown on an unknown child), so an evaluation there either
 reads the root an evaluation a tick earlier reads, or holds. A held evaluation sets and clears no
-timer over the stale leaf, makes no tracker call (§6.4), resolves nothing and keeps a re-arm hold
-(§6.3); the one thing it does, closing an elapsed hysteresis window, the sweep does for every rule
-whatever it evaluates (§6.1). So the evaluation is the same as no evaluation, and the next one,
-per reading or periodic, decides, but for one record: a `sustained` node whose child it finds
-false may take that evaluation as its not-true instant, when the node's lease has run out (§3).
-The child was false there whatever the stale leaf reads, so it was false on the evaluation before
-too, with only `now` advancing, and that evaluation or its lease covers it. Missing the evaluation
-at the staleness instant leaves the earlier record, so a later run may start up to the lease
-earlier, but never before an evaluation that found its child false.
+timer over the stale leaf, makes no tracker call before its hold's bound (§6.4), resolves nothing
+and keeps a re-arm hold (§6.3); the one thing it does, closing an elapsed hysteresis window, the
+sweep does for every rule whatever it evaluates (§6.1). So the evaluation is the same as no
+evaluation, and the next one, per reading or periodic, decides, but for two records. A
+`sustained` node whose child it finds false may take that evaluation as its not-true instant,
+when the node's lease has run out (§3). The child was false there whatever the stale leaf reads,
+so it was false on the evaluation before too, with only `now` advancing, and that evaluation or
+its lease covers it. Missing the evaluation at the staleness instant leaves the earlier record,
+so a later run may start up to the lease earlier, but never before an evaluation that found its
+child false. And the first held evaluation records the hold's start (§6.4): missing it starts the
+hold at the next held evaluation, so its bound comes later, never earlier.
 
 The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
@@ -729,6 +760,7 @@ even when the root does not. Containers contribute only through their children, 
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
 | Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
+| Tracker held, its bound not yet reported | `HeldSince + HOLD_BOUND` (§6.4), measured as §5.4 measures an anchor, or, once that has passed, at once. With every fact frozen the root stays unknown, so the hold goes on to its bound. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
 A leaf unknown because its anchor is more than 5 minutes ahead of `now` contributes
@@ -777,10 +809,13 @@ Every other wall-clock rule keeps the 30 s cadence:
   that reads show, moving the anchor by the match tolerance with no announcement.
 
 A held evaluation (§6.4) records its next change like any other: the value is read from the
-state the evaluation left, which is the state it found, and it is keyed by the context's glucose
-facts, so a reading arriving moves the key and the sweep evaluates. A rule
-never evaluated before keeps no state after a held evaluation, so nothing is recorded and the
-sweep evaluates it on its cadence.
+state the evaluation left, which is the state it found with its hold's start, and it is keyed by
+the context's glucose facts, so a reading arriving moves the key and the sweep evaluates. The
+value reaches the hold's bound, so the sweep evaluates the rule there even with no reading. A
+rule never evaluated before has state after its first held evaluation (§6.4), so its next change
+is recorded too. Apart from that, the sweep evaluates any enabled rule whose hold has lasted
+`HOLD_BOUND` and is not yet reported, whatever it reads, so a rule it does not evaluate on the
+clock reaches the bound as well.
 
 ### 5.4 Anchors ahead of the clock
 
@@ -809,13 +844,14 @@ The rule applies to every comparison of `now - anchor`:
 | `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_modes`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
 | `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
+| `held_since` | the hold's bound (§6.4) |
 
 Two instants are meant to be ahead of `now` and are exempt, so their elapsed time is negative
 until they pass: a **scheduled** (event) `tracker_age` instance's time, and `LatestReceivedAt`.
 The arrival is the host's own record of when it stored the reading, and replay reads a reading
 stored after its tick as fresh there (§8), so an arrival after `now` is fresh (§3).
 
-`enabled_at` and the two state instants are written from the host's clock, so they are ahead of
+`enabled_at` and the three state instants are written from the host's clock, so they are ahead of
 `now` only when that clock went back, or when two hosts' clocks differ. The rule treats them as
 any anchor.
 
@@ -865,14 +901,15 @@ the notification keeps the instant the fact was ahead to and is archived once `n
 notification is reported after the evaluation it comes from, and a failure to write it never stops
 an evaluation. Instants the
 host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
-`active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+`held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
 
 ---
 
 ## 6. Excursion state machine (`ExcursionTracker`)
 
 Per-rule persisted state: `{State, ActiveExcursionId, UpdatedAt,
-HysteresisStartedAt, AwaitingRearm, LastExcursion}` with states `idle | active | hysteresis`.
+HysteresisStartedAt, AwaitingRearm, LastExcursion, HeldSince}` with states `idle | active |
+hysteresis`.
 A rule numbers its own excursions 1, 2, ... in the order it opens them: opening one takes
 `LastExcursion + 1` and records it as `LastExcursion`, so an excursion is identified by its rule
 and that ordinal, and no counter is shared between rules. A state restored without
@@ -880,10 +917,13 @@ and that ordinal, and no counter is shared between rules. A state restored witho
 `HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
 read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
 autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
-(§6.3). An evaluation the rule holds makes no such call (§6.4). **Every call**, regardless of
-transition, decides `state.UpdatedAt = now`. The host persists a decision only when it changes another field: the only reader of
-`UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
-the start. A stored state string naming none of the three states, `confirming` among them,
+(§6.3). Such a call ends any hold: it clears `HeldSince`. An evaluation the rule holds makes no
+such call (§6.4), except from its hold's bound. **Every call**, regardless of transition, decides
+`state.UpdatedAt = now`. The host persists a decision only when it changes another field: the
+readers of `UpdatedAt` are the hysteresis-start adoption below, and the decision that adopts it
+persists the start, and the hold bound of §6.4, whose reaching decision persists it. While the
+rule is held, nothing but the evaluation that reaches the bound moves `UpdatedAt`: a close of an
+elapsed window (§6.1) and a force-close (§6.2) leave it as it is. A stored state string naming none of the three states, `confirming` among them,
 is read as `active` when the row holds an `ActiveExcursionId`, so that excursion goes on to
 close, and as `idle` otherwise, so the rule can fire again; its hysteresis start and re-arm
 flag (§6.3) are dropped. Every operation reads it so.
@@ -897,7 +937,7 @@ flag (§6.3) are dropped. Every operation reads it so.
 | active | true | `ExcursionContinues` |
 | active | false | → **hysteresis**, `HysteresisStartedAt = now` (state and excursion row), emit `HysteresisStarted` |
 | hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` (same excursion) |
-| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, clear `HysteresisStartedAt`, emit `ExcursionClosed(reason: hysteresis)`; else None |
+| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, clear `HysteresisStartedAt`, emit `ExcursionClosed(reason: hysteresis)`, or `hold-bound` when the hysteresis began at or after the hold's bound (§6.4); else None |
 
 ### 6.1 Hysteresis expiry
 
@@ -980,23 +1020,94 @@ three words, stored as a string; any other word is an error in the `evaluate` en
 | `met` | read as true, then exactly as a known true root |
 | `not_met` | read as false, then exactly as a known false root |
 
-A **held** evaluation makes no `ProcessEvaluationAsync` call. State, the
-open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they were, and
-the transition is `none`. The one thing that still moves is time: an excursion in hysteresis
-whose window has elapsed closes, as `CloseElapsedHysteresisAsync` closes it (§6.1), with
-`ExcursionClosed(reason: hysteresis)` and `UpdatedAt = now`; that window was started by a
-known false and does not depend on this evaluation. A rule never evaluated before has no state
-after a held evaluation. `UpdatedAt` is left alone because its only reader, the
-hysteresis-start adoption of §6, reads it only in hysteresis without a start, which a held
-evaluation never makes; so a state restored from what a held evaluation left evaluates as the
-continuous one does.
+A **held** evaluation makes no `ProcessEvaluationAsync` call before its hold's bound (below).
+State, the open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they
+were, and the transition is `none`. It records one thing: **`HeldSince`**, the instant the
+current hold began. The first held evaluation of a hold sets it to `now`; held evaluations after
+it keep it; the first evaluation whose root is known, or read as known, clears it (§6), so a rule
+whose `OnUnknown` is `met` or `not_met` never has one. A rule never evaluated before has, after
+its first held evaluation, a state that records only the hold: idle, no excursion, `LastExcursion`
+0, not awaiting re-arm, `UpdatedAt` and `HeldSince` that evaluation's `now`; it still reads as on
+its first evaluation to `sustained` (§3). A state stored before `HeldSince` existed has none, so a
+hold already in progress counts from the first held evaluation after the upgrade, never from an
+earlier instant guessed from other fields.
+
+The one other thing that still moves is time: an excursion in hysteresis whose window has elapsed
+closes, as `CloseElapsedHysteresisAsync` closes it (§6.1); that window was started by a known
+false and does not depend on this evaluation. `UpdatedAt` is left alone, by that close too, so a
+state restored from what a held evaluation left evaluates as the continuous one does: its readers
+are the hysteresis-start adoption of §6, which reads it only in hysteresis without a start, which a
+held evaluation never makes, and the bound below.
 
 So an open excursion whose fact disappears or goes stale (§3) stays open under `hold`,
-neither continuing nor entering hysteresis, and a rule whose fact has never arrived opens
-nothing; under `not_met` the first closes through hysteresis as it would on a false reading. Leaf timers follow the
-`sustained` rule of §3 whatever `OnUnknown` says. Auto-resolve (§7 step 5) still runs on a
-held evaluation: a known true auto-resolve tree closes the excursion, and an unknown one does
-not.
+neither continuing nor entering hysteresis, until the bound, and a rule whose fact has never
+arrived opens nothing; under `not_met` the first closes through hysteresis as it would on a false
+reading. Leaf timers follow the `sustained` rule of §3 whatever `OnUnknown` says. Auto-resolve (§7
+step 5) still runs on a held evaluation: a known true auto-resolve tree closes the excursion, and
+an unknown one does not.
+
+**The hold bound.** `HOLD_BOUND` is 24 hours, one constant of the crate
+(`excursion::HOLD_BOUND`, exported to hosts as `nocturne_alerts_hold_bound_ms`); no rule or tenant
+sets it. A hold reaches it at the first held evaluation at which `now - HeldSince >= HOLD_BOUND`,
+measured as §5.4 measures an anchor (a `HeldSince` beyond the tolerance ahead does not reach it).
+That evaluation is a tracker decision:
+
+- it reports `held_too_long: true`, and sets `UpdatedAt = now`. A held evaluation reports it only
+  while `UpdatedAt < HeldSince + HOLD_BOUND`, so it is reported once per hold: a later evaluation
+  of the same hold finds `UpdatedAt` past the bound, and a new hold, with a later `HeldSince`, is
+  reported again at its own bound;
+- with **no open excursion**, nothing else changes: the rule stays idle and held, its re-arm is
+  kept, and it is reported, not closed. A hold with no excursion never ends on its own;
+- with an **open excursion** (active or in hysteresis), the root is read as **not met** from the
+  bound on, exactly as a known false root, on this and every later held evaluation of the hold:
+  the excursion enters hysteresis there and closes as §6 says. A close from a hysteresis that
+  began at or after `HeldSince + HOLD_BOUND`, which only the bound can begin, has close reason
+  `hold-bound`, whether an evaluation or the sweep's `CloseElapsedHysteresisAsync` closes it. A
+  hysteresis begun by a known false before the hold closes with `hysteresis` as before.
+
+After the bound the rule is idle and held: the root is still held, so it opens nothing, and the
+hold is not reported again. The hold ends at the first known root, which clears `HeldSince`; a
+true one then opens a new excursion at once.
+
+**A hold an older engine wrote over.** A host can run an engine that does not record holds between
+two that do (a rollback, then an upgrade again). That engine leaves a stored `HeldSince` in place
+while it decides the rule, so a later held evaluation would read a hold that did not last. While
+held, this engine leaves `UpdatedAt` at or before `HeldSince` (the first held evaluation of a rule
+with no state sets both to the same instant; of a rule with state, `UpdatedAt` is from an earlier
+decision) until the evaluation that reaches the bound sets it to that instant, and from then on the
+state is never `active`, since only a known root, which ends the hold, makes it active again. So a
+stored state with `HeldSince < UpdatedAt < HeldSince + HOLD_BOUND`, or with `UpdatedAt >= HeldSince
++ HOLD_BOUND` that is `active`, was written after the hold began by an engine that does not record
+holds. A held evaluation reads it as no hold, and its hold starts at `now` as a first held evaluation
+(no report, no read as not met), and a close from hysteresis reads it as no hold. A host clock that
+went back can also leave `UpdatedAt` after `HeldSince`; the hold then starts again at each held
+evaluation until `now` passes `UpdatedAt`, so its bound comes later, never earlier.
+
+Known limit: when the older engine wrote nothing after the hold began (an alert that stayed active
+and true writes no decision), the stored state is the same as a real hold and is trusted. No rule
+based on elapsed time separates them, since a host that does not evaluate across the bound (a phone
+that sleeps) must still reach it on its next evaluation. After a rollback past the release that
+added holds, clear stored holds before upgrading again.
+
+This fails in a stated direction. An alert held open is closed at 24 hours although its condition
+may still hold: an alert that nobody can clear except by disabling the rule is worse than a late
+close, and the report is what tells the person. It never closes before 24 hours of unbroken hold,
+and a hold that a host does not evaluate at its bound is reported, and closed, later, never
+earlier.
+
+**Host.** The backend persists `HeldSince` on `alert_tracker_state` with the rest of the tracker,
+and with it the facts of the last held evaluation that changed them (`held_facts`), which the rule
+and active-alert responses show. The report is a notice built on the one of §1.4: a marked
+excursion row (`alert_excursions.held_since`, the hold it is for), recorded owing its dispatch
+(`opened_owed_at`, §7) by the alert sweep for every enabled rule whose stored state shows a reported
+bound, dispatched once through the rule's own channels at its severity behind the same Do Not
+Disturb gate, with no glucose value and nothing to acknowledge, of payload kind `held` (no open
+excursion) or `held_closed` (an excursion open at the bound). The sweep resolves it once the hold
+it is for is over (the rule's `HeldSince` is no longer that instant) or the rule is no longer
+enabled, so a rule disabled while held is never sent one and a rule enabled again while still held
+is told again; every query over `alert_excursions` excludes it through `AlertExcursionQueries`. The
+sweep also evaluates every enabled rule whose hold has lasted `HOLD_BOUND` and is not yet reported,
+so a rule that reads nothing on the wall clock reaches the bound with no reading.
 
 ---
 
@@ -1011,8 +1122,9 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
 3. `transition` = tracker.ProcessEvaluation(rule, conditionMet, autoResolveMet). Only when
    the stored state is idle awaiting re-arm, `autoResolveMet` is the auto-resolve tree
    evaluated first, exactly as in step 5, and is true unless the tree is known false;
-   otherwise it is not evaluated here. A held root makes no call: the transition is `none`,
-   or the hysteresis close of §6.4.
+   otherwise it is not evaluated here. A held root makes no call: it records `HeldSince`, and
+   the transition is `none` or the hysteresis close of §6.4; from the hold's bound it reports
+   `held_too_long` once and an open excursion reads the root as not met (§6.4).
 4. Open/close side effects (instances, delivery, DND suppression, info auto-ack) —
    host-side, out of crate scope, in the order below ("Acting on a transition").
 5. **Unconditionally** (even on the same tick as an open), if `AutoResolveEnabled` and
@@ -1164,7 +1276,11 @@ host has to act on it if every fact stays as it is:
   evaluation of §5.1. The backend's sweep, every 30 s, reaches the same instant up to 30 s later.
 - Any other rule is due only while its tracker is in hysteresis, at its `next_change_at`, which
   reaches the window's end. There its elapsed window closes without an evaluation, as
-  `CloseElapsedHysteresisAsync` closes it (§6.1).
+  `CloseElapsedHysteresisAsync` closes it (§6.1). It is due as well while it is held with its
+  bound not yet reported, at `HeldSince + HOLD_BOUND`, and is evaluated there against the latest
+  tick's context, as the backend's sweep evaluates a hold that has reached its bound (§6.4).
+  So a replayed hold reaches the bound as a live one does; a close by the bound is a `closed`
+  event, and the result shape is unchanged.
 
 At a step, as at a sample, a due rule's elapsed window closes first and its evaluation follows,
 the order of the backend's sweep: a condition true at the instant its window ends opens a new

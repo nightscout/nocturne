@@ -185,13 +185,15 @@ impl TimerStore {
 /// holds once `minutes` fractional minutes have passed since the start, so a
 /// run that began long enough ago holds at once. A start beyond the tolerance
 /// ahead of `now`, set by a clock that has since gone back, is unknown and
-/// kept: the run is neither complete nor broken (§5.4). A true node has held
-/// since its start plus `minutes`.
+/// kept: the run is neither complete nor broken (§5.4), and names no fact,
+/// since the start is the engine's own state. A true node has held since its
+/// start plus `minutes`; an unknown child leaves it unknown by the child's
+/// facts.
 pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> Held {
     let now = env.now;
     let child = eval_held(&p.child, &node_child_path(path, 0, &p.child), env);
     match child.truth {
-        Truth::Unknown => Truth::Unknown.into(),
+        Truth::Unknown => child,
         Truth::False => {
             env.timers.mark_not_true(env.rule_id, path, now);
             Truth::False.into()

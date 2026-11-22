@@ -453,6 +453,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -462,7 +468,8 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle"
+            "state": "idle",
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -476,6 +483,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -486,7 +499,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 1
+            "excursion": 1,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -500,6 +514,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "aps",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -510,7 +530,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 2
+            "excursion": 2,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -524,6 +545,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "aps",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -534,7 +561,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 3
+            "excursion": 3,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -548,6 +576,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000005",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "device_ages",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -558,7 +592,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 4
+            "excursion": 4,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -572,6 +607,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000006",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "device_ages",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -582,7 +623,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 5
+            "excursion": 5,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -596,6 +638,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000007",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "carbs",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -606,7 +654,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 6
+            "excursion": 6,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -620,6 +669,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000008",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "insulin",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -630,7 +685,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 7
+            "excursion": 7,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -644,6 +700,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000009",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "active_alerts",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -654,7 +716,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 8
+            "excursion": 8,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -668,6 +731,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000010",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -678,7 +747,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 9
+            "excursion": 9,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -692,6 +762,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000011",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -702,7 +778,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 10
+            "excursion": 10,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -716,6 +793,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000012",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "do_not_disturb",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -726,7 +809,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 11
+            "excursion": 11,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -740,6 +824,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000013",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -750,7 +840,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 12
+            "excursion": 12,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
@@ -764,6 +855,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000014",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -774,7 +871,8 @@
           "transition": "none",
           "tracker": {
             "state": "active",
-            "excursion": 13
+            "excursion": 13,
+            "held_since": "2026-04-01T11:54:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [

@@ -90,20 +90,23 @@ internal sealed class RustBackedAlertEngine(
             return new AlertEngineEvaluation { Skipped = true };
         }
 
+        var heldFacts = HeldFacts.Format(result.UnknownFacts?.Select(f => new HeldFact(f.Fact, f.Reason)));
         var decision = new TrackerDecision(
             RustEnvelopeMapper.TransitionFromWire(result.Transition!.Value),
             result.CloseReason is { } reason ? RustEnvelopeMapper.CloseReasonFromWire(reason) : null,
-            RustEnvelopeMapper.PostStateFromWire(response.Tracker!));
+            RustEnvelopeMapper.PostStateFromWire(response.Tracker!, heldFacts));
         // The engine decided on the row read under the lease, which an edit can have changed
         // since the snapshot was loaded.
         var (transition, autoResolveTransition) = await ExcursionTransitionWriter.ApplyAsync(
             trackerRepository, logger, rule.Id, trackerState, decision, AlertRuleConditions.Of(ruleRow), now, ct,
-            result.AutoResolved, result.TimerOps, RecordedNextChange(rule, result, context));
+            result.AutoResolved, result.TimerOps, RecordedNextChange(rule, result, context), result.HeldTooLong);
 
         return new AlertEngineEvaluation
         {
             ConditionMet = result.Root!.Value,
             ConditionUnknown = result.Unknown,
+            UnknownFacts = result.UnknownFacts?.Select(f => new HeldFact(f.Fact, f.Reason)).ToList() ?? [],
+            HeldTooLong = result.HeldTooLong,
             Transition = transition,
             AutoResolveTransition = autoResolveTransition,
             LeafValues = options.IncludeLeafValues

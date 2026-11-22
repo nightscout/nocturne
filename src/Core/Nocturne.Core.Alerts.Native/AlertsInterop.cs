@@ -24,6 +24,7 @@ public static partial class AlertsInterop
     private const string VersionExport = "nocturne_alerts_version";
     private const string TzdbVersionExport = "nocturne_alerts_tzdb_version";
     private const string ClockToleranceExport = "nocturne_alerts_clock_tolerance_ms";
+    private const string HoldBoundExport = "nocturne_alerts_hold_bound_ms";
     private const string EvaluateExport = "nocturne_alerts_evaluate";
     private const string EvaluateNodeExport = "nocturne_alerts_evaluate_node";
     private const string LeafPathsExport = "nocturne_alerts_leaf_paths";
@@ -37,7 +38,7 @@ public static partial class AlertsInterop
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
     [
-        FreeStringExport, VersionExport, TzdbVersionExport, ClockToleranceExport, EvaluateExport, EvaluateNodeExport,
+        FreeStringExport, VersionExport, TzdbVersionExport, ClockToleranceExport, HoldBoundExport, EvaluateExport, EvaluateNodeExport,
         LeafPathsExport, ClassifyExport, ValidateExport, ReplayExport, DescribeExport,
         ReferencesWallClockExport, RuleReadsExport,
         TrackerProcessExport, TrackerForceCloseExport, TrackerCloseElapsedHysteresisExport,
@@ -131,6 +132,13 @@ public static partial class AlertsInterop
     private static partial long ClockToleranceNative();
 
     /// <summary>
+    /// How long a rule may hold before its hold is reported, in milliseconds
+    /// (docs/alerts/engine-semantics.md §6.4). A plain integer, not freed.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = HoldBoundExport)]
+    private static partial long HoldBoundNative();
+
+    /// <summary>
     /// Evaluates one rule for one tick. Request/response are the JSON envelopes
     /// documented in crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
     /// </summary>
@@ -206,6 +214,9 @@ public static partial class AlertsInterop
 
     /// <summary>The engine's clock tolerance (docs/alerts/engine-semantics.md §5.4).</summary>
     public static TimeSpan GetClockTolerance() => TimeSpan.FromMilliseconds(ClockToleranceNative());
+
+    /// <summary>The engine's hold bound (docs/alerts/engine-semantics.md §6.4).</summary>
+    public static TimeSpan GetHoldBound() => TimeSpan.FromMilliseconds(HoldBoundNative());
 
     /// <summary>Raw evaluate call: request envelope JSON in, response envelope JSON out.</summary>
     public static string Evaluate(string requestJson) => ConsumeString(EvaluateNative(requestJson), "{}");

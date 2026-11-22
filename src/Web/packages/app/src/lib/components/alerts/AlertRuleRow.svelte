@@ -11,7 +11,9 @@
   import Zap from "@lucide/svelte/icons/zap";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import { storedConditionIssuesMessage } from "./conditionIssues.svelte";
+  import { holdFactLines, holdSinceText } from "./holdText.svelte";
   import { reviewReasonMessage } from "./reviewReason";
   import {
     summarizeCondition,
@@ -126,6 +128,9 @@
       {#if attention}
         <Badge variant="warning" size="sm">Needs review</Badge>
       {/if}
+      {#if rule.hold}
+        <Badge variant="warning" size="sm">Waiting</Badge>
+      {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
       {chip || "No condition configured"}
@@ -141,6 +146,17 @@
         <AlertTriangle class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
         <span>{notSending}</span>
       </p>
+    {/if}
+    {#if rule.hold}
+      <div class="mt-1 flex items-start gap-1.5 text-xs text-status-warning" data-testid="rule-hold">
+        <Hourglass class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <div>
+          <p>{holdSinceText(rule.hold)}</p>
+          {#each holdFactLines(rule.hold) as line (line)}
+            <p>{line}</p>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 

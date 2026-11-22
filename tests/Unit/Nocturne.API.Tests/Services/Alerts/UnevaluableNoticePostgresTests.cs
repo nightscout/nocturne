@@ -190,7 +190,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         (await clamped.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, DateTime.UtcNow, CancellationToken.None))!
             .ExcursionId.Should().Be(notice.ExcursionId, "the clamped reader finds the standing notice rather than recording another");
 
-        await clamped.EndUnevaluableNoticeAsync(notice.ExcursionId, DateTime.UtcNow, CancellationToken.None);
+        await clamped.EndNoticeAsync(notice.ExcursionId, DateTime.UtcNow, CancellationToken.None);
         await clamped.ResolveInstancesForExcursionAsync(notice.ExcursionId, DateTime.UtcNow, "rule-disabled", CancellationToken.None);
         (await Instance(tenant).GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None)).Should().BeEmpty(
             "a clamped member who disables the rule resolves its notice");

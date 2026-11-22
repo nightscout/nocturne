@@ -5,8 +5,10 @@ use chrono::{DateTime, Duration, Utc};
 use super::elapsed::{ClockLeaf, Elapsed, Measure};
 use crate::clock_anomaly::ClockAnchor;
 use crate::context::SensorContext;
+use crate::facts::ContextFact;
 use crate::model::SignalLossPayload;
 use crate::truth::Truth;
+use crate::unknown::UnknownReason;
 
 /// What `signal_loss` and `staleness` measure the time since data stopped
 /// from (engine-semantics.md §3).
@@ -43,6 +45,6 @@ pub(super) fn signal_loss(
             measure: Measure::AtLeast(Duration::minutes(i64::from(p.timeout_minutes.get()))),
         }),
         DataStopped::Forever => ClockLeaf::Fixed(Truth::True),
-        DataStopped::Unknown => ClockLeaf::Fixed(Truth::Unknown),
+        DataStopped::Unknown => ClockLeaf::Unknown(ContextFact::Glucose, UnknownReason::Absent),
     }
 }

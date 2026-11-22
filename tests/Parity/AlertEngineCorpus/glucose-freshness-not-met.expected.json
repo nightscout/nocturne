@@ -30,6 +30,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -54,6 +60,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,

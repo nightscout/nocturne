@@ -136,7 +136,7 @@ public class UnevaluableRuleNoticeTests
     {
         public int Records { get; private set; }
 
-        public override async Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
+        public override async Task<NoticeRecorded?> RecordUnevaluableNoticeAsync(
             AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct)
         {
             Records++;

@@ -148,6 +148,8 @@ you what the message is:
 |--------|---------|
 | `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. |
 | `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
+| `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
+| `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data has been missing for 24 hours. |
 
 The other fields are the same for both kinds: `RuleName`, `Severity`,
 `AlertType`, `ExcursionId`, `InstanceId`, `TenantId`, `SubjectName` and
@@ -197,7 +199,8 @@ the rule uses that result.
 
 - **Wait** (the default). The rule does not change the alert. It opens no alert,
   and it does not close an open alert, until it knows again. A true auto-resolve
-  condition can still close the alert.
+  condition can still close the alert. The waiting has a limit of 24 hours (see
+  [While a rule waits](#while-a-rule-waits)).
 - **Count the condition as true.** The rule counts its full condition as true. It
   can open an alert because data is missing. A "for N minutes" part does not delay
   this alert.
@@ -214,6 +217,30 @@ the rule uses that result.
   the condition as false**, it can close an open alert between them.
 
 </Callout>
+
+### While a rule waits
+
+When a rule with **Wait** cannot know its condition, the rules list and the rule
+page show **Waiting** and the time the wait started. They also show each missing
+data source and the cause. The cause is one of these: missing, too old, has a time
+in the future, has a value that Nocturne does not know, or not exact (for example
+a pump that reports "50+" units). An open alert that waits shows the same in the
+alert banner.
+
+The waiting has a limit of 24 hours, and you cannot change it:
+
+- When a rule has waited for 24 hours, Nocturne sends one message through the
+  rule's channels. The message gives the name of the rule and the missing data. It
+  has no glucose value and nothing to acknowledge. The rule continues to wait and
+  shows **Waiting** until the data comes back. If the data stops again later,
+  Nocturne sends a new message after 24 more hours.
+- When an open alert has waited for 24 hours, Nocturne closes the alert, and the
+  message says so. The alert closes even if its condition can still be true. The
+  alert history shows that it closed because its data was missing for 24 hours.
+  The rule opens a new alert only when the data comes back and the condition is
+  true.
+
+A rule that you disable while it waits sends no message.
 
 ### Minutes until a glucose reading counts as missing
 

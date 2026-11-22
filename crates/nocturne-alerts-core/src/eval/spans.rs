@@ -6,10 +6,12 @@ use super::elapsed::{ClockLeaf, Elapsed, active_for};
 use crate::clock_anomaly::ClockAnchor;
 use crate::context::SensorContext;
 use crate::enums::AlertStateKind;
+use crate::facts::ContextFact;
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
 use crate::truth::Truth;
+use crate::unknown::UnknownReason;
 
 /// Cross-alert state. `firing`: the snapshot's state is "firing" (ASCII case
 /// ignored); `unacknowledged`: firing and not acknowledged; `acknowledged`:
@@ -81,7 +83,9 @@ pub(super) fn pump_state(p: &PumpStatePayload, ctx: &SensorContext) -> ClockLeaf
         (None, Some(started_at), Some(m)) if p.is_active => ClockLeaf::UnknownOnceHeld(
             Elapsed::held_for(started_at, m, ClockAnchor::ActivePumpModes),
         ),
-        (None, Some(_), _) => ClockLeaf::Fixed(Truth::Unknown),
+        (None, Some(_), _) => {
+            ClockLeaf::Unknown(ContextFact::StateSpans, UnknownReason::Unrecognised)
+        }
         _ => active_for(
             p.is_active,
             p.for_minutes,

@@ -12,7 +12,9 @@ use uuid::Uuid;
 
 use crate::context::{ActiveAlertSnapshot, SensorContext};
 use crate::engine::{EngineState, Evaluation, Rule, evaluate_parsed_rule, format_instant};
-use crate::excursion::{CloseReason, TrackerRuleConfig, TrackerStateKind, TransitionType};
+use crate::excursion::{
+    CloseReason, TrackerRuleConfig, TrackerState, TrackerStateKind, TransitionType,
+};
 use crate::facts::{ContextFact, RuleConditions, rule_reads};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{Node, Payload};
@@ -332,7 +334,14 @@ impl Run<'_> {
                     });
                 }
                 let before = self.ctx.active_alerts.contains_key(&p.rule.id);
-                let evaluated = p.wall_clock || !due;
+                let evaluated = p.wall_clock
+                    || !due
+                    || self
+                        .state
+                        .tracker
+                        .state(p.rule.id)
+                        .and_then(TrackerState::hold_bound_at)
+                        .is_some_and(|bound| bound <= at);
                 self.sweep(i, at);
                 if evaluated {
                     outcomes.extend(self.evaluate(i, at));
@@ -360,7 +369,7 @@ impl Run<'_> {
         p.due = if p.wall_clock {
             e.next_change_at
         } else {
-            hysteresis_due(&e)
+            sweep_due(e.tracker.as_ref(), e.next_change_at, at)
         };
         let firing = self.state.tracker.active_excursion_id(rule.id).is_some();
         self.record_evaluation(rule.id, &e, at);
@@ -387,10 +396,15 @@ impl Run<'_> {
             .state
             .tracker
             .close_elapsed_hysteresis(rule.id, config, at);
-        p.due = match (&p.body, self.state.tracker.state(rule.id)) {
-            (Some(body), Some(s)) if s.state == TrackerStateKind::Hysteresis => {
-                next_change_at(rule, body, &self.ctx, at, &self.state)
-            }
+        let tracker = self.state.tracker.state(rule.id);
+        p.due = match (&p.body, tracker) {
+            (Some(body), Some(s)) => sweep_due(
+                Some(s),
+                (s.state == TrackerStateKind::Hysteresis)
+                    .then(|| next_change_at(rule, body, &self.ctx, at, &self.state))
+                    .flatten(),
+                at,
+            ),
             _ => None,
         };
         if transition.kind == TransitionType::ExcursionClosed {
@@ -452,13 +466,22 @@ impl Run<'_> {
     }
 }
 
-/// A rule the sweep does not evaluate is due only to close its hysteresis
-/// window; `next_change_at` reaches that instant no later than the window's
-/// end.
-fn hysteresis_due(e: &Evaluation) -> Option<DateTime<Utc>> {
-    e.tracker
-        .filter(|t| t.state == TrackerStateKind::Hysteresis)
-        .and(e.next_change_at)
+/// When the sweep next acts on a rule it does not evaluate for the clock: in
+/// hysteresis at `next_change_at`, which reaches the window's end no later
+/// than it falls, and held where the hold reaches its bound, to evaluate it
+/// there (engine-semantics.md §6.4).
+fn sweep_due(
+    t: Option<&TrackerState>,
+    next_change_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let t = t?;
+    let window = next_change_at.filter(|_| t.state == TrackerStateKind::Hysteresis);
+    let bound = t.hold_bound_at().map(|at| {
+        now.checked_add_signed(crate::next_change::RESOLUTION)
+            .map_or(at, |next| at.max(next))
+    });
+    window.into_iter().chain(bound).min()
 }
 
 /// Each entry holds the leaf's last value and its points; a leaf turning

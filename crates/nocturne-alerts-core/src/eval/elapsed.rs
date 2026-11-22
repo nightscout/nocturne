@@ -9,52 +9,53 @@ use crate::clock_anomaly::{CLOCK_TOLERANCE, ClockAnchor, since_anchor};
 use crate::compare::{Unit, decimal_from_f64_cs, in_unit};
 use crate::context::SensorContext;
 use crate::enums::CmpOp;
+use crate::facts::ContextFact;
 use crate::model::Payload;
 use crate::truth::Truth;
+use crate::unknown::{UnknownFacts, UnknownReason};
 
 use super::Held;
 
 /// A wall-clock leaf's truth for one context: fixed whatever `now` is, or an
-/// elapsed time compared with a bound. A leaf without its anchor is fixed, so
-/// an unknown one contributes no next change (engine-semantics.md §5.3).
+/// elapsed time compared with a bound. A leaf without its anchor is fixed or
+/// unknown, so it contributes no next change (engine-semantics.md §5.3).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ClockLeaf {
     Fixed(Truth),
+    /// Unknown whatever `now` is, by its fact.
+    Unknown(ContextFact, UnknownReason),
     /// True, and has been since the span it reads began.
     Began(DateTime<Utc>),
     Measured(Elapsed),
-    /// False until the bound holds, unknown from then on.
+    /// False until the bound holds, unknown from then on: a pump mode the
+    /// crate cannot name (engine-semantics.md §3).
     UnknownOnceHeld(Elapsed),
 }
 
 impl ClockLeaf {
-    pub(crate) fn holds(self, now: DateTime<Utc>) -> Truth {
+    /// The truth at `now` with the instant it has held since, where the leaf
+    /// knows one (engine-semantics.md §3), and the facts that leave it
+    /// unknown.
+    pub(crate) fn held(self, now: DateTime<Utc>) -> Held {
         match self {
-            ClockLeaf::Fixed(value) => value,
-            ClockLeaf::Began(_) => Truth::True,
-            ClockLeaf::Measured(e) => e.truth(now),
+            ClockLeaf::Fixed(value) => value.into(),
+            ClockLeaf::Unknown(fact, reason) => Held::unknown(fact, reason),
+            ClockLeaf::Began(at) => Held::since(Truth::True, Some(at)),
+            ClockLeaf::Measured(e) => {
+                Held::since(e.truth(now), e.began(now)).because(e.unknown_by())
+            }
             ClockLeaf::UnknownOnceHeld(e) => match e.truth(now) {
-                Truth::False => Truth::False,
-                Truth::True | Truth::Unknown => Truth::Unknown,
+                Truth::False => Truth::False.into(),
+                Truth::True => Held::unknown(ContextFact::StateSpans, UnknownReason::Unrecognised),
+                Truth::Unknown => Held::from(Truth::Unknown).because(e.unknown_by()),
             },
         }
-    }
-
-    /// The truth at `now` with the instant it has held since, where the leaf
-    /// knows one (engine-semantics.md §3).
-    pub(crate) fn held(self, now: DateTime<Utc>) -> Held {
-        let since = match self {
-            ClockLeaf::Began(at) => Some(at),
-            ClockLeaf::Measured(e) => e.began(now),
-            ClockLeaf::Fixed(_) | ClockLeaf::UnknownOnceHeld(_) => None,
-        };
-        Held::since(self.holds(now), since)
     }
 
     /// The comparison whose flips are this leaf's changes.
     pub(crate) fn elapsed(self) -> Option<Elapsed> {
         match self {
-            ClockLeaf::Fixed(_) | ClockLeaf::Began(_) => None,
+            ClockLeaf::Fixed(_) | ClockLeaf::Unknown(..) | ClockLeaf::Began(_) => None,
             ClockLeaf::Measured(e) | ClockLeaf::UnknownOnceHeld(e) => Some(e),
         }
     }
@@ -123,6 +124,13 @@ impl Elapsed {
     /// next-change search can bisect it.
     pub(crate) fn reached(self, now: DateTime<Utc>) -> bool {
         self.compares(self.since(now).unwrap_or(TimeDelta::zero()))
+    }
+
+    /// What an unknown comparison is unknown by: its anchor beyond the
+    /// tolerance ahead.
+    pub(crate) fn unknown_by(self) -> UnknownFacts {
+        self.source
+            .map_or_else(UnknownFacts::default, UnknownFacts::ahead_of_clock)
     }
 
     /// The anchor and how far ahead of `now` it is, when beyond the tolerance.

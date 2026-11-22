@@ -3,9 +3,10 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
-/// The alert rows that are episodes of a rule's condition. A test fire and a notice that a rule
-/// cannot be evaluated (<see cref="AlertExcursionEntity.UnevaluableConditionVersion"/>) each have an
-/// excursion and an instance so that their deliveries are recorded, and neither is a time the
+/// The alert rows that are episodes of a rule's condition. A test fire and a notice about a rule
+/// (<see cref="AlertExcursionEntity.UnevaluableConditionVersion"/>: that it cannot be evaluated, or,
+/// with <see cref="AlertExcursionEntity.HeldSince"/>, that its hold reached the engine's bound) each
+/// have an excursion and an instance so that their deliveries are recorded, and none is a time the
 /// condition was true.
 /// </summary>
 /// <remarks>
@@ -38,11 +39,11 @@ public static class AlertExcursionQueries
         return includeTest ? ofCondition : ofCondition.Where(i => !i.IsTest);
     }
 
-    /// <summary>Notices that a rule cannot be evaluated that still stand: their instance is unresolved.</summary>
+    /// <summary>Notices about a rule, of either kind, that still stand: their instance is unresolved.</summary>
     public static IQueryable<AlertExcursionEntity> StandingNotices(this IQueryable<AlertExcursionEntity> excursions) =>
         excursions.Where(e => e.UnevaluableConditionVersion != null && e.Instances.Any(i => i.ResolvedAt == null));
 
-    /// <summary>The unresolved instances of notices that a rule cannot be evaluated.</summary>
+    /// <summary>The unresolved instances of notices about a rule, of either kind.</summary>
     public static IQueryable<AlertInstanceEntity> OfStandingNotices(this IQueryable<AlertInstanceEntity> instances) =>
         instances.Where(i => i.ResolvedAt == null && i.AlertExcursion!.UnevaluableConditionVersion != null);
 }

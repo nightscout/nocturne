@@ -2,17 +2,27 @@
 
 use rust_decimal::Decimal;
 
-use super::{Env, Held};
+use super::{Env, Held, unknown_by};
 use crate::enums::{CmpOp, TempBasalMetric, holds};
+use crate::facts::ContextFact;
 use crate::model::{ComparePayload, TempBasalPayload};
 use crate::truth::Truth;
+use crate::unknown::{UnknownFacts, UnknownReason};
 
-pub(super) fn iob(p: &ComparePayload, env: &Env) -> Truth {
-    holds(p.operator, env.ctx.iob_units, p.value)
+pub(super) fn iob(p: &ComparePayload, env: &Env) -> Held {
+    unknown_by(
+        holds(p.operator, env.ctx.iob_units, p.value),
+        ContextFact::Insulin,
+        UnknownReason::Absent,
+    )
 }
 
-pub(super) fn cob(p: &ComparePayload, env: &Env) -> Truth {
-    holds(p.operator, env.ctx.cob_grams, p.value)
+pub(super) fn cob(p: &ComparePayload, env: &Env) -> Held {
+    unknown_by(
+        holds(p.operator, env.ctx.cob_grams, p.value),
+        ContextFact::Carbs,
+        UnknownReason::Absent,
+    )
 }
 
 /// A lower-bound reading ("50+") only proves the reservoir holds at least that
@@ -20,19 +30,23 @@ pub(super) fn cob(p: &ComparePayload, env: &Env) -> Truth {
 /// gives the same answer: `>` / `>=` are true once the bound satisfies them,
 /// `<` / `<=` / `==` false once the bound is past them, and anything else is
 /// unknown.
-pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> Truth {
+pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> Held {
     let Some(bound) = env.ctx.reservoir_units else {
-        return Truth::Unknown;
+        return Held::unknown(ContextFact::Pump, UnknownReason::Absent);
     };
     if !env.ctx.reservoir_is_lower_bound {
-        return p.operator.apply(bound, p.value).into();
+        return Truth::from(p.operator.apply(bound, p.value)).into();
     }
     let decided = match p.operator {
         CmpOp::Gt | CmpOp::Ge => p.operator.apply(bound, p.value).then_some(true),
         CmpOp::Lt => (bound >= p.value).then_some(false),
         CmpOp::Le | CmpOp::Eq => (bound > p.value).then_some(false),
     };
-    Truth::of(decided)
+    unknown_by(
+        Truth::of(decided),
+        ContextFact::Pump,
+        UnknownReason::Inexact,
+    )
 }
 
 /// No `has_ever_*` guard: no active temp is false, since the condition only
@@ -54,5 +68,8 @@ pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> Held {
             .and_then(|ratio| ratio.checked_mul(Decimal::ONE_HUNDRED)),
     };
     let since = (p.metric == TempBasalMetric::Rate).then_some(temp.started_at);
-    Held::since(holds(p.operator, actual, p.value), since)
+    Held::since(holds(p.operator, actual, p.value), since).because(UnknownFacts::of(
+        ContextFact::Insulin,
+        UnknownReason::Absent,
+    ))
 }

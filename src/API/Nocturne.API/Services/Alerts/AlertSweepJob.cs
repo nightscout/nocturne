@@ -110,6 +110,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                      (CheckAlertChannelsAsync, "checking alert channels"),
                      (CheckClockAnomaliesAsync, "checking clock-anomaly notifications"),
                      (EvaluateWallClockRulesAsync, "evaluating wall-clock rules"),
+                     (CheckHeldRulesAsync, "checking held rules"),
                      (EvaluateAutoResolveAsync, "evaluating auto-resolve"),
                  })
         {
@@ -630,6 +631,14 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         sweep.Services.GetRequiredService<IClockAnomalyNotice>().RefreshAsync(sweep.Now, ct);
 
     /// <summary>
+    /// Hands every enabled rule to <see cref="IHeldRuleNotice"/>, after the evaluation pass has
+    /// evaluated each hold that reached its bound, so a reported hold is told within the run.
+    /// </summary>
+    private static async Task CheckHeldRulesAsync(Sweep sweep, CancellationToken ct) =>
+        await sweep.Services.GetRequiredService<IHeldRuleNotice>()
+            .CheckAsync(await sweep.EnabledRulesAsync(ct), ct);
+
+    /// <summary>
     /// Evaluates every enabled rule that <see cref="RuleTrees.ReferencesWallClock"/> selects
     /// through the orchestrator's full pipeline. Those conditions change truth with the clock
     /// alone, so between readings, or with no readings at all, only this pass moves them. The
@@ -653,6 +662,11 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// write's evaluation measures (<see cref="CanonicalAlertEvaluator"/>); with none, or with one
     /// found only by looking back, a write evaluates nothing, so every rule is evaluated.
     /// </para>
+    /// <para>
+    /// Every enabled rule whose hold has reached the engine's bound unreported is evaluated as well
+    /// (<see cref="IHeldRuleNotice.DueAsync"/>), wall-clock or not and whatever its next change, so
+    /// the bound is reached with no reading (docs/alerts/engine-semantics.md §6.4).
+    /// </para>
     /// </remarks>
     private async Task EvaluateWallClockRulesAsync(Sweep sweep, CancellationToken ct)
     {
@@ -661,7 +675,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         var verdicts = new Dictionary<Guid, WallClockVerdict>(enabled.Count);
         var wallClockRules = enabled.Where(rule => ReferencesWallClock(rule, kept, verdicts)).ToList();
         _wallClock[sweep.TenantId] = verdicts;
-        if (wallClockRules.Count == 0) return;
+        var heldDue = await sweep.Services.GetRequiredService<IHeldRuleNotice>().DueAsync(enabled, sweep.Now, ct);
+        if (wallClockRules.Count == 0 && heldDue.Count == 0) return;
 
         var last = await LastUsableReadingAsync(sweep, ct);
         var context = last.Reading is { } usable
@@ -674,10 +689,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 LastReadingAt = last.At,
             };
         if (last.Newest)
-        {
             wallClockRules = await NotYetDueAsync(sweep, wallClockRules, verdicts, NextChange.GlucoseOf(context), ct);
-            if (wallClockRules.Count == 0) return;
-        }
+        wallClockRules.AddRange(heldDue.Where(rule => wallClockRules.All(r => r.Id != rule.Id)));
+        if (wallClockRules.Count == 0) return;
 
         var orchestrator = sweep.Services.GetRequiredService<IAlertOrchestrator>();
         await orchestrator.EvaluateRulesAsync(

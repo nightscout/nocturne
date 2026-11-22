@@ -145,6 +145,13 @@ public sealed record RustTrackerState
     /// </summary>
     [JsonPropertyName("last_excursion_ordinal")]
     public int? LastExcursionOrdinal { get; init; }
+
+    /// <summary>
+    /// When the rule's current hold began (docs/alerts/engine-semantics.md §6.4); present only
+    /// while it is held.
+    /// </summary>
+    [JsonPropertyName("held_since")]
+    public DateTime? HeldSince { get; init; }
 }
 
 /// <summary>Request envelope for <c>nocturne_alerts_evaluate</c>.</summary>
@@ -243,6 +250,13 @@ public sealed record RustRuleResult
     public bool Unknown { get; init; }
 
     /// <summary>
+    /// The context facts whose unknown reached the root, each with its reason; present exactly
+    /// when <see cref="Unknown"/>.
+    /// </summary>
+    [JsonPropertyName("unknown_facts")]
+    public List<RustUnknownFact>? UnknownFacts { get; init; }
+
+    /// <summary>
     /// Per-leaf force-eval truths, ascending by leaf id; present on every result that was not
     /// skipped when the request set <see cref="RustEvaluateRequest.IncludeLeaves"/>.
     /// </summary>
@@ -254,6 +268,13 @@ public sealed record RustRuleResult
     /// <summary>Present exactly when <see cref="Transition"/> is <see cref="RustTransition.Closed"/>.</summary>
     [JsonPropertyName("close_reason")]
     public RustCloseReason? CloseReason { get; init; }
+
+    /// <summary>
+    /// This evaluation's hold reached the engine's bound, once per hold
+    /// (docs/alerts/engine-semantics.md §6.4); the wire carries it only when true.
+    /// </summary>
+    [JsonPropertyName("held_too_long")]
+    public bool HeldTooLong { get; init; }
 
     /// <summary>The auto-resolve pass force-closed the excursion; the wire carries it only when true.</summary>
     [JsonPropertyName("auto_resolved")]
@@ -286,6 +307,15 @@ public sealed record RustClockAnomaly(
     [property: JsonPropertyName("fact"), JsonRequired] string Fact,
     [property: JsonPropertyName("ahead_ms"), JsonRequired] long AheadMs);
 
+/// <summary>
+/// A context fact (docs/alerts/engine-semantics.md §5.2) whose unknown reached an unknown root, and
+/// why it was unknown: <c>absent</c>, <c>stale</c>, <c>ahead_of_clock</c>, <c>unrecognised</c> or
+/// <c>inexact</c>.
+/// </summary>
+public sealed record RustUnknownFact(
+    [property: JsonPropertyName("fact"), JsonRequired] string Fact,
+    [property: JsonPropertyName("reason"), JsonRequired] string Reason);
+
 /// <summary>Tracker transition wire values in <see cref="RustRuleResult.Transition"/>.</summary>
 [JsonConverter(typeof(StrictStringEnumConverter<RustTransition>))]
 public enum RustTransition
@@ -306,6 +336,7 @@ public enum RustCloseReason
     [JsonStringEnumMemberName("auto")] Auto,
     [JsonStringEnumMemberName("manual")] Manual,
     [JsonStringEnumMemberName("rule-disabled")] RuleDisabled,
+    [JsonStringEnumMemberName("hold-bound")] HoldBound,
 }
 
 /// <summary>

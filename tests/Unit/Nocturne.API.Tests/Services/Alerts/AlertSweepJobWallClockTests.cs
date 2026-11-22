@@ -568,7 +568,8 @@ public class AlertSweepJobWallClockTests
 
     /// <summary>
     /// Each tree with whether the fixture's context leaves its other leaf unknown, so the rule is
-    /// held and keeps no tracker row (docs/alerts/engine-semantics.md §6.4).
+    /// held and its tracker row records only the hold, from the first sweep
+    /// (docs/alerts/engine-semantics.md §6.4).
     /// </summary>
     public static TheoryData<string, bool> RulesReadingOtherFacts => new()
     {
@@ -596,7 +597,12 @@ public class AlertSweepJobWallClockTests
         fixture.Evaluations.Should().Be(3);
         var state = await fixture.TrackerRepo.GetTrackerStateAsync(RuleId);
         if (held)
-            state.Should().BeNull();
+        {
+            state!.State.Should().Be("idle");
+            state.ActiveExcursionId.Should().BeNull();
+            state.HeldSince.Should().Be(T0.AddMinutes(1), "a hold begins at its first held evaluation");
+            state.HeldFacts.Should().NotBeNullOrEmpty();
+        }
         else
             state!.NextChangeKnown.Should().BeFalse();
     }
@@ -961,6 +967,7 @@ public class AlertSweepJobWallClockTests
             services.AddScoped<IExcursionOpenedHandler, ExcursionOpenedHandler>();
             services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
             services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
+            services.AddSingleton(NoHeldRules.Notice());
             services.AddSingleton(ClockNotice.Object);
             services.AddSingleton(Mock.Of<IAlertChannelNotice>());
             services.AddSingleton<AlertRuleEvaluationGate>();

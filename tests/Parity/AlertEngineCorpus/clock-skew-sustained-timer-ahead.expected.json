@@ -36,6 +36,7 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [],
           "leaves": [
             {
               "leaf_id": 0,
@@ -44,7 +45,8 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle"
+            "state": "idle",
+            "held_since": "2026-04-01T11:50:00Z"
           },
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
