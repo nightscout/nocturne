@@ -4431,6 +4431,7 @@ msgstr "Demostración"
 #~ msgid "Log out"
 #~ msgstr "Cerrar sesión"
 
+#: src/lib/components/auth/SignInGate.svelte
 #: src/lib/components/layout/UserMenu.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
 #: src/routes/(unauthenticated)/auth/confirm-email/+page.svelte
@@ -47878,4 +47879,90 @@ msgstr ""
 #. 0: inviteName
 #: src/lib/components/members/PendingInvitesList.svelte
 msgid "Revoke {0}"
+msgstr ""
+
+#: src/lib/forms/submit-messages.svelte.ts
+msgid "Sign in again to do this. This session started from a sign-in link."
+msgstr ""
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Finish sign-in"
+msgstr ""
+
+#: src/lib/components/auth/ConfirmIdentityDialog.svelte
+msgid "Confirm it is you"
+msgstr ""
+
+#: src/lib/components/auth/ConfirmIdentityDialog.svelte
+msgid "This session started from a sign-in link. Sign in again, then do the action again."
+msgstr ""
+
+#: src/lib/components/connectors/AddConnectionDialog.svelte
+msgid "Sign in again to connect an app or create an API token."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceSelectionView.svelte
+msgid "Sign in again to connect an app."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Sign in again to make a guest link."
+msgstr ""
+
+#: src/lib/components/members/LockedOutMembers.svelte
+msgid "Sign in again to make a recovery link."
+msgstr ""
+
+#: src/lib/components/members/PublicAccessCard.svelte
+msgid "Sign in again to make a public link, show it, or change what it shares."
+msgstr ""
+
+#: src/routes/(authenticated)/oauth/consent/+page.svelte
+msgid "Sign in again to approve or deny this app."
+msgstr ""
+
+#: src/routes/(authenticated)/oauth/device/+page.svelte
+msgid "Sign in again to approve or deny this device."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/custom/+page.svelte
+msgid "Sign in again to make, change, or delete a report."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Sign in again to add or remove sign-in methods, see trusted devices, or make new recovery codes."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/+page.svelte
+msgid "Sign in again to make an invite link."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/+page.svelte
+msgid "Sign in again to see your connections, connect an app, or create an API token."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/hub/HubStepDown.svelte
+msgid "Sign in again to step down."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
+msgid "Sign in again to change, copy, or delete this report."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/custom/new/+page.svelte
+msgid "Sign in again to make a report."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "Sign in again to connect your chat account."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/custom/[id]/edit/+page.svelte
+msgid "Sign in again to change or copy this report."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Sign in again to link your Discord account."
 msgstr ""
