@@ -32,6 +32,24 @@ public class RecordChangePublisherTests
     }
 
     [Fact]
+    public async Task A_hand_off_runs_after_the_invalidations_and_before_an_announcement_that_throws()
+    {
+        var publisher = new RecordChangePublisher(
+        [
+            new Subscriber(
+                "announce", RecordChangeStage.Announce, _ran,
+                onChanged: _ => throw new InvalidOperationException("the hub is down")),
+            new Subscriber("hand-off", RecordChangeStage.HandOff, _ran),
+            new Subscriber("invalidate", RecordChangeStage.Invalidate, _ran),
+        ]);
+
+        var publish = () => publisher.PublishAsync(Batch, CancellationToken.None);
+
+        await publish.Should().ThrowAsync<InvalidOperationException>();
+        _ran.Should().Equal("invalidate", "hand-off", "announce");
+    }
+
+    [Fact]
     public async Task Every_subscriber_receives_the_batch_as_published()
     {
         RecordsChanged? received = null;

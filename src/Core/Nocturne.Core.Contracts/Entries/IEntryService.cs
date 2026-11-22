@@ -68,7 +68,7 @@ public interface IEntryService
     );
 
     /// <summary>
-    /// Writes a processed v1 upload batch and says what to echo and which entries moved glucose.
+    /// Writes a processed v1 upload batch and says what to echo.
     /// </summary>
     /// <remarks>
     /// Uses one duplicate query per entry type for the whole batch instead of one per entry, with the

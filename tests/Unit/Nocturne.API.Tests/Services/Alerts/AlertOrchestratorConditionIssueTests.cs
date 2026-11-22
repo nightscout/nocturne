@@ -285,7 +285,8 @@ public class AlertOrchestratorConditionIssueTests
 
             _orchestrator = new AlertOrchestrator(
                 Engine.Object,
-                Mock.Of<IAlertRepository>(),
+                new AlertRuleEvaluationGate(),
+                new AlertRuleDecisions(TimeProvider.System),
                 tenant.Object,
                 enricher.Object,
                 Mock.Of<IExcursionOpenedHandler>(),
@@ -296,6 +297,6 @@ public class AlertOrchestratorConditionIssueTests
         }
 
         public Task EvaluateAsync(params AlertRuleSnapshot[] rules) =>
-            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), CancellationToken.None);
+            _orchestrator.EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), Reading(40), readAt: null, CancellationToken.None);
     }
 }

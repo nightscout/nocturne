@@ -539,7 +539,6 @@ public class V4BulkValidationTests
         WithContext(new SensorGlucoseController(
             (repo ?? new Mock<ISensorGlucoseRepository>()).Object,
             Mock.Of<IGlucoseProcessingResolver>(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IPatientDeviceStamper>()));
 }

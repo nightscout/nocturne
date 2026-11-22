@@ -20,7 +20,6 @@ public class SensorGlucoseControllerTests
 {
     private readonly Mock<ISensorGlucoseRepository> _repoMock = new();
     private readonly Mock<IGlucoseProcessingResolver> _glucoseResolverMock = new();
-    private readonly Mock<ICanonicalAlertEvaluator> _alertEvaluatorMock = new();
     private readonly Mock<IPatientDeviceRepository> _patientDevicesMock = new();
     private readonly Mock<IPatientDeviceStamper> _deviceStamperMock = new();
 
@@ -29,7 +28,6 @@ public class SensorGlucoseControllerTests
         var controller = new SensorGlucoseController(
             _repoMock.Object,
             _glucoseResolverMock.Object,
-            _alertEvaluatorMock.Object,
             _patientDevicesMock.Object,
             _deviceStamperMock.Object);
 

@@ -284,11 +284,10 @@ public class LegacyPostBodyTests
                 It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<Entry>, string?, CancellationToken>((processed, _, _) => entries.AddRange(processed))
             .ReturnsAsync((IReadOnlyList<Entry> processed, string? _, CancellationToken _) =>
-                new EntryUploadResult(processed, processed));
+                new EntryUploadResult(processed));
         var controller = WithContext(new LegacyV1.EntriesController(
             service.Object,
             Passthrough(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             TimeProvider.System,
             NullLogger<LegacyV1.EntriesController>.Instance));
         return new Handler(

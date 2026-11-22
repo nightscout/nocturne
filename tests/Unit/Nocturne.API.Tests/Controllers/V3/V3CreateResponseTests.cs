@@ -171,7 +171,6 @@ public class V3CreateResponseTests
         var controller = WithContext(new EntriesController(
             processing.Object,
             service.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance));
         return (controller, service);
     }

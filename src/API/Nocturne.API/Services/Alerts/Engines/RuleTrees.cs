@@ -61,15 +61,7 @@ internal static class RuleTrees
 
     private static readonly ConcurrentDictionary<NextChangeKey, bool> NextChangeVerdicts = new();
 
-    /// <summary>
-    /// The facts (docs/alerts/engine-semantics.md §5.2) that move only through a glucose write,
-    /// which evaluates every enabled rule. <c>predictions</c> is not one: the enricher fetches
-    /// them live, and they move with treatments and the clock. Nor is <c>time_zone</c>: it is
-    /// read from the profile, and a profile write moves it and evaluates nothing. A
-    /// <c>glucose_bucket</c> reads it too, since the bucket is the reading placed in the
-    /// schedule at the tenant's local time, so such a rule never waits.
-    /// </summary>
-    private static readonly string[] FactsOnlyReadingsMove = ["glucose"];
+    private static readonly ConcurrentDictionary<DescriptionKey, IReadOnlyList<string>> FactsRead = new();
 
     /// <summary>
     /// The leaves of the rule's body in pre-order, then those of its auto-resolve tree when
@@ -102,10 +94,29 @@ internal static class RuleTrees
         RustAlertEngine.ReferencesWallClock(ConditionsRequest(rule));
 
     /// <summary>
-    /// Whether the rule references the wall clock and reads only <see cref="FactsOnlyReadingsMove"/>,
-    /// so between its evaluations only the clock moves it, and its last evaluation's next change
-    /// (docs/alerts/engine-semantics.md §5.3) is the earliest instant one can differ. Kept per
+    /// The context facts the rule reads (docs/alerts/engine-semantics.md §5.2), by wire name. Kept per
     /// condition, as descriptions are.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
+    public static IReadOnlyList<string> Reads(AlertRuleSnapshot rule)
+    {
+        var key = new DescriptionKey(
+            rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled ? rule.AutoResolveParams : null);
+        if (FactsRead.TryGetValue(key, out var kept))
+            return kept;
+
+        var reads = RustAlertEngine.RuleReads(ConditionsRequest(rule));
+        if (FactsRead.Count >= CacheLimit)
+            FactsRead.Clear();
+        FactsRead[key] = reads;
+        return reads;
+    }
+
+    /// <summary>
+    /// Whether the rule references the wall clock and every fact it reads is one the sweep may wait
+    /// for (<see cref="ContextFactWrites.SweepMayWaitFor"/>), so between its evaluations only the
+    /// clock moves it, and its last evaluation's next change (docs/alerts/engine-semantics.md §5.3) is
+    /// the earliest instant one can differ. Kept per condition, as descriptions are.
     /// </summary>
     /// <exception cref="RustAlertEngineException">The engine rejected the request.</exception>
     public static bool WaitsForNextChange(AlertRuleSnapshot rule)
@@ -117,9 +128,8 @@ internal static class RuleTrees
         if (NextChangeVerdicts.TryGetValue(key, out var kept))
             return kept;
 
-        var request = ConditionsRequest(rule);
-        var waits = RustAlertEngine.ReferencesWallClock(request)
-                    && RustAlertEngine.RuleReads(request).All(FactsOnlyReadingsMove.Contains);
+        var waits = RustAlertEngine.ReferencesWallClock(ConditionsRequest(rule))
+                    && Reads(rule).All(ContextFactWrites.SweepMayWaitFor);
         if (NextChangeVerdicts.Count >= CacheLimit)
             NextChangeVerdicts.Clear();
         NextChangeVerdicts[key] = waits;
@@ -166,11 +176,12 @@ internal static class RuleTrees
         }
     }
 
-    /// <summary>Drops every kept description and next-change verdict.</summary>
+    /// <summary>Drops every kept description, fact set and next-change verdict.</summary>
     internal static void ClearCache()
     {
         Descriptions.Clear();
         NextChangeVerdicts.Clear();
+        FactsRead.Clear();
     }
 
     /// <param name="type">The condition type <paramref name="conditionParams"/> is stored for.</param>

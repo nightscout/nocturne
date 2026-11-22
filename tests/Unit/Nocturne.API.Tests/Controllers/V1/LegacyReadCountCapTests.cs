@@ -103,7 +103,6 @@ public class LegacyReadCountCapTests
         var controller = new EntriesController(
             entryService.Object,
             Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             TimeProvider.System,
             Mock.Of<ILogger<EntriesController>>()
         )

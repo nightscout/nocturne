@@ -48,7 +48,6 @@ public class V3SearchLimitTests
         var controller = new EntriesController(
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = Context(queryString),

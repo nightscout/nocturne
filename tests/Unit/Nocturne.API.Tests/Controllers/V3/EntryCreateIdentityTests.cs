@@ -41,7 +41,6 @@ public class EntryCreateIdentityTests
         _controller = new EntriesController(
             processing.Object,
             entryService.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

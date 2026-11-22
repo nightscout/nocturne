@@ -1200,6 +1200,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<INotificationActionHandler, AlertActionHandler>();
         services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
         services.AddSingleton<AlertEvaluationWatermark>();
+        services.AddSingleton<AlertRuleDecisions>();
+        services.AddSingleton<AlertFactEvaluationScheduler>();
+        services.AddHostedService(sp => sp.GetRequiredService<AlertFactEvaluationScheduler>());
+        services.AddScoped<IRecordChangeSubscriber, AlertFactsChangedSubscriber>();
 
         // Trackers. The trigger is the IDeviceEventReactor adapter rather than a service any
         // caller invokes: it runs from the V4 device-event write chokepoint, which is what makes a

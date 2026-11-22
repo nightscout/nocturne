@@ -1,4 +1,3 @@
-using Nocturne.API.Services.Alerts;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +7,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 namespace Nocturne.API.Controllers.V3;
@@ -22,7 +20,6 @@ namespace Nocturne.API.Controllers.V3;
 /// Provides full V3 API compatibility with Nightscout entries endpoints, at /api/v3/entries.
 /// </remarks>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="Entry"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -32,18 +29,15 @@ namespace Nocturne.API.Controllers.V3;
 public class EntriesController : BaseV3Controller<Entry>
 {
     private readonly IEntryService _entryService;
-    private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
     public EntriesController(
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
-        ICanonicalAlertEvaluator alertEvaluator,
         ILogger<EntriesController> logger
     )
         : base(documentProcessingService, logger)
     {
         _entryService = entryService;
-        _alertEvaluator = alertEvaluator;
     }
 
     /// <summary>
@@ -177,7 +171,6 @@ public class EntriesController : BaseV3Controller<Entry>
     /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
     /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
     /// duplicate.
-    /// After creation, alerts are evaluated via <see cref="IAlertOrchestrator"/> for the new reading.
     /// </remarks>
     /// <response code="201">Entry created successfully.</response>
     /// <response code="200">Duplicate entry detected (deduplication response for AAPS).</response>
@@ -243,8 +236,6 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
-
-            await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
 
             return V3Created(nameof(GetEntry), createdEntry.Id);
         }
@@ -315,8 +306,6 @@ public class EntriesController : BaseV3Controller<Entry>
                 "Successfully created {Count} V3 entries via bulk operation",
                 createdEntries.Count()
             );
-
-            await _alertEvaluator.EvaluateForEntriesAsync(createdEntries, cancellationToken);
 
             return StatusCode(201, createdEntries.ToV3Responses());
         }

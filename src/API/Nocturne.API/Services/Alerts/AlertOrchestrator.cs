@@ -10,8 +10,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <summary>
 /// Wires <see cref="IAlertEvaluationEngine"/> and the transition handlers
 /// (<see cref="IExcursionOpenedHandler"/>, <see cref="IExcursionResolutionHandler"/>) together
-/// into a per-reading alert evaluation pass.
-/// Called on every new glucose reading to evaluate all enabled alert rules for the current tenant.
+/// into an alert evaluation pass over a set of the current tenant's enabled rules.
 /// </summary>
 /// <remarks>
 /// For each enabled rule, the orchestrator asks the engine seam for the rule's evaluation
@@ -30,7 +29,8 @@ namespace Nocturne.API.Services.Alerts;
 /// <seealso cref="IAlertEvaluationEngine"/>
 internal sealed class AlertOrchestrator(
     IAlertEvaluationEngine evaluationEngine,
-    IAlertRepository repository,
+    AlertRuleEvaluationGate gate,
+    AlertRuleDecisions decisions,
     ITenantAccessor tenantAccessor,
     ISensorContextEnricher contextEnricher,
     IExcursionOpenedHandler openedHandler,
@@ -40,18 +40,11 @@ internal sealed class AlertOrchestrator(
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
 {
-    public async Task EvaluateAsync(SensorContext context, CancellationToken ct)
-    {
-        if (tenantAccessor.TenantId == Guid.Empty) return;
-
-        var rules = await repository.GetEnabledRulesAsync(ct);
-        await EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), context, ct);
-    }
-
     public async Task EvaluateRulesAsync(
         IReadOnlyList<AlertRuleSnapshot> rules,
         IReadOnlySet<Guid> enabledRuleIds,
         SensorContext context,
+        long? readAt,
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
@@ -68,13 +61,14 @@ internal sealed class AlertOrchestrator(
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
         // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
         var enriched = await contextEnricher.EnrichAsync(context, evaluable, ct);
+        var stamp = readAt is { } read ? AlertRuleDecisions.StampOf(enriched, read) : null;
 
         var anomalies = new Dictionary<string, ClockAnomaly>(StringComparer.Ordinal);
         foreach (var rule in evaluable)
         {
             try
             {
-                foreach (var anomaly in await EvaluateRuleAsync(rule, enriched, tenantId, ct))
+                foreach (var anomaly in await EvaluateRuleAsync(rule, enriched, tenantId, stamp, ct))
                 {
                     if (!anomalies.TryGetValue(anomaly.Fact, out var seen) || seen.Ahead < anomaly.Ahead)
                         anomalies[anomaly.Fact] = anomaly;
@@ -94,16 +88,41 @@ internal sealed class AlertOrchestrator(
         await clockAnomalyNotice.ReportIsolatedAsync(enriched, anomalies.Values, logger, ct);
     }
 
+    /// <remarks>
+    /// The check against <see cref="AlertRuleDecisions"/>, the engine's evaluation and its record are
+    /// one section of the rule's lock, which every pass over the rule takes, so no other decision
+    /// lands between them. A rule a newer context decided is skipped with nothing recorded; an
+    /// evaluation that throws records nothing. Delivery runs after the section.
+    /// </remarks>
     private async Task<IReadOnlyList<ClockAnomaly>> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         Guid tenantId,
+        ContextStamp? stamp,
         CancellationToken ct)
     {
         // The engine runs the full per-rule driver sequence (root eval → tracker →
         // unconditional auto-resolve under the auto_resolve path root) and persists all
         // evaluation state; this method applies the side effects its transitions call for.
-        var evaluation = await evaluationEngine.EvaluateRuleAsync(rule, context, AlertEngineOptions.Default, ct);
+        var evaluation = await gate.RunExclusiveAsync<AlertEngineEvaluation?>(
+            rule.Id,
+            async () =>
+            {
+                if (stamp is { } checking && decisions.DecidedByNewer(rule.Id, checking))
+                    return null;
+                var evaluated = await evaluationEngine.EvaluateRuleAsync(rule, context, AlertEngineOptions.Default, ct);
+                if (stamp is { } deciding)
+                    decisions.Decided(rule.Id, deciding);
+                return evaluated;
+            },
+            ct);
+        if (evaluation is null)
+        {
+            logger.LogDebug(
+                "Alert rule {AlertRuleId} of tenant {TenantId} was decided by a newer reading; this pass skips it",
+                rule.Id, tenantId);
+            return [];
+        }
         if (evaluation.Skipped) return [];
 
         switch (evaluation.Transition.Type)

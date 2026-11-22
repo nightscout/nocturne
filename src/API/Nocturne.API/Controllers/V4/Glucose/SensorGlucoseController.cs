@@ -7,7 +7,6 @@ using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -23,13 +22,12 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// each creation.
 /// </summary>
 /// <remarks>
-/// CRUD operations and bulk creation for <see cref="SensorGlucose"/> records. After creation, glucose alerts
-/// are evaluated against the canonical stream via <see cref="ICanonicalAlertEvaluator"/>.
+/// CRUD operations and bulk creation for <see cref="SensorGlucose"/> records. The repository announces
+/// every committed write, and alerts are evaluated from that (<see cref="AlertFactsChangedSubscriber"/>).
 /// </remarks>
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
-/// <seealso cref="ICanonicalAlertEvaluator"/>
 /// <seealso cref="PatientDeviceAttribution"/>
 /// <seealso cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>
 [ApiController]
@@ -41,7 +39,6 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
-    ICanonicalAlertEvaluator alertEvaluator,
     IPatientDeviceRepository patientDevices,
     IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
@@ -166,18 +163,6 @@ public class SensorGlucoseController(
         return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// One pass for the whole batch: alarms evaluate against the canonical stream rather than the
-    /// records just written, so a per-record pass would repeat the same evaluation.
-    /// </remarks>
-    protected override async Task<SensorGlucose[]> OnAfterBulkCreateAsync(SensorGlucose[] written, CancellationToken ct)
-    {
-        await alertEvaluator.EvaluateForReadingsAsync(written, ct);
-
-        return written;
-    }
-
     private Task ResolveGlucoseAsync(SensorGlucose model, UpsertSensorGlucoseRequest request, CancellationToken ct) =>
         glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
@@ -192,12 +177,5 @@ public class SensorGlucoseController(
             model, request.PatientDeviceId, existing, patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, ct);
 
         return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
-    }
-
-    protected override async Task<SensorGlucose> OnAfterCreateAsync(SensorGlucose created, CancellationToken ct)
-    {
-        await alertEvaluator.EvaluateForReadingsAsync([created], ct);
-
-        return created;
     }
 }

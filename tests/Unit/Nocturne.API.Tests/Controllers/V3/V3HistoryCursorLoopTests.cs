@@ -84,7 +84,7 @@ public class V3HistoryCursorLoopTests
         var pages = await Drain(async since =>
         {
             var controller = new EntriesController(
-                Mock.Of<IDocumentProcessingService>(), service.Object, Mock.Of<ICanonicalAlertEvaluator>(),
+                Mock.Of<IDocumentProcessingService>(), service.Object,
                 NullLogger<EntriesController>.Instance) { ControllerContext = Context() };
             return (await controller.GetEntryHistory(since, PageSize), controller);
         });
