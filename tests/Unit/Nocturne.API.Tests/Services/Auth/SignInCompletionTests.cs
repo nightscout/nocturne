@@ -1,0 +1,267 @@
+using System.Text.Json;
+using System.Threading;
+using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Configuration;
+using Xunit;
+
+namespace Nocturne.API.Tests.Services.Auth;
+
+/// <summary>
+/// The steps every sign-in takes once its method has proved the subject: admission, the
+/// second-factor gate, the session, last-login and the audit row, and the cookies the outcome
+/// calls for.
+/// </summary>
+[Trait("Category", "Unit")]
+public class SignInCompletionTests
+{
+    private const string Ip = "203.0.113.9";
+    private const string Agent = "Firefox";
+
+    private readonly Mock<ITotpService> _totp = new();
+    private readonly Mock<ITenantMemberService> _members = new();
+    private readonly Mock<ISessionService> _sessions = new();
+    private readonly Mock<ISubjectService> _subjects = new();
+    private readonly Mock<IAuthAuditService> _audit = new();
+    private readonly List<string> _steps = [];
+    private readonly List<(string EventType, Guid? Subject, bool Success, string? Ip, string? Agent, JsonElement Details)> _rows = [];
+
+    private readonly Guid _subjectId = Guid.NewGuid();
+    private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly SessionTokenPair _session;
+
+    public SignInCompletionTests()
+    {
+        _session = new SessionTokenPair("access", "refresh", 900, _subjectId);
+
+        _members.Setup(m => m.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Callback(() => _steps.Add("admission"))
+            .ReturnsAsync(true);
+        _totp.Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .Callback(() => _steps.Add("gate"))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
+        _totp.Setup(t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()))
+            .Callback(() => _steps.Add("step-up"))
+            .ReturnsAsync("step-up-token");
+        _sessions.Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => _steps.Add("session"))
+            .ReturnsAsync(_session);
+        _subjects.Setup(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()))
+            .Callback(() => _steps.Add("last-login"))
+            .Returns(Task.CompletedTask);
+        _audit.Setup(a => a.LogAsync(
+                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()))
+            .Callback((string type, Guid? subject, bool success, string? ip, string? agent, string? _, string? details,
+                Guid? _, AuthAuditActor? _, Guid? _) =>
+            {
+                _steps.Add($"audit:{type}");
+                _rows.Add((type, subject, success, ip, agent, JsonDocument.Parse(details!).RootElement.Clone()));
+            })
+            .Returns(Task.CompletedTask);
+    }
+
+    private SignInCompletion Completion() =>
+        new(_totp.Object, _members.Object, _sessions.Object, _subjects.Object, _audit.Object);
+
+    private SignInAttempt Attempt(
+        SignInMethod method = SignInMethod.Passkey,
+        SignInAdmission? admission = null,
+        SecondFactorProof? secondFactor = null,
+        Guid? providerId = null) =>
+        new(_subjectId, method,
+            admission ?? new SignInAdmission.Member(_tenantId),
+            secondFactor ?? new SecondFactorProof.Primary("device-cookie"),
+            new SessionContext(DeviceDescription: "Passkey", IpAddress: Ip, UserAgent: Agent),
+            providerId);
+
+    private void GateAnswers(SecondFactorRequirement requirement) =>
+        _totp.Setup(t => t.GetSecondFactorRequirementAsync(_subjectId, "device-cookie"))
+            .Callback(() => _steps.Add("gate"))
+            .ReturnsAsync(requirement);
+
+    private void NotAMember() =>
+        _members.Setup(m => m.IsMemberAsync(_subjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .Callback(() => _steps.Add("admission"))
+            .ReturnsAsync(false);
+
+    [Fact]
+    public async Task A_member_without_an_authenticator_is_admitted_gated_given_a_session_then_last_login_then_the_login_row()
+    {
+        var outcome = await Completion().CompleteAsync(Attempt());
+
+        outcome.Should().BeEquivalentTo(new SignInOutcome.SignedIn(_session, false, SignInMethod.Passkey, null));
+        _steps.Should().Equal("admission", "gate", "session", "last-login", "audit:login");
+        var expected = new SessionContext(DeviceDescription: "Passkey", IpAddress: Ip, UserAgent: Agent);
+        _sessions.Verify(s => s.IssueSessionAsync(_subjectId, expected, It.IsAny<CancellationToken>()));
+
+        var row = _rows.Single();
+        row.Should().Match<(string EventType, Guid? Subject, bool Success, string? Ip, string? Agent, JsonElement Details)>(
+            r => r.EventType == AuthAuditEventType.Login && r.Subject == _subjectId && r.Success
+                && r.Ip == Ip && r.Agent == Agent);
+        row.Details.GetRawText().Should().Be("""{"method":"passkey"}""");
+    }
+
+    [Fact]
+    public async Task A_trusted_device_stands_in_for_the_code_and_the_login_row_says_so()
+    {
+        GateAnswers(SecondFactorRequirement.SatisfiedByTrustedDevice);
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Oidc));
+
+        outcome.Should().BeOfType<SignInOutcome.SignedIn>().Which.TrustedDevice.Should().BeTrue();
+        _rows.Single().Details.GetRawText().Should().Be("""{"method":"oidc","secondFactor":"trusted_device"}""");
+    }
+
+    [Fact]
+    public async Task A_code_still_owed_writes_the_pending_row_mints_a_step_up_token_and_issues_no_session()
+    {
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+        var providerId = Guid.NewGuid();
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Oidc, providerId: providerId));
+
+        outcome.Should().BeEquivalentTo(new SignInOutcome.SecondFactorRequired(
+            _subjectId, "step-up-token", SignInMethod.Oidc, providerId));
+        _steps.Should().Equal("admission", "gate", "audit:login", "step-up");
+        _totp.Verify(t => t.CreateStepUpTokenAsync(_subjectId, _tenantId, false));
+
+        var row = _rows.Single();
+        row.Success.Should().BeFalse("a sign-in waiting for its code is not a completed one");
+        row.Details.GetRawText().Should().Be("""{"method":"oidc","secondFactorPending":true}""");
+        _subjects.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_invitee_is_admitted_without_membership_and_the_step_up_token_carries_the_invite()
+    {
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+
+        await Completion().CompleteAsync(Attempt(admission: new SignInAdmission.Invite(_tenantId)));
+
+        _members.Verify(m => m.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _totp.Verify(t => t.CreateStepUpTokenAsync(_subjectId, _tenantId, true));
+    }
+
+    [Fact]
+    public async Task On_a_host_with_no_tenant_the_step_up_token_is_bound_to_no_tenant()
+    {
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+
+        await Completion().CompleteAsync(Attempt(admission: new SignInAdmission.Account()));
+
+        _members.Verify(m => m.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _totp.Verify(t => t.CreateStepUpTokenAsync(_subjectId, null, false));
+    }
+
+    [Fact]
+    public async Task An_invitee_on_a_host_with_no_tenant_is_minted_a_step_up_token_bound_to_no_tenant_with_the_invite()
+    {
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+
+        await Completion().CompleteAsync(Attempt(admission: new SignInAdmission.Invite(TenantId: null)));
+
+        _members.Verify(m => m.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _totp.Verify(t => t.CreateStepUpTokenAsync(_subjectId, null, true));
+    }
+
+    [Fact]
+    public async Task A_non_member_with_an_authenticator_is_refused_before_the_gate_and_is_minted_no_step_up_token()
+    {
+        NotAMember();
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Totp));
+
+        outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
+        _steps.Should().Equal("admission", "audit:failed_auth");
+        _totp.Verify(t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+        _sessions.Verify(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var row = _rows.Single();
+        row.Subject.Should().Be(_subjectId);
+        row.Success.Should().BeFalse();
+        row.Details.GetRawText().Should().Be("""{"method":"totp","reason":"not_a_member"}""");
+    }
+
+    [Fact]
+    public async Task A_verified_code_satisfies_the_gate_without_asking_whether_one_is_owed()
+    {
+        var outcome = await Completion().CompleteAsync(
+            Attempt(SignInMethod.Totp, secondFactor: new SecondFactorProof.CodeVerified(
+                new TotpLoginResult(_subjectId, "rhys", "Rhys", _tenantId, AdmittedByInvite: false))));
+
+        outcome.Should().BeOfType<SignInOutcome.SignedIn>().Which.TrustedDevice.Should().BeFalse();
+        _totp.Verify(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
+        _rows.Single().Details.GetRawText().Should().Be("""{"method":"totp"}""");
+    }
+
+    [Fact]
+    public async Task A_failed_last_login_write_yields_no_outcome_and_leaves_a_refresh_token_that_is_never_delivered()
+    {
+        _subjects.Setup(s => s.UpdateLastLoginAsync(_subjectId)).ThrowsAsync(new DbUpdateException("down"));
+
+        var act = () => Completion().CompleteAsync(Attempt());
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _sessions.Verify(s => s.IssueSessionAsync(_subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _rows.Should().BeEmpty("a sign-in that did not finish is not logged as one");
+    }
+
+    [Fact]
+    public async Task A_session_sets_the_session_cookies_and_the_sign_in_hint()
+    {
+        var context = new DefaultHttpContext();
+
+        await context.ApplySignInAsync(
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.Passkey, null), new OidcOptions());
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{new OidcOptions().Cookie.AccessTokenName}=access");
+        setCookie.Should().Contain($"{new OidcOptions().Cookie.RefreshTokenName}=refresh");
+        setCookie.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey");
+    }
+
+    [Fact]
+    public async Task A_provider_sign_in_hint_names_the_provider()
+    {
+        var context = new DefaultHttpContext();
+        var providerId = Guid.NewGuid();
+
+        await context.ApplySignInAsync(
+            new SignInOutcome.SecondFactorRequired(_subjectId, "t", SignInMethod.Oidc, providerId), new OidcOptions());
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=oidc%3A{providerId}");
+        setCookie.Should().NotContain(new OidcOptions().Cookie.AccessTokenName, "a code is still owed");
+    }
+
+    [Fact]
+    public async Task The_code_step_sets_the_session_cookies_and_leaves_the_hint_the_primary_factor_wrote()
+    {
+        var context = new DefaultHttpContext();
+
+        await context.ApplySignInAsync(
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.Totp, null), new OidcOptions());
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{new OidcOptions().Cookie.AccessTokenName}=access");
+        setCookie.Should().NotContain(SessionCookieExtensions.LastSignInCookieName);
+    }
+
+    [Fact]
+    public async Task A_refusal_sets_no_cookie()
+    {
+        var context = new DefaultHttpContext();
+
+        await context.ApplySignInAsync(new SignInOutcome.Refused(SignInRefusal.NotAMember), new OidcOptions());
+
+        context.Response.Headers.SetCookie.ToString().Should().BeEmpty();
+    }
+}
