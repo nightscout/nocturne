@@ -163,6 +163,7 @@ public class V4BulkValidationTests
         [typeof(MeterGlucoseController)] = new("Meter glucose", "reading", "readings"),
         [typeof(NoteController)] = new("Note", "note", "notes"),
         [typeof(SensorGlucoseController)] = new("Sensor glucose", "reading", "readings"),
+        [typeof(TempBasalController)] = new("Temp basal", "temp basal", "temp basals"),
     };
 
     /// <summary>
@@ -262,7 +263,6 @@ public class V4BulkValidationTests
         Rejected((await ApsController().CreateApsSnapshots([])).Result, "APS snapshot data is required");
         Rejected((await PumpController().CreatePumpSnapshots([])).Result, "Pump snapshot data is required");
         Rejected((await UploaderController().CreateUploaderSnapshots([])).Result, "Uploader snapshot data is required");
-        Rejected((await TempBasals().CreateTempBasals([])).Result, "Temp basal data is required");
     }
 
     [Fact]
@@ -274,9 +274,6 @@ public class V4BulkValidationTests
         Rejected(
             (await UploaderController().CreateUploaderSnapshots(Fill(1001, () => new UpsertUploaderSnapshotRequest()))).Result,
             "Bulk operations are limited to 1000 snapshots per request");
-        Rejected(
-            (await TempBasals().CreateTempBasals(Fill(1001, () => new CreateTempBasalRequest()))).Result,
-            "Bulk operations are limited to 1000 temp basals per request");
     }
 
     [Fact]
@@ -516,9 +513,6 @@ public class V4BulkValidationTests
 
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
-
-    private static TempBasalController TempBasals() =>
-        WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));
 
     private static ActivityController Activities(Mock<IActivityService> service) =>
         WithContext(new ActivityController(service.Object, Mock.Of<IActivityDecomposer>()));
