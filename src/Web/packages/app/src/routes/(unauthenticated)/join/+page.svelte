@@ -158,6 +158,14 @@
     }
   }
 
+  // The member is already signed in here, so the step cannot hold the join up: it skips itself
+  // wherever it does not apply.
+  function askForRecoveryEmail() {
+    const params = new URLSearchParams({ next: withWelcome(resolve("")) });
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- a fixed same-origin route
+    return goto(`/join/recovery-email?${params.toString()}`, { replace: true });
+  }
+
   function goHome(joined = false) {
     const home = resolve("");
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved above; the welcome marker only adds a query
@@ -210,7 +218,7 @@
       <Card.Content>
         <RecoveryCodes
           codes={recoveryCodes}
-          onContinue={() => goHome(true)}
+          onContinue={askForRecoveryEmail}
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>

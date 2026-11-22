@@ -78,6 +78,7 @@ public class GuestLinkService : IGuestLinkService
         string label,
         string baseUrl,
         IReadOnlySet<string> creatorScopes,
+        DateTime? expiresNoLaterThan,
         IEnumerable<string>? scopes = null,
         bool limitTo24Hours = false,
         CancellationToken ct = default)
@@ -96,6 +97,7 @@ public class GuestLinkService : IGuestLinkService
         var code = GenerateCode();
         var hash = CredentialHash.GuestCode(code);
         var now = DateTime.UtcNow;
+        var expiresAt = expiresNoLaterThan is { } cap && cap < now + LinkLifetime ? cap : now + LinkLifetime;
 
         var grantId = await _grants.CreateAsync(
             new NewOAuthGrant(
@@ -106,7 +108,7 @@ public class GuestLinkService : IGuestLinkService
                 label,
                 TokenHash: hash,
                 LegacySecretHash: null,
-                ExpiresAt: now + LinkLifetime,
+                ExpiresAt: expiresAt,
                 limitTo24Hours,
                 CreatedBySubjectId: createdBySubjectId),
             ct);

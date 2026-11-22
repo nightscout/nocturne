@@ -216,7 +216,7 @@ public class AlertAcknowledgementServiceTests
     {
         _members
             .Setup(m => m.GetMemberAccessAsync(subjectId, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantMemberAccess(membership.ToHashSet(), LimitTo24Hours: false));
+            .ReturnsAsync(new TenantMemberAccess(membership.ToHashSet(), LimitTo24Hours: false, null));
         return new AlertAcknowledgementAuthority(subjectId, credentialScopes.ToHashSet());
     }
 

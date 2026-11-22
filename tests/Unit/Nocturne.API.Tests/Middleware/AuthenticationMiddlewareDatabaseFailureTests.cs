@@ -62,6 +62,7 @@ public class AuthenticationMiddlewareDatabaseFailureTests
             .AddSingleton(contexts.Object)
             .AddTransient<ITenantMembershipRepository, TenantMembershipRepository>()
             .AddSingleton(AccountLinkRoutes.Off)
+            .AddSingleton(TimeProvider.System)
             .BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

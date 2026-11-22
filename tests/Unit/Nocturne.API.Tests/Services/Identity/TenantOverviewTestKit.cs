@@ -34,7 +34,8 @@ internal static class TenantOverviewTestKit
         List<string>? directPermissions = null,
         bool tenantActive = true,
         bool limitTo24Hours = false,
-        DateTime? lastReadingAt = null)
+        DateTime? lastReadingAt = null,
+        DateTime? accessEndsAt = null)
     {
         using var db = new NocturneDbContext(options);
         var tenant = new TenantEntity
@@ -57,6 +58,7 @@ internal static class TenantOverviewTestKit
             SubjectId = subjectId,
             DirectPermissions = directPermissions,
             LimitTo24Hours = limitTo24Hours,
+            AccessEndsAt = accessEndsAt,
         };
         db.TenantMembers.Add(member);
 

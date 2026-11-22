@@ -13,6 +13,8 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ClockIcon from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
+  import { createOverlayReveal } from "#lib/utils/overlay-reveal.svelte.js";
   import ClockFaceRenderer from "#lib/components/clock/ClockFaceRenderer.svelte";
   import ClockAlertBand from "#lib/components/clock/ClockAlertBand.svelte";
   import { formatClockTime } from "#lib/components/clock/clock-time.js";
@@ -98,43 +100,7 @@
   // Show time based on configuration
   const showTime = $derived(clockConfig?.settings?.alwaysShowTime || isStale);
 
-  // Touch has no hover, so a tap shows the navigation bar for a few seconds. While the last
-  // pointer was a touch and the bar is hidden, it takes no taps. A key press hands the bar
-  // back to the keyboard.
-  const NAV_REVEAL_MS = 4000;
-  let navRevealed = $state(false);
-  let touchInput = $state(false);
-  let navHideTimer: ReturnType<typeof setTimeout> | undefined;
-  // A screen whose primary pointer is fine still lets a tap land on the hidden bar: the tap
-  // that reveals it must not also press the button under it.
-  let tapRevealedNav = false;
-
-  function handlePointerDown(event: PointerEvent) {
-    touchInput = event.pointerType !== "mouse";
-    tapRevealedNav = touchInput && !navRevealed;
-    if (!touchInput) return;
-    navRevealed = true;
-    clearTimeout(navHideTimer);
-    navHideTimer = setTimeout(() => navRevealed = false, NAV_REVEAL_MS);
-  }
-
-  function handlePointerMove(event: PointerEvent) {
-    if (event.pointerType === "mouse") touchInput = false;
-  }
-
-  function handleKeyDown() {
-    touchInput = false;
-    tapRevealedNav = false;
-  }
-
-  function handleNavClickCapture(event: MouseEvent) {
-    if (!tapRevealedNav) return;
-    tapRevealedNav = false;
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  $effect(() => () => clearTimeout(navHideTimer));
+  const reveal = createOverlayReveal();
 
   const showAlerts = $derived(clockConfig?.settings?.showAlerts ?? false);
   $effect(() => {
@@ -151,9 +117,9 @@
 <svelte:body class:embed-transparent={embed}></svelte:body>
 
 <svelte:window
-  onpointerdown={handlePointerDown}
-  onpointermove={handlePointerMove}
-  onkeydown={handleKeyDown}
+  onpointerdown={reveal.pointerdown}
+  onpointermove={reveal.pointermove}
+  onkeydown={reveal.keydown}
 ></svelte:window>
 
 {#if loading}
@@ -175,22 +141,11 @@
   </div>
 {:else if clockConfig}
   {#if !embed}
-  <!-- Navigation overlay: shows on hover, or for a few seconds after a tap. On a coarse pointer
-       each button's ::before widens its tap target to 44px. -->
-  <div
-    data-testid="clock-nav"
-    data-revealed={navRevealed}
-    inert={touchInput && !navRevealed}
-    onclickcapture={handleNavClickCapture}
-    class="fixed inset-x-0 top-0 z-50 flex items-center justify-between p-4
-           bg-linear-to-b from-black/50 to-transparent
-           transition-opacity duration-300 hover:opacity-100 focus-within:opacity-100
-           {navRevealed ? 'opacity-100' : 'opacity-0 pointer-coarse:pointer-events-none'}"
-    >
+  <!-- Navigation overlay: shows on hover, or for a few seconds after a tap. -->
+  <RevealableOverlay {reveal} data-testid="clock-nav">
       <Button
         variant="overlay"
         size="sm"
-        class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
         onclick={() => goto(resolve('clock'))}
       ><ArrowLeft class="size-4" />Back</Button>
 
@@ -204,7 +159,6 @@
           <Button
             variant="overlay"
             size="sm"
-            class="relative pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5 pointer-coarse:before:content-['']"
             onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
         >
           <Settings class="size-4" />
@@ -212,7 +166,7 @@
         </Button>
         {/if}
       </div>
-    </div>
+    </RevealableOverlay>
   {/if}
 
   <!-- Clock Display -->

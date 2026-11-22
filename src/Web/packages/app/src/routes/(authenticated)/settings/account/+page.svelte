@@ -42,6 +42,7 @@
   import LinkedOidcIdentities from "#lib/components/settings/LinkedOidcIdentities.svelte";
   import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
   import TrustedDevices from "#lib/components/settings/TrustedDevices.svelte";
+  import RecoveryEmailSection from "#lib/components/settings/RecoveryEmailSection.svelte";
   import UserProfileCard from "#lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "#lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "#lib/components/account/TotpSetupDialog.svelte";
@@ -495,6 +496,11 @@
            there is nothing to list. -->
       {#if totpCredentials.length > 0}
         <TrustedDevices />
+      {/if}
+
+      <!-- Not rendered where this site cannot send the confirming email, and the tenantless host has no site to send for. -->
+      {#if page.data.tenantless !== true}
+        <RecoveryEmailSection />
       {/if}
 
       <!-- Section 3: Recovery Codes -->

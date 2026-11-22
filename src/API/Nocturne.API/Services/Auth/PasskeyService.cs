@@ -36,6 +36,7 @@ public class PasskeyService : IPasskeyService
     private readonly Fido2Configuration _fido2Config;
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
+    private readonly TimeProvider _time;
 
     /// <param name="passkeys">Repository for the stored passkey credentials.</param>
     /// <param name="subjects">Repository for finding the tenant member a username names.</param>
@@ -45,6 +46,7 @@ public class PasskeyService : IPasskeyService
     /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
     /// <param name="logger">Logger for credential registration, assertion and removal, and challenge token failures.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
+    /// <param name="timeProvider">The clock a member's end date is judged by.</param>
     public PasskeyService(
         IPasskeyCredentialRepository passkeys,
         ISubjectRepository subjects,
@@ -53,8 +55,10 @@ public class PasskeyService : IPasskeyService
         IDataProtectionProvider dataProtectionProvider,
         Microsoft.Extensions.Options.IOptions<Fido2Configuration> fido2Options,
         ILogger<PasskeyService> logger,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        TimeProvider timeProvider)
     {
+        _time = timeProvider;
         _passkeys = passkeys ?? throw new ArgumentNullException(nameof(passkeys));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _members = members ?? throw new ArgumentNullException(nameof(members));
@@ -242,7 +246,7 @@ public class PasskeyService : IPasskeyService
 
     public async Task<PasskeyAssertionOptions> GenerateAssertionOptionsAsync(string username, Guid tenantId)
     {
-        var subject = await _subjects.FindMemberByUsernameAsync(tenantId, username, activeOnly: true, CancellationToken.None)
+        var subject = await _subjects.FindMemberByUsernameAsync(tenantId, username, activeOnly: true, _time.GetUtcNow().UtcDateTime, CancellationToken.None)
             ?? throw new InvalidOperationException($"No active subject found with username '{username}' in this tenant.");
 
         var credentials = (await _passkeys.GetCredentialIdsAsync(subject.Id, CancellationToken.None))

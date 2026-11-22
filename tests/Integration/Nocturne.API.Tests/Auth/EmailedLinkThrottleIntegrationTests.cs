@@ -60,7 +60,7 @@ public class EmailedLinkThrottleIntegrationTests : ApiIntegrationTestBase
                     services.GetRequiredService<ILoginCodeService>(),
                     services.GetRequiredService<ISubjectRepository>(),
                     delivery,
-                    Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }));
+                    Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }), TimeProvider.System);
                 await links.SendRecoveryLinksAsync(tenant, Address, new AuthAuditActor(null, "test"), null, null, default);
                 return true;
             })));

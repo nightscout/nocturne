@@ -1,12 +1,9 @@
 <script lang="ts">
   import type { TenantOverviewItem } from "@nocturne/api-client";
-  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
-  import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
-  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
-  import { bg, bgDelta, bgLabel } from "#lib/utils/formatting.js";
-  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
-  import { deltaColorClass } from "@nocturne/ui/glucose";
-  import { readingIsNotCurrent } from "./person.js";
+  import { bgDelta, bgLabel } from "#lib/utils/formatting.js";
+  import PersonTrend from "./PersonTrend.svelte";
+  import PersonValue from "./PersonValue.svelte";
+  import { getReadState, isShownAsCurrent } from "./read-state.js";
 
   interface Props {
     person: TenantOverviewItem;
@@ -18,8 +15,8 @@
   const { person, size, deltaUnit = false }: Props = $props();
 
   const latest = $derived(person.latest);
-  const mgdl = $derived(latest?.mgdl);
-  const notCurrent = $derived(readingIsNotCurrent(person));
+  const read = getReadState();
+  const notCurrent = $derived(!isShownAsCurrent(person, read));
   const arrowSize = $derived(size === "lg" ? 22 : 16);
   // The large layout states the unit after the delta. With no delta shown, the value keeps it.
   const unitFollowsDelta = $derived(
@@ -32,24 +29,11 @@
 </script>
 
 <div class="flex items-center gap-2">
-  {#if mgdl != null}
-    <GlucoseValueIndicator
-      displayValue={bg(mgdl)}
-      variant={getGlucoseTileVariant(person.status)}
-      isStale={notCurrent}
-      {size}
-    />
+  <PersonValue {person} {size} />
+  {#if latest?.mgdl != null}
     <span class={unitClass} data-testid="bg-unit">{bgLabel()}</span>
     {#if !notCurrent}
-      {#if latest?.direction}
-        <span
-          role="img"
-          aria-label={getDirectionInfo(latest.direction).label}
-          class="inline-flex items-center {deltaColorClass(latest.direction)}"
-        >
-          <TrendArrow direction={latest.direction} size={arrowSize} />
-        </span>
-      {/if}
+      <PersonTrend {person} size={arrowSize} />
       {#if latest?.delta != null}
         <span
           class="text-sm text-muted-foreground tabular-nums"
@@ -64,7 +48,5 @@
         </span>
       {/if}
     {/if}
-  {:else}
-    <GlucoseValueIndicator displayValue="—" variant="neutral" {size} />
   {/if}
 </div>

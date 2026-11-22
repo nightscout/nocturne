@@ -105,6 +105,7 @@ public class MembershipRequestController(
     public async Task<IActionResult> ApproveRequest(
         Guid id,
         [FromBody] ApproveMembershipRequestRequest request,
+        [FromServices] TimeProvider time,
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
@@ -112,9 +113,13 @@ public class MembershipRequestController(
         if (subjectId == null)
             return Unauthorized();
 
+        var accessEndsAt = HttpContext.InheritAccessEnd(AccessEndRequest.Instant(request.AccessEndsAt));
+        if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, time.GetUtcNow().UtcDateTime) is (var status, var detail))
+            return Problem(detail: detail, statusCode: status);
+
         var result = await membershipRequestService.ApproveRequestAsync(
             id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(),
-            HttpContext.IsCallerHistoryClamped(), ct);
+            accessEndsAt, HttpContext.IsCallerHistoryClamped(), ct);
 
         if (!result.Success)
             return BadRequest(result);
@@ -184,6 +189,8 @@ public class MembershipRequestController(
 }
 
 public record CreateMembershipRequestRequest(string? Message);
-public record ApproveMembershipRequestRequest(List<Guid> RoleIds);
+/// <param name="RoleIds">The roles the new membership holds.</param>
+/// <param name="AccessEndsAt">When the new membership ends; none when omitted, unless the approver's own access ends.</param>
+public record ApproveMembershipRequestRequest(List<Guid> RoleIds, DateTimeOffset? AccessEndsAt = null);
 public record MembershipRequestSettingsDto(bool AllowRequests);
 public record UpdateMembershipRequestSettingsRequest(bool AllowRequests);

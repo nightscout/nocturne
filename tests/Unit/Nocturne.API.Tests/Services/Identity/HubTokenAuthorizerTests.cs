@@ -133,7 +133,7 @@ public class HubTokenAuthorizerTests
                 subjectId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid queriedTenant, CancellationToken _) =>
                 queriedTenant == tenantId
-                    ? new TenantMemberAccess(rolePermissions.ToHashSet(), limitTo24Hours)
+                    ? new TenantMemberAccess(rolePermissions.ToHashSet(), limitTo24Hours, null)
                     : null);
     }
 

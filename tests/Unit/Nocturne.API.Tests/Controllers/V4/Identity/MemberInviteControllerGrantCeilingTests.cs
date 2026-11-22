@@ -2,8 +2,11 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
+using Nocturne.API.Middleware;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
@@ -13,6 +16,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -629,7 +633,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         {
             RoleIds = [_ownerRoleId],
             LimitTo24Hours = true,
-        });
+        }, TimeProvider.System);
 
         ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
     }
@@ -644,7 +648,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         var result = await controller.CreateInvite(new CreateMemberInviteRequest
         {
             DirectPermissions = [Scope.TenantSettings],
-        });
+        }, TimeProvider.System);
 
         ShouldRefuse(result, StatusCodes.Status400BadRequest, AdministratorClampReason);
     }
@@ -755,9 +759,170 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         {
             RoleIds = [_caretakerRoleId],
             LimitTo24Hours = true,
-        });
+        }, TimeProvider.System);
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+    }
+
+    private static readonly DateTimeOffset AccessEndNow = new(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly FakeTimeProvider AccessEndClock = new(AccessEndNow);
+
+    /// <summary>The caller's own membership, as the request authenticated it, ending at <paramref name="accessEndsAt"/>.</summary>
+    private void CallerAccessEndsAt(MemberInviteController controller, DateTime? accessEndsAt) =>
+        new RequestMembership(
+                _callerSubjectId,
+                _tenantId,
+                new MembershipFacts(_callerMemberId, new TenantMemberAccess(AdministratorScopes.ToHashSet(), false, accessEndsAt), null))
+            .StoreOn(controller.HttpContext);
+
+    private async Task<DateTime?> TargetAccessEndAsync() =>
+        (await _dbContext.TenantMembers.AsNoTracking().FirstAsync(m => m.Id == _targetMemberId)).AccessEndsAt;
+
+    private Task<IActionResult> SetTargetAccessEndAsync(MemberInviteController controller, DateTimeOffset? accessEndsAt, Guid? member = null) =>
+        controller.SetMemberAccessEnd(
+            member ?? _targetMemberId, new SetMemberAccessEndRequest(accessEndsAt), AccessEndClock, CancellationToken.None);
+
+    [Fact]
+    public async Task SetMemberAccessEnd_setsMovesAndClearsTheDateForACallerWithNoEnd()
+    {
+        var controller = BuildController(AdministratorScopes);
+
+        (await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(30))).Should().BeOfType<NoContentResult>();
+        (await TargetAccessEndAsync()).Should().Be(AccessEndNow.UtcDateTime.AddDays(30));
+
+        (await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(400))).Should().BeOfType<NoContentResult>();
+        (await TargetAccessEndAsync()).Should().Be(AccessEndNow.UtcDateTime.AddDays(400));
+
+        (await SetTargetAccessEndAsync(controller, null)).Should().BeOfType<NoContentResult>();
+        (await TargetAccessEndAsync()).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_sentTwiceWithSevenFractionalDigits_storesMicrosecondsAndAuditsOnce()
+    {
+        var controller = BuildController(AdministratorScopes);
+        var requested = AccessEndNow.AddDays(30).AddTicks(1234567);
+
+        await SetTargetAccessEndAsync(controller, requested);
+        await SetTargetAccessEndAsync(controller, requested);
+
+        (await TargetAccessEndAsync())!.Value.Ticks.Should().Be(
+            requested.UtcDateTime.Ticks - requested.UtcDateTime.Ticks % TimeSpan.TicksPerMicrosecond,
+            "the column stores microseconds, so the request is cut to them before it is compared");
+        (await _dbContext.AuthAuditLog.AsNoTracking()
+                .CountAsync(r => r.TargetSubjectId == _targetSubjectId && r.EventType == AuthAuditEventType.AccessEndChanged))
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_takesTheInstantInWhateverOffsetItIsSentIn()
+    {
+        var controller = BuildController(AdministratorScopes);
+
+        await SetTargetAccessEndAsync(controller, new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(10)));
+
+        (await TargetAccessEndAsync()).Should().Be(new DateTime(2026, 11, 30, 14, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-60)]
+    public async Task SetMemberAccessEnd_refusesAnEndAtOrBeforeNow(int secondsFromNow)
+    {
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await SetTargetAccessEndAsync(controller, AccessEndNow.AddSeconds(secondsFromNow));
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.PastDetail);
+        (await TargetAccessEndAsync()).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_rejectsEditingTheCallersOwnMembership()
+    {
+        var controller = BuildController(AdministratorScopes);
+
+        var result = await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(1), _callerMemberId);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, SelfEditReason);
+    }
+
+    [Theory]
+    [InlineData(DeviceSubjectFilter.DeviceSubjectName)]
+    [InlineData(PublicSubjectFilter.PublicSubjectName)]
+    public async Task SetMemberAccessEnd_refusesTheSystemSubjects(string subjectName)
+    {
+        var target = await _dbContext.Subjects.FirstAsync(s => s.Id == _targetSubjectId);
+        target.Name = subjectName;
+        target.IsSystemSubject = true;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(1));
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.SystemSubjectDetail);
+        (await TargetAccessEndAsync()).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_refusesAnOwner()
+    {
+        _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantMemberId = _targetMemberId, TenantRoleId = _ownerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(1));
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.OwnerDetail);
+        (await TargetAccessEndAsync()).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_refusesTheOwnerRoleForAMemberWhoseAccessEnds()
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.AccessEndsAt = AccessEndNow.UtcDateTime.AddDays(1);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await controller.SetMemberRoles(
+            _targetMemberId, new SetMemberRolesRequest([_ownerRoleId]), _publicAccessCache, CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.ClearBeforeOwnerDetail);
+        (await _dbContext.TenantMemberRoles.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_byACallerWhoseAccessEnds_allowsAnEndNoLaterThanTheirs()
+    {
+        var controller = BuildController(AdministratorScopes);
+        CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
+
+        (await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(10))).Should().BeOfType<NoContentResult>();
+        (await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(3))).Should().BeOfType<NoContentResult>();
+        (await TargetAccessEndAsync()).Should().Be(AccessEndNow.UtcDateTime.AddDays(3));
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_byACallerWhoseAccessEnds_refusesALaterEndOrNone()
+    {
+        var controller = BuildController(AdministratorScopes);
+        CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
+
+        ShouldRefuse(
+            await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(11)),
+            StatusCodes.Status403Forbidden, HttpContextExtensions.AccessEndCeilingDetail);
+        ShouldRefuse(
+            await SetTargetAccessEndAsync(controller, null),
+            StatusCodes.Status403Forbidden, HttpContextExtensions.AccessEndCeilingDetail);
+        (await TargetAccessEndAsync()).Should().BeNull();
     }
 
     public void Dispose() => _dbContext.Dispose();

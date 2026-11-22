@@ -9,6 +9,7 @@
   import { resolve } from "$app/paths";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
@@ -35,6 +36,8 @@
     canEditRoles: boolean;
     canManage: boolean;
     canViewHistory?: boolean;
+    /** The viewer holds members.manage, the only one the API tells who has no confirmed recovery email. */
+    canSeeRecoveryEmail?: boolean;
     isExpanded: boolean;
     isSaving: boolean;
     saveError?: string | null;
@@ -50,6 +53,7 @@
     canEditRoles = false,
     canManage = false,
     canViewHistory = false,
+    canSeeRecoveryEmail = false,
     isExpanded = false,
     isSaving = false,
     saveError = null,
@@ -152,6 +156,18 @@
               {role.name ?? role.slug ?? "Unknown"}
             </Badge>
           {/each}
+          {#if canSeeRecoveryEmail && member.hasConfirmedRecoveryEmail === false}
+            <Tooltip.Provider>
+              <Tooltip.Root>
+                <Tooltip.Trigger variant="term">
+                  <Badge variant="outline">No recovery email</Badge>
+                </Tooltip.Trigger>
+                <Tooltip.Content class="max-w-64 text-left">
+                  This member has no confirmed recovery email. If they lose their sign-in, they cannot use a link sent by email to get back in.
+                </Tooltip.Content>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          {/if}
           {#if member.directPermissions?.length}
             <Badge variant="outline">
               {member.directPermissions.length} direct permission{member

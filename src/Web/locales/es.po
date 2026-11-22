@@ -236,6 +236,7 @@ msgstr "Alta urgente"
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
@@ -258,6 +259,7 @@ msgstr "Bajo"
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
@@ -508,6 +510,7 @@ msgid "Verification code"
 msgstr "Código de verificación"
 
 #: ../portal/src/routes/studio/+page.svelte
+#: src/lib/components/account/RecoveryEmailForm.svelte
 #: src/lib/components/account/TotpSetupDialog.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/admin/RoleDialog.svelte
@@ -1881,6 +1884,7 @@ msgid "<0/> Complete"
 msgstr "<0/> Completar"
 
 #: src/lib/components/auth/RecoveryCodes.svelte
+#: src/routes/(unauthenticated)/join/recovery-email/+page.svelte
 msgid "Continue"
 msgstr "Continuar"
 
@@ -2134,6 +2138,7 @@ msgstr "Altura: {0}px"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
+#: src/lib/components/settings/RecoveryEmailSection.svelte
 #: src/lib/components/settings/TrustedDevices.svelte
 msgid "<0/> Remove"
 msgstr "<0/> Eliminar"
@@ -2860,6 +2865,7 @@ msgstr "No hay fuentes de datos disponibles"
 msgid "There are no data sources available at this time."
 msgstr "No hay fuentes de datos disponibles en este momento."
 
+#: src/lib/components/account/RecoveryEmailForm.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
@@ -3324,6 +3330,7 @@ msgstr "Alertas"
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/layout/BackupSignInPrompt.svelte
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealSuggestionRow.svelte
 #: src/lib/components/members/JoinWelcome.svelte
@@ -5852,6 +5859,7 @@ msgstr "<0/> Intentar de nuevo"
 #: src/lib/components/alerts/HistoryCheck.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 #: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -15619,11 +15627,17 @@ msgstr "Generado {0}"
 msgid "Active alerts ({0})"
 msgstr "Alertas activas ({0})"
 
+#. 0: bg(bounds.urgentLow); 1: bg(bounds.low)
+#. 0: bg(bounds.low); 1: bg(bounds.high)
+#. 0: bg(bounds.high); 1: bg(bounds.urgentHigh)
 #. 0: span.from; 1: span.to
 #. 0: from; 1: to
 #. 0: relativeMinutes(slotMinute(minutes, slot)); 1: relativeMinutes(slotMinute(minutes, slot + 1))
 #. 0: mFrom; 1: mTo
 #. 0: rFrom; 1: rTo
+#: src/lib/components/people/WallLegend.svelte
+#: src/lib/components/people/WallLegend.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
@@ -21717,6 +21731,7 @@ msgstr "Elevado"
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
@@ -22595,6 +22610,7 @@ msgid "Metric"
 msgstr "Métrica"
 
 #: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/settings/RecoveryEmailSection.svelte
 #: src/routes/(authenticated)/reports/comparison/ComparisonReport.svelte
 #: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
@@ -23722,6 +23738,7 @@ msgstr "No hubo bajadas de 15 minutos o más durante esta sesión"
 #: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
@@ -23943,6 +23960,7 @@ msgstr "Hora"
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
+#: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -38905,6 +38923,7 @@ msgstr "<0/>Eliminar datos de demostración"
 msgid "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0> ."
 msgstr "Los intervalos programados se interpretan según tu zona horaria, configurada en tu <0>ficha del paciente</0>."
 
+#: src/lib/components/people/PeopleWall.svelte
 #: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 #: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "<0/>Back"
@@ -46139,6 +46158,7 @@ msgstr[1] ""
 #~ msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "The list of people did not load."
 msgstr ""
 
@@ -46156,7 +46176,9 @@ msgid "Person"
 msgstr ""
 
 #. 0: bgLabel()
+#. 0: bgLabel()
 #: src/lib/components/people/PeopleRoster.svelte
+#: src/lib/components/people/WallLegend.svelte
 msgid "Glucose, {0}"
 msgstr ""
 
@@ -46338,6 +46360,7 @@ msgid "Statistics for {0}."
 msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "Readings refresh every minute."
 msgstr ""
 
@@ -46466,6 +46489,7 @@ msgid "Recent entries"
 msgstr ""
 
 #: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/PeopleWall.svelte
 msgid "Readings update as they arrive."
 msgstr ""
 
@@ -47519,4 +47543,170 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "No member changes are recorded."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "<0/> Wall display"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "People wall display - Nocturne"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "People wall display"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "You do not follow anyone."
+msgstr ""
+
+#. 0: time(lastRead.at)
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Connection lost. Showing readings from {0}."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Loading the list of people."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "# more person is not shown."
+msgid_plural "# more people are not shown."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "This person is flagged."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "# of them is flagged."
+msgid_plural "# of them are flagged."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: bg(bounds.urgentLow)
+#: src/lib/components/people/WallLegend.svelte
+msgid "Below {0}"
+msgstr ""
+
+#. 0: bg(bounds.urgentHigh)
+#: src/lib/components/people/WallLegend.svelte
+msgid "Above {0}"
+msgstr ""
+
+#: src/lib/components/people/WallLegend.svelte
+msgid "Ranges are each person's own."
+msgstr ""
+
+#: src/routes/(unauthenticated)/join/recovery-email/+page.svelte
+msgid "Recovery email - Nocturne"
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
+#: src/routes/(unauthenticated)/join/recovery-email/+page.svelte
+msgid "Add a recovery email"
+msgstr ""
+
+#: src/routes/(unauthenticated)/join/recovery-email/+page.svelte
+msgid "If you lose this device, we send a link to your recovery email so you can get back in. You can skip this and add it later in account settings."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+#: src/routes/(unauthenticated)/join/recovery-email/+page.svelte
+msgid "Save and send confirmation"
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailForm.svelte
+msgid "We could not save your recovery email. Check the address and try again."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailForm.svelte
+msgid "This site cannot send email, so it cannot confirm a recovery email."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailForm.svelte
+msgid "Recovery email"
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailOutcomeNotice.svelte
+msgid "We sent a link to your address. Follow the link to confirm it."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailOutcomeNotice.svelte
+msgid "We saved your address. We sent a link a short time ago, so we did not send another. Wait a couple of minutes, then select Resend."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailOutcomeNotice.svelte
+msgid "We saved your address. We sent a link a short time ago, so we did not send another. In a couple of minutes, you can send a link from account settings."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailOutcomeNotice.svelte
+msgid "We saved your address, but we could not send the link. Try Resend later."
+msgstr ""
+
+#: src/lib/components/account/RecoveryEmailOutcomeNotice.svelte
+msgid "We saved your address, but we could not send the link. Later, you can send a link from account settings."
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
+msgid "Confirm your recovery email"
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
+msgid "Your recovery email is not confirmed. Open recovery email settings to send a new link."
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
+msgid "If you lose your sign-in, we send a link to your recovery email so you can get back in. Add an address that only you can read."
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPrompt.svelte
+msgid "Recovery email settings"
+msgstr ""
+
+#: src/lib/components/layout/RecoveryEmailPromptMarker.test.svelte
+msgid "marker"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "No recovery email"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "This member has no confirmed recovery email. If they lose their sign-in, they cannot use a link sent by email to get back in."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "We could not send the link. Try again in a few minutes."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "We sent a link a short time ago. Wait a few minutes, then try again."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "We could not remove your recovery email. Try again."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "<0/> Recovery email"
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "If you lose your sign-in, we send a link to this address so you can get back in. Use an address that only you can read."
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "Confirmed"
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "Not confirmed yet"
+msgstr ""
+
+#: src/lib/components/settings/RecoveryEmailSection.svelte
+msgid "<0/> Resend"
 msgstr ""
