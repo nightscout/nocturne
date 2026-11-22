@@ -2024,6 +2024,7 @@ msgstr ""
 msgid "{0}m"
 msgstr ""
 
+#. 0: editor.glucoseFreshnessMinutes
 #. 0: m
 #. 0: bolusCalc.preBolus
 #. 0: minutes
@@ -2032,6 +2033,7 @@ msgstr ""
 #. 0: Math.round(value)
 #. 0: min
 #. 0: therapy.delay ?? "-"
+#: src/lib/components/alerts/AdvancedSection.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
@@ -6253,8 +6255,9 @@ msgstr ""
 #~ msgid "Credentials"
 #~ msgstr ""
 
-#~ msgid "Advanced"
-#~ msgstr ""
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Advanced"
+msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
@@ -46770,4 +46773,61 @@ msgstr ""
 
 #: src/lib/components/settings/RecoveryEmailSection.svelte
 msgid "<0/> Resend"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Wait"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Count the condition as true"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Count the condition as false"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The rule does not change the alert. It opens no alert, and it does not close an open alert, until it knows again. A true auto-resolve condition can still close the alert."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The rule counts its full condition as true. It can open an alert because data is missing. A “for N minutes” part does not delay this alert."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The rule counts its full condition as false. An open alert closes as it does when the condition stops being true. A condition that uses “not” also counts as false when data is missing."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The choices could not be loaded."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "If your data source sends readings less often than every 5 minutes, set a bound for this rule. Make it at least the time between two readings plus the time a reading can be late. If you do not: with “Count the condition as true”, the rule can open an alert between two readings that arrive on time. With “Count the condition as false”, it can close an open alert between them."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "When data is missing"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "These choices apply only when missing data stops the rule from knowing whether its full condition is true. If the other parts of the condition give a result, the rule uses that result."
+msgstr ""
+
+#. 0: defaultBound
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The default is {0} minutes. Leave the field empty to use the default."
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Minutes until a glucose reading counts as missing"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "The rule counts a glucose reading as missing when Nocturne received it more than this number of minutes ago. This applies to conditions on the glucose value, rate of change, trend and glucose range. It does not apply to signal loss, data age, predicted glucose or Smart snooze conditions. <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/AdvancedSection.svelte
+msgid "Use the default"
 msgstr ""
