@@ -61,6 +61,7 @@ msgstr "Desconectado"
 msgid "Using cached data"
 msgstr "Usando datos almacenados"
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/connectors/ConnectionStatusLabel.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorSelectionGrid.svelte
@@ -288,6 +289,7 @@ msgstr "Usuario"
 msgid "Failed to load session"
 msgstr "No se pudo cargar la sesión"
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/layout/GuestBanner.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
@@ -4830,6 +4832,7 @@ msgstr "Pico"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -14631,6 +14634,7 @@ msgid "NOT"
 msgstr "NOT"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -42416,6 +42420,7 @@ msgstr "Medida"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "Minutes, optional"
 msgstr "Minutos, opcional"
 
@@ -48268,27 +48273,20 @@ msgstr ""
 msgid "Time zone"
 msgstr ""
 
-#. 0: formatDateTimeCompact(hold.since)
-#: src/lib/components/alerts/holdText.svelte.ts
-msgid "Waiting for data since {0}."
-msgstr ""
+#~ msgid "Waiting for data since {0}."
+#~ msgstr ""
 
-#: src/lib/components/alerts/holdText.svelte.ts
-msgid "Waiting for data."
-msgstr ""
+#~ msgid "Waiting for data."
+#~ msgstr ""
 
-#: src/lib/components/alerts/holdText.svelte.ts
-msgid "This alert stays open while its data is missing. It closes after 24 hours of missing data."
-msgstr ""
+#~ msgid "This alert stays open while its data is missing. It closes after 24 hours of missing data."
+#~ msgstr ""
 
-#: src/lib/components/alerts/holdText.svelte.ts
-msgid "Closed because its data was missing for 24 hours."
-msgstr ""
+#~ msgid "Closed because its data was missing for 24 hours."
+#~ msgstr ""
 
-#. 0: holdSinceText(hold)
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
-msgid "{0} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert."
-msgstr ""
+#~ msgid "{0} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert."
+#~ msgstr ""
 
 #. 0: memberFirst; 1: entry.inviteLabel; 2: by
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
@@ -48699,4 +48697,56 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Teams"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Only for No value. The other states have no start time."
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Warm-up"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Calibration necessary"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "No value"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Sensor state"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The CGM sensor reports a state, for example warm-up or an error"
+msgstr ""
+
+#. 0: formatDateTimeCompact(hold.since)
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Waiting for usable data since {0}."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Waiting for usable data."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "This alert stays open while it has no usable data. It closes after 24 hours with no usable data."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Closed because it had no usable data for 24 hours."
+msgstr ""
+
+#. 0: formatList(p.states.map(sensorStateLabel), "disjunction")
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Sensor state: {0}"
+msgstr ""
+
+#. 0: holdSinceText(hold)
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "{0} This rule cannot open an alert until usable data comes back. After 24 hours with no usable data, Nocturne closes an open alert."
 msgstr ""
