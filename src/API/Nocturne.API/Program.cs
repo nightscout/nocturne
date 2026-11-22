@@ -127,6 +127,11 @@ else
 
 builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
+builder.Services.AddV4Repositories();
+builder.Services.AddHealthRepositories();
+builder.Services.AddFoodRepositories();
+builder.Services.AddNotificationAndEventRepositories();
+builder.Services.AddAuditRepositories();
 
 builder.Services.AddDataProtection()
     // Never change this string. It is part of the root purpose for every payload, and TOTP secrets

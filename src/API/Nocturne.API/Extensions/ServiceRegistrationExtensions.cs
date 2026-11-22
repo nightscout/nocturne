@@ -590,7 +590,6 @@ public static class ServiceRegistrationExtensions
         services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
-        services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
         services.AddScoped<ISubjectService, SubjectService>();
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IRoleService, RoleService>();
@@ -770,10 +769,6 @@ public static class ServiceRegistrationExtensions
         // Core domain services
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<ITreatmentStore, TreatmentReadService>();
-        services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadStore, Nocturne.Infrastructure.Data.Repositories.RejectedUploadRepository>();
-        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditLogReader, Nocturne.Infrastructure.Data.Repositories.AuditLogReader>();
-        services.AddScoped<Nocturne.Core.Contracts.Multitenancy.IMemberHistoryReader, Nocturne.Infrastructure.Data.Repositories.MemberHistoryReader>();
-        services.AddScoped<Nocturne.Core.Contracts.Audit.IAuditConfigStore, Nocturne.Infrastructure.Data.Repositories.AuditConfigRepository>();
         services.AddScoped<Nocturne.Core.Contracts.Uploads.IRejectedUploadRecorder, Nocturne.API.Services.Uploads.RejectedUploadRecorder>();
         services.AddScoped<ITreatmentCache, TreatmentCacheAdapter>();
         services.AddScoped<SignalRTreatmentEventSink>();
@@ -867,7 +862,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
-        services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
         services.AddScoped<IMealReadService, MealReadService>();
 
@@ -955,50 +949,11 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
-    /// V4 repositories, snapshot repositories, profile repositories,
-    /// patient record repositories, AID detection, and decomposition pipeline.
+    /// Glucose processing, AID detection and the decomposition pipeline. Infrastructure registers
+    /// the V4 repositories.
     /// </summary>
     public static IServiceCollection AddV4Infrastructure(this IServiceCollection services)
     {
-        // V4 Repositories
-        services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
-        services.AddScoped<IMeterGlucoseRepository, MeterGlucoseRepository>();
-        services.AddScoped<ICalibrationRepository, CalibrationRepository>();
-        services.AddScoped<IBolusRepository, BolusRepository>();
-        services.AddScoped<IBasalInjectionRepository, BasalInjectionRepository>();
-        services.AddScoped<ITempBasalRepository, TempBasalRepository>();
-        services.AddScoped<IProfileActivationRepository, ProfileActivationRepository>();
-        services.AddScoped<ICarbIntakeRepository, CarbIntakeRepository>();
-        services.AddScoped<IBGCheckRepository, BGCheckRepository>();
-        services.AddScoped<INoteRepository, NoteRepository>();
-        services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
-        services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
-        services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
-        services.AddScoped<IDeviceRepository, DeviceRepository>();
-
-        // Manually-entered lab results (outside the V4 sync/dedup family)
-        services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
-        services.AddScoped<IReportSpecRepository, ReportSpecRepository>();
-
-        // V4 Snapshot Repositories
-        services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
-        services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
-        services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
-        services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
-        services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
-
-        // V4 Profile Repositories
-        services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();
-        services.AddScoped<IBasalScheduleRepository, BasalScheduleRepository>();
-        services.AddScoped<ICarbRatioScheduleRepository, CarbRatioScheduleRepository>();
-        services.AddScoped<ISensitivityScheduleRepository, SensitivityScheduleRepository>();
-        services.AddScoped<ITargetRangeScheduleRepository, TargetRangeScheduleRepository>();
-
-        // V4 Patient Record Repositories
-        services.AddScoped<IPatientRecordRepository, PatientRecordRepository>();
-        services.AddScoped<IPatientDeviceRepository, PatientDeviceRepository>();
-        services.AddScoped<IPatientInsulinRepository, PatientInsulinRepository>();
-
         // Glucose processing
         services.AddScoped<IGlucoseProcessingConfigProvider, GlucoseProcessingConfigProvider>();
         services.AddScoped<IGlucoseProcessingResolver, GlucoseProcessingResolver>();
@@ -1085,7 +1040,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IOpenApsService, OpenApsService>();
 
         // In-app notifications
-        services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
         services.AddScoped<IInAppNotificationService, InAppNotificationService>();
         services.AddScheduledJob<NotificationResolutionJob>();
         services.AddScheduledJob<NotificationCleanupJob>();
@@ -1116,7 +1070,6 @@ public static class ServiceRegistrationExtensions
     )
     {
         // Compression low detection
-        services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
         services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
         services.AddScoped<ICompressionLowService, CompressionLowService>();
         services.AddSingleton<CompressionLowDetectionService>();

@@ -1,9 +1,5 @@
 using FluentAssertions;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Nocturne.API.Tests.Integration.Infrastructure;
-using Nocturne.Core.Constants;
 using Xunit;
 
 namespace Nocturne.API.Tests.Integration;
@@ -44,24 +40,9 @@ public class AlertRegistrationGuardTests(ServiceProviderValidationTests.Migrated
     [Fact]
     public async Task NoAlertOrTrackerServiceTypeIsRegisteredTwiceWithoutAReason()
     {
-        var database = fixture.Database;
-        List<ServiceDescriptor>? captured = null;
+        var captured = await RegisteredServices.CaptureAsync(fixture);
 
-        await using var factory = new ApiFactory().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Production");
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}", database.AppConnectionString);
-            builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
-            builder.UseSetting("INSTANCE_KEY", "di-validation-instance-key-of-at-least-32-chars");
-            builder.UseSetting("BASE_DOMAIN", "localhost");
-            builder.UseSetting("DemoService:Enabled", "false");
-            builder.ConfigureTestServices(services => captured = [.. services]);
-        });
-
-        _ = factory.Services;
-
-        captured.Should().NotBeNull("the registrations were captured from the real program");
-        var registrations = captured!.Where(d => !d.IsKeyedService).ToList();
+        var registrations = captured.Where(d => !d.IsKeyedService).ToList();
         var alertTypes = registrations.Where(IsAlertOrTracker).Select(d => d.ServiceType).Distinct().ToList();
         alertTypes.Should().NotBeEmpty();
 
