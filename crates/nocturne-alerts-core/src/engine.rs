@@ -213,9 +213,7 @@ impl TimerOp {
         let mut o = Map::new();
         o.insert("op".into(), self.kind.wire().into());
         o.insert("path".into(), self.path.clone().into());
-        if let Some(at) = self.at {
-            o.insert("at".into(), format_instant(at).into());
-        }
+        o.insert("at".into(), format_instant(self.at).into());
         Value::Object(o)
     }
 }
@@ -319,7 +317,16 @@ pub fn evaluate_parsed_rule(
     state: &mut EngineState,
     log_leaves: bool,
 ) -> RuleOutcome {
-    let outcome = evaluate_body(rule, body, ctx, now, &mut state.timers, log_leaves);
+    let first_evaluation = state.tracker.state(rule.id).is_none() && !state.timers.has_any(rule.id);
+    let outcome = evaluate_body(
+        rule,
+        body,
+        ctx,
+        now,
+        &mut state.timers,
+        first_evaluation.then_some(rule.enabled_at).flatten(),
+        log_leaves,
+    );
     let mut clock_anomaly = outcome.clock_anomaly;
     let config = TrackerRuleConfig {
         hysteresis_minutes: rule.hysteresis_minutes,
@@ -385,17 +392,20 @@ pub(crate) struct BodyOutcome {
 }
 
 /// The root truth of a body read by [`Rule::parse_body`] and, when
-/// `log_leaves`, each leaf alone.
+/// `log_leaves`, each leaf alone. `first_evaluation_bound` is
+/// [`Env::first_evaluation_bound`].
 pub(crate) fn evaluate_body(
     rule: &Rule,
     body: &Node,
     ctx: &SensorContext,
     now: DateTime<Utc>,
     timers: &mut TimerStore,
+    first_evaluation_bound: Option<DateTime<Utc>>,
     log_leaves: bool,
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
-    let mut env = rule_env(rule, ctx, now, timers);
+    let mut env =
+        rule_env(rule, ctx, now, timers).with_first_evaluation_bound(first_evaluation_bound);
     let root = eval_payload(body.payload(), wire, &mut env);
 
     // Leaves evaluate alone, at the rule's root path;

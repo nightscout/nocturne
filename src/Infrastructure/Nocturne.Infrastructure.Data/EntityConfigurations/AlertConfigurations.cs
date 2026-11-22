@@ -51,6 +51,20 @@ internal sealed class AlertConditionTimerEntityConfiguration : IEntityTypeConfig
     }
 }
 
+internal sealed class AlertConditionNotTrueEntityConfiguration : IEntityTypeConfiguration<AlertConditionNotTrueEntity>
+{
+    public void Configure(EntityTypeBuilder<AlertConditionNotTrueEntity> entity)
+    {
+        entity.ToTable("alert_condition_not_true");
+        entity.HasKey(e => new { e.AlertRuleId, e.ConditionPath });
+
+        entity.HasOne(e => e.AlertRule)
+            .WithMany()
+            .HasForeignKey(e => e.AlertRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfiguration<AlertTrackerStateEntity>
 {
     public void Configure(EntityTypeBuilder<AlertTrackerStateEntity> entity)

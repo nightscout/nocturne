@@ -381,6 +381,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<AlertConditionTimerEntity> AlertConditionTimers { get; set; }
 
+    public DbSet<AlertConditionNotTrueEntity> AlertConditionNotTrue { get; set; }
+
     public DbSet<AlertTrackerStateEntity> AlertTrackerState { get; set; }
 
     public DbSet<AlertExcursionEntity> AlertExcursions { get; set; }

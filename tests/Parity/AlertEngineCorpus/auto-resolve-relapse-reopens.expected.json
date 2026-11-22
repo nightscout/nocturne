@@ -150,7 +150,8 @@
           "timer_ops": [
             {
               "op": "clear",
-              "path": "auto_resolve"
+              "path": "auto_resolve",
+              "at": "2026-01-05T12:20:00Z"
             }
           ]
         }
@@ -172,7 +173,14 @@
           "tracker": {
             "state": "active",
             "excursion": 2
-          }
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "auto_resolve",
+              "at": "2026-01-05T12:25:00Z"
+            }
+          ]
         }
       ]
     }

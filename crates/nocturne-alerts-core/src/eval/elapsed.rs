@@ -12,12 +12,16 @@ use crate::enums::CmpOp;
 use crate::model::Payload;
 use crate::truth::Truth;
 
+use super::Held;
+
 /// A wall-clock leaf's truth for one context: fixed whatever `now` is, or an
 /// elapsed time compared with a bound. A leaf without its anchor is fixed, so
 /// an unknown one contributes no next change (engine-semantics.md §5.3).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ClockLeaf {
     Fixed(Truth),
+    /// True, and has been since the span it reads began.
+    Began(DateTime<Utc>),
     Measured(Elapsed),
     /// False until the bound holds, unknown from then on.
     UnknownOnceHeld(Elapsed),
@@ -27,6 +31,7 @@ impl ClockLeaf {
     pub(crate) fn holds(self, now: DateTime<Utc>) -> Truth {
         match self {
             ClockLeaf::Fixed(value) => value,
+            ClockLeaf::Began(_) => Truth::True,
             ClockLeaf::Measured(e) => e.truth(now),
             ClockLeaf::UnknownOnceHeld(e) => match e.truth(now) {
                 Truth::False => Truth::False,
@@ -35,10 +40,21 @@ impl ClockLeaf {
         }
     }
 
+    /// The truth at `now` with the instant it has held since, where the leaf
+    /// knows one (engine-semantics.md §3).
+    pub(crate) fn held(self, now: DateTime<Utc>) -> Held {
+        let since = match self {
+            ClockLeaf::Began(at) => Some(at),
+            ClockLeaf::Measured(e) => e.began(now),
+            ClockLeaf::Fixed(_) | ClockLeaf::UnknownOnceHeld(_) => None,
+        };
+        Held::since(self.holds(now), since)
+    }
+
     /// The comparison whose flips are this leaf's changes.
     pub(crate) fn elapsed(self) -> Option<Elapsed> {
         match self {
-            ClockLeaf::Fixed(_) => None,
+            ClockLeaf::Fixed(_) | ClockLeaf::Began(_) => None,
             ClockLeaf::Measured(e) | ClockLeaf::UnknownOnceHeld(e) => Some(e),
         }
     }
@@ -121,6 +137,28 @@ impl Elapsed {
             .and_then(|_| self.anchor.checked_sub_signed(CLOCK_TOLERANCE))
     }
 
+    /// The first instant at or before `now` from which the comparison has
+    /// held, when it holds at `now` and grows true with the elapsed time
+    /// (`>=`, `>`): the anchor when it held there, else where the elapsed time
+    /// crossed the bound, rounded up to the tick so a host that keeps ticks
+    /// reads no earlier instant. `None` for `<`, `<=` and `==`, which hold
+    /// before a bound rather than from one.
+    pub(crate) fn began(self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        let rising = match self.measure {
+            Measure::AtLeast(_) | Measure::Over(_) => true,
+            Measure::Decimal { op, .. } | Measure::Minutes { op, .. } => {
+                matches!(op, CmpOp::Ge | CmpOp::Gt)
+            }
+        };
+        if !rising || !self.truth(now).is_true() {
+            return None;
+        }
+        if self.reached(self.anchor) {
+            return Some(self.anchor);
+        }
+        first_true_between(self.anchor, now, |t| self.reached(t)).and_then(ceil_to_tick)
+    }
+
     fn compares(self, d: TimeDelta) -> bool {
         match self.measure {
             Measure::Decimal {
@@ -166,6 +204,37 @@ impl Elapsed {
             ..self
         })
     }
+}
+
+/// Bisects `(before, after]`, `holds` false at `before` and true at `after`,
+/// to the nanosecond.
+pub(crate) fn first_true_between(
+    mut before: DateTime<Utc>,
+    mut after: DateTime<Utc>,
+    holds: impl Fn(DateTime<Utc>) -> bool,
+) -> Option<DateTime<Utc>> {
+    while let Some(half) = after.signed_duration_since(before).checked_div(2)
+        && half > TimeDelta::zero()
+    {
+        let mid = before.checked_add_signed(half)?;
+        if holds(mid) {
+            after = mid;
+        } else {
+            before = mid;
+        }
+    }
+    Some(after)
+}
+
+/// `at` rounded up to the 100 ns tick grid ([`crate::next_change::RESOLUTION`]).
+fn ceil_to_tick(at: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    let past_tick = at.timestamp_subsec_nanos() % 100;
+    if past_tick == 0 {
+        return Some(at);
+    }
+    at.checked_add_signed(TimeDelta::nanoseconds(i64::from(
+        100u32.saturating_sub(past_tick),
+    )))
 }
 
 /// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx`, for
@@ -235,7 +304,7 @@ pub(super) fn active_for(
     source: ClockAnchor,
 ) -> ClockLeaf {
     match started_at {
-        Some(at) if is_active => for_minutes.map_or(ClockLeaf::Fixed(Truth::True), |m| {
+        Some(at) if is_active => for_minutes.map_or(ClockLeaf::Began(at), |m| {
             ClockLeaf::Measured(Elapsed::held_for(at, m, source))
         }),
         Some(_) => ClockLeaf::Fixed(Truth::False),

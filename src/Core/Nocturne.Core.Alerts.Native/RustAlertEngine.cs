@@ -117,7 +117,7 @@ public static partial class RustAlertEngine
     }
 
     /// <summary>
-    /// A successful evaluate envelope carries <c>result</c>, <c>timers</c> and <c>tracker</c>,
+    /// A successful evaluate envelope carries <c>result</c>, <c>timers</c>, <c>not_true</c> and <c>tracker</c>,
     /// and a tracker holding a <c>state</c> carries its <c>updated_at</c>.
     /// </summary>
     internal static RustEvaluateResponse ParseEvaluateResponse(string responseJson)
@@ -125,6 +125,7 @@ public static partial class RustAlertEngine
         var response = ParseResponse<RustEvaluateResponse>(responseJson, "evaluate");
         Require(response.Result is not null, "evaluate", "result");
         Require(response.Timers is not null, "evaluate", "timers");
+        Require(response.NotTrue is not null, "evaluate", "not_true");
         Require(response.Tracker is not null, "evaluate", "tracker");
         Require(response.Tracker!.State is null || response.Tracker.UpdatedAt is not null, "evaluate", "tracker.updated_at");
         return response;
@@ -139,7 +140,8 @@ public static partial class RustAlertEngine
         DateTime now,
         IReadOnlyDictionary<string, DateTime>? timers = null,
         RustTrackerState? tracker = null,
-        bool includeLeaves = true)
+        bool includeLeaves = true,
+        IReadOnlyDictionary<string, DateTime>? notTrue = null)
     {
         return Evaluate(new RustEvaluateRequest
         {
@@ -147,6 +149,7 @@ public static partial class RustAlertEngine
             Context = context,
             Now = now,
             Timers = timers is null ? null : new Dictionary<string, DateTime>(timers),
+            NotTrue = notTrue is null ? null : new Dictionary<string, DateTime>(notTrue),
             Tracker = tracker,
             IncludeLeaves = includeLeaves,
         });
@@ -180,7 +183,6 @@ public static partial class RustAlertEngine
         Require(!leavesRequested || result.Leaves is not null, "evaluate", "result.leaves");
         Require(result.Transition is not null, "evaluate", "result.transition");
         Require((result.Transition == RustTransition.Closed) == (result.CloseReason is not null), "evaluate", "result.close_reason");
-        RequireTimerOps(result.TimerOps, "evaluate", "result.timer_ops");
         return result;
     }
 
@@ -200,13 +202,13 @@ public static partial class RustAlertEngine
         return ParseEvaluateNodeResponse(AlertsInterop.EvaluateNode(Serialize(request)));
     }
 
-    /// <summary>A successful evaluate_node envelope carries <c>value</c> and <c>timers</c>.</summary>
+    /// <summary>A successful evaluate_node envelope carries <c>value</c>, <c>timers</c> and <c>not_true</c>.</summary>
     internal static RustEvaluateNodeResponse ParseEvaluateNodeResponse(string responseJson)
     {
         var response = ParseResponse<RustEvaluateNodeResponse>(responseJson, "evaluate_node");
         Require(response.Value is not null, "evaluate_node", "value");
         Require(response.Timers is not null, "evaluate_node", "timers");
-        RequireTimerOps(response.TimerOps, "evaluate_node", "timer_ops");
+        Require(response.NotTrue is not null, "evaluate_node", "not_true");
         return response;
     }
 
@@ -381,12 +383,6 @@ public static partial class RustAlertEngine
                 $"Rust alert engine rejected the {operation} request: {response.Error ?? "(no error message)"}",
                 response.Error);
         return response;
-    }
-
-    private static void RequireTimerOps(List<RustTimerOp>? ops, string operation, string field)
-    {
-        foreach (var op in ops ?? [])
-            Require((op.Op == RustTimerOpKind.Set) == (op.At is not null), operation, $"{field}.at");
     }
 
     private static void Require(bool present, string operation, string field)

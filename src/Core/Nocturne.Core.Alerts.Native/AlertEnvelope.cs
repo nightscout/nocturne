@@ -162,8 +162,12 @@ public sealed record RustEvaluateRequest
     /// <summary>The evaluation instant ("now"), UTC.</summary>
     public required DateTime Now { get; init; }
 
-    /// <summary>Persisted sustained-timer state for this rule: condition path → first-true instant.</summary>
+    /// <summary>Persisted sustained runs for this rule: condition path → first-true instant.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
+
+    /// <summary>Persisted sustained paths with no run: condition path → last not-true instant.</summary>
+    [JsonPropertyName("not_true")]
+    public Dictionary<string, DateTime>? NotTrue { get; init; }
 
     public RustTrackerState? Tracker { get; init; }
 
@@ -204,8 +208,12 @@ public sealed record RustEvaluateResponse : IRustResponseEnvelope
     /// </summary>
     public JsonElement? Result { get; init; }
 
-    /// <summary>Post-evaluation timer state to persist for this rule.</summary>
+    /// <summary>Post-evaluation sustained runs for this rule.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
+
+    /// <summary>Post-evaluation sustained paths with no run, with their last not-true instant.</summary>
+    [JsonPropertyName("not_true")]
+    public Dictionary<string, DateTime>? NotTrue { get; init; }
 
     /// <summary>Post-evaluation tracker state to persist.</summary>
     public RustTrackerState? Tracker { get; init; }
@@ -318,17 +326,20 @@ public sealed record RustLeafValue(
     [property: JsonPropertyName("value")] bool Value,
     [property: JsonPropertyName("unknown")] bool Unknown = false);
 
-/// <summary>One sustained-timer mutation; <see cref="At"/> is present exactly on a <see cref="RustTimerOpKind.Set"/>.</summary>
+/// <summary>One sustained-path mutation.</summary>
 public sealed record RustTimerOp(
     [property: JsonPropertyName("op"), JsonRequired] RustTimerOpKind Op,
     [property: JsonPropertyName("path"), JsonRequired] string Path,
-    [property: JsonPropertyName("at")] DateTime? At);
+    [property: JsonPropertyName("at"), JsonRequired] DateTime At);
 
 /// <summary>Timer op wire values in <see cref="RustTimerOp.Op"/>.</summary>
 [JsonConverter(typeof(StrictStringEnumConverter<RustTimerOpKind>))]
 public enum RustTimerOpKind
 {
+    /// <summary>The path's run started at <see cref="RustTimerOp.At"/>.</summary>
     [JsonStringEnumMemberName("set")] Set,
+
+    /// <summary>The path has no run; its child was last found not true at <see cref="RustTimerOp.At"/>.</summary>
     [JsonStringEnumMemberName("clear")] Clear,
 }
 
@@ -354,8 +365,12 @@ public sealed record RustEvaluateNodeRequest
     /// <summary>The evaluation instant ("now"), UTC.</summary>
     public required DateTime Now { get; init; }
 
-    /// <summary>Persisted sustained-timer state for the rule: condition path → first-true instant.</summary>
+    /// <summary>Persisted sustained runs for the rule: condition path → first-true instant.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
+
+    /// <summary>Persisted sustained paths with no run: condition path → last not-true instant.</summary>
+    [JsonPropertyName("not_true")]
+    public Dictionary<string, DateTime>? NotTrue { get; init; }
 }
 
 /// <summary>Response envelope for <c>nocturne_alerts_evaluate_node</c>.</summary>
@@ -376,8 +391,12 @@ public sealed record RustEvaluateNodeResponse : IRustResponseEnvelope
     /// <summary>The node is unknown; the wire carries it only when true.</summary>
     public bool Unknown { get; init; }
 
-    /// <summary>Post-evaluation timer state to persist for the rule.</summary>
+    /// <summary>Post-evaluation sustained runs for the rule.</summary>
     public Dictionary<string, DateTime>? Timers { get; init; }
+
+    /// <summary>Post-evaluation sustained paths with no run, with their last not-true instant.</summary>
+    [JsonPropertyName("not_true")]
+    public Dictionary<string, DateTime>? NotTrue { get; init; }
 
     /// <summary>Sustained-timer mutations performed during the call, in execution order.</summary>
     [JsonPropertyName("timer_ops")]

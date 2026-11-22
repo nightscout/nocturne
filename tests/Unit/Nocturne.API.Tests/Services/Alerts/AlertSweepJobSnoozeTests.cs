@@ -147,6 +147,7 @@ public class AlertSweepJobSnoozeTests
         services.AddMetrics();
         services.AddSingleton<AlertEngineErrors>();
         services.AddSingleton<ConditionVersionLog>();
+        services.AddSingleton<NotTrueRecordingFloor>();
         services.AddScoped<IAlertEvaluationEngine, RustBackedAlertEngine>();
 
         await using var provider = services.BuildServiceProvider();

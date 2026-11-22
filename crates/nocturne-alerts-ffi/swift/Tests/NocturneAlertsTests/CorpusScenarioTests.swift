@@ -38,6 +38,7 @@ final class CorpusScenarioTests: XCTestCase {
         XCTAssertEqual(ticks.count, expectedTicks.count)
 
         var timers: [String: Any] = [:]
+        var notTrue: [String: Any] = [:]
         var tracker: Any = NSNull()
         var transitions: [String] = []
 
@@ -48,6 +49,7 @@ final class CorpusScenarioTests: XCTestCase {
                 "context": try XCTUnwrap(tick["context"]),
                 "now": try XCTUnwrap(tick["at"]),
                 "timers": timers,
+                "not_true": notTrue,
             ]
             if !(tracker is NSNull) { request["tracker"] = tracker }
 
@@ -63,6 +65,7 @@ final class CorpusScenarioTests: XCTestCase {
 
             transitions.append(try XCTUnwrap(result["transition"] as? String))
             timers = try XCTUnwrap(response["timers"] as? [String: Any])
+            notTrue = try XCTUnwrap(response["not_true"] as? [String: Any])
             tracker = try XCTUnwrap(response["tracker"])
         }
 

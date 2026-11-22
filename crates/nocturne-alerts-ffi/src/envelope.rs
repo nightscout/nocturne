@@ -23,7 +23,7 @@ use nocturne_alerts_core::facts::{self, ContextFact, RuleConditions};
 use nocturne_alerts_core::leaf_identity::nodes_with_paths;
 use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload};
 use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, node_child_path};
-use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
+use nocturne_alerts_core::sustained::{TimerOp, TimerState, TimerStore};
 use nocturne_alerts_core::wall_clock::references_wall_clock;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
@@ -63,24 +63,41 @@ pub(crate) fn ok(fields: Value) -> Value {
     Value::Object(o)
 }
 
-/// Persisted sustained-timer state for one rule: `path -> first_true`.
+/// Persisted `sustained` state for one rule, one map per [`TimerState`]:
+/// `timers` is `path -> first_true`, `not_true` is `path -> not_true_at`. A
+/// path in neither has no recorded state.
 type WireTimers = BTreeMap<String, DateTime<Utc>>;
 
-/// Checks and loads persisted timers.
-fn seed_timers(timers: &mut TimerStore, rule_id: Uuid, wire: &WireTimers) -> Result<(), String> {
-    for (path, &at) in wire {
-        timers.seed(rule_id, path, check_timestamp(at, "timers")?);
+/// Checks and loads persisted timers. A path in both maps is running.
+fn seed_timers(
+    timers: &mut TimerStore,
+    rule_id: Uuid,
+    running: &WireTimers,
+    not_true: &WireTimers,
+) -> Result<(), String> {
+    for (path, &at) in not_true {
+        let at = check_timestamp(at, "not_true")?;
+        timers.seed(rule_id, path, TimerState::NotTrue(at));
+    }
+    for (path, &at) in running {
+        let at = check_timestamp(at, "timers")?;
+        timers.seed(rule_id, path, TimerState::Running(at));
     }
     Ok(())
 }
 
-/// A rule's timers after evaluation: `path -> first_true`.
-fn timers_json(timers: &TimerStore, rule_id: Uuid) -> Value {
-    timers
-        .snapshot_for_rule(rule_id)
-        .map(|(path, at)| (path.to_owned(), format_instant(at).into()))
-        .collect::<Map<_, _>>()
-        .into()
+/// A rule's state after evaluation as the `timers` and `not_true` maps.
+fn timers_json(timers: &TimerStore, rule_id: Uuid, into: &mut Map<String, Value>) {
+    let (mut running, mut not_true) = (Map::new(), Map::new());
+    for (path, state) in timers.snapshot_for_rule(rule_id) {
+        let (map, at) = match state {
+            TimerState::Running(at) => (&mut running, at),
+            TimerState::NotTrue(at) => (&mut not_true, at),
+        };
+        map.insert(path.to_owned(), format_instant(at).into());
+    }
+    into.insert("timers".into(), running.into());
+    into.insert("not_true".into(), not_true.into());
 }
 
 #[derive(Deserialize)]
@@ -91,6 +108,8 @@ struct EvaluateRequest {
     now: DateTime<Utc>,
     #[serde(default)]
     timers: WireTimers,
+    #[serde(default)]
+    not_true: WireTimers,
     /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
@@ -172,7 +191,7 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
     check_timestamp(req.now, "now")?;
 
     let mut state = EngineState::new();
-    seed_timers(&mut state.timers, rule.id, &req.timers)?;
+    seed_timers(&mut state.timers, rule.id, &req.timers, &req.not_true)?;
     if let Some(tracker) = &req.tracker {
         tracker.restore(&mut state.tracker, rule.id)?;
     }
@@ -185,11 +204,11 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
         &mut state,
         req.include_leaves,
     );
-    Ok(ok(json!({
-        "result": outcome.to_json(),
-        "timers": timers_json(&state.timers, rule.id),
-        "tracker": tracker_json(&state.tracker, rule.id),
-    })))
+    let mut response = Map::new();
+    response.insert("result".into(), outcome.to_json());
+    timers_json(&state.timers, rule.id, &mut response);
+    response.insert("tracker".into(), tracker_json(&state.tracker, rule.id));
+    Ok(ok(Value::Object(response)))
 }
 
 /// The tracker after evaluation. The per-rule fields are present once the
@@ -231,6 +250,8 @@ struct EvaluateNodeRequest {
     now: DateTime<Utc>,
     #[serde(default)]
     timers: WireTimers,
+    #[serde(default)]
+    not_true: WireTimers,
 }
 
 /// A node that cannot be evaluated (engine-semantics.md §1.4) is an error.
@@ -239,7 +260,7 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
         read_request(request_json, |r: &EvaluateNodeRequest| r.schema_version)?;
     check_timestamp(req.now, "now")?;
     let mut timers = TimerStore::new();
-    seed_timers(&mut timers, req.rule_id, &req.timers)?;
+    seed_timers(&mut timers, req.rule_id, &req.timers, &req.not_true)?;
 
     let node = match &req.root {
         Some(root) => Node::parse_rooted(&req.node, root),
@@ -255,7 +276,7 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
     let mut response = Map::new();
     value.write(&mut response, "value");
     clock_anomaly.write(&mut response);
-    response.insert("timers".into(), timers_json(&timers, req.rule_id));
+    timers_json(&timers, req.rule_id, &mut response);
     response.insert(
         "timer_ops".into(),
         ops.iter().map(TimerOp::to_json).collect(),

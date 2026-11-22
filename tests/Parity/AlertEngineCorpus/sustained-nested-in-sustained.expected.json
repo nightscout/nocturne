@@ -23,6 +23,11 @@
               "op": "set",
               "path": "sustained[0].sustained",
               "at": "2026-01-05T12:00:00Z"
+            },
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-01-05T12:00:00Z"
             }
           ]
         }
@@ -95,11 +100,13 @@
           "timer_ops": [
             {
               "op": "clear",
-              "path": "sustained[0].sustained"
+              "path": "sustained[0].sustained",
+              "at": "2026-01-05T12:15:00Z"
             },
             {
               "op": "clear",
-              "path": "sustained"
+              "path": "sustained",
+              "at": "2026-01-05T12:15:00Z"
             }
           ]
         }

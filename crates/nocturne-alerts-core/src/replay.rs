@@ -173,7 +173,7 @@ pub fn replay(
                 });
                 continue;
             };
-            let body = evaluate_body(rule, body, &ctx, at, &mut timers, true);
+            let body = evaluate_body(rule, body, &ctx, at, &mut timers, None, true);
             record_leaves(leaf_log, body.leaves.unwrap_or_default(), at);
 
             let met = body.root;
@@ -212,7 +212,7 @@ pub fn replay(
                     },
                 );
             } else if resolved == Some(false) && firing.firing {
-                close(&mut ctx, &mut timers, rule.id);
+                close(&mut ctx, &mut timers, rule.id, at);
                 events.push(event(at, rule.id, ReplayEventKind::Cleared));
             }
 
@@ -292,11 +292,11 @@ fn event(at: DateTime<Utc>, rule_id: Uuid, kind: ReplayEventKind) -> ReplayEvent
     ReplayEvent { at, rule_id, kind }
 }
 
-/// A rule's body went false while firing: it leaves the active alerts and
-/// its timers reset.
-fn close(ctx: &mut SensorContext, timers: &mut TimerStore, rule_id: Uuid) {
+/// A rule's body went false at `at` while firing: it leaves the active alerts
+/// and its runs end there.
+fn close(ctx: &mut SensorContext, timers: &mut TimerStore, rule_id: Uuid, at: DateTime<Utc>) {
     ctx.active_alerts.remove(&rule_id);
-    timers.clear_all_for_rule(rule_id);
+    timers.clear_all_for_rule(rule_id, at);
 }
 
 /// Each entry holds the leaf's last value and its points; a leaf turning

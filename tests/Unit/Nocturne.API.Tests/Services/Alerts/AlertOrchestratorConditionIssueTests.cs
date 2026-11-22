@@ -46,7 +46,7 @@ public class AlertOrchestratorConditionIssueTests
             RustEnvelopeMapper.WrapPayload(AlertConditionTypeNames.ToWireString(type), conditionParams));
         var errors = new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System);
         return RustAuxiliaryEvaluation.EvaluateNode(
-            errors, RuleId, node, "condition", context, Now, new Dictionary<string, DateTime>()).Value!.Value;
+            errors, RuleId, node, "condition", context, Now, ConditionTimers.None).Value!.Value;
     }
 
     [NativeFact]

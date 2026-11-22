@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "name": "sustained-unknown-between-false-and-true",
+  "description": "false, then unknown (no pump snapshot yet), then a suspension that began between the two: the unknown evaluation does not move the bound, so the run starts where the suspension began, before the unknown evaluation",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 30,
+        "child": {
+          "type": "pump_suspended",
+          "pump_suspended": {
+            "is_active": true
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true
+      }
+    },
+    {
+      "at": "2026-11-02T12:20:00Z",
+      "context": {
+        "has_ever_pump_snapshot": false
+      }
+    },
+    {
+      "at": "2026-11-02T12:25:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:39:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:40:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:10:00Z"
+        }
+      }
+    }
+  ]
+}

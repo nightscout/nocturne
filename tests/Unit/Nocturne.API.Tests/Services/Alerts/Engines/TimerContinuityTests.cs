@@ -65,7 +65,7 @@ public class TimerContinuityTests
         var done = await after.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(10)), AlertEngineOptions.Default, CancellationToken.None);
         done.ConditionMet.Should().BeTrue("10 sustained minutes elapsed since the stored first-true");
         done.Transition.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
-        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None))
+        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None)).FirstTrue
             .Should().Contain("sustained", T0, "the first-true instant the first instance recorded must survive untouched");
     }
 
@@ -84,7 +84,7 @@ public class TimerContinuityTests
         time.SetUtcNow(T0);
         var first = await rust.EvaluateSnoozeAsync(RuleId, list, LowGlucoseContext(T0), CancellationToken.None);
         first.Should().BeFalse("the window starts on the first true tick");
-        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None))
+        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None)).FirstTrue
             .Should().Equal(new Dictionary<string, DateTime> { ["snooze[0].sustained"] = T0 },
                 "snooze timers key under their own path root, not the rule body");
 

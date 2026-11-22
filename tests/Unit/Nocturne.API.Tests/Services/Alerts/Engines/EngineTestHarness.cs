@@ -49,16 +49,21 @@ internal static class EngineTestHarness
         new(trackerRepo, gate ?? new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance,
             new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), time)));
 
-    /// <summary>Builds a <see cref="RustBackedAlertEngine"/> over the corpus's in-memory fakes.</summary>
+    /// <summary>
+    /// Builds a <see cref="RustBackedAlertEngine"/> over the corpus's in-memory fakes. Its
+    /// <see cref="NotTrueRecordingFloor"/> starts at <paramref name="time"/>'s instant now, unless one is given.
+    /// </summary>
     public static RustBackedAlertEngine BuildRustEngine(
         ManualTimeProvider time,
-        IAlertTrackerRepository trackerRepo)
+        IAlertTrackerRepository trackerRepo,
+        NotTrueRecordingFloor? notTrueFloor = null)
     {
         return new RustBackedAlertEngine(
             trackerRepo,
             new AlertRuleEvaluationGate(),
             new AlertEngineErrors(new TestMeterFactory(), time),
             new ConditionVersionLog(),
+            notTrueFloor ?? new NotTrueRecordingFloor(time),
             time,
             NullLogger<RustBackedAlertEngine>.Instance);
     }

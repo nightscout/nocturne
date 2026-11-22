@@ -260,6 +260,7 @@ pub(crate) const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
 fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> Value {
     // Per-rule persisted state, plus the shared next-excursion ordinal.
     let mut timers: Map<String, Value> = Map::new(); // rule id -> timers object
+    let mut not_true: Map<String, Value> = Map::new(); // rule id -> not_true object
     let mut trackers: Map<String, Value> = Map::new(); // rule id -> tracker object
     let mut next_ordinal: u64 = 1;
 
@@ -284,6 +285,7 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                         "context": tick.context,
                         "now": tick.at,
                         "timers": timers.get(&rule_id).cloned().unwrap_or_else(|| json!({})),
+                        "not_true": not_true.get(&rule_id).cloned().unwrap_or_else(|| json!({})),
                         "tracker": tracker,
                     });
 
@@ -307,6 +309,7 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                     );
 
                     timers.insert(rule_id.clone(), response["timers"].clone());
+                    not_true.insert(rule_id.clone(), response["not_true"].clone());
                     trackers.insert(rule_id.clone(), response["tracker"].clone());
                     next_ordinal = response["tracker"]["next_excursion_ordinal"]
                         .as_u64()
@@ -1917,4 +1920,95 @@ mod uniffi_surface {
         }));
         assert_error(&bad_schema, "unsupported schema_version 2");
     }
+}
+
+/// A sustained{30} over an override that began at 11:00, evaluated at 12:00
+/// from `state`, the request fields a host persisted.
+fn override_held_since_eleven(state: Value) -> Value {
+    let mut request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abcd",
+            "condition_type": "sustained",
+            "condition_params": {
+                "minutes": 30,
+                "child": { "type": "override_active", "override_active": { "is_active": true } }
+            },
+            "enabled_at": "2026-01-05T09:00:00Z",
+        },
+        "context": { "active_override": { "started_at": "2026-01-05T11:00:00Z" } },
+        "now": "2026-01-05T12:00:00Z",
+    });
+    request
+        .as_object_mut()
+        .unwrap()
+        .extend(state.as_object().unwrap().clone());
+    evaluate(&request)
+}
+
+#[test]
+fn not_true_round_trips_and_bounds_a_start() {
+    let first = evaluate(&json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abcd",
+            "condition_type": "sustained",
+            "condition_params": {
+                "minutes": 30,
+                "child": { "type": "override_active", "override_active": { "is_active": true } }
+            },
+        },
+        "context": {},
+        "now": "2026-01-05T11:45:00Z",
+    }));
+    assert_eq!(first["timers"], json!({}));
+    assert_eq!(
+        first["not_true"],
+        json!({ "sustained": "2026-01-05T11:45:00Z" })
+    );
+    assert_eq!(
+        first["result"]["timer_ops"],
+        json!([{ "op": "clear", "path": "sustained", "at": "2026-01-05T11:45:00Z" }])
+    );
+
+    let second = override_held_since_eleven(json!({
+        "timers": first["timers"],
+        "not_true": first["not_true"],
+        "tracker": first["tracker"],
+    }));
+    // The 11:45 record's lease ends at 11:50, where the run starts.
+    assert_eq!(second["result"]["root"], json!(false));
+    assert_eq!(
+        second["timers"],
+        json!({ "sustained": "2026-01-05T11:50:00Z" })
+    );
+    assert_eq!(second["not_true"], json!({}));
+}
+
+#[test]
+fn a_rule_with_state_from_before_not_true_starts_its_run_at_now() {
+    let tracker = json!({ "state": "idle", "updated_at": "2026-01-05T11:55:00Z" });
+    let stored = override_held_since_eleven(json!({ "timers": {}, "tracker": tracker }));
+    assert_eq!(stored["result"]["root"], json!(false));
+    assert_eq!(
+        stored["timers"],
+        json!({ "sustained": "2026-01-05T12:00:00Z" })
+    );
+
+    // With no state at all it is the rule's first evaluation, bounded by its
+    // enabled_at: the override has held 60 minutes since it began.
+    let fresh = override_held_since_eleven(json!({}));
+    assert_eq!(fresh["result"]["root"], json!(true));
+    assert_eq!(
+        fresh["timers"],
+        json!({ "sustained": "2026-01-05T11:00:00Z" })
+    );
+}
+
+#[test]
+fn evaluate_rejects_not_true_outside_the_dotnet_range() {
+    let response = override_held_since_eleven(json!({
+        "not_true": { "sustained": "0000-06-01T00:00:00Z" },
+    }));
+    assert_error(&response, "not_true is outside");
 }

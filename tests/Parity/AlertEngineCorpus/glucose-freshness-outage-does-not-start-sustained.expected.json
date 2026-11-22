@@ -18,6 +18,13 @@
           "tracker": {
             "state": "idle"
           },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-03-02T12:00:00Z"
+            }
+          ],
           "next_change_at": "2026-03-02T12:11:00Z"
         }
       ]

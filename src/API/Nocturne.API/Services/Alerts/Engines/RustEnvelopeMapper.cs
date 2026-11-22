@@ -123,7 +123,7 @@ internal static class RustEnvelopeMapper
     private static readonly ConditionalWeakTable<SensorContext, object> ContextElementCache = new();
 
     /// <summary>
-    /// Copies persisted sustained timers into the envelope with every instant pinned to
+    /// Copies one map of persisted sustained state into the envelope with every instant pinned to
     /// <see cref="DateTimeKind.Utc"/>.
     /// </summary>
     /// <remarks>

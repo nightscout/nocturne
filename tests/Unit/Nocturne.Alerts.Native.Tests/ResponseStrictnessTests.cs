@@ -16,7 +16,7 @@ public class ResponseStrictnessTests
     private const string Tracker = """{"state":"active","active_excursion_ordinal":1,"updated_at":"2026-01-05T12:00:00Z","next_excursion_ordinal":2}""";
 
     private static string Evaluate(string result, string tracker = Tracker, int schemaVersion = 1) =>
-        $$"""{"schema_version":{{schemaVersion}},"ok":true,"result":{{result}},"timers":{},"tracker":{{tracker}}}""";
+        $$"""{"schema_version":{{schemaVersion}},"ok":true,"result":{{result}},"timers":{},"not_true":{},"tracker":{{tracker}}}""";
 
     private static RustRuleResult RuleResult(string result) =>
         RustAlertEngine.GetRuleResult(RustAlertEngine.ParseEvaluateResponse(Evaluate(result)));
@@ -74,13 +74,13 @@ public class ResponseStrictnessTests
 
     [Theory]
     [InlineData("""[{"op":"set","path":"sustained"}]""")]
-    [InlineData("""[{"op":"clear","path":"sustained","at":"2026-01-05T12:00:00Z"}]""")]
-    [InlineData("""[{"op":"reset","path":"sustained"}]""")]
-    [InlineData("""[{"op":"clear"}]""")]
+    [InlineData("""[{"op":"clear","path":"sustained"}]""")]
+    [InlineData("""[{"op":"reset","path":"sustained","at":"2026-01-05T12:00:00Z"}]""")]
+    [InlineData("""[{"op":"clear","at":"2026-01-05T12:00:00Z"}]""")]
     public void A_malformed_timer_op_throws(string ops)
     {
         var act = () => RustAlertEngine.ParseEvaluateNodeResponse(
-            $$"""{"schema_version":1,"ok":true,"value":true,"timers":{},"timer_ops":{{ops}}}""");
+            $$"""{"schema_version":1,"ok":true,"value":true,"timers":{},"not_true":{},"timer_ops":{{ops}}}""");
 
         act.Should().Throw<RustAlertEngineException>();
     }
@@ -89,9 +89,11 @@ public class ResponseStrictnessTests
     public void Timer_ops_parse()
     {
         var response = RustAlertEngine.ParseEvaluateNodeResponse(
-            """{"schema_version":1,"ok":true,"value":true,"timers":{},"timer_ops":[{"op":"set","path":"a","at":"2026-01-05T12:00:00Z"},{"op":"clear","path":"b"}]}""");
+            """{"schema_version":1,"ok":true,"value":true,"timers":{},"not_true":{},"timer_ops":[{"op":"set","path":"a","at":"2026-01-05T12:00:00Z"},{"op":"clear","path":"b","at":"2026-01-05T12:05:00Z"}]}""");
 
-        response.TimerOps!.Select(o => o.Op).Should().Equal(RustTimerOpKind.Set, RustTimerOpKind.Clear);
+        response.TimerOps!.Select(o => (o.Op, o.At)).Should().Equal(
+            (RustTimerOpKind.Set, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc)),
+            (RustTimerOpKind.Clear, new DateTime(2026, 1, 5, 12, 5, 0, DateTimeKind.Utc)));
     }
 
     [Fact]
@@ -124,8 +126,9 @@ public class ResponseStrictnessTests
     }
 
     [Theory]
-    [InlineData("""{"schema_version":1,"ok":true,"timers":{},"timer_ops":[]}""", "value")]
-    [InlineData("""{"schema_version":1,"ok":true,"value":true,"timer_ops":[]}""", "timers")]
+    [InlineData("""{"schema_version":1,"ok":true,"timers":{},"not_true":{},"timer_ops":[]}""", "value")]
+    [InlineData("""{"schema_version":1,"ok":true,"value":true,"not_true":{},"timer_ops":[]}""", "timers")]
+    [InlineData("""{"schema_version":1,"ok":true,"value":true,"timers":{},"timer_ops":[]}""", "not_true")]
     public void An_evaluate_node_response_missing_a_required_field_throws(string json, string missing)
     {
         var act = () => RustAlertEngine.ParseEvaluateNodeResponse(json);
