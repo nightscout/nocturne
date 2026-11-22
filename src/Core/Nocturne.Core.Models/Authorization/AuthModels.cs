@@ -78,10 +78,6 @@ public class AuthContext
     /// </summary>
     public string? Email { get; set; }
 
-    public string? OidcSubjectId { get; set; }
-
-    public string? OidcIssuer { get; set; }
-
     /// <summary>
     /// Resolved Shiro-style permissions
     /// </summary>
@@ -225,11 +221,6 @@ public enum AuthType
     /// No authentication
     /// </summary>
     None,
-
-    /// <summary>
-    /// OIDC opaque token
-    /// </summary>
-    OidcToken,
 
     /// <summary>
     /// A first-party session JWT presented as a bearer token. A Nightscout exchange JWT carries its

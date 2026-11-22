@@ -14,7 +14,7 @@ namespace Nocturne.API.Middleware.Handlers;
 public class SessionCookieHandler : IAuthHandler
 {
     /// <summary>
-    /// Handler priority (50 - highest priority, before OIDC tokens)
+    /// Handler priority (50 - before every bearer credential)
     /// Session cookies should be checked first for web app authentication
     /// </summary>
     public int Priority => 50;

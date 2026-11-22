@@ -45,7 +45,7 @@ public class RateLimitPartitionKeyGuardTests
             var authContext = new AuthContext
             {
                 IsAuthenticated = true,
-                AuthType = AuthType.OidcToken,
+                AuthType = AuthType.SessionCookie,
                 SubjectId = Guid.NewGuid(),
                 TenantId = Guid.NewGuid(),
                 SubjectName = "member",

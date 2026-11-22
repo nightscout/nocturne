@@ -72,7 +72,6 @@ public class OverviewAdmissionControllerTests
 
     [Theory]
     [InlineData(AuthType.SessionCookie)]
-    [InlineData(AuthType.OidcToken)]
     [InlineData(AuthType.LegacyJwt)]
     public async Task A_subjects_own_login_is_admitted_to_exactly_its_glucose_readable_tenants(AuthType authType)
     {

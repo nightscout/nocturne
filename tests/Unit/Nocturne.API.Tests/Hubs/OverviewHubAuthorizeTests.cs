@@ -277,7 +277,6 @@ public class OverviewHubAuthorizeTests
 
     [Theory]
     [InlineData(AuthType.SessionCookie)]
-    [InlineData(AuthType.OidcToken)]
     [InlineData(AuthType.LegacyJwt)]
     public async Task Authorize_with_subject_scoped_credential_type_on_a_tenant_host_is_accepted(
         AuthType authType)

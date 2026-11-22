@@ -15,10 +15,8 @@ namespace Nocturne.API.Authorization;
 /// api-secret, a guest link, the instance key) holds only what it was given; one that could enrol a
 /// factor or mint another credential would outlive its own revocation and expiry. The interactive
 /// types are the ones that are the person, not a grant they gave out, by the rule
-/// <see cref="PlatformAdminCredentials"/> states, less a provider's ID token sent as a bearer: the
-/// provider vouches for its own sign-in, not for the second factor this instance asks of the
-/// subject, and a bearer has no step-up to present one. This attribute keeps its own list so a
-/// change to scope handling cannot move this boundary.
+/// <see cref="PlatformAdminCredentials"/> states. This attribute keeps its own list so a change to
+/// scope handling cannot move this boundary.
 /// <para>
 /// A session redeemed from a login code (<see cref="AuthContext.IsHandedOff"/>) is refused too:
 /// someone else issued the code and redeeming it asks for no second factor. Its refusal carries

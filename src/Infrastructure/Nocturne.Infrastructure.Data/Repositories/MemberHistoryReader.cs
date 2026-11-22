@@ -119,6 +119,12 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             details.InviteId is { } invite ? labels.GetValueOrDefault(invite) : null);
     }
 
+    /// <summary>
+    /// The credential name stored on audit rows written for an identity provider's token. No
+    /// <see cref="AuthType"/> member carries it: nothing authenticates that way, and the rows remain.
+    /// </summary>
+    private const string StoredProviderTokenCredential = "OidcToken";
+
     private static MemberHistoryActor ActorOf(AuthAuditLogEntity row, Dictionary<Guid, string> names)
     {
         if (row.ActorSubjectId is { } subject)
@@ -129,7 +135,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             MemberAccessAudit.System => MemberHistoryActorKind.System,
             MemberAccessAudit.Anonymous or nameof(AuthType.None) => MemberHistoryActorKind.Anonymous,
             nameof(AuthType.ApiKey) or nameof(AuthType.DirectGrant) => MemberHistoryActorKind.ApiKey,
-            nameof(AuthType.OAuthAccessToken) or nameof(AuthType.OidcToken)
+            nameof(AuthType.OAuthAccessToken) or StoredProviderTokenCredential
                 or nameof(AuthType.LegacyJwt) or nameof(AuthType.SessionCookie) => MemberHistoryActorKind.AccessToken,
             nameof(AuthType.InstanceKey) => MemberHistoryActorKind.InstanceKey,
             nameof(AuthType.Guest) => MemberHistoryActorKind.GuestLink,
