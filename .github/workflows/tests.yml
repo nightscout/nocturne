@@ -571,6 +571,16 @@ jobs:
             --collect "XPlat Code Coverage" \
             --test-adapter-path .coverlet \
             --results-directory TestResults/integration
+      - name: Integration tests (Infrastructure.Data unit project, real Postgres)
+        run: |
+          dotnet test tests/Unit/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
+            --no-build \
+            --filter "Category=Integration" \
+            --logger "trx;LogFileName=integration-data-unit.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --test-adapter-path .coverlet \
+            --results-directory TestResults/integration
       - uses: actions/upload-artifact@v6
         if: always()
         with:
