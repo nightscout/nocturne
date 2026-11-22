@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 
 namespace Nocturne.Core.Contracts.Multitenancy;
@@ -255,11 +256,25 @@ public interface ITenantMembershipRepository
     /// <summary>Stores a role and returns it.</summary>
     Task<TenantRoleRecord> CreateRoleAsync(NewTenantRole role, CancellationToken ct);
 
-    /// <summary>Applies <paramref name="edit"/> to the role and stamps it updated at <paramref name="now"/>; null when there is no such role.</summary>
-    Task<TenantRoleRecord?> UpdateRoleAsync(Guid tenantId, Guid roleId, TenantRoleEdit edit, DateTime now, CancellationToken ct);
+    /// <summary>
+    /// Applies <paramref name="edit"/> to the role and stamps it updated at <paramref name="now"/>.
+    /// While a team's access gives the role, an edit that is not data only
+    /// (<see cref="Scope.IsDataOnly"/>) is refused with <see cref="RoleChangeOutcome.HeldByTeam"/>,
+    /// and one that adds a permission the role does not hold is refused with
+    /// <see cref="RoleChangeOutcome.HeldByTeamOwnerOnly"/> unless <paramref name="editorSubjectId"/>
+    /// is an owner of the site in force: only an owner may give a team more. Checked under the site's
+    /// owners lock and team access lock, so an approval or an owner change racing it is either seen or
+    /// waits. A null <paramref name="editorSubjectId"/> is the system, which is no owner.
+    /// </summary>
+    Task<TenantRoleUpdate> UpdateRoleAsync(
+        Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now, CancellationToken ct);
 
-    /// <summary>Deletes the role together with every member's assignment of it, in one save; false when there is no such role.</summary>
-    Task<bool> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct);
+    /// <summary>
+    /// Deletes the role together with every member's assignment of it, in one save. Refused with
+    /// <see cref="RoleChangeOutcome.HeldByTeam"/> while a team's access gives the role, checked as
+    /// <see cref="UpdateRoleAsync"/> checks.
+    /// </summary>
+    Task<RoleChangeOutcome> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct);
 
     /// <summary>Stores the tenant's seed roles whose slugs it does not have yet.</summary>
     Task SeedRolesAsync(Guid tenantId, CancellationToken ct);

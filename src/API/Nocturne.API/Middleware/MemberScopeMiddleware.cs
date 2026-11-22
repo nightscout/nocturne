@@ -139,8 +139,8 @@ public class MemberScopeMiddleware
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
         context.SetPermissionTrie(memberTrie);
 
-        authContext.LimitTo24Hours = MemberScopeResolver.IsHistoryClamped(
-            authContext.LimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions);
+        authContext.FoldMembershipLimit(MemberScopeResolver.IsHistoryClamped(
+            authContext.LimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions));
 
         _logger.LogDebug(
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",

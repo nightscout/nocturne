@@ -546,6 +546,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<DelegatedConnectorSyncLimiter>();
         services.AddSingleton<GuestActivationLimiter>();
         services.AddSingleton<TeamCreationLimiter>();
+        services.AddSingleton<TeamRenameLimiter>();
 
         return services;
     }
@@ -687,6 +688,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
+        services.AddScoped<TeamAccessService>();
+        services.AddScoped<TeamRenameAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();

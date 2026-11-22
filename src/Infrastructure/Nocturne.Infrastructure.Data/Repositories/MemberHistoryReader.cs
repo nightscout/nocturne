@@ -25,6 +25,11 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <c>access_ends_at</c> key: a string is the new end, a null is a cleared end, and no key is a row
 /// whose detail is unknown.
 /// <para>
+/// A team's access to the site given or stopped is a <see cref="TeamAudit"/> row with
+/// <c>kind</c> = <c>team_access</c> and no target, so it never appears in a page narrowed to a member.
+/// It names the team by its name now, or the name the row recorded once the team is gone.
+/// </para>
+/// <para>
 /// A change an invite made is <see cref="MemberHistoryEntry.InRecordedJoin"/> when a
 /// <see cref="AuthAuditEventType.MemberJoined"/> row of the same commit names the same member and
 /// invite; a join older than that row has none, and its changes keep reading as the join itself.
@@ -41,10 +46,12 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         AuthAuditEventType.RolePermissionsChanged,
         AuthAuditEventType.MemberJoined,
         AuthAuditEventType.MemberRemoved,
+        AuthAuditEventType.TeamAccessGiven,
+        AuthAuditEventType.TeamAccessStopped,
     ];
 
     private const string MemberChangeRows =
-        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditRows.KindKey}' = '{MemberAccessAudit.TenantKind}'";
+        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditRows.KindKey}' IN ('{MemberAccessAudit.TenantKind}', '{TeamAudit.TeamAccessKind}')";
 
     public async Task<MemberHistoryPage> GetAsync(
         Guid tenantId, Guid? memberSubjectId, int limit, int offset, DateTime now, CancellationToken ct = default)
@@ -88,6 +95,13 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
         var joins = await RecordedJoinsAsync(db, tenantId, parsed, ct);
 
+        var teamIds = parsed.Select(p => p.Row.TeamId).OfType<Guid>().Distinct().ToList();
+        var teamNames = teamIds.Count == 0
+            ? []
+            : await db.Teams.AsNoTracking()
+                .Where(t => teamIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
         DateTime? accessEndedAt = null;
         if (memberSubjectId is { } narrowed
             && await db.TenantMembers.AsNoTracking()
@@ -99,7 +113,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
         return new MemberHistoryPage
         {
-            Data = parsed.Select(p => ToEntry(p.Row, p.Details, names, labels, joins)).ToList(),
+            Data = parsed.Select(p => ToEntry(p.Row, p.Details, names, labels, joins, teamNames)).ToList(),
             Pagination = new PaginationInfo(limit, offset, total),
             AccessEndedAt = accessEndedAt,
         };
@@ -140,7 +154,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
     private static MemberHistoryEntry ToEntry(
         AuthAuditLogEntity row, Details details, Dictionary<Guid, string> names, Dictionary<Guid, string?> labels,
-        HashSet<(Guid Member, Guid Invite, DateTime At)> joins)
+        HashSet<(Guid Member, Guid Invite, DateTime At)> joins, Dictionary<Guid, string> teamNames)
     {
         var given = row.EventType == AuthAuditEventType.RoleAssigned;
         var kind = row.EventType switch
@@ -149,6 +163,8 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             AuthAuditEventType.RolePermissionsChanged => MemberHistoryKind.RolePermissionsChanged,
             AuthAuditEventType.MemberJoined => MemberHistoryKind.Joined,
             AuthAuditEventType.MemberRemoved => MemberHistoryKind.Removed,
+            AuthAuditEventType.TeamAccessGiven => MemberHistoryKind.TeamAccessGiven,
+            AuthAuditEventType.TeamAccessStopped => MemberHistoryKind.TeamAccessStopped,
             AuthAuditEventType.AccessEndChanged => details switch
             {
                 { AccessEndRecorded: false } => MemberHistoryKind.AccessEndChanged,
@@ -180,7 +196,9 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             kind != MemberHistoryKind.Joined
                 && row.TargetSubjectId is { } member
                 && details.InviteId is { } via
-                && joins.Contains((member, via, row.CreatedAt)));
+                && joins.Contains((member, via, row.CreatedAt)),
+            row.TeamId is { } team ? new MemberHistoryTeam(team, teamNames.GetValueOrDefault(team) ?? details.Name) : null,
+            details.Roles);
     }
 
     /// <summary>
@@ -212,9 +230,9 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
     private sealed record Details(
         string? Role, string? Permission, MemberHistoryLimit? HistoryLimit, Guid? InviteId,
         IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost, bool AccessEndRecorded, DateTime? AccessEndsAt,
-        MembershipJoinHow? JoinedHow, MembershipEndHow? RemovedHow, Guid? By)
+        MembershipJoinHow? JoinedHow, MembershipEndHow? RemovedHow, Guid? By, string? Name, IReadOnlyList<string>? Roles)
     {
-        private static readonly Details Unknown = new(null, null, null, null, null, null, false, null, null, null, null);
+        private static readonly Details Unknown = new(null, null, null, null, null, null, false, null, null, null, null, null, null);
 
         public static Details Of(string? json)
         {
@@ -245,7 +263,9 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 instant,
                 MemberAccessAudit.JoinedHow.Where(h => h.Value == how).Select(h => (MembershipJoinHow?)h.Key).FirstOrDefault(),
                 MemberAccessAudit.RemovedHow.Where(h => h.Value == how).Select(h => (MembershipEndHow?)h.Key).FirstOrDefault(),
-                Guid.TryParse(Text(root, MemberAccessAudit.ByKey), out var by) ? by : null);
+                Guid.TryParse(Text(root, MemberAccessAudit.ByKey), out var by) ? by : null,
+                Text(root, TeamAudit.NameKey),
+                List(root, TeamAudit.RolesKey));
         }
 
         private static string? Text(JsonElement root, string key) =>

@@ -119,6 +119,7 @@ public class ReadEndpointScopeEnforcementTests
             ["TeamsController.GetMyTeams"] = V4Reason.OwnDataInteractiveOnly,
             ["TeamsController.GetTeam"] = V4Reason.OwnDataInteractiveOnly,
             ["TeamsController.GetInviteInfo"] = V4Reason.CapabilityToken,
+            ["TeamsController.GetAccessLinkInfo"] = V4Reason.CapabilityToken,
             ["MyTenantsController.GetOverview"] = V4Reason.ActionChecksAccess,
             ["MyTenantsController.GetReview"] = V4Reason.ActionChecksAccess,
             ["MyTenantsController.GetPerson"] = V4Reason.ActionChecksAccess,

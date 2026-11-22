@@ -10,7 +10,6 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
@@ -127,7 +126,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var teams = Teams(stranger);
 
         (await teams.GetAsync(team.Id, stranger, Now, default)).Should().BeNull();
-        (await teams.RenameAsync(team.Id, stranger, "Mine now", default)).Should().BeFalse();
+        (await teams.RenameAsync(team.Id, stranger, "Mine now", default)).Should().BeNull();
         (await teams.RemoveManagerAsync(team.Id, stranger, manager, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
         (await teams.CreateInviteAsync(team.Id, stranger, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team.Id, stranger, invite!.Value, Now, default)).Should().BeFalse();
@@ -146,7 +145,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var manager = await NewSubjectAsync();
         var team = await Teams(manager).CreateAsync(manager, "Old", default);
 
-        (await Teams(manager).RenameAsync(team.Id, manager, "New", default)).Should().BeTrue();
+        (await Teams(manager).RenameAsync(team.Id, manager, "New", default)).Should().Be("Old");
 
         (await Teams().GetAsync(team.Id, manager, Now, default))!.Name.Should().Be("New");
         var row = (await AuditOfAsync(team.Id)).Single(r => r.EventType == AuthAuditEventType.TeamRenamed);
@@ -438,7 +437,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         detail.Invites.Should().BeEmpty();
         detail.CanDelete.Should().BeFalse();
         detail.IsLastManager.Should().BeFalse();
-        (await teams.RenameAsync(team, staff, "Taken", default)).Should().BeFalse();
+        (await teams.RenameAsync(team, staff, "Taken", default)).Should().BeNull();
         (await teams.CreateInviteAsync(team, staff, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team, staff, invite!.Value, Now, default)).Should().BeFalse();
         (await teams.RemoveManagerAsync(team, staff, a, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
@@ -449,26 +448,8 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         forManager.Invites.Should().ContainSingle().Which.CreatedByName.Should().Be(forManager.Managers[0].DisplayName);
     }
 
-    private async Task UntilWaitingAsync(int sessions, params Task[] contenders)
-    {
-        await using var observer = new NpgsqlConnection(database.AppConnectionString);
-        await observer.OpenAsync();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (DateTime.UtcNow < deadline)
-        {
-            contenders.Should().OnlyContain(t => !t.IsCompleted, "neither may finish while the lock is held");
-            await using var command = observer.CreateCommand();
-            command.CommandText = """
-                SELECT count(*) FROM pg_stat_activity
-                WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'
-                """;
-            if (Convert.ToInt32(await command.ExecuteScalarAsync()) >= sessions)
-                return;
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("The contenders never waited on the held lock.");
-    }
+    private Task UntilWaitingAsync(int sessions, params Task[] contenders) =>
+        PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, sessions, contenders);
 }
 
 internal static class TeamRepositoryTestExtensions

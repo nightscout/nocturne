@@ -477,7 +477,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     /// Teams, which belong to no tenant and outlive one: a team one test makes would be in the next
     /// test's list of the same subject's teams.
     /// </summary>
-    private static readonly string[] TeamTables = ["team_invites", "team_members", "teams"];
+    private static readonly string[] TeamTables =
+        ["team_tenant_access_roles", "team_tenant_access", "team_access_links", "team_invites", "team_members", "teams"];
 
     /// <summary>The tables holding credentials, which the fixture restores its own into.</summary>
     private static readonly string[] CredentialTables =

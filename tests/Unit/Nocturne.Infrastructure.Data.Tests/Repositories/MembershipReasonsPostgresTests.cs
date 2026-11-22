@@ -182,7 +182,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         (await s.Members.GetMemberAsync(s.Tenant, member, Ct))!.Roles.Select(r => r.RoleId)
             .Should().BeEquivalentTo([s.CaretakerRole, s.ViewerRole]);
 
-        (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().BeTrue();
+        (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().Be(RoleChangeOutcome.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_role_id = '{s.CaretakerRole}'")).Should().Be(0);
@@ -432,7 +432,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
                 expected = [AuthAuditEventType.RoleAssigned];
                 break;
             default:
-                (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().BeTrue();
+                (await s.Members.DeleteRoleAsync(s.Tenant, s.CaretakerRole, Ct)).Should().Be(RoleChangeOutcome.Changed);
                 expected = [AuthAuditEventType.RoleRemoved];
                 break;
         }

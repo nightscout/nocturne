@@ -288,6 +288,30 @@ public static class Scope
         new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate };
 
     /// <summary>
+    /// The permissions that run a tenant rather than read or write its records: who gets in, what
+    /// roles mean, public sharing, settings, connectors and the audit log. A team is given data
+    /// permissions only (<see cref="IsDataOnly"/>), since a team's staff are not the site's to
+    /// choose one by one.
+    /// </summary>
+    public static readonly IReadOnlySet<string> AdministrativePermissions = new HashSet<string>(StringComparer.Ordinal)
+    {
+        MembersInvite,
+        MembersManage,
+        RolesManage,
+        SharingManage,
+        SharingGuest,
+        TenantSettings,
+        ConnectorsReadWrite,
+        AuditRead,
+        AuditManage,
+        FullAccess,
+    };
+
+    /// <summary>Whether <paramref name="permissions"/> hold none of the <see cref="AdministrativePermissions"/>.</summary>
+    public static bool IsDataOnly(IEnumerable<string> permissions) =>
+        !permissions.Any(AdministrativePermissions.Contains);
+
+    /// <summary>
     /// Permissions for a demo tenant's shared visitor member: everything needed to explore and
     /// change the patient-facing surfaces, and nothing that manages who can get in.
     /// </summary>

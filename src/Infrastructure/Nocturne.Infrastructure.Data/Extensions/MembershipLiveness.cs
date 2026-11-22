@@ -24,6 +24,14 @@ public static class MembershipLiveness
     /// <summary>Whether a membership that ends at <paramref name="accessEndsAt"/> has ended at <paramref name="now"/>.</summary>
     public static bool HasEnded(DateTime? accessEndsAt, DateTime now) => !LiveNow(accessEndsAt, now);
 
+    /// <summary>
+    /// Whether <paramref name="end"/> outlasts <paramref name="callerEnd"/>: the caller's access
+    /// ends and <paramref name="end"/> is later or none. The one date test behind every ceiling;
+    /// a member or invite for which it holds is beyond the caller's reach.
+    /// </summary>
+    public static bool Outlasts(DateTime? callerEnd, DateTime? end) =>
+        callerEnd is { } ceiling && (end is not { } e || e > ceiling);
+
     /// <summary>The memberships that have not ended at <paramref name="now"/>.</summary>
     public static IQueryable<TenantMemberEntity> LiveAt(this IQueryable<TenantMemberEntity> members, DateTime now) =>
         members.Where(IsLive(now));

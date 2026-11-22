@@ -26,7 +26,13 @@ public class TeamCreationLimiterTests : IDisposable
     [Fact]
     public void TheCreateAction_CarriesTheLimit() =>
         typeof(TeamsController).GetMethod(nameof(TeamsController.CreateTeam))!
-            .GetCustomAttribute<LimitTeamCreationPerPersonAttribute>()
+            .GetCustomAttribute<LimitPerPersonAttribute<TeamCreationLimiter>>()
+            .Should().NotBeNull();
+
+    [Fact]
+    public void TheRenameAction_CarriesItsOwnLimit() =>
+        typeof(TeamsController).GetMethod(nameof(TeamsController.RenameTeam))!
+            .GetCustomAttribute<LimitPerPersonAttribute<TeamRenameLimiter>>()
             .Should().NotBeNull();
 
     [Fact]
@@ -35,8 +41,8 @@ public class TeamCreationLimiterTests : IDisposable
         var first = Guid.CreateVersion7();
         var second = Guid.CreateVersion7();
 
-        Spend(first, "10.0.0.1").Should().Be(TeamCreationLimiter.PermitLimit);
-        Spend(second, "10.0.0.1").Should().Be(TeamCreationLimiter.PermitLimit);
+        Spend(first, "10.0.0.1").Should().Be(_limiter.PermitLimit);
+        Spend(second, "10.0.0.1").Should().Be(_limiter.PermitLimit);
     }
 
     [Fact]
@@ -44,22 +50,22 @@ public class TeamCreationLimiterTests : IDisposable
     {
         var person = Guid.CreateVersion7();
 
-        Spend(person, "10.0.0.1").Should().Be(TeamCreationLimiter.PermitLimit);
+        Spend(person, "10.0.0.1").Should().Be(_limiter.PermitLimit);
         Spend(person, "10.0.0.2").Should().Be(0);
     }
 
     [Fact]
     public void A_request_with_no_subject_is_limited_by_its_address()
     {
-        Spend(null, "10.0.0.3").Should().Be(TeamCreationLimiter.PermitLimit);
-        Spend(null, "10.0.0.4").Should().Be(TeamCreationLimiter.PermitLimit);
+        Spend(null, "10.0.0.3").Should().Be(_limiter.PermitLimit);
+        Spend(null, "10.0.0.4").Should().Be(_limiter.PermitLimit);
     }
 
     /// <summary>How many creations the caller gets before the first refusal, up to one past the limit.</summary>
     private int Spend(Guid? subjectId, string address)
     {
         var granted = 0;
-        for (var i = 0; i <= TeamCreationLimiter.PermitLimit; i++)
+        for (var i = 0; i <= _limiter.PermitLimit; i++)
         {
             var context = new DefaultHttpContext();
             context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(address);

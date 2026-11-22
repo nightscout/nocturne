@@ -134,6 +134,10 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/invites", "POST")]
     [InlineData("/api/v4/me/teams/invites/a-token", "GET")]
     [InlineData("/api/v4/me/teams/invites/a-token/accept", "POST")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/access-links", "POST")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/access-links/0195f0a0-0000-7000-8000-000000000003", "DELETE")]
+    [InlineData("/api/v4/me/teams/access-links/a-token", "GET")]
+    [InlineData("/api/v4/me/teams/access-links/a-token/approve", "POST")]
     public void Every_team_route_is_served_without_a_tenant(string path, string method) =>
         TenantResolutionMiddleware.IsTenantlessAllowed(path, method).Should().BeTrue();
 

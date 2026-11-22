@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Base;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -20,8 +21,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <summary>
 /// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke
 /// invites, accept an invite, list members, change a member's roles or permissions, set a member's
-/// 24-hour history limit or the date their access ends, remove a member from the tenant, and step
-/// themselves down to a more limited role.
+/// 24-hour history limit or the date their access ends, remove a member from the tenant, step
+/// themselves down to a more limited role, and list and stop the teams given access to the tenant.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>
@@ -305,6 +306,30 @@ public class MemberInviteController : ControllerBase
             })
             .ToList());
     }
+
+    /// <summary>
+    /// The teams with access to the current tenant: each team's name, the roles given, the limit, the
+    /// end and whether it has passed, who approved it and when.
+    /// </summary>
+    [HttpGet("team-access")]
+    [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<TenantTeamAccess>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetTeamAccess(
+        [FromServices] ITeamRepository teams, [FromServices] TimeProvider time, CancellationToken ct) =>
+        Ok(await teams.ListAccessOfTenantAsync(_tenantAccessor.TenantId, time.GetUtcNow().UtcDateTime, ct));
+
+    /// <summary>Stops a team's access to the current tenant at once.</summary>
+    [HttpDelete("team-access/{teamId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMemberHistory"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> StopTeamAccess(
+        Guid teamId, [FromServices] ITeamRepository teams, CancellationToken ct) =>
+        await teams.StopAccessAsync(_tenantAccessor.TenantId, teamId, ct) ? NoContent() : NotFound();
 
     /// <summary>
     /// A page of the changes to what the current tenant's members can read, newest first: members

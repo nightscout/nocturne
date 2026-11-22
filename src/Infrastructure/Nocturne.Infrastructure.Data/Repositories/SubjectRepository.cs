@@ -517,7 +517,7 @@ public class SubjectRepository : ISubjectRepository
             await db.SaveChangesAsync(ct);
 
             foreach (var team in soleMemberOf)
-                TeamRepository.Remove(db, team);
+                await TeamRepository.RemoveAsync(db, team, ct);
 
             // One statement per column set: the audit trail of a long-lived subject is every
             // sign-in it ever made, which is not loaded into the tracker to null two columns.

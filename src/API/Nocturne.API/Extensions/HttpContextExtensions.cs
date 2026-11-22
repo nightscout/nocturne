@@ -6,6 +6,7 @@ using Nocturne.API.Middleware;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
@@ -313,15 +314,7 @@ public static class HttpContextExtensions
     /// <see cref="CallerAccessEndsAt"/>, or no end at all, for a caller whose access ends.
     /// </summary>
     public static bool OutlastsCallerAccess(this HttpContext context, DateTime? requested) =>
-        Outlasts(context.CallerAccessEndsAt(), requested);
-
-    /// <summary>
-    /// Whether <paramref name="end"/> outlasts <paramref name="callerEnd"/>: the caller's access
-    /// ends and <paramref name="end"/> is later or none. The one date test behind every ceiling;
-    /// a member or invite for which it holds is beyond the caller's reach.
-    /// </summary>
-    public static bool Outlasts(DateTime? callerEnd, DateTime? end) =>
-        callerEnd is { } ceiling && (end is not { } e || e > ceiling);
+        MembershipLiveness.Outlasts(context.CallerAccessEndsAt(), requested);
 
     /// <summary>The refusal a caller whose access ends reads on a member whose access outlasts the caller's.</summary>
     public const string MemberOutlastsCallerDetail = "This member's access lasts longer than yours.";
