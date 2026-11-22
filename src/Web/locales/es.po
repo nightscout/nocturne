@@ -503,6 +503,7 @@ msgstr "O introduce este secreto manualmente:"
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Label (optional)"
 msgstr "Etiqueta (opcional)"
 
@@ -819,6 +820,7 @@ msgstr "Actualiza los datos y permisos del rol."
 #: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/reports/custom/+page.svelte
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Name"
 msgstr "Nombre"
 
@@ -2143,6 +2145,7 @@ msgstr "Altura: {0}px"
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 #: src/lib/components/settings/RecoveryEmailSection.svelte
 #: src/lib/components/settings/TrustedDevices.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Remove"
 msgstr "<0/> Eliminar"
 
@@ -4700,6 +4703,7 @@ msgstr "Accedido {0}{1}"
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ClientDevices.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Revoke"
 msgstr "<0/> Revocar"
 
@@ -9245,6 +9249,7 @@ msgstr "Unirse - Nocturne"
 #~ msgid "Invalid Invite"
 #~ msgstr ""
 
+#: src/routes/(authenticated)/teams/join/+page.svelte
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "Loading invite..."
 msgstr "Cargando invitación..."
@@ -18617,8 +18622,11 @@ msgstr "Oura"
 #~ msgid "MS Teams"
 #~ msgstr ""
 
-#~ msgid "Teams"
-#~ msgstr ""
+#: src/lib/navigation/settings-navigation.svelte.ts
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Teams"
+msgstr ""
 
 #~ msgid "Microsoft Teams"
 #~ msgstr ""
@@ -22447,12 +22455,14 @@ msgstr "Proteína <0>opcional</0>"
 #. 0: food.current?.name ?? 'food'
 #. 0: layer.name
 #. 0: signalLabel(id)
+#. 0: manager.displayName
 #. 0: item.l
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/reports/custom/workspace/FoodPicker.svelte
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/custom/workspace/SignalRail.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 #, python-brace-format
 msgid "Remove {0}"
@@ -25910,6 +25920,7 @@ msgid "Me"
 msgstr "Yo"
 
 #: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/teams/member-kind.svelte.ts
 msgid "Member"
 msgstr "Miembro"
 
@@ -31900,6 +31911,7 @@ msgstr "Datos básicos"
 msgid "What you told us at the start. You can change these any time."
 msgstr "Lo que nos indicaste al principio. Puedes cambiarlo cuando quieras."
 
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 msgid "You"
 msgstr "Tú"
@@ -33632,6 +33644,7 @@ msgstr "7. Licencia de código abierto"
 msgid "No invite token provided. Check the link you were given."
 msgstr "No se ha proporcionado ningún token de invitación. Comprueba el enlace que recibiste."
 
+#: src/routes/(authenticated)/teams/join/+page.svelte
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "Invite unavailable"
 msgstr "Invitación no disponible"
@@ -33640,6 +33653,7 @@ msgstr "Invitación no disponible"
 msgid "You are in"
 msgstr "Ya estás dentro"
 
+#: src/routes/(authenticated)/teams/join/+page.svelte
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You are already a member"
 msgstr "Ya eres miembro"
@@ -33648,6 +33662,7 @@ msgstr "Ya eres miembro"
 msgid "Accept invite"
 msgstr "Aceptar invitación"
 
+#: src/routes/(authenticated)/teams/join/+page.svelte
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "<0/> Accept invite"
 msgstr "<0/> Aceptar invitación"
@@ -34514,6 +34529,7 @@ msgstr "<0/> Invitaciones pendientes"
 
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingInvitesList.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Invite link"
 msgstr "Enlace de invitación"
 
@@ -38973,9 +38989,8 @@ msgstr "Cuando cambies el elemento, selecciona su pastilla. Después, selecciona
 msgid "My settings"
 msgstr "Mis ajustes"
 
-#: src/lib/navigation/settings-navigation.svelte.ts
-msgid "Your sign-in, your display, and your linked chat accounts."
-msgstr "Tu inicio de sesión, la visualización y tus cuentas de chat vinculadas."
+#~ msgid "Your sign-in, your display, and your linked chat accounts."
+#~ msgstr "Tu inicio de sesión, la visualización y tus cuentas de chat vinculadas."
 
 #: src/lib/navigation/settings-navigation.svelte.ts
 msgid "Profile, passkeys, authenticator apps, recovery codes, and sessions."
@@ -39100,6 +39115,8 @@ msgstr "No se ha podido cargar el estado de Nightscout"
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 #: src/routes/(authenticated)/settings/site/+page.svelte
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Reload the page to try again."
 msgstr "Vuelve a cargar la página para intentarlo de nuevo."
 
@@ -39978,6 +39995,7 @@ msgid "Could not save the setting. Try again."
 msgstr "No se ha podido guardar el ajuste. Inténtalo de nuevo."
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Could not make the link. Try again."
 msgstr "No se ha podido crear el enlace. Inténtalo de nuevo."
 
@@ -40076,10 +40094,12 @@ msgid "Make a link"
 msgstr "Crear un enlace"
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "We show the link one time only. Copy it before you leave this page."
 msgstr "Solo mostramos el enlace una vez. Cópialo antes de salir de esta página."
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "For example, the name of the person"
 msgstr "Por ejemplo, el nombre de la persona"
 
@@ -40108,6 +40128,7 @@ msgid "Who can use the link"
 msgstr "Quién puede utilizar el enlace"
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "The link stops working after"
 msgstr "El enlace dejará de funcionar después de"
 
@@ -40116,14 +40137,17 @@ msgid "I put <0/> into each app, watch face, and bookmark."
 msgstr "He introducido <0/> en cada aplicación, esfera del reloj y marcador."
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Make link"
 msgstr "<0/> Crear enlace"
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Copy the invite link"
 msgstr "Copiar el enlace de invitación"
 
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Your link is ready"
 msgstr "Tu enlace está listo"
 
@@ -40141,6 +40165,7 @@ msgstr "Todavía no hay enlaces. Crea uno para invitar a una persona."
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "No label"
 msgstr "Sin etiqueta"
 
@@ -48385,4 +48410,293 @@ msgstr ""
 #. 0: chip; 1: amount(margin)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "{0}, clear margin {1}"
+msgstr ""
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+msgid "Your sign-in, your display, your teams, and your linked chat accounts."
+msgstr ""
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+msgid "The teams that you are a member of, and their managers."
+msgstr ""
+
+#: src/lib/teams/member-kind.svelte.ts
+msgid "Manager"
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The team name is empty or too long. Change the name and try again."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The label is too long. Use a shorter label."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Nocturne does not allow this expiry. Select another expiry."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Nocturne does not allow this number of uses. Try again."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A team must keep one manager. Invite another manager first."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "The operator of this site limits who can create a team."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You cannot delete this team now."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "This invite link has expired. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A manager revoked this invite link. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "This invite link has no uses left. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The manager who made this link left the team. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "You are already a member of this team."
+msgstr ""
+
+#: src/lib/components/teams/TeamsUnavailable.svelte
+msgid "Teams are not available in the demo."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Could not create the team. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Teams - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "The teams that you are a member of."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Could not load your teams"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Your teams"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "You are not a member of a team."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "Create a team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "You are the first manager of a team that you create."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Team name"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/+page.svelte
+msgid "<0/> Create team"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "This link has no invite token. Check the link that you were given."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "This invite link is not valid. Ask the manager who sent it for a new link."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Your sign-in cannot join a team."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "This invite link cannot be used."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Could not accept the invite. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Join a team - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Join a team"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Joining..."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "You are already a member of <0/>."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "Open the team"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "<0/> invited you to be a manager of <1/>."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/join/+page.svelte
+msgid "<0/> invited you to join <1/>."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "Only platform administrators can create a team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/invites/+page.svelte
+msgid "When this is on, other people cannot create a team. Their teams stay as they are."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not rename the team. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not leave the team. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not remove the manager. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not revoke the link. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not delete the team. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Team"
+msgstr ""
+
+#. 0: team?.name ?? "Team"
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "{0} - Teams - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Could not load the team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "The managers of this team, and the links that add a manager."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "<0/> Rename team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Managers"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "A manager can rename the team, add and remove managers, and delete the team."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Leave team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "<0/> Leave"
+msgstr ""
+
+#. 0: team.name
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Leave {0}? You lose access to the team. A manager of the team must add you again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "A team must keep one manager. Invite another manager before you leave."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Remove manager"
+msgstr ""
+
+#. 0: manager.displayName; 1: team.name
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Remove {0} as a manager of {1}? They lose access to the team. The links that they made stop working."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Invite a manager"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "One person can use each link. A link stops working when the manager who made it leaves the team."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "No link works now."
+msgstr ""
+
+#. 0: invite.createdByName; 1: formatMediumDateTime(invite.expiresAt)
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Made by {0} · Stops working {1}"
+msgstr ""
+
+#. 0: invite.label ?? "with no label"
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Revoke the link {0}"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Links that work now"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Delete team"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Every manager of the team loses it. You cannot undo this."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "<0/> Delete team"
+msgstr ""
+
+#. 0: team.name
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "Delete {0}? Every manager loses the team. You cannot undo this."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "<0/> Teams"
 msgstr ""
