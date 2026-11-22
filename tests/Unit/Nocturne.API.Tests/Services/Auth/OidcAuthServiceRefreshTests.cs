@@ -93,6 +93,8 @@ public class OidcAuthServiceRefreshTests
             Mock.Of<IHttpClientFactory>(),
             Mock.Of<ITenantMemberService>(),
             Mock.Of<IMemberInviteService>(),
+            Mock.Of<ITenantCreationInviteService>(),
+            Mock.Of<ITenantRepository>(),
             Mock.Of<ITotpService>(),
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions { Session = new() { RotateRefreshTokens = rotate } }),

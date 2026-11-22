@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Identity;
 using Xunit;
 using Subject = Nocturne.Core.Models.Authorization.Subject;
 
@@ -32,6 +33,8 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IMemberInviteService> _memberInviteService = new();
+    private readonly Mock<ITenantCreationInviteService> _tenantCreationInvites = new();
+    private readonly Mock<ITenantRepository> _tenants = new();
     private readonly Mock<ITotpService> _totpService = new();
     private readonly ListLogger<OidcAuthService> _logger = new();
     private readonly OidcAuthService _service;
@@ -53,6 +56,8 @@ public class OidcAuthServiceLoginGateTests
             _httpFactory.Object,
             _tenantMemberService.Object,
             _memberInviteService.Object,
+            _tenantCreationInvites.Object,
+            _tenants.Object,
             _totpService.Object,
             new EphemeralDataProtectionProvider(),
             options,
@@ -693,5 +698,137 @@ public class OidcAuthServiceLoginGateTests
             t => t.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never,
             "an identity with no subject is a member of nothing");
+    }
+
+    private static TenantRecord SoleTenant(Guid id) => new(
+        Id: id, Slug: "sole", DisplayName: "Sole", IsActive: true, IsDemo: false, AllowAccessRequests: false,
+        AllowPublicDocs: false, OnboardingCompletedAt: null, SetupHubEnrolledAt: null, SetupStripDismissedRevision: null,
+        PatientRelationship: null, HandedOverAt: null, DefaultGlucoseUnits: null, LastReadingAt: null,
+        ShareTokenHash: null, ShareTokenEncrypted: null, ShareTokenSetAt: null, ShareLastAccessedAt: null,
+        SysCreatedAt: DateTime.UtcNow, SysUpdatedAt: DateTime.UtcNow, DemoConfig: null);
+
+    /// <summary>A first-time identity whose subject the sign-in creates, with the provider's default roles.</summary>
+    private (OidcProvider Provider, Subject Created) SetupCreatableFirstTimeIdentity()
+    {
+        SetupFirstTimeIdentity();
+        var provider = Provider();
+        provider.DefaultRoles = ["provider-default"];
+        var created = new Subject { Id = Guid.NewGuid(), Name = "Newcomer" };
+        _subjectService
+            .Setup(s => s.FindOrCreateFromOidcAsync(
+                provider.Id, Claims().Sub, provider.IssuerUrl,
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), provider.DefaultRoles))
+            .ReturnsAsync(created);
+        SetupSessionIssuance();
+        return (provider, created);
+    }
+
+    private Task<OidcCallbackResult> SignInOnTheApexAsync(OidcProvider provider, string returnUrl) =>
+        _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!, returnUrl: returnUrl), provider, Claims(), currentTenantId: null,
+            ipAddress: null, userAgent: null);
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("/")]
+    [InlineData("/settings/account")]
+    [InlineData("/api/auth/platform-access?tenant=erik")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithNoLink_IsRefusedWithoutASubject(string returnUrl)
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+
+        var result = await SignInOnTheApexAsync(provider, returnUrl);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().BeNull();
+        result.ProviderId.Should().Be(provider.Id);
+        result.ExternalIdentityDigest.Should().Be(
+            OidcAuthService.ExternalIdentityDigest(provider.IssuerUrl, Claims().Sub));
+        VerifyNothingWrittenForTheIdentity();
+        _tenants.Verify(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _tenantCreationInvites.Verify(
+            t => t.GetInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAUsableTenantCreationLink_CreatesItsSubjectWithTheProvidersDefaultRoles()
+    {
+        var (provider, created) = SetupCreatableFirstTimeIdentity();
+        _tenantCreationInvites
+            .Setup(t => t.GetInfoAsync("creation-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteInfo>.Ok(
+                new TenantCreationInviteInfo("nocturne.example.com", "Admin", DateTime.UtcNow.AddDays(1))));
+
+        var result = await SignInOnTheApexAsync(provider, "/start?token=creation-token&slug=erik&name=Erik");
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithARefusedTenantCreationLink_IsRefusedWithoutASubject()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        _tenantCreationInvites
+            .Setup(t => t.GetInfoAsync("creation-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteInfo>.Refused(
+                TenantInviteRefusalCode.UsedUp, "This invite link was already used."));
+
+        var result = await SignInOnTheApexAsync(provider, "/start?token=creation-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAJoinLinkOfTheSoleTenant_CreatesItsSubject()
+    {
+        var (provider, created) = SetupCreatableFirstTimeIdentity();
+        var soleId = Guid.NewGuid();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(SoleTenant(soleId));
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", soleId))
+            .ReturnsAsync(ValidInvite(soleId));
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexOfSeveralTenantsForAnUnseenIdentityWithAJoinLink_IsRefusedWithoutReadingTheInvite()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync((TenantRecord?)null);
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
+        _memberInviteService.Verify(
+            s => s.GetInviteByTokenAsync(It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAnUnknownJoinLinkOfTheSoleTenant_IsRefusedWithoutASubject()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        var soleId = Guid.NewGuid();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(SoleTenant(soleId));
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
     }
 }

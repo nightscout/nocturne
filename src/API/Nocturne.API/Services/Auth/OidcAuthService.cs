@@ -33,6 +33,8 @@ public class OidcAuthService : IOidcAuthService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IMemberInviteService _memberInviteService;
+    private readonly ITenantCreationInviteService _tenantCreationInvites;
+    private readonly ITenantRepository _tenants;
     private readonly ITotpService _totpService;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
@@ -50,6 +52,8 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
+    /// <param name="tenantCreationInvites">Reads the tenant-creation link a tenantless login returns to.</param>
+    /// <param name="tenants">Finds the sole tenant a tenantless host serves, for a join link handed out there.</param>
     /// <param name="totpService">Service that withholds the session behind an authenticator code when one is enrolled.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
@@ -64,6 +68,8 @@ public class OidcAuthService : IOidcAuthService
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
         IMemberInviteService memberInviteService,
+        ITenantCreationInviteService tenantCreationInvites,
+        ITenantRepository tenants,
         ITotpService totpService,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
@@ -79,6 +85,8 @@ public class OidcAuthService : IOidcAuthService
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
         _memberInviteService = memberInviteService;
+        _tenantCreationInvites = tenantCreationInvites;
+        _tenants = tenants;
         _totpService = totpService;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
@@ -310,8 +318,9 @@ public class OidcAuthService : IOidcAuthService
     /// for an identity not seen before) and issues a session. Because an OIDC identity resolves to
     /// a <em>global</em> subject, a valid external identity must still be a member of
     /// <paramref name="currentTenantId"/> before a session is issued; otherwise any external
-    /// identity could mint a session on any tenant's subdomain. A refused sign-in writes no
-    /// subject, identity link or profile change.
+    /// identity could mint a session on any tenant's subdomain. With no tenant resolved, only an
+    /// existing subject, or a first-time identity holding a link that authorises an account, is
+    /// admitted. A refused sign-in writes no subject, identity link or profile change.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
     /// </summary>
@@ -348,31 +357,18 @@ public class OidcAuthService : IOidcAuthService
         //
         // A state that names a tenant also requires one to have resolved. Such a state was
         // minted by a tenant login and must have been bounced to that subdomain, so an
-        // unresolved tenant means something upstream failed — and treating that as "nothing to
+        // unresolved tenant means something upstream failed, and treating that as "nothing to
         // check" is how the gate silently disappeared when the state encoding changed.
+        //
+        // With no tenant at all, a subject is global, so an existing one is admitted. There is no
+        // open sign-up: a first-time identity is admitted only by a link that authorises an account.
+        var admitted = false;
         var admittedByInvite = false;
         if (currentTenantId is { } tenantId)
         {
-            if (existing is null || !await _tenantMemberService.IsMemberAsync(existing.Id, tenantId))
-            {
-                if (!await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
-                {
-                    var digest = existing is null
-                        ? ExternalIdentityDigest(provider.IssuerUrl, idTokenClaims.Sub)
-                        : null;
-                    _logger.LogWarning(
-                        "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
-                            + "identity digest {IdentityDigest}) is not a member of tenant {TenantId}",
-                        provider.Id,
-                        existing?.Id,
-                        digest,
-                        tenantId);
-                    return OidcCallbackResult.NotAMember(
-                        existing?.Id, provider.Id, digest, stateData.ReturnUrl);
-                }
-
-                admittedByInvite = true;
-            }
+            admitted = existing is not null && await _tenantMemberService.IsMemberAsync(existing.Id, tenantId);
+            if (!admitted && await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+                admitted = admittedByInvite = true;
         }
         else if (!string.IsNullOrEmpty(stateData.TenantSlug))
         {
@@ -383,6 +379,26 @@ public class OidcAuthService : IOidcAuthService
             return OidcCallbackResult.Failed(
                 "invalid_state",
                 "The login could not be completed against the tenant it was started from.");
+        }
+        else
+        {
+            admitted = existing is not null || await AuthorisesAccountOnTenantlessHostAsync(stateData.ReturnUrl);
+        }
+
+        if (!admitted)
+        {
+            var digest = existing is null
+                ? ExternalIdentityDigest(provider.IssuerUrl, idTokenClaims.Sub)
+                : null;
+            _logger.LogWarning(
+                "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
+                    + "identity digest {IdentityDigest}) is not admitted to tenant {TenantId}",
+                provider.Id,
+                existing?.Id,
+                digest,
+                currentTenantId);
+            return OidcCallbackResult.NotAMember(
+                existing?.Id, provider.Id, digest, stateData.ReturnUrl);
         }
 
         var subject = await _subjectService.FindOrCreateFromOidcAsync(
@@ -475,7 +491,8 @@ public class OidcAuthService : IOidcAuthService
     /// </remarks>
     private async Task<bool> IsInvitedByReturnUrlAsync(string? returnUrl, Guid tenantId)
     {
-        var token = InviteTokenFromReturnUrl(returnUrl);
+        var token = TokenFromReturnUrl(
+            returnUrl, IMemberInviteService.JoinPath, IMemberInviteService.TokenQueryParameter);
         if (token == null)
             return false;
 
@@ -484,12 +501,38 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Reads the invite token out of a join link (<c>/join?token=...</c>), the only return URL
-    /// that carries one. Returns null for any other return URL.
+    /// Whether a login on a host that resolves no tenant returns to a link that authorises an
+    /// account for a first-time identity: a tenant-creation link that can still be redeemed, or a
+    /// join link of the sole tenant that host serves.
+    /// </summary>
+    /// <param name="returnUrl">The return URL carried in the (data-protected) state.</param>
+    /// <remarks>
+    /// Neither link is used here. The tenant is created, or the membership written, by the page the
+    /// login returns to, for the reason <see cref="IsInvitedByReturnUrlAsync"/> gives.
+    /// </remarks>
+    private async Task<bool> AuthorisesAccountOnTenantlessHostAsync(string? returnUrl)
+    {
+        var creationToken = TokenFromReturnUrl(
+            returnUrl, ITenantCreationInviteService.StartPath, ITenantCreationInviteService.TokenQueryParameter);
+        if (creationToken != null)
+            return (await _tenantCreationInvites.GetInfoAsync(creationToken, CancellationToken.None)).Refusal is null;
+
+        if (TokenFromReturnUrl(returnUrl, IMemberInviteService.JoinPath, IMemberInviteService.TokenQueryParameter) == null)
+            return false;
+
+        return await _tenants.FindSoleTenantAsync(CancellationToken.None) is { } sole
+            && await IsInvitedByReturnUrlAsync(returnUrl, sole.Id);
+    }
+
+    /// <summary>
+    /// Reads the token out of a link to <paramref name="path"/> (<c>/join?token=...</c>,
+    /// <c>/start?token=...</c>). Returns null for any other return URL.
     /// </summary>
     /// <param name="returnUrl">The return URL carried in the state.</param>
-    /// <returns>The invite token, or null.</returns>
-    private static string? InviteTokenFromReturnUrl(string? returnUrl)
+    /// <param name="path">The page the link opens.</param>
+    /// <param name="parameter">The query parameter carrying the token.</param>
+    /// <returns>The token, or null.</returns>
+    private static string? TokenFromReturnUrl(string? returnUrl, string path, string parameter)
     {
         if (string.IsNullOrEmpty(returnUrl))
             return null;
@@ -498,15 +541,12 @@ public class OidcAuthService : IOidcAuthService
         if (queryStart < 0)
             return null;
 
-        if (!returnUrl.AsSpan(0, queryStart)
-                .Equals(IMemberInviteService.JoinPath, StringComparison.OrdinalIgnoreCase))
-        {
+        if (!returnUrl.AsSpan(0, queryStart).Equals(path, StringComparison.OrdinalIgnoreCase))
             return null;
-        }
 
         var token = Microsoft.AspNetCore.WebUtilities.QueryHelpers
             .ParseQuery(returnUrl[queryStart..])
-            .TryGetValue(IMemberInviteService.TokenQueryParameter, out var values)
+            .TryGetValue(parameter, out var values)
                 ? values.ToString()
                 : null;
 
