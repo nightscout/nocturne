@@ -179,9 +179,10 @@ public interface ITenantMembershipRepository
     Task RecordUseAsync(Guid tenantId, Guid memberId, DateTime at, string? ipAddress, string? userAgent, CancellationToken ct);
 
     /// <summary>
-    /// The subject's platform-admin flag and their membership of <paramref name="tenantId"/> unless it
-    /// has ended at <paramref name="now"/>, read in one statement for the authentication of every
-    /// request; null when there is no such subject.
+    /// The subject's platform-admin standing and active state and their membership of
+    /// <paramref name="tenantId"/> unless it has ended at <paramref name="now"/>, read in one statement
+    /// for the authentication of every request; null when there is no such subject. An inactive
+    /// subject holds no platform-admin standing.
     /// </summary>
     Task<SubjectMembershipRead?> ReadSubjectMembershipAsync(Guid subjectId, Guid tenantId, DateTime now, CancellationToken ct);
 
@@ -293,5 +294,7 @@ public interface ITenantMembershipRepository
 /// <param name="LastUsedAt">When the membership was last stamped as used.</param>
 public sealed record TenantMembershipFacts(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt);
 
-/// <summary>A subject's platform-admin flag with their membership of the resolved tenant, or null when they hold none.</summary>
-public sealed record SubjectMembershipRead(bool IsPlatformAdmin, TenantMembershipFacts? Membership);
+/// <summary>A subject's platform-admin standing, active state and membership of the resolved tenant, as the authentication of a request reads them.</summary>
+/// <param name="IsPlatformAdmin">Whether the subject holds platform admin and is active.</param>
+/// <param name="Membership">The subject's membership of the tenant, or null when they hold none.</param>
+public sealed record SubjectMembershipRead(bool IsPlatformAdmin, bool IsActive, TenantMembershipFacts? Membership);

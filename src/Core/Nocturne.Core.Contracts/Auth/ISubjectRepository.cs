@@ -192,8 +192,8 @@ public interface ISubjectRepository
     Task<bool?> IsDemoSubjectAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
-    /// Whether the subject holds platform admin; false when there is no such subject. Read as the
-    /// scope's reader, unlike <see cref="GetSignInStateAsync"/>.
+    /// Whether the subject holds platform admin and is active; false when there is no such subject.
+    /// Read as the scope's reader, unlike <see cref="GetSignInStateAsync"/>.
     /// </summary>
     Task<bool> IsPlatformAdminAsync(Guid subjectId, CancellationToken ct);
 

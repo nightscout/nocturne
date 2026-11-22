@@ -101,6 +101,9 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         if (this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
 

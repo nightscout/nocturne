@@ -178,6 +178,11 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Create subject requested: {Name}", subject.Name);
 
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
+
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
@@ -223,6 +228,11 @@ public class AuthorizationController : ControllerBase
     public async Task<ActionResult<Subject>> UpdateSubject([FromBody] Subject subject)
     {
         _logger.LogDebug("Update subject requested: {Id}", subject.Id);
+
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
 
         if (!ModelState.IsValid)
         {

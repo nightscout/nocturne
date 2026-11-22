@@ -75,6 +75,11 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
+
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
         {
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);

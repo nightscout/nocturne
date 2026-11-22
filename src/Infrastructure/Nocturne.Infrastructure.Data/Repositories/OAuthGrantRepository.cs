@@ -60,7 +60,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         Guid tenantId, DirectGrantLookup lookup, DateTime now, CancellationToken ct)
     {
         await using var db = await OpenForTenantAsync(tenantId, ct);
-        var grants = Match(PinnedGrants(db, tenantId).Where(IsLiveDirectGrant(now)), lookup);
+        var grants = Match(PinnedGrants(db, tenantId).Where(IsLiveDirectGrant(now)).Where(g => g.Subject!.IsActive), lookup);
         var row = await WithMembership(grants, db, tenantId, now).FirstOrDefaultAsync(ct);
         return row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership());
     }
@@ -467,10 +467,16 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         db.OAuthGrants.AsNoTracking().Where(g => g.TenantId == tenantId);
 
     /// <summary>
-    /// What makes a direct grant usable at <paramref name="now"/>. Every read that authenticates or
-    /// exchanges one goes through it, and <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/> is the
-    /// same rule for a record already read, so none can accept a grant another refuses.
+    /// What makes a direct grant itself usable at <paramref name="now"/>, apart from its subject.
+    /// Every read of live direct grants goes through it, and
+    /// <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/> is the same rule for a record already read.
     /// </summary>
+    /// <remarks>
+    /// A grant also authenticates only while its subject is active, a test each authenticating read
+    /// adds itself: the pinned read joins it, and the V2 exchange reads the subject. It stays out of
+    /// this rule because a record carries no subject state, and because the "secret already in use"
+    /// read must still see an inactive subject's grant, or a second grant would take the same secret.
+    /// </remarks>
     private static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
         g => g.GrantType == OAuthGrantTypes.Direct
              && g.RevokedAt == null

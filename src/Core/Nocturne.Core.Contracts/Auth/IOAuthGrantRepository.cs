@@ -22,7 +22,8 @@ public interface IOAuthGrantRepository
     /// and that authenticates at <paramref name="now"/>, with its subject's membership of that
     /// tenant read in the same statement; null when there is none. A grant is live when it is not
     /// revoked and either open-ended or short of its expiry; the expiry instant itself does not
-    /// authenticate.
+    /// authenticate. It authenticates only while its subject is active, so a deactivated subject's
+    /// grant is refused as a revoked one is.
     /// </summary>
     /// <remarks>
     /// The grant's own tenant is matched as well as pinned, so the tenant a grant authorizes is

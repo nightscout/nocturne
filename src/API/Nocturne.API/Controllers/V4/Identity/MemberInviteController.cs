@@ -83,6 +83,9 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
 
         var accessEndsAt = HttpContext.InheritAccessEnd(AccessEndRequest.Instant(request.AccessEndsAt));

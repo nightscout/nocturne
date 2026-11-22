@@ -117,6 +117,11 @@ public class HubTokenAuthorizerTests
     {
         using (var db = _dbContextFactory.CreateDbContext())
         {
+            if (db.Subjects.Find(subjectId) is null)
+            {
+                db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
+            }
+
             db.TenantMembers.Add(new TenantMemberEntity
             {
                 Id = Guid.CreateVersion7(),
