@@ -5758,6 +5758,7 @@ msgstr "<0/> Zkusit znovu"
 
 #: ../portal/src/routes/roadmap/+page.svelte
 #: src/lib/components/alerts/HistoryCheck.svelte
+#: src/lib/components/members/PublicAccessCard.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
@@ -47026,4 +47027,13 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
 msgid "Sign in again to link your Discord account."
+msgstr ""
+
+#. 0: lockedDate
+#: src/lib/components/members/PublicAccessCard.svelte
+msgid "Your access ends on {0}, so you cannot change public sharing."
+msgstr ""
+
+#: src/lib/components/members/PublicAccessCard.svelte
+msgid "The public access settings did not load."
 msgstr ""
