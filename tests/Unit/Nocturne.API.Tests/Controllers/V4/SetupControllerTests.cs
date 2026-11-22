@@ -463,6 +463,39 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task OwnerOptions_WhenAnotherMemberHoldsTheUsername_Returns400AndIssuesNoOptions()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var candidateId = Guid.Parse("00000000-0000-7000-8000-000000000001");
+        var formerId = Guid.Parse("00000000-0000-7000-8000-000000000002");
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Subjects.AddRange(
+            new SubjectEntity { Id = candidateId, Name = "Candidate", Username = "candidate", IsActive = true },
+            new SubjectEntity { Id = formerId, Name = "Former", Username = "taken", IsActive = true });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = formerId, Username = "taken",
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "taken", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Subject.Detail.Should().Be("This username is already taken");
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.TenantMembers.CountAsync()).Should().Be(1, "the refusal writes no membership");
+    }
+
+    [Fact]
     public async Task OwnerOptions_WhenSoleTenantHasCredentialedMember_Returns409OwnerAlreadyExists()
     {
         // The guard must still block once a member holds real credentials — a

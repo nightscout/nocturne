@@ -797,10 +797,20 @@ public class OidcAuthService : IOidcAuthService
         if (!parsed.Success)
             return OidcSetupCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
 
-        var stateData = parsed.StateData!;
-        var provider = parsed.Provider!;
-        var claims = parsed.Claims!;
+        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, ipAddress, userAgent);
+    }
 
+    /// <summary>
+    /// Completes the setup owner step after the callback has been validated and the ID token parsed.
+    /// Extracted from <see cref="HandleSetupCallbackAsync"/> so it can be tested without the code exchange.
+    /// </summary>
+    internal async Task<OidcSetupCallbackResult> CompleteSetupAsync(
+        OidcStateData stateData,
+        OidcProvider provider,
+        OidcIdTokenClaims claims,
+        string? ipAddress,
+        string? userAgent)
+    {
         if (stateData.Intent != "setup")
             return OidcSetupCallbackResult.Failed("invalid_intent", "State was not issued for a setup flow");
 
@@ -809,7 +819,6 @@ public class OidcAuthService : IOidcAuthService
 
         var subjectId = stateData.SubjectId.Value;
 
-        // Link OIDC identity to the pre-created admin subject
         var (outcome, _) = await _subjectService.AttachOidcIdentityAsync(
             subjectId,
             provider.Id,
@@ -819,9 +828,18 @@ public class OidcAuthService : IOidcAuthService
             claims.EmailVerified == true);
 
         if (outcome == OidcLinkOutcome.AlreadyLinkedToOther)
-            return OidcSetupCallbackResult.Failed(
-                "identity_already_linked",
-                "This provider account is already linked to another Nocturne user");
+        {
+            // The caller has just proved the identity, so a subject that holds it and nothing that
+            // could make someone else the owner is theirs.
+            if (stateData.TenantSlug is not { } tenantSlug
+                || await _subjectService.AdoptForSetupAsync(subjectId, claims.Sub, provider.IssuerUrl, tenantSlug)
+                    is not { } adoptedId)
+                return OidcSetupCallbackResult.Failed(
+                    "identity_already_linked",
+                    "This provider account is already linked to another Nocturne user");
+
+            subjectId = adoptedId;
+        }
 
         // Update subject email/name from OIDC claims if not already set
         var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
@@ -901,9 +919,13 @@ public class OidcAuthService : IOidcAuthService
                 => OidcLinkResult.Succeeded(
                     identityId!.Value, stateData.ReturnUrl, provider.Id, added: outcome == OidcLinkOutcome.Created),
             OidcLinkOutcome.AlreadyLinkedToOther
-                => OidcLinkResult.Failed(
-                    "identity_already_linked",
-                    "This provider account is already linked to another Nocturne user"),
+                => await _subjectService.TakeUnclaimedOidcIdentityAsync(
+                        authenticatedSubjectId, claims.Sub, provider.IssuerUrl, claims.Email,
+                        claims.EmailVerified == true) is { } takenId
+                    ? OidcLinkResult.Succeeded(takenId, stateData.ReturnUrl, provider.Id, added: true)
+                    : OidcLinkResult.Failed(
+                        "identity_already_linked",
+                        "This provider account is already linked to another Nocturne user"),
             _ => OidcLinkResult.Failed("unknown_error", "Unexpected link outcome"),
         };
     }
