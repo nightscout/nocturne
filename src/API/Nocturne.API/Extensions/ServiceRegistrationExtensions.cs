@@ -169,6 +169,7 @@ public static class ServiceRegistrationExtensions
         // each anonymous request costs. An invite page reads once per visit, which leaves the
         // ceiling room for reloads and for a clinic behind one NAT.
         ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
+        // One address. GuestActivationLimiter bounds every address at one tenant together.
         ("guest-activate", 5, TimeSpan.FromMinutes(10)),
         // Redeeming a login code. The code is a random string of refresh-token length, so grinding
         // one is infeasible at any rate; the ceiling bounds what an anonymous attempt costs, which
@@ -543,6 +544,7 @@ public static class ServiceRegistrationExtensions
                 ct));
         });
         services.AddSingleton<DelegatedConnectorSyncLimiter>();
+        services.AddSingleton<GuestActivationLimiter>();
 
         return services;
     }
