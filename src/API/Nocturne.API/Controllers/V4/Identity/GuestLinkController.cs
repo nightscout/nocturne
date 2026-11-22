@@ -6,6 +6,7 @@ using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -184,6 +185,7 @@ public class GuestLinkController : ControllerBase
     [HttpPost("activate")]
     [AllowAnonymous]
     [EnableRateLimiting("guest-activate")]
+    [LimitGuestActivationsPerTenant]
     [ProducesResponseType(typeof(ActivateGuestLinkResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateGuestLink(
