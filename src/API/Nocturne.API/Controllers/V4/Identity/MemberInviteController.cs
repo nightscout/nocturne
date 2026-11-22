@@ -130,7 +130,7 @@ public class MemberInviteController : ControllerBase
     public async Task<IActionResult> ListInvites()
     {
         var invites = await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId);
-        return Ok(invites);
+        return Ok(invites.Select(i => i with { OutlastsCaller = HttpContext.OutlastsCallerAccess(i.AccessEndsAt) }).ToList());
     }
 
     /// <inheritdoc cref="IMemberInviteService.RevokeInviteAsync"/>
@@ -142,6 +142,12 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvite(Guid inviteId)
     {
+        if (HttpContext.CallerAccessEndsAt() is not null
+            && (await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId))
+                .FirstOrDefault(i => i.Id == inviteId) is { } invite
+            && HttpContext.OutlastsCallerAccess(invite.AccessEndsAt))
+            return Problem(detail: HttpContextExtensions.InviteOutlastsCallerDetail, statusCode: StatusCodes.Status403Forbidden);
+
         var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, _tenantAccessor.TenantId);
         return revoked ? NoContent() : NotFound();
     }
@@ -162,6 +168,11 @@ public class MemberInviteController : ControllerBase
     {
         if (IsCallersOwnMembership(subjectId))
             return Problem(detail: SelfRemovalDetail, statusCode: 400);
+
+        if (HttpContext.CallerAccessEndsAt() is not null
+            && await _members.FindMemberAsync(_tenantAccessor.TenantId, subjectId, ct) is { } member
+            && this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
+            return outlasts;
 
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
         return result.Ok
@@ -283,9 +294,13 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         var managesMembers = Scope.Satisfies(HttpContext.GetGrantedScopes(), Scope.MembersManage);
-        return Ok(managesMembers
-            ? tenant.Members
-            : tenant.Members.Select(m => m with { HasConfirmedRecoveryEmail = null }).ToList());
+        return Ok(tenant.Members
+            .Select(m => m with
+            {
+                HasConfirmedRecoveryEmail = managesMembers ? m.HasConfirmedRecoveryEmail : null,
+                OutlastsCaller = HttpContext.OutlastsCallerAccess(m.AccessEndsAt),
+            })
+            .ToList());
     }
 
     /// <summary>
@@ -344,6 +359,9 @@ public class MemberInviteController : ControllerBase
 
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
+
+        if (this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
+            return outlasts;
 
         if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
@@ -455,6 +473,9 @@ public class MemberInviteController : ControllerBase
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
 
+        if (this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
+            return outlasts;
+
         if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
@@ -548,6 +569,9 @@ public class MemberInviteController : ControllerBase
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
 
+        if (this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
+            return outlasts;
+
         // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
         if (IsCallersOwnMembership(member.SubjectId))
@@ -579,7 +603,8 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     /// <remarks>
     /// To end access now, remove the member: an end at or before now is refused. A caller whose own
-    /// access ends cannot set a later end or clear one (<see cref="HttpContextExtensions.OutlastsCallerAccess"/>).
+    /// access ends cannot set a later end or clear one, nor change a member whose access outlasts theirs
+    /// (<see cref="HttpContextExtensions.OutlastsCallerAccess"/>).
     /// An owner cannot be given an end date.
     /// </remarks>
     [HttpPut("members/{id:guid}/access-end")]
@@ -600,6 +625,9 @@ public class MemberInviteController : ControllerBase
 
         if (member == null)
             return NotFound();
+
+        if (this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
+            return outlasts;
 
         if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);

@@ -33,8 +33,12 @@
       {@const accessEnd = invite.accessEndsAt
         ? formatMediumDate(accessEndDate(invite.accessEndsAt))
         : null}
+      {@const outlastsReasonId = `invite-outlasts-${invite.id}`}
       <div
         class="flex items-center justify-between gap-4 rounded-md border p-3"
+        role="group"
+        aria-label={inviteName}
+        aria-describedby={invite.outlastsCaller ? outlastsReasonId : undefined}
       >
         <div class="space-y-1 flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
@@ -62,6 +66,11 @@
               &middot; Access ends {accessEnd}
             {/if}
           </p>
+          {#if invite.outlastsCaller}
+            <p id={outlastsReasonId} class="text-xs text-muted-foreground">
+              This invite gives access that lasts longer than yours.
+            </p>
+          {/if}
           {#if invite.usedBy && invite.usedBy.length > 0}
             <div class="mt-2 pt-2 border-t space-y-1">
               <p
@@ -81,6 +90,7 @@
             </div>
           {/if}
         </div>
+        {#if !invite.outlastsCaller}
         <Button
           type="button"
           variant="ghost-destructive"
@@ -96,6 +106,7 @@
             <Trash2 class="h-3.5 w-3.5" />
           {/if}
         </Button>
+        {/if}
       </div>
     {/each}
   </Card.Content>

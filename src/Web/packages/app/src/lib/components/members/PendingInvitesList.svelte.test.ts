@@ -40,4 +40,32 @@ describe("PendingInvitesList", () => {
     await expect.element(page.getByText("Camp session")).toBeVisible();
     expect(page.getByText("Access ends", { exact: false }).elements()).toHaveLength(0);
   });
+
+  it("offers no revoke control and says why for an invite that outlasts the caller", async () => {
+    render(PendingInvitesList, {
+      invites: [{ ...invite, outlastsCaller: true }],
+      onRevoke: () => {},
+      isRevoking: false,
+    });
+
+    const reason = "This invite gives access that lasts longer than yours.";
+    await expect.element(page.getByText(reason)).toBeVisible();
+    await expect
+      .element(page.getByRole("group", { name: "Camp session" }))
+      .toHaveAccessibleDescription(reason);
+    expect(page.getByRole("button", { name: "Revoke Camp session" }).elements()).toHaveLength(0);
+  });
+
+  it("offers revoke and no reason for an invite within reach", async () => {
+    render(PendingInvitesList, {
+      invites: [{ ...invite, outlastsCaller: false }],
+      onRevoke: () => {},
+      isRevoking: false,
+    });
+
+    await expect.element(page.getByRole("button", { name: "Revoke Camp session" })).toBeVisible();
+    expect(
+      page.getByText("This invite gives access that lasts longer than yours.").elements(),
+    ).toHaveLength(0);
+  });
 });

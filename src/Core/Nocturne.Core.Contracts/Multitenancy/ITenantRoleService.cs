@@ -25,6 +25,12 @@ public interface ITenantRoleService
         Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
 
     /// <summary>
+    /// Who holds the roles of <paramref name="tenantId"/>, from one read of its members and, when
+    /// <paramref name="callerEnd"/> is not null, its invites. See <see cref="RoleHolders"/>.
+    /// </summary>
+    Task<RoleHolders> GetRoleHoldersAsync(Guid tenantId, DateTime? callerEnd, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns a role by its ID within <paramref name="tenantId"/>, or null if the tenant has
     /// no such role. A role ID belonging to another tenant resolves to null.
     /// </summary>
@@ -123,11 +129,31 @@ public record RoleGrantValidation(bool Ok, string? ErrorCode, string? ErrorDescr
 }
 
 /// <summary>
+/// The roles held, by group, for a caller whose access ends at a given instant.
+/// </summary>
+/// <param name="HeldPast">Roles held by a member whose access outlasts the caller's, which includes the Public member since its access never ends. Empty for a caller whose access does not end.</param>
+/// <param name="InvitedPast">Roles a live invite gives, where the invite's access outlasts the caller's. Empty for a caller whose access does not end.</param>
+/// <param name="HeldByPublic">Roles the Public member holds, for any caller.</param>
+public sealed record RoleHolders(HashSet<Guid> HeldPast, HashSet<Guid> InvitedPast, HashSet<Guid> HeldByPublic)
+{
+    /// <summary>Whether the caller may not change <paramref name="roleId"/>.</summary>
+    public bool Outlasts(Guid roleId) => HeldPast.Contains(roleId) || InvitedPast.Contains(roleId);
+}
+
+/// <summary>
 /// Projection of a tenant role including its permission set and member count.
 /// </summary>
 /// <param name="CanGrant">
 /// Whether the caller the role was read for may confer it: what
 /// <see cref="ITenantRoleService.ValidateRoleGrantAsync"/> would say for this role alone.
+/// </param>
+/// <param name="OutlastsCaller">
+/// Whether the caller the role was read for has an end date and a member whose access outlasts it
+/// holds this role, so the caller may not change or delete it. Always false when read for no caller.
+/// </param>
+/// <param name="InviteOutlastsCaller">
+/// Whether the caller has an end date and a live invite whose access outlasts it gives this role,
+/// so the caller may not change or delete it. Always false when read for no caller.
 /// </param>
 public record TenantRoleDto(
     Guid Id,
@@ -138,7 +164,9 @@ public record TenantRoleDto(
     bool IsSystem,
     int MemberCount,
     DateTime SysCreatedAt,
-    bool CanGrant
+    bool CanGrant,
+    bool OutlastsCaller = false,
+    bool InviteOutlastsCaller = false
 )
 {
     public RoleAccessLevel? AccessLevel => RoleAccessLevels.Of(Permissions);

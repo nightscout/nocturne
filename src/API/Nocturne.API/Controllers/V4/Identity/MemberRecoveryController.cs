@@ -83,7 +83,9 @@ public class MemberRecoveryController : ControllerBase
                 s.Id, s.Name, s.Username,
                 HasRecoveryCodes: await _recoveryCodeService.GetRemainingCountAsync(s.Id) > 0,
                 OperatorOnly: await _eligibility.IsOperatorOnlyAsync(
-                    _tenantAccessor.TenantId, s.Id, s.IsPlatformAdmin, ct)));
+                    _tenantAccessor.TenantId, s.Id, s.IsPlatformAdmin, ct),
+                OutlastsCaller: HttpContext.OutlastsCallerAccess(
+                    (await _members.FindMemberAsync(_tenantAccessor.TenantId, s.Id, ct))?.AccessEndsAt)));
         }
 
         return Ok(members);
@@ -160,5 +162,6 @@ public class MemberRecoveryController : ControllerBase
 /// <param name="Username">Sign-in name, when the member has one.</param>
 /// <param name="HasRecoveryCodes">Whether the member can still sign in with a recovery code of their own.</param>
 /// <param name="OperatorOnly">Whether only the operator can issue this member's recovery code.</param>
+/// <param name="OutlastsCaller">Whether the caller has an end date and this member's access outlasts it, so the caller may not issue a code.</param>
 public record LockedOutMember(
-    Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes, bool OperatorOnly);
+    Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes, bool OperatorOnly, bool OutlastsCaller = false);

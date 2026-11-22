@@ -186,4 +186,54 @@ describe("RolesSection", () => {
     await expect.element(page.getByRole("alertdialog")).toBeVisible();
     expect(page.getByRole("alertdialog").getByRole("alert").elements()).toHaveLength(0);
   });
+
+  it("offers only View and says why for a role a longer-lasting member holds", async () => {
+    roles = [{ ...caretaker, outlastsCaller: true, memberCount: 1 }];
+
+    render(RolesSection);
+
+    const reason = "A member whose access lasts longer than yours has this role.";
+    await expect.element(page.getByText(reason)).toBeVisible();
+    await expect
+      .element(page.getByRole("group", { name: "Caretaker" }))
+      .toHaveAccessibleDescription(reason);
+    expect(page.getByRole("button", { name: "Edit" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Delete role" }).elements()).toHaveLength(0);
+
+    await page.getByRole("button", { name: "View" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByText("View role")).toBeVisible();
+    await expect
+      .element(dialog.getByText("A member whose access lasts longer than yours has this role."))
+      .toBeVisible();
+    expect(dialog.getByText(/System roles are managed/).elements()).toHaveLength(0);
+    expect(dialog.getByRole("button", { name: "Save" }).elements()).toHaveLength(0);
+  });
+
+  it("offers only View and states the invite when a longer-lasting invite uses the role", async () => {
+    roles = [{ ...caretaker, inviteOutlastsCaller: true }];
+
+    render(RolesSection);
+
+    const reason = "An invite that gives access longer than yours uses this role.";
+    await expect.element(page.getByText(reason)).toBeVisible();
+    await expect
+      .element(page.getByRole("group", { name: "Caretaker" }))
+      .toHaveAccessibleDescription(reason);
+    expect(page.getByRole("button", { name: "Edit" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Delete role" }).elements()).toHaveLength(0);
+    await expect.element(page.getByRole("button", { name: "View" })).toBeVisible();
+  });
+
+  it("offers edit and delete and no reason for a role within reach", async () => {
+    roles = [{ ...caretaker, outlastsCaller: false }];
+
+    render(RolesSection);
+
+    await expect.element(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Delete role" })).toBeVisible();
+    expect(
+      page.getByText("A member whose access lasts longer than yours has this role.").elements(),
+    ).toHaveLength(0);
+  });
 });

@@ -4,6 +4,7 @@ using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Identity;
@@ -50,12 +51,19 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken ct)
     {
-        if (HttpContext.HasScope(Scope.RolesManage))
-            return Ok(await _roleService.GetRolesAsync(_tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct));
+        var tenantId = _tenantAccessor.TenantId;
+        var roles = HttpContext.HasScope(Scope.RolesManage)
+            ? await _roleService.GetRolesAsync(tenantId, HttpContext.GetGrantedScopes(), ct)
+            : await _roleService.GetAssignableRolesAsync(tenantId, HttpContext.GetGrantedScopes(), ct);
 
-        var assignable = await _roleService.GetAssignableRolesAsync(
-            _tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct);
-        return Ok(assignable);
+        var holders = await _roleService.GetRoleHoldersAsync(tenantId, HttpContext.CallerAccessEndsAt(), ct);
+        return Ok(roles
+            .Select(r => r with
+            {
+                OutlastsCaller = holders.HeldPast.Contains(r.Id),
+                InviteOutlastsCaller = holders.InvitedPast.Contains(r.Id),
+            })
+            .ToList());
     }
 
     /// <summary>
@@ -91,8 +99,17 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
+    public async Task<IActionResult> UpdateRole(
+        Guid id,
+        [FromBody] UpdateRoleRequest request,
+        [FromServices] PublicAccessCacheService publicAccessCache,
+        CancellationToken ct)
     {
+        var holders = await _roleService.GetRoleHoldersAsync(
+            _tenantAccessor.TenantId, HttpContext.CallerAccessEndsAt(), ct);
+        if (RoleHeldPastCallerRefusal(holders, id) is { } heldPast)
+            return heldPast;
+
         var grantedScopes = HttpContext.GetGrantedScopes();
         var violation = Scope.ValidateGrant(request.Permissions, grantedScopes);
         if (violation != null)
@@ -105,7 +122,13 @@ public class RoleController : ControllerBase
             if (result == null)
                 return NotFound();
 
-            return result.Role is null ? NameProblem(result) : Ok(result.Role);
+            if (result.Role is null)
+                return NameProblem(result);
+
+            if (holders.HeldByPublic.Contains(id))
+                publicAccessCache.Evict(_tenantAccessor.TenantId);
+
+            return Ok(result.Role);
         }
         catch (InvalidOperationException ex)
         {
@@ -123,14 +146,35 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DeleteRole(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteRole(
+        Guid id, [FromServices] PublicAccessCacheService publicAccessCache, CancellationToken ct)
     {
+        var holders = await _roleService.GetRoleHoldersAsync(
+            _tenantAccessor.TenantId, HttpContext.CallerAccessEndsAt(), ct);
+        if (RoleHeldPastCallerRefusal(holders, id) is { } heldPast)
+            return heldPast;
+
         var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
         if (!result.Success)
             return Problem(detail: result.ErrorDescription, statusCode: 400, title: result.ErrorCode);
 
+        if (holders.HeldByPublic.Contains(id))
+            publicAccessCache.Evict(_tenantAccessor.TenantId);
+
         return NoContent();
     }
+
+    /// <summary>
+    /// The 403 for a change to a role a member or a live invite whose access outlasts the caller's
+    /// holds (the Public member always does), or null when the caller may go on. A role edit
+    /// changes what every holder can do.
+    /// </summary>
+    private ObjectResult? RoleHeldPastCallerRefusal(RoleHolders holders, Guid roleId) =>
+        holders.HeldPast.Contains(roleId)
+            ? Problem(detail: HttpContextExtensions.RoleHeldPastCallerDetail, statusCode: StatusCodes.Status403Forbidden)
+            : holders.InvitedPast.Contains(roleId)
+                ? Problem(detail: HttpContextExtensions.RoleInvitedPastCallerDetail, statusCode: StatusCodes.Status403Forbidden)
+                : null;
 
     private ObjectResult NameProblem(SaveRoleResult result) =>
         this.ProblemWithCode(

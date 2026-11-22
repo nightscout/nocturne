@@ -15,6 +15,13 @@ public sealed class RoleControllerGetRolesGateTests
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Mock<ITenantRoleService> _roles = new();
 
+    public RoleControllerGetRolesGateTests()
+    {
+        _roles
+            .Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RoleHolders([], [], []));
+    }
+
     private static TenantRoleDto Role(string slug, params string[] permissions) =>
         new(Guid.CreateVersion7(), slug, slug, null, [.. permissions], false, 0, DateTime.UtcNow, true);
 
