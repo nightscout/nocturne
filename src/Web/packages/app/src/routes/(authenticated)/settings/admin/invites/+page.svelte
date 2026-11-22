@@ -29,6 +29,7 @@
     TenantCreationInviteStatus,
     type TenantCreationInviteDto,
   } from "#lib/api/index.js";
+  import type { PlatformPolicyUpdate } from "@nocturne/api-client";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
@@ -43,15 +44,22 @@
   const policyQuery = getPolicy();
   const policy = $derived(policyQuery.current);
   let policySaving = $state(false);
-  let policyError = $state<string | null>(null);
+  let policyError = $state<{ field: keyof PlatformPolicyUpdate; message: string } | null>(null);
+  let ownerSlugChange = $derived(policy?.allowOwnerSlugChange ?? false);
+  let restrictTeamCreation = $derived(policy?.restrictTeamCreationToAdmins ?? false);
 
-  async function setOwnerSlugChange(allow: boolean) {
+  async function savePolicy(field: keyof PlatformPolicyUpdate, value: boolean) {
     policySaving = true;
     policyError = null;
     try {
-      await setPolicy({ allowOwnerSlugChange: allow });
+      await setPolicy({ [field]: value });
     } catch (err) {
-      policyError = describeSubmitError(err, "Could not save the setting. Try again.");
+      ownerSlugChange = policy?.allowOwnerSlugChange ?? false;
+      restrictTeamCreation = policy?.restrictTeamCreationToAdmins ?? false;
+      policyError = {
+        field,
+        message: describeSubmitError(err, "Could not save the setting. Try again."),
+      };
     } finally {
       policySaving = false;
     }
@@ -417,13 +425,38 @@
           </div>
           <Switch
             id="allow-owner-slug-change"
-            checked={policy?.allowOwnerSlugChange ?? false}
+            bind:checked={ownerSlugChange}
             disabled={!policy || policySaving}
-            onCheckedChange={(checked) => setOwnerSlugChange(checked)}
+            onCheckedChange={(checked) => savePolicy("allowOwnerSlugChange", checked)}
           />
         </div>
-        {#if policyError}
-          <p class="text-sm text-destructive" role="alert">{policyError}</p>
+        {#if policyError?.field === "allowOwnerSlugChange"}
+          <p class="text-sm text-destructive" role="alert">{policyError.message}</p>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Teams</Card.Title>
+      </Card.Header>
+      <Card.Content class="space-y-2">
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-1">
+            <Label for="restrict-team-creation">Only platform administrators can create a team</Label>
+            <p class="text-sm text-muted-foreground">
+              When this is on, other people cannot create a team. Their teams stay as they are.
+            </p>
+          </div>
+          <Switch
+            id="restrict-team-creation"
+            bind:checked={restrictTeamCreation}
+            disabled={!policy || policySaving}
+            onCheckedChange={(checked) => savePolicy("restrictTeamCreationToAdmins", checked)}
+          />
+        </div>
+        {#if policyError?.field === "restrictTeamCreationToAdmins"}
+          <p class="text-sm text-destructive" role="alert">{policyError.message}</p>
         {/if}
       </Card.Content>
     </Card.Root>

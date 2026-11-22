@@ -22,6 +22,17 @@ describe("visibleSettingsGroups", () => {
     expect(groups.site).toContain("/settings/audit");
   });
 
+  it("offers Teams in the personal group, to a viewer who holds no site scope", () => {
+    expect(hrefs({ grantedScopes: [], isPlatformAdmin: false }).personal).toContain("/settings/teams");
+    expect(hrefs(OWNER).site).not.toContain("/settings/teams");
+  });
+
+  it("does not offer Teams to the demo visitor", () => {
+    expect(
+      hrefs({ grantedScopes: [], isPlatformAdmin: false, refusedAsDemoSubject: true }).personal,
+    ).not.toContain("/settings/teams");
+  });
+
   it("adds the platform group for a platform admin", () => {
     expect(hrefs({ ...OWNER, isPlatformAdmin: true }).platform).toEqual([
       "/settings/admin",

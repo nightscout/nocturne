@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -46,7 +47,7 @@ public class TeamsController(
 
     public const string TokenQueryParameter = "token";
 
-    private const int MaxLabelLength = 255;
+    public const int MaxLabelLength = 255;
 
     internal const string CreationRestrictedDetail = "Only a platform administrator can create a team on this site.";
 
@@ -77,7 +78,8 @@ public class TeamsController(
             return Unauthorized();
 
         if (!CanCreate(await policies.GetAsync(ct), HttpContext.GetAuthContext()))
-            return Problem(detail: CreationRestrictedDetail, statusCode: StatusCodes.Status403Forbidden);
+            return this.ProblemWithCode(
+                TeamProblemCodes.CreationRestricted, CreationRestrictedDetail, StatusCodes.Status403Forbidden);
 
         if (TeamName(request.Name) is not { } name)
             return NameProblem();
@@ -136,8 +138,8 @@ public class TeamsController(
         return await teams.RemoveManagerAsync(teamId, callerId, subjectId, Now, ct) switch
         {
             ManagerGuardedChange.Changed => NoContent(),
-            ManagerGuardedChange.LastManager => Problem(
-                detail: TeamManagerFilter.LastManagerRefusal, statusCode: StatusCodes.Status400BadRequest),
+            ManagerGuardedChange.LastManager => this.ProblemWithCode(
+                TeamProblemCodes.LastManager, TeamManagerFilter.LastManagerRefusal, StatusCodes.Status400BadRequest),
             _ => NotFound(),
         };
     }
@@ -158,20 +160,23 @@ public class TeamsController(
             return Unauthorized();
 
         if (request.ExpiresInDays is < 1 or > TenantCreationInviteService.MaxExpiresInDays)
-            return Problem(
-                detail: $"Expiry must be between 1 and {TenantCreationInviteService.MaxExpiresInDays} days.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return this.ProblemWithCode(
+                TeamProblemCodes.ExpiryInvalid,
+                $"Expiry must be between 1 and {TenantCreationInviteService.MaxExpiresInDays} days.",
+                StatusCodes.Status400BadRequest);
 
         if (request.MaxUses is < 1 or > TenantCreationInviteService.MaxUsesCeiling)
-            return Problem(
-                detail: $"The number of uses must be between 1 and {TenantCreationInviteService.MaxUsesCeiling}.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return this.ProblemWithCode(
+                TeamProblemCodes.UsesInvalid,
+                $"The number of uses must be between 1 and {TenantCreationInviteService.MaxUsesCeiling}.",
+                StatusCodes.Status400BadRequest);
 
         var label = string.IsNullOrWhiteSpace(request.Label) ? null : request.Label.Trim();
         if (label is { Length: > MaxLabelLength })
-            return Problem(
-                detail: $"The label must be {MaxLabelLength} characters or fewer.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return this.ProblemWithCode(
+                TeamProblemCodes.LabelInvalid,
+                $"The label must be {MaxLabelLength} characters or fewer.",
+                StatusCodes.Status400BadRequest);
 
         var token = jwtService.GenerateRefreshToken();
         var expiresAt = Now.AddDays(request.ExpiresInDays);
@@ -217,10 +222,10 @@ public class TeamsController(
             return NotFound();
 
         if (UnusableDetail(info.Refusal) is { } detail)
-            return Problem(detail: detail, statusCode: StatusCodes.Status400BadRequest);
+            return this.ProblemWithCode(UnusableCode(info.Refusal)!, detail, StatusCodes.Status400BadRequest);
 
         return Ok(new TeamInviteDetails(
-            info.TeamId, info.TeamName, info.CreatedByName, info.Refusal == TeamInviteRefusal.AlreadyMember));
+            info.TeamId, info.TeamName, info.CreatedByName, info.Kind, info.Refusal == TeamInviteRefusal.AlreadyMember));
     }
 
     /// <summary>
@@ -243,9 +248,12 @@ public class TeamsController(
         {
             { Refusal: null, TeamId: { } teamId } => Ok(new TeamInviteAccepted(teamId)),
             { Refusal: TeamInviteRefusal.NotFound } => NotFound(),
-            { Refusal: TeamInviteRefusal.AlreadyMember } => Problem(
-                detail: "You are already a member of this team.", statusCode: StatusCodes.Status400BadRequest),
-            _ => Problem(detail: UnusableDetail(acceptance.Refusal), statusCode: StatusCodes.Status400BadRequest),
+            { Refusal: TeamInviteRefusal.AlreadyMember } => this.ProblemWithCode(
+                TeamProblemCodes.AlreadyMember, "You are already a member of this team.", StatusCodes.Status400BadRequest),
+            _ => this.ProblemWithCode(
+                UnusableCode(acceptance.Refusal) ?? TeamProblemCodes.NoLongerValid,
+                UnusableDetail(acceptance.Refusal),
+                StatusCodes.Status400BadRequest),
         };
     }
 
@@ -263,8 +271,8 @@ public class TeamsController(
         return await teams.DeleteAsync(teamId, subjectId, ct) switch
         {
             TeamDeletion.Deleted => NoContent(),
-            TeamDeletion.Refused => Problem(
-                detail: "You cannot delete this team now.", statusCode: StatusCodes.Status403Forbidden),
+            TeamDeletion.Refused => this.ProblemWithCode(
+                TeamProblemCodes.DeleteRefused, "You cannot delete this team now.", StatusCodes.Status403Forbidden),
             _ => NotFound(),
         };
     }
@@ -278,9 +286,19 @@ public class TeamsController(
     private static string? TeamName(string? name) =>
         name?.Trim() is { Length: > 0 and <= TeamEntity.NameMaxLength } trimmed ? trimmed : null;
 
-    private ObjectResult NameProblem() => Problem(
-        detail: $"The team name must be 1 to {TeamEntity.NameMaxLength} characters.",
-        statusCode: StatusCodes.Status400BadRequest);
+    private ObjectResult NameProblem() => this.ProblemWithCode(
+        TeamProblemCodes.NameInvalid,
+        $"The team name must be 1 to {TeamEntity.NameMaxLength} characters.",
+        StatusCodes.Status400BadRequest);
+
+    private static string? UnusableCode(TeamInviteRefusal? refusal) => refusal switch
+    {
+        TeamInviteRefusal.Expired => TeamProblemCodes.Expired,
+        TeamInviteRefusal.Revoked => TeamProblemCodes.Revoked,
+        TeamInviteRefusal.UsedUp => TeamProblemCodes.UsedUp,
+        TeamInviteRefusal.NoLongerValid => TeamProblemCodes.NoLongerValid,
+        _ => null,
+    };
 
     private static string? UnusableDetail(TeamInviteRefusal? refusal) => refusal switch
     {
@@ -295,15 +313,35 @@ public class TeamsController(
 /// <summary>The caller's teams, and whether they may create one.</summary>
 public sealed record MyTeamsResponse(IReadOnlyList<TeamSummary> Items, bool CanCreate);
 
-public sealed record TeamNameRequest(string Name);
+public sealed record TeamNameRequest([property: MinLength(1), MaxLength(TeamEntity.NameMaxLength)] string Name);
 
 /// <param name="MaxUses">How many people the link may add; null for no cap.</param>
-public sealed record CreateTeamInviteRequest(string? Label, int ExpiresInDays = 7, int? MaxUses = 1);
+public sealed record CreateTeamInviteRequest(
+    [property: MaxLength(TeamsController.MaxLabelLength)] string? Label, int ExpiresInDays = 7, int? MaxUses = 1);
 
 /// <summary>A new manager invite. <paramref name="Token"/> is never returned again.</summary>
 public sealed record TeamInviteCreated(Guid Id, string Token, string InviteUrl, DateTime ExpiresAt);
 
 /// <param name="AlreadyMember">Whether the caller is already a member, so accepting changes nothing.</param>
-public sealed record TeamInviteDetails(Guid TeamId, string TeamName, string CreatedByName, bool AlreadyMember);
+/// <param name="Kind">What accepting makes the caller, a <see cref="TeamMemberKind"/> value.</param>
+public sealed record TeamInviteDetails(
+    Guid TeamId, string TeamName, string CreatedByName, string Kind, bool AlreadyMember);
+
+/// <summary>The problem codes the team routes answer with, which the web app words itself.</summary>
+public static class TeamProblemCodes
+{
+    public const string NameInvalid = "team_name_invalid";
+    public const string LabelInvalid = "team_invite_label_invalid";
+    public const string ExpiryInvalid = "team_invite_expiry_invalid";
+    public const string UsesInvalid = "team_invite_uses_invalid";
+    public const string LastManager = "team_last_manager";
+    public const string CreationRestricted = "team_creation_restricted";
+    public const string DeleteRefused = "team_delete_refused";
+    public const string Expired = "team_invite_expired";
+    public const string Revoked = "team_invite_revoked";
+    public const string UsedUp = "team_invite_used_up";
+    public const string NoLongerValid = "team_invite_no_longer_valid";
+    public const string AlreadyMember = "team_invite_already_member";
+}
 
 public sealed record TeamInviteAccepted(Guid TeamId);

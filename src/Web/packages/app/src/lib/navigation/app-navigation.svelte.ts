@@ -104,6 +104,8 @@ export interface NavViewer {
   isGuestSession: boolean;
   /** Whether the viewer administers the platform. */
   isPlatformAdmin: boolean;
+  /** Whether the API refuses the viewer as the demo subject. */
+  refusedAsDemoSubject?: boolean;
   /** The viewer's granted scopes, as `page.data.effectivePermissions` carries them. */
   grantedScopes: readonly string[];
   /** How many tenants the viewer can switch between. */
