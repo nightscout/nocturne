@@ -8,7 +8,11 @@
     formatGlucoseDelta,
   } from "#lib/utils/formatting.js";
   import { deltaColorClass, trendAngle } from "@nocturne/ui/glucose";
-  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import {
+    chartLineColor,
+    chartLineColorMode,
+    glucoseUnits,
+  } from "#lib/stores/appearance-store.svelte.js";
   import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -127,7 +131,12 @@
             <!-- The density heuristic would show a dot per reading now that the
                  series is the displayed window rather than the 48-hour buffer.
                  A 120px sparkline reads as a line. -->
-            <GlucoseTrack showAxis={false} showPoints={false} />
+            <GlucoseTrack
+              showAxis={false}
+              showPoints={false}
+              lineColorMode={chartLineColorMode.current}
+              lineColor={chartLineColor.current}
+            />
           {/snippet}
         </GlucoseChartShell>
       </a>
