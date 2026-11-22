@@ -239,7 +239,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// The sub-objects and unknown top-level keys with no typed snapshot of their own, or
     /// <see langword="null"/> when the device status carries none.
     /// </summary>
-    private V4Models.DeviceStatusExtras? BuildExtras(DeviceStatus ds, Guid correlationId)
+    private V4Models.DeviceStatusExtras? BuildExtras(DeviceStatus ds, Guid correlationId, string? source)
     {
         var extras = new Dictionary<string, object?>();
 
@@ -275,6 +275,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             CorrelationId = correlationId,
             Timestamp = ResolveTimestamp(ds),
             Extras = extras,
+            Device = string.IsNullOrEmpty(ds.Device) ? null : ds.Device,
+            DataSource = source,
         };
     }
 
@@ -609,7 +611,10 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 (uploader.DataSource, uploader.SyncIdentifier) = (group.Uploader?.DataSource, group.Uploader?.SyncIdentifier);
         }
 
-        return new BatchModels(aps, pump, uploader, BuildExtras(ds, correlationId));
+        var extrasSource = group is null
+            ? source
+            : group.Pump?.DataSource ?? group.Uploader?.DataSource ?? group.Aps?.DataSource;
+        return new BatchModels(aps, pump, uploader, BuildExtras(ds, correlationId, extrasSource));
     }
 
     /// <summary>

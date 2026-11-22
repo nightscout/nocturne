@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "name": "sensor-state-no-value-without-reports",
+  "description": "a no value for 10 minutes rule on a source that reports no state is false at readings with a value, false while readings with no value have lasted less than 10 minutes, true from 10 minutes on, and false again at the next reading with a value; it never holds",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sensor_state",
+      "condition_params": {
+        "states": [
+          "no_value"
+        ],
+        "for_minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 110,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "latest_received_at": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 112,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "latest_received_at": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "latest_received_at": "2026-01-05T12:10:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "no_value",
+          "since": "2026-01-05T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "latest_received_at": "2026-01-05T12:15:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "no_value",
+          "since": "2026-01-05T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "latest_received_at": "2026-01-05T12:20:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "no_value",
+          "since": "2026-01-05T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "latest_received_at": "2026-01-05T12:25:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "no_value",
+          "since": "2026-01-05T12:10:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 115,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "latest_received_at": "2026-01-05T12:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

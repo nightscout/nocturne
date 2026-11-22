@@ -19,23 +19,32 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
-    public void Threshold_only_triggers_no_optional_needs()
+    public void Threshold_needs_only_the_sensor_state()
     {
         var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().BeEquivalentTo(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
     [NativeFact]
-    public void Trend_leaf_needs_no_fetch()
+    public void Trend_leaf_needs_only_the_sensor_state()
     {
         var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().BeEquivalentTo(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
+    }
+
+    [NativeFact]
+    public void Signal_loss_and_the_sensor_state_leaf_need_what_they_read()
+    {
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SignalLoss, """{"timeout_minutes":15}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None, "signal loss reads the base context alone");
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SensorState, """{"states":["warming_up"]}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
     [NativeFact]
@@ -337,7 +346,7 @@ public class RuleDataNeedsTests
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().BeEquivalentTo(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
     [NativeFact]

@@ -94,6 +94,7 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.IDeviceStatusExtrasRepository>(r => r.GetReportedAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusExtras>>(Array.Empty<Nocturne.Core.Models.V4.DeviceStatusExtras>())),
             Options.Create(new AlertEvaluationOptions()));
         _enricher = new SensorContextEnricher(
             enricherDeps,
@@ -211,6 +212,40 @@ public class AlertReplayServiceTests
         imported.LatestReceivedAt.Should().BeNull("imported history was not received by live as it came");
         engine.Input.Ticks.Single(t => t.At == windowStart.AddMinutes(23.5)).Context.LatestReceivedAt
             .Should().Be(windowStart.AddMinutes(23.5));
+    }
+
+    /// <summary>
+    /// A reading with no glucose value is replayed as live reads it: no value, the sensor's
+    /// no_value state from the first such reading, and signal loss measured from the last reading
+    /// with a value (docs/alerts/engine-semantics.md §8).
+    /// </summary>
+    [NativeFact]
+    public async Task A_reading_with_no_value_is_replayed_as_the_no_value_state()
+    {
+        var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "below", 70m) });
+        SetupReadings(
+            Reading(windowStart.AddMinutes(5), 60),
+            Reading(windowStart.AddMinutes(10), 0),
+            Reading(windowStart.AddMinutes(15), 0),
+            Reading(windowStart.AddMinutes(20), 80));
+        var engine = new CapturingReplayEngine();
+        var sut = new AlertReplayService(
+            _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
+            _tenantAccessor.Object, Options.Create(new AlertEvaluationOptions()), engine,
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
+
+        await sut.ReplayAsync(null, null, windowStart, windowStart.AddMinutes(25), CancellationToken.None);
+
+        SensorContext At(double minutes) => engine.Input!.Ticks.Single(t => t.At == windowStart.AddMinutes(minutes)).Context;
+        At(5).SensorState.Should().BeNull();
+        var valueless = At(15);
+        valueless.LatestValue.Should().BeNull("a reading with no value is not a reading of zero");
+        valueless.LatestTimestamp.Should().Be(windowStart.AddMinutes(15));
+        valueless.LastReadingAt.Should().Be(windowStart.AddMinutes(5));
+        valueless.SensorState.Should().Be(new SensorStateSnapshot(SensorState.NoValue, windowStart.AddMinutes(10)));
+        At(20).Should().Match<SensorContext>(c => c.LatestValue == 80m && c.SensorState == null && c.LastReadingAt == windowStart.AddMinutes(20));
     }
 
     /// <summary>

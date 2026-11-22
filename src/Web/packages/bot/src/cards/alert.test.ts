@@ -116,7 +116,7 @@ describe("AlertCard for a rule held for 24 hours", () => {
 
     expect(cardTitle(card)).toBe("Warning: Urgent low");
     expect(cardTexts(card)).toEqual([
-      "This rule has waited 24 hours for data, so it cannot send alerts until the data comes back.",
+      "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back.",
     ]);
     expect(cardFields(card)).toEqual(["Glucose readings: Too old", "Pump data: Missing"]);
     expect(cardButtons(card)).toHaveLength(0);
@@ -126,7 +126,7 @@ describe("AlertCard for a rule held for 24 hours", () => {
     const card = AlertCard({ payload: { ...held, kind: "held_closed" } });
 
     expect(cardTexts(card)).toEqual([
-      "The data for this alert has been missing for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until the data comes back.",
+      "This alert had no usable data for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until usable data comes back.",
     ]);
     expect(cardButtons(card)).toHaveLength(0);
   });

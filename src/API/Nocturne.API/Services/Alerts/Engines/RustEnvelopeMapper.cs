@@ -228,6 +228,9 @@ internal static class RustEnvelopeMapper
                         kv.Key, Utc(kv.Value.ReferenceAt)!.Value, Utc(kv.Value.RecordedAt), kv.Value.IsScheduled))
                     .ToList(),
             SleepSessionActive = ctx.SleepSessionActive,
+            SensorState = ctx.SensorState is { } sensor
+                ? new WireSensorState(WireEnum(sensor.State), Utc(sensor.Since), Utc(sensor.Until))
+                : null,
         };
 
         return JsonSerializer.SerializeToElement(wire, AlertEnvelopeJson.Options);
@@ -335,7 +338,13 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("active_state_spans")] public List<WireStateSpan>? ActiveStateSpans { get; init; }
         [JsonPropertyName("active_trackers")] public List<WireTrackerReference>? ActiveTrackers { get; init; }
         [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
+        [JsonPropertyName("sensor_state")] public WireSensorState? SensorState { get; init; }
     }
+
+    private sealed record WireSensorState(
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("since")] DateTime? Since,
+        [property: JsonPropertyName("until")] DateTime? Until);
 
     private sealed record WirePrediction(
         [property: JsonPropertyName("offset_minutes")] int OffsetMinutes,

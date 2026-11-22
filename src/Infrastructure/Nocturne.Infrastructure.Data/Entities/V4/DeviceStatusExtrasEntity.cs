@@ -48,6 +48,14 @@ public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletabl
     [Column("extras", TypeName = "jsonb")]
     public string? ExtrasJson { get; set; }
 
+    /// <summary>The device the status named itself by; null on rows stored before it was kept.</summary>
+    [Column("device")]
+    public string? Device { get; set; }
+
+    /// <summary>The source the status was written under; null when the write named none.</summary>
+    [Column("data_source")]
+    public string? DataSource { get; set; }
+
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>

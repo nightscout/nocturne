@@ -69,7 +69,7 @@ describe("AlertBanner", () => {
 
 		await expect
 			.element(page.getByText(
-				`Waiting for data since ${formatDateTimeCompact(since)}. This alert stays open while its data is missing. It closes after 24 hours of missing data.`,
+				`Waiting for usable data since ${formatDateTimeCompact(since)}. This alert stays open while it has no usable data. It closes after 24 hours with no usable data.`,
 			))
 			.toBeVisible();
 		await expect.element(page.getByText("Glucose readings: missing")).toBeVisible();

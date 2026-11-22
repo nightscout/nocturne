@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use crate::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
-    StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
-    WireEnum,
+    SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric,
+    TrendBucket, WireEnum,
 };
 use crate::paths::{child_path, node_child_path};
 
@@ -62,8 +62,8 @@ pub enum Reason {
     InvalidTime(&'static str),
     /// A `time_of_day` whose `from` equals its `to`.
     EmptyWindow,
-    /// A composite's `conditions`, or a `glucose_bucket` or `day_of_week`
-    /// list, that is absent or empty.
+    /// A composite's `conditions`, or a `glucose_bucket`, `day_of_week` or
+    /// `sensor_state` list, that is absent or empty.
     ListEmpty(&'static str),
     /// A `state_span_active` on the pump-mode category, which only
     /// `pump_state` reads.
@@ -265,6 +265,7 @@ condition_kinds! {
     SleepSessionActive = "sleep_session_active" => SleepSessionPayload,
     TrackerAge = "tracker_age" => TrackerAgePayload,
     TransmitterBattery = "transmitter_battery" => TransmitterBatteryPayload,
+    SensorState = "sensor_state" => SensorStatePayload,
 }
 
 impl Payload {
@@ -791,7 +792,7 @@ macro_rules! enum_lists {
     )*};
 }
 
-enum_lists!(GlucoseBucket, DayOfWeek);
+enum_lists!(GlucoseBucket, DayOfWeek, SensorState);
 
 impl Field for Box<Node> {
     fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
@@ -1105,6 +1106,15 @@ payload!(
 );
 
 payload!(SleepSessionPayload { is_active: bool });
+
+payload!(
+    /// `sensor_state`: the sensor's state is one of `states`, and with
+    /// `for_minutes` has been since at least that long.
+    SensorStatePayload {
+        states: Vec<SensorState>,
+        for_minutes: Option<i32>,
+    }
+);
 
 fn hh_mm<S: Serializer>(t: &NaiveTime, s: S) -> Result<S::Ok, S::Error> {
     s.collect_str(&t.format("%H:%M"))

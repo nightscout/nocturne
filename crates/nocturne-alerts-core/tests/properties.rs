@@ -39,12 +39,14 @@ use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, HOLD_BOUND, TrackerRuleConfig, TrackerState, TrackerStateKind,
     Transition, TransitionType,
 };
+use nocturne_alerts_core::facts::ContextFact;
 use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
 };
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerState, TimerStore};
 use nocturne_alerts_core::truth::Truth;
+use nocturne_alerts_core::unknown::UnknownReason;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
 use clock::{clock_context, enabled_at, naming_the_context, word_or_unrecognised};
@@ -2153,5 +2155,86 @@ proptest! {
             _ => Truth::Unknown,
         };
         prop_assert_eq!(bucket_truth, expected);
+    }
+}
+
+/// The kinds of the leaves of a node's JSON in leaf-id order (engine-semantics.md §2.2).
+fn leaf_kinds(node: &Value) -> Vec<String> {
+    let kind = node["type"].as_str().unwrap();
+    let payload = &node[kind];
+    match kind {
+        "composite" => payload["conditions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(leaf_kinds)
+            .collect(),
+        "not" | "sustained" => leaf_kinds(&payload["child"]),
+        _ => vec![kind.to_owned()],
+    }
+}
+
+fn with_sensor_state(tick: &Tick, state: &str, since: Option<i64>) -> SensorContext {
+    let mut context = tick.context.clone();
+    let mut sensor = json!({ "state": state });
+    if let Some(ago) = since {
+        sensor["since"] = (tick.now - TimeDelta::seconds(ago)).to_rfc3339().into();
+    }
+    context["sensor_state"] = sensor;
+    serde_json::from_value(context).unwrap()
+}
+
+proptest! {
+    /// §3 sensor state: with no `sensor_state` leaf, a context whose sensor is ok, from any start,
+    /// evaluates byte for byte as one that says nothing of the sensor, tick after tick.
+    #[test]
+    fn an_ok_sensor_evaluates_as_no_sensor_state(
+        spec in rule_spec(),
+        ticks in skewed_ticks(),
+        since in option::of(-600..=7200i64),
+    ) {
+        let rule = rule_from_wire(spec.wire());
+        let (mut absent, mut ok) = (EngineState::new(), EngineState::new());
+        for tick in &ticks {
+            let a = evaluate_rule(&rule, &context_of(tick), tick.now, &mut absent, true);
+            let b = evaluate_rule(&rule, &with_sensor_state(tick, "ok", since), tick.now, &mut ok, true);
+            prop_assert_eq!(a.to_json(), b.to_json());
+        }
+    }
+
+    /// §3 sensor state: while the sensor is in any state but ok, or one the engine has no name
+    /// for, no `threshold` leaf is known, and no root is unknown by the glucose fact: the
+    /// sensor's state names why.
+    #[test]
+    fn a_sensor_that_is_not_ok_leaves_no_glucose_leaf_known(
+        spec in rule_spec(),
+        ticks in skewed_ticks(),
+        state in select(vec!["warming_up", "calibration_needed", "error", "expired", "no_value", "rebooting"]),
+    ) {
+        let rule = rule_from_wire(spec.wire());
+        let kinds = leaf_kinds(&node("composite", spec.wire()["condition_params"].clone()));
+        let reason = if state == "rebooting" {
+            UnknownReason::Unrecognised
+        } else {
+            UnknownReason::SensorNotOk
+        };
+        let mut engine = EngineState::new();
+        for tick in &ticks {
+            let ctx = with_sensor_state(tick, state, None);
+            let outcome = evaluate_rule(&rule, &ctx, tick.now, &mut engine, true);
+            let evaluation = outcome.evaluation.expect("the body is evaluable");
+            let leaves = evaluation.leaves.expect("the leaves were requested");
+            for (kind, truth) in kinds.iter().zip(&leaves) {
+                if kind == "threshold" {
+                    prop_assert!(truth.is_unknown(), "{kind} read {truth:?} under {state}");
+                }
+            }
+            for (fact, why) in evaluation.unknown.iter() {
+                prop_assert_ne!(fact, ContextFact::Glucose);
+                if fact == ContextFact::SensorState {
+                    prop_assert_eq!(why, reason);
+                }
+            }
+        }
     }
 }

@@ -34,7 +34,8 @@ has exactly one spelling for every property name and enum value. Anything else i
 - condition-only enums use snake_case wire names (`TempBasalMetric`: `rate` |
   `percent_of_scheduled`; `TransmitterBatteryMetric`: `voltage_a` | `voltage_b` |
   `resistance` | `days`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
-  | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`;
+  | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`; `SensorState`:
+  `warming_up` | `ok` | `calibration_needed` | `error` | `expired` | `no_value`;
   `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; the composite operator, `direction`
   and `alert_state` `state` words)
 - `StateSpanCategory` and `PumpModeState` are domain enums the rest of the API also
@@ -93,8 +94,8 @@ this tick):
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained` |
 | `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4) |
-| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
-| `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets` or a `day_of_week` `days` that is absent, `null` or empty |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket`, `day_of_week` or `sensor_state` list member |
+| `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets`, a `day_of_week` `days` or a `sensor_state` `states` that is absent, `null` or empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
 | `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
 | `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
@@ -215,8 +216,9 @@ the set of (fact, reason) pairs it is unknown by.
   (§5.2), and `absent` (the fact, its guard or a field it needs is missing), `stale` (a judged
   glucose fact whose reading is past its freshness bound, §3), `ahead_of_clock` (an anchor
   beyond the tolerance ahead of `now`, §5.4, named by the fact that holds it), `unrecognised`
-  (a pump mode the engine has no member for, §3) or `inexact` (a lower-bound `reservoir` reading
-  that does not decide the comparison). A bucket name the engine has no member for reads as an
+  (a pump mode or a sensor state the engine has no member for, §3), `inexact` (a lower-bound
+  `reservoir` reading that does not decide the comparison) or `sensor_not_ok` (a judged glucose
+  leaf whose sensor reports a state other than ok, named by `sensor_state`, §3). A bucket name the engine has no member for reads as an
   absent bucket (§4), so it is `absent`. `pump_suspended` is unknown by `pump` when its guard
   is false and by `state_spans` when its span starts beyond the tolerance ahead.
 - An `and` or `or` that is unknown is unknown by the union of its unknown children's sets: no
@@ -247,11 +249,11 @@ as false or true.
 
 | Kind | Payload | Inputs | Semantics | Unknown, and absence that is an answer |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null, or the reading stale ⇒ **unknown** |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null, or the reading stale ⇒ **unknown** |
+| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue`, `SensorState` | below: `v < value`; above: `v > value` (**strict**) | the sensor not ok, `LatestValue` null, or the reading stale ⇒ **unknown** |
+| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4), `SensorState` | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | the sensor not ok, `TrendRate` null, or the reading stale ⇒ **unknown** |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, the rule's `enabled_at`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | no reading history ⇒ measured from `enabled_at`, and **unknown** without it (below); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ **unknown**; with points present but none within the horizon or satisfying ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4) | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
+| `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4), `SensorState` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | the sensor not ok, `TrendBucket` null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ **unknown** |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ **unknown** |
@@ -269,12 +271,13 @@ as false or true.
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate): never unknown |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ **unknown**; ratio null ⇒ **unknown** |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off: never unknown |
-| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
+| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket`, `SensorState` | set membership | the sensor not ok, bucket null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
 | `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpModes` | `is_active:false`: true whenever no active span is of `mode` (**including no active span**). `is_active:true`: a span of `mode` must be active; `for_minutes` anchors at its `StartedAt` (double, `>=`) | no guard; no active span is an answer; with no span of `mode`, an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on it (table below) |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown; a span of a category the engine has no member for (§4) is not in the lookup |
+| `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `(now - Since).TotalMinutes >= for_minutes` (double) | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
@@ -329,6 +332,30 @@ leaves read unknown. Under `hold` that changes nothing (§5.1), but a rule whose
 and closes it, once per reading interval, and `met` opens one on data with no fault. Such a rule
 on a source slower than 5 minutes needs its own `glucose_freshness_minutes`, at least the
 interval between readings plus the delay a reading can arrive with.
+
+**Sensor state.** `threshold`, `rate_of_change`, `trend` and `glucose_bucket` read the
+sensor's state (`SensorState`, §4) before they read the reading. While the state is
+`warming_up`, `calibration_needed`, `error`, `expired`, `no_value`, or a name the engine has no
+member for, each of them is **unknown**, whatever value the reading has and however fresh it is:
+by `sensor_state` with reason `sensor_not_ok`, or `unrecognised` for a name the engine does not
+know (§4). With the state absent or `ok` they read exactly as they would with no such member: a
+host that knows nothing of the sensor changes nothing. So under `hold` (§6.4) a low `threshold`
+rule holds while the sensor warms up rather than firing on a warm-up value, an excursion open
+when the sensor went into error stays open and does not close on a false value, and the 24-hour
+hold bound applies unchanged. The first evaluation with the state ok or absent decides. Unlike a
+stale reading, a state that is not ok makes the leaf unknown at once, with no bound to wait for.
+
+This fails in a stated direction. A glucose leaf made unknown wrongly is a silent rule: the
+person believes a low alarm is watching. So the engine reads only the state the host sends, and
+the host sends only one that a source states outright, that is current and that describes
+the newest reading's own source (§4); with doubt, the
+state is absent and the leaves read as they always have.
+
+`predicted` is not gated. Its points are a forecast the host fetched, not facts of the reading
+(below), and an AID system that forecasts handles its own sensor's state; the forecast's source
+decides what it builds on. `staleness` and `signal_loss` are not gated either: they say that
+data stopped, and readings that arrive with no value do not restart them (§4, the newest
+reading).
 
 **No reading ever.** `staleness` and `signal_loss` measure the time since data stopped. With
 no reading history at all (both `LastReadingAt` and `LatestTimestamp` null), data stopped when
@@ -509,7 +536,7 @@ starts the run later, never earlier.
 
 | Node | Reports, when true |
 |---|---|
-| `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` on the active side | the span's `StartedAt`; with `for_minutes`, the first instant it has held `for_minutes` (`StartedAt + for_minutes`, as the comparison finds it), not `StartedAt`, since the leaf is false until then |
+| `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` on the active side, and `sensor_state` | the span's `StartedAt` (for `sensor_state`, its `Since`; nothing without one); with `for_minutes`, the first instant it has held `for_minutes` (`StartedAt + for_minutes`, as the comparison finds it), not `StartedAt`, since the leaf is false until then |
 | the same kinds on the inactive side | nothing (no span is the state, and it has no start) |
 | `temp_basal` with `metric: rate` | the temp's `StartedAt`: its rate stands for the whole temp |
 | `temp_basal` with `metric: percent_of_scheduled` | nothing: the scheduled rate follows the schedule within the temp |
@@ -545,6 +572,46 @@ in §3 plus:
   replay, whose reading is at or before its tick. Stored readings, and what charts and statistics
   read, are not filtered. A reading within the tolerance is selected, and the engine reads its
   instant as `now`.
+- **A newest reading with no glucose value.** It is still the newest reading: `LatestTimestamp`
+  and `LatestReceivedAt` are its own, so the context is that reading's. `LatestValue`,
+  `TrendRate`, `TrendBucket` and `GlucoseBucket` are absent, and `SensorState` is `no_value`, with
+  `Since` the first reading with no value after the last reading that has one, unless a source
+  states another state that is not ok (below), which says why. `LastReadingAt` is **the last
+  reading with a value**, looked for at most 24 hours back (with none there, the oldest reading
+  looked at), because `signal_loss` and `staleness` mean no reading with a value: readings that
+  arrive with no value do not hold off a signal-loss alert, as they never have. The engine tells
+  this case from no readings arriving by the newest reading's own times, and the judged glucose
+  leaves by `SensorState` (§3, sensor state).
+- `SensorState` is `{state, since, until}` or absent: what the sensor's own reports say of its
+  readings, `state` one of `warming_up`, `ok`, `calibration_needed`, `error`, `expired`,
+  `no_value`, `since` the instant it began where the source says, and `until` the instant the host
+  stops counting the report. Absent means nothing is known of the sensor, and every glucose leaf
+  reads as it would without the member. **The engine owns the lapse:** a state whose `until` is at
+  or before `now` is no state, so a host that evaluates late cannot keep a report its own bound has
+  ended, and `until` is a next change of every leaf that reads the fact (§5.3). `no_value` has no
+  `until`: it lasts as long as its reading is the newest.
+- A host fills `SensorState` only from a source that states the state outright, never from elapsed
+  time (a warm-up guessed from a sensor start and a device's warm-up length), and only from a
+  report of **the newest reading's own source**: the report's device and data source are both
+  present, the newest reading's are both present, and each equals the other. A report of another
+  device, or one that lacks either member on either side, is no state, so a pump's sensor error
+  never holds a low read from a different CGM. A report counts while its timestamp is within the
+  clock tolerance of `now` (§5.4) and it arrived at most 11 minutes (the default glucose freshness
+  bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
+  reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
+  dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
+- The backend reads a device status's CareLink `cgm.sensorState` (Medtronic Guardian sensors) and
+  its `xdripjs.state` session code (Dexcom G5 and G6 through Lookout, Logger and xdrip-js), each
+  through an allowlist where every other value is no state. An entry is added only from a real
+  upload. CareLink's: `NO_ERROR_MESSAGE` ok, `WARM_UP` warming up, `CALIBRATION_REQUIRED`
+  calibration needed, `SENSOR_ERROR` and `CHANGE_SENSOR` error, `SENSOR_END_OF_LIFE` expired.
+  xdripjs: `0x02` warming up, `0x06` ok, `0x04`, `0x05`, `0x08` to `0x0a`, `0x0d` calibration
+  needed, `0x0b`, `0x0c`, `0x10` to `0x12` error, `0x0f` expired. The routine calibration prompts
+  (`0x07`, `0x0e`), a stopped session (`0x01`) and excess noise (`0x03`) are no state. CareLink
+  writes a status and its readings under one device name (`CareLink {family}`) and its connector's
+  data source, so they match. An upload through the v1 API names no data source on its readings or
+  its statuses, so an xdripjs report has no source to match and is no state. Neither source gives a
+  `since`. A reported ok does not replace `no_value`; a reported state that is not ok does.
 - `LatestReceivedAt` is when the host received the newest reading, the instant its glucose
   facts' age runs from (§3). The backend sends the instant it stored the reading's row: a
   re-upload under the reading's sync key, or an edit, updates that row and keeps the instant; a
@@ -584,6 +651,12 @@ in §3 plus:
     `for_minutes` has passed, is a next change (§5.3). Several entries are each kept: the
     context lists one entry per active span, in any order, and a repeated mode is not an
     error.
+  - `sensor_state.state`: read as a state that is **not ok, state unknown**. The judged glucose
+    leaves are unknown by `sensor_state` with reason `unrecognised`, and a `sensor_state` leaf is
+    unknown, whatever states it lists. A name the engine cannot place may be a state that makes a
+    glucose value unreliable, and treating it as ok would let a warm-up value fire a low; treating
+    it as absent would read that value as good. Unknown holds the rule (§6.4) and the 24-hour bound
+    tells the person.
   - `active_state_spans[].category`: the span is ignored. A `state_span_active` leaf names a
     category the engine knows, and a span of a name the engine does not know is a different
     category, so it can neither be the leaf's span nor stand for its absence. The leaf reads
@@ -649,6 +722,7 @@ still: it measures elapsed time against an anchor that a reading does not move.
 | `time_since_last_carb`, `time_since_last_bolus` | last treatment |
 | `alert_state` | the other alert's trigger or acknowledgement (`for_minutes`) |
 | `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` | start of the span (`for_minutes`) |
+| `sensor_state` | the state's `since` (`for_minutes`) |
 
 Every other kind is not wall-clock. Two cases are deliberate:
 
@@ -725,6 +799,7 @@ reads a rule's kinds the same way.
 | Fact | `SensorContext` fields | Kinds that read it |
 |---|---|---|
 | `glucose` | `LatestValue`, `LatestTimestamp`, `LatestReceivedAt`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
+| `sensor_state` | `SensorState` | `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `sensor_state` |
 | `predictions` | `Predictions` | `predicted` |
 | `insulin` | `IobUnits`, `LastBolusAt`, `ActiveTempBasal` | `iob`, `temp_basal`, `time_since_last_bolus` |
 | `carbs` | `CobGrams`, `LastCarbAt` | `cob`, `time_since_last_carb` |
@@ -745,7 +820,9 @@ evaluation state, not context. `pump_suspended` reads two facts: its guard is th
 snapshot and its anchor the suspension span. No field carries a therapy profile or
 schedule as such; the target range reaches the context only through `GlucoseBucket`, which a
 host derives from the reading and the schedule at the tenant's local time, so
-`glucose_bucket` reads `time_zone` as well as `glucose`.
+`glucose_bucket` reads `time_zone` as well as `glucose`. The judged glucose leaves read
+`sensor_state` too: a state that is not ok makes them unknown (§3). A `sensor_state` leaf reads
+`glucose` as well: with no state, a reading with a value says the sensor is not `no_value`.
 `now` is not a fact: it is an argument to evaluation.
 
 A host uses facts to evaluate rules on writes other than glucose: a write evaluates the
@@ -834,11 +911,12 @@ even when the root does not. Containers contribute only through their children, 
 | Node | Contribution |
 |---|---|
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
-| `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
+| `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active`, `sensor_state` with `for_minutes` | On the active side, with the span or alert present (for `sensor_state`, a listed state with a `since`), the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
 | `sustained` with a run (including one started by this evaluation) | The first instant `minutes` have passed since the run's start, whatever its child returned. The start can be before the evaluation that set it (§3), so this can be well before `now + minutes`; once passed it contributes nothing. Without a run, only what its child contributes. |
-| `threshold`, `rate_of_change`, `trend`, `glucose_bucket` with their fact present and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket` with their fact present, the sensor not reported other than ok, and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `sensor_state` with a sensor state whose `until` is after `now` | That `until`, where the state lapses (§4). |
 | Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
 | A body with a clear margin above `0` (§3) whose evaluation closed the excursion | At once. The next evaluation reads the plain limit, and can answer false where this one read true: an auto-resolve that closes an excursion the body held by its margin leaves a rule whose next evaluation, read closed, finds the body false and re-arms. An opening adds nothing: the next evaluation reads the root at least as true (§3), so it continues. A margin changes nothing else: a value leaf contributes no instant with or without one, and the open flag moves only on a tracker transition. |
 | Tracker held, its bound not yet reported | `HeldSince + HOLD_BOUND` (§6.4), measured as §5.4 measures an anchor, or, once that has passed, at once. With every fact frozen the root stays unknown, so the hold goes on to its bound. |
@@ -871,7 +949,11 @@ does not report it.
 
 The backend's sweep waits for it only for a wall-clock rule every fact of which (§5.2) has an
 announcing write for every write that moves it and does not move with the clock: `glucose`,
-`aps`, `uploader` and `transmitter` (`ContextFactWrites.SweepMayWaitFor`). It waits only while
+`aps`, `uploader`, `transmitter` and `sensor_state` (`ContextFactWrites.SweepMayWaitFor`).
+`sensor_state` moves with a reading (one with no value is `no_value`) and with a device status that
+states it, whose extras write announces itself, as does a purge that deletes extras; a report's
+lapse is its `until`, which the engine reports as a next change, so it does not move with the
+clock. It waits only while
 the newest canonical reading is usable, the one a write's evaluation measures, and the context
 carries the glucose facts the recorded value was computed from. A glucose reading deleted, edited
 or recomputed, or re-picked by deduplication, moves those facts, so the sweep then evaluates. An
@@ -923,6 +1005,7 @@ The rule applies to every comparison of `now - anchor`:
 | `last_carb_at`, `last_bolus_at` | `time_since_last_carb`, `time_since_last_bolus` |
 | `active_alerts` | `alert_state` `for_minutes` |
 | `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_modes`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
+| `sensor_state` | `for_minutes` on `sensor_state`, from the state's `since` |
 | `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
 | `held_since` | the hold's bound (§6.4) |
@@ -1298,9 +1381,11 @@ it:
   rule is evaluated there, as live evaluates every rule per reading (§5.2).
 - A **sample** tick in a gap between readings, every 5 minutes after the last tick until the next
   reading. It is a sweep: each rule's elapsed hysteresis window closes (§6.1), then the rules the
-  live sweep evaluates (wall-clock, §5.1) and the rules that read a fact other than `glucose` and
-  `time_zone` (§5.2) are evaluated. A rule that reads only those is not: live evaluates it only
-  per reading, so between readings a `sustained` run over its reading cannot complete.
+  live sweep evaluates (wall-clock, §5.1) and the rules that read a fact other than `glucose`,
+  `time_zone` and `sensor_state` (§5.2) are evaluated. A rule that reads only those is not: live
+  evaluates it only per reading, so between readings a `sustained` run over its reading cannot
+  complete. Replay has no tick for a device-status write: live evaluates the rules that read
+  `sensor_state` at a status write (§5.2), and replay sees that status at its next tick.
 
 **Where a reading is evaluated.** Live evaluates a reading when it arrives, which the backend
 stores as the reading's `CreatedAt`. Replay tells a late upload from imported history by the
@@ -1421,7 +1506,13 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
 
 - Window resolution, the canonical reading stream, the ticks above and their enrichment as of
   each tick. Glucose is the newest reading evaluated by the tick, and `LastReadingAt` is that
-  reading's time, so a gap after a reading reads as stale. `LatestReceivedAt` is its arrival
+  reading's time, so a gap after a reading reads as stale. A newest reading with no value is
+  replayed as live reads it (§4): no value, `SensorState` `no_value` from the first such reading
+  after the last one with a value, and `LastReadingAt` that last reading's time, found among the
+  readings replay has loaded rather than 24 hours back. The sensor state a device status reports
+  is read as of each tick through the same enrichment as live, from statuses stored by the tick
+  (receipt-gated), so replay sees a status where live could first have read it. Unlike live, a
+  status that arrives between readings is evaluated at the next tick, not at its write. `LatestReceivedAt` is its arrival
   when that was a live arrival, else absent (Ticks). `until` is the window's end.
 - Do Not Disturb: for each tick, the rules an excursion opening on it, or on a step before the
   next tick, is recorded for as suppressed (the gate live delivery applies on open,

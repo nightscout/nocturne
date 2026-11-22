@@ -64,6 +64,8 @@ export function factLabel(kind: LeafKind): string {
       return "Day of week";
     case "alert_state":
       return "Other rule state";
+    case "sensor_state":
+      return "Sensor state";
     default: {
       const unhandled: never = kind;
       return unhandled;
@@ -135,6 +137,8 @@ export function factDescription(kind: LeafKind): string {
       return "The day is one of the weekdays you select";
     case "alert_state":
       return "A different alert is active, or acknowledged";
+    case "sensor_state":
+      return "The CGM sensor reports a state, for example warm-up or an error";
     default: {
       const unhandled: never = kind;
       return unhandled;

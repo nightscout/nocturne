@@ -233,9 +233,9 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
         | Payload::TimeSinceLastBolus(_)
         | Payload::PumpState(_)
         | Payload::StateSpanActive(_)
-        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at).map_or(
-            Truth::False.into(),
-            |leaf| {
+        | Payload::SensorState(_)
+        | Payload::TrackerAge(_) => elapsed::clock_leaf(payload, env.ctx, env.enabled_at, env.now)
+            .map_or(Truth::False.into(), |leaf| {
                 if let Some(e) = leaf.elapsed() {
                     env.measure(e);
                 }
@@ -249,8 +249,7 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
                     },
                     _ => held,
                 }
-            },
-        ),
+            }),
     }
 }
 

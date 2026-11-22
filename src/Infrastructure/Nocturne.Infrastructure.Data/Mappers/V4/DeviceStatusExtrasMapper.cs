@@ -25,6 +25,8 @@ public static class DeviceStatusExtrasMapper
             ExtrasJson = model.Extras is { Count: > 0 }
                 ? JsonSerializer.Serialize(model.Extras)
                 : null,
+            Device = model.Device,
+            DataSource = model.DataSource,
         };
     }
 
@@ -44,6 +46,8 @@ public static class DeviceStatusExtrasMapper
             Extras = MapperHelpers.DeserializeJson<Dictionary<string, object?>>(
                 entity.ExtrasJson
             ),
+            Device = entity.Device,
+            DataSource = entity.DataSource,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
         };
@@ -61,5 +65,7 @@ public static class DeviceStatusExtrasMapper
         entity.ExtrasJson = model.Extras is { Count: > 0 }
             ? JsonSerializer.Serialize(model.Extras)
             : null;
+        entity.Device = model.Device;
+        entity.DataSource = model.DataSource;
     }
 }

@@ -102,8 +102,8 @@ function HeldCard(props: { payload: AlertPayload; closed: boolean }) {
   const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
   const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
   const text = closed
-    ? "The data for this alert has been missing for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until the data comes back."
-    : "This rule has waited 24 hours for data, so it cannot send alerts until the data comes back.";
+    ? "This alert had no usable data for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until usable data comes back."
+    : "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back.";
 
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>

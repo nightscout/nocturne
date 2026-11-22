@@ -20,6 +20,7 @@ const FACT_NAMES: Record<string, string> = {
   active_alerts: "Alert data",
   do_not_disturb: "Do Not Disturb data",
   time_zone: "Time zone",
+  sensor_state: "Sensor state",
 };
 
 const REASONS: Record<string, string> = {
@@ -28,6 +29,7 @@ const REASONS: Record<string, string> = {
   ahead_of_clock: "Has a time in the future",
   unrecognised: "Has a value that Nocturne does not know",
   inexact: "Not exact",
+  sensor_not_ok: "Not OK, so Nocturne does not use the glucose value",
 };
 
 export function heldFactName(fact: string | undefined): string {

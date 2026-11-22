@@ -151,7 +151,7 @@ internal sealed class AlertDeliveryService(
                 tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false);
             if (configured > 0)
                 anchor.LastError = payload.Kind.IsHeld()
-                    ? "No channel of the rule carries a notice that it has waited for missing data"
+                    ? "No channel of the rule carries a notice that it has waited for usable data"
                     : "No channel of the rule carries a notice that it cannot be evaluated";
             db.AlertDeliveries.Add(anchor);
             await db.SaveChangesAsync(ct);

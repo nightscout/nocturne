@@ -21,6 +21,7 @@
     glucoseBucketLabel,
     pumpModeLabel,
     rateDirectionLabel,
+    sensorStateLabel,
     stateSpanCategoryLabel,
     tempBasalMetricLabel,
     transmitterBatteryMetricLabel,
@@ -45,6 +46,7 @@
     PumpModeState,
     StateSpanCategory,
     AlertWeekday,
+    SensorState,
   } from "./types";
   import { AlertComparisonOperator } from "@nocturne/api-client";
 
@@ -126,6 +128,11 @@
   const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
     definitionsQuery?.current ?? [],
   );
+
+  /** A sensor state's start is known only for No value, so only it can be timed. */
+  function onlyNoValue(states: SensorState[] | undefined): boolean {
+    return states?.length === 1 && states[0] === SensorState.NoValue;
+  }
 
   // Stored on the wire as the symbol; shown in words.
   const OPERATORS: readonly ComparisonOperator[] = [">=", ">", "<=", "<"];
@@ -729,6 +736,47 @@
         </ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
+  {:else if node.type === "sensor_state" && node.sensor_state}
+    {@const selectedStates = new Set(node.sensor_state.states ?? [])}
+    {@const timed = onlyNoValue(node.sensor_state.states)}
+    <ToggleGroup.Root
+      type="multiple"
+      size="sm"
+      spacing={1}
+      value={[...selectedStates]}
+      onValueChange={(v: string[]) => {
+        if (!node.sensor_state) return;
+        node.sensor_state.states = v.filter((s) => isStringEnumMember(SensorState, s));
+        if (!onlyNoValue(node.sensor_state.states)) node.sensor_state.for_minutes = undefined;
+      }}
+      class="flex-wrap"
+    >
+      {#each Object.values(SensorState) as state (state)}
+        <ToggleGroup.Item value={state} aria-label={sensorStateLabel(state)}>
+          {sensorStateLabel(state)}
+        </ToggleGroup.Item>
+      {/each}
+    </ToggleGroup.Root>
+    <span class="text-xs text-muted-foreground">for at least</span>
+    <Input
+      type="number"
+      aria-label="Minutes, optional"
+      min="1"
+      size="sm"
+      class="w-16 text-right tabular-nums"
+      placeholder="any"
+      disabled={!timed}
+      value={node.sensor_state.for_minutes ?? ""}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        const v = e.currentTarget.value;
+        if (node.sensor_state)
+          node.sensor_state.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
+      }}
+    />
+    <span class="text-xs text-muted-foreground">min</span>
+    {#if !timed}
+      <span class="text-xs text-muted-foreground">Only for No value. The other states have no start time.</span>
+    {/if}
   {:else if node.type === "pump_state" && node.pump_state}
     <Select.Root
       type="single"

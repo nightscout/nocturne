@@ -36,6 +36,9 @@ public class WireContractCompletenessTests
             // Scoped DND suppression is applied host-side (DndSuppressionGate); the engine
             // only sees the tenant-wide ActiveDoNotDisturb snapshot.
             nameof(SensorContext.ActiveDndScopes),
+            // The host matches a reported sensor state to the reading's source before it sends
+            // the state; the engine reads only the state.
+            nameof(SensorContext.LatestSource),
         ]),
         new(typeof(PredictedGlucosePoint), "WirePrediction", typeof(ScenarioPrediction), []),
         // AlertId travels as the wire record's extra field (it is the dictionary key on

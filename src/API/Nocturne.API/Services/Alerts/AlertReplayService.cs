@@ -254,6 +254,11 @@ internal sealed class AlertReplayService(
         // Readings the cursor has walked past, waiting for the instant live evaluated them.
         var arriving = new PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime>();
         (SensorGlucose Reading, ReadingTrend Trend)? known = null;
+        // The newest known reading with a value, and the first with none after it, as live's look
+        // back finds them (AlertReadings.LookBackAsync), so a reading with no value reads as live
+        // reads it.
+        SensorGlucose? usable = null;
+        DateTime? valuelessSince = null;
 
         // The window's start stands for the evaluation of the last reading before it, so every rule
         // is evaluated there; after it, a tick is a reading where live evaluated it, or a sample.
@@ -272,23 +277,33 @@ internal sealed class AlertReplayService(
                 arriving.Dequeue();
                 if (reading.Reading.Timestamp <= AlertReadings.Bound(tick)
                     && (known is null || reading.Reading.Timestamp > known.Value.Reading.Timestamp))
+                {
                     known = reading;
+                    if (AlertReadings.HasValue(reading.Reading))
+                        (usable, valuelessSince) = (reading.Reading, null);
+                    else
+                        valuelessSince ??= reading.Reading.Timestamp;
+                }
             }
 
             var current = known?.Reading;
             var trend = known?.Trend ?? default;
             hasReadings |= current is not null;
+            var valueless = current is not null && !AlertReadings.HasValue(current);
 
             var baseContext = new SensorContext
             {
-                LatestValue = current?.Mgdl.ToDecimal(),
+                LatestValue = valueless ? null : current?.Mgdl.ToDecimal(),
                 LatestTimestamp = current?.Timestamp,
                 LatestReceivedAt = current is not null && arrivals.Live(current) ? current.CreatedAt : null,
-                TrendRate = trend.Rate,
-                TrendBucket = trend.Bucket,
+                TrendRate = valueless ? null : trend.Rate,
+                TrendBucket = valueless ? null : trend.Bucket,
                 // A tick before the window's first reading reads as fresh rather than as never
-                // having had one (engine-semantics.md §8).
-                LastReadingAt = current?.Timestamp ?? tick,
+                // having had one (engine-semantics.md §8). After a reading with no value it is the
+                // last reading with one (CanonicalAlertEvaluator.ContextForValueless).
+                LastReadingAt = valueless ? usable?.Timestamp ?? valuelessSince : current?.Timestamp ?? tick,
+                SensorState = valueless ? new SensorStateSnapshot(SensorState.NoValue, valuelessSince) : null,
+                LatestSource = current is null ? null : new ReadingSource(current.DataSource, current.Device),
                 ActiveAlerts = new Dictionary<Guid, ActiveAlertSnapshot>(),
             };
 

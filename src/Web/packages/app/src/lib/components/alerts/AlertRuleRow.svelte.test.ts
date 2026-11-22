@@ -123,7 +123,7 @@ describe("AlertRuleRow hold", () => {
     });
 
     await expect.element(page.getByText("Waiting", { exact: true })).toBeVisible();
-    await expect.element(page.getByText(/^Waiting for data since /)).toBeVisible();
+    await expect.element(page.getByText(/^Waiting for usable data since /)).toBeVisible();
     await expect.element(page.getByText("Glucose readings: too old")).toBeVisible();
     await expect.element(page.getByText("warp_core: melted")).toBeVisible();
   });

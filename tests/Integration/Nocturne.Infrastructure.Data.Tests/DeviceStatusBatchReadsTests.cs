@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -8,6 +9,7 @@ using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Tests.Rls;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -97,6 +99,61 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
     }
 
     [Fact]
+    public async Task GetReportedAsync_ReadsTheWindowStoredByThenWithItsSourceAndSectionsAsStored()
+    {
+        await using var store = await OpenAsync();
+        var extras = new DeviceStatusExtrasRepository(store.Factory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
+        var careLink = new Dictionary<string, object?> { ["sensorState"] = "WARM_UP" };
+        await extras.BulkCreateAsync(
+        [
+            Extras(At(0), new() { ["cgm"] = careLink }),
+            Extras(At(5), new() { ["cgm"] = careLink }, "carelink-connector", "CareLink MiniMed 780G"),
+            Extras(At(9), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 6 } }),
+            Extras(At(12), new() { ["cgm"] = careLink }),
+        ], WriteOrigin.Live);
+        var deleted = await extras.CreateAsync(Extras(At(7), new() { ["cgm"] = careLink }), WriteOrigin.Live);
+        await extras.DeleteByCorrelationIdAsync(deleted.CorrelationId);
+        store.Recorder.Clear();
+
+        var read = (await extras.GetReportedAsync(At(5), DateTime.UtcNow.AddHours(1), At(10)))
+            .OrderBy(r => r.Timestamp).ToList();
+        var notStoredYet = await extras.GetReportedAsync(At(5), At(10), At(10));
+
+        store.Recorder.Count("SELECT").Should().Be(2);
+        read.Select(r => r.Timestamp).Should().Equal([At(5), At(9)], "both ends are inside the window, a deleted row is not");
+        read[0].Should().Match<DeviceStatusExtras>(r => r.DataSource == "carelink-connector" && r.Device == "CareLink MiniMed 780G");
+        read[1].Should().Match<DeviceStatusExtras>(r => r.DataSource == null && r.Device == null);
+        ((JsonElement)read[0].Extras!["cgm"]!).GetProperty("sensorState").GetString().Should().Be("WARM_UP");
+        ((JsonElement)read[1].Extras!["xdripjs"]!).GetProperty("state").GetInt32().Should().Be(6);
+        notStoredYet.Should().BeEmpty("a row stored after the instant read was not there then");
+    }
+
+    [Fact]
+    public async Task A_write_that_stores_or_deletes_a_sensor_state_announces_the_type_and_no_other_does()
+    {
+        await using var store = await OpenAsync();
+        var changes = new RecordingRecordChanges();
+        var extras = new DeviceStatusExtrasRepository(
+            store.Factory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance, changes);
+        var radio = new Dictionary<string, object?> { ["radioAdapter"] = new Dictionary<string, object?> { ["RSSI"] = -60 } };
+
+        await extras.BulkCreateAsync([Extras(At(1), radio)], WriteOrigin.Live);
+        var plain = await extras.CreateAsync(Extras(At(2), radio), WriteOrigin.Live);
+        await extras.DeleteByCorrelationIdAsync(plain.CorrelationId);
+        changes.Changes.Should().BeEmpty("no row states the sensor's state");
+
+        await extras.BulkCreateAsync(
+            [Extras(At(3), new() { ["cgm"] = new Dictionary<string, object?> { ["sensorState"] = "WARM_UP" } })], WriteOrigin.Backfill);
+        var xdrip = await extras.CreateAsync(
+            Extras(At(4), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 2 } }), WriteOrigin.Live);
+        await extras.DeleteByCorrelationIdAsync(xdrip.CorrelationId);
+
+        changes.Changes.Select(c => (c.RecordType, c.HasRecords)).Should().Equal(
+            [(typeof(DeviceStatusExtras), false), (typeof(DeviceStatusExtras), false), (typeof(DeviceStatusExtras), false)],
+            "a bulk write, a single write and a delete of a state each announce once");
+    }
+
+    [Fact]
     public async Task UpdateStateSpansAsync_MatchesTheOriginalIdBeforeTheUuid()
     {
         await using var store = await OpenAsync();
@@ -147,9 +204,10 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         FirstSeenTimestamp = Start, LastSeenTimestamp = Start,
     };
 
-    private static DeviceStatusExtras Extras(DateTime at, Dictionary<string, object?> extras) => new()
+    private static DeviceStatusExtras Extras(
+        DateTime at, Dictionary<string, object?> extras, string? dataSource = null, string? device = null) => new()
     {
-        CorrelationId = Guid.CreateVersion7(), Timestamp = at, Extras = extras,
+        CorrelationId = Guid.CreateVersion7(), Timestamp = at, Extras = extras, DataSource = dataSource, Device = device,
     };
 
     private static StateSpan Span(string name, DateTime start, DateTime? end, string originalId, string? source = null) => new()

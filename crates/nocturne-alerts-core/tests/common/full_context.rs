@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::enums::{
-    GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum,
+    GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket, WireEnum,
 };
 
 use crate::generators::{base, object, word};
@@ -35,6 +35,7 @@ pub(crate) const UNRECOGNISED_MODE: &str = "Turbo";
 pub(crate) const UNRECOGNISED_CATEGORY: &str = "NotACategory";
 pub(crate) const UNRECOGNISED_TREND: &str = "sideways";
 pub(crate) const UNRECOGNISED_GLUCOSE: &str = "off_the_chart";
+pub(crate) const UNRECOGNISED_SENSOR_STATE: &str = "rebooting";
 
 fn half_present<T: std::fmt::Debug + Clone + 'static>(
     value: impl Strategy<Value = T> + 'static,
@@ -179,6 +180,25 @@ fn state_spans() -> BoxedStrategy<Value> {
     .boxed()
 }
 
+/// The sensor's state, a name the crate has no member for one time in four,
+/// with its start half the time, and half the time an `until` within ten
+/// minutes either side of now, exactly now now and then.
+pub(crate) fn sensor_state() -> BoxedStrategy<Value> {
+    (
+        named::<SensorState>(UNRECOGNISED_SENSOR_STATE),
+        option::weighted(0.5, age_in(60)),
+        option::weighted(0.5, (-20..=20i64).prop_map(|n| n * 30)),
+    )
+        .prop_map(|(state, since, until)| {
+            object(vec![
+                ("state", Some(state)),
+                ("since", since.map(instant)),
+                ("until", until.map(instant)),
+            ])
+        })
+        .boxed()
+}
+
 fn trackers() -> BoxedStrategy<Value> {
     let tracker = (age_in(60), option::weighted(0.5, age_in(60)), any::<bool>());
     (
@@ -266,6 +286,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         spans,
         flags,
         half_present(select(TENANT_ZONES.to_vec())),
+        half_present(sensor_state()),
     )
         .prop_map(
             |(
@@ -276,6 +297,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                 (suspension, override_, dnd, pump_modes, state_spans, alerts, trackers),
                 (aps_cycled, pump_snapshot, uploader_snapshot, aps_sensitivity, asleep),
                 zone,
+                sensor_state,
             )| {
                 object(vec![
                     ("latest_value", value),
@@ -317,6 +339,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                     ("active_state_spans", state_spans),
                     ("active_trackers", trackers),
                     ("sleep_session_active", Some(asleep.into())),
+                    ("sensor_state", sensor_state),
                 ])
             },
         )

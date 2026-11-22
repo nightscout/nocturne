@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -20,6 +21,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<DeviceStatusExtrasRepository> _logger;
+    private readonly IRecordChangePublisher? _changes;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceStatusExtrasRepository"/> class.
@@ -27,15 +29,40 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="changes">Where a write that moves the sensor's state is announced.</param>
     public DeviceStatusExtrasRepository(
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
-        ILogger<DeviceStatusExtrasRepository> logger)
+        ILogger<DeviceStatusExtrasRepository> logger,
+        IRecordChangePublisher? changes = null)
     {
         _contextFactory = contextFactory;
         _auditContext = auditContext;
         _logger = logger;
+        _changes = changes;
     }
+
+    /// <summary>
+    /// Whether a stored extras document states the sensor's state, which alert rules read: a CareLink
+    /// <c>cgm.sensorState</c> or an xdrip-js <c>xdripjs.state</c>, whatever its value.
+    /// </summary>
+    internal static bool StatesSensorState(string? extrasJson)
+    {
+        if (extrasJson is null || JsonNode.Parse(extrasJson) is not JsonObject extras)
+            return false;
+        return Member(DeviceStatusExtras.CgmSection, DeviceStatusExtras.CgmSensorState)
+               || Member(DeviceStatusExtras.XDripJsSection, DeviceStatusExtras.XDripJsState);
+
+        bool Member(string section, string name) =>
+            extras[section] is JsonObject found && found[name] is not null;
+    }
+
+    /// <summary>Announces the type when any of <paramref name="written"/> states the sensor's state.</summary>
+    private Task ReportSensorStateAsync(IEnumerable<string?> written) =>
+        written.Any(StatesSensorState)
+            ? _changes?.PublishAsync(RecordsChanged.Written([typeof(DeviceStatusExtras)]), CancellationToken.None)
+              ?? Task.CompletedTask
+            : Task.CompletedTask;
 
     /// <summary>
     /// Creates a new device status extras record.
@@ -55,6 +82,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 
         ctx.DeviceStatusExtras.Add(entity);
         await ctx.SaveChangesAsync(ct);
+        await ReportSensorStateAsync([entity.ExtrasJson]);
         return DeviceStatusExtrasMapper.ToDomainModel(entity);
     }
 
@@ -97,6 +125,19 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceStatusExtras>> GetReportedAsync(
+        DateTime since, DateTime asOf, DateTime latestTimestamp, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entities = await ctx.DeviceStatusExtras
+            .AsNoTracking()
+            .Where(e => e.Timestamp >= since && e.Timestamp <= latestTimestamp
+                        && e.SysCreatedAt >= since && e.SysCreatedAt <= asOf)
+            .ToListAsync(ct);
+        return [.. entities.Select(DeviceStatusExtrasMapper.ToDomainModel)];
+    }
+
     /// <summary>
     /// Deletes device status extras records by correlation ID.
     /// </summary>
@@ -106,9 +147,12 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     public async Task<int> DeleteByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId),
-            _auditContext, $"correlation_id={correlationId}", ct);
+        var rows = ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId);
+        var documents = await rows.Select(e => e.ExtrasJson).ToListAsync(ct);
+        var deleted = await ctx.AuditedSoftDeleteAsync(rows, _auditContext, $"correlation_id={correlationId}", ct);
+        if (deleted > 0)
+            await ReportSensorStateAsync(documents);
+        return deleted;
     }
 
     /// <inheritdoc />
@@ -155,6 +199,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             ct: ct);
 
         _logger.LogSkippedDeleted(nameof(DeviceStatusExtras), skippedDeleted);
+        await ReportSensorStateAsync(inserted.Select(e => e.ExtrasJson));
         return new BulkWrite<DeviceStatusExtras>(
             inserted.Select(DeviceStatusExtrasMapper.ToDomainModel).ToList(), skippedDeleted);
     }

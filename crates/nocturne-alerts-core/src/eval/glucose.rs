@@ -10,7 +10,7 @@ use super::{Env, Held};
 use crate::clock_anomaly::ClockAnchor;
 use crate::compare::Unit;
 use crate::context::SensorContext;
-use crate::enums::{CmpOp, holds};
+use crate::enums::{CmpOp, SensorState, holds};
 use crate::facts::ContextFact;
 use crate::model::{
     ConditionKind, GlucoseBucketPayload, Margined, Payload, PredictedPayload, RateOfChangePayload,
@@ -70,11 +70,27 @@ fn fresh<T>(fact: Option<T>, env: &mut Env) -> Result<T, UnknownReason> {
     }
 }
 
+/// Why the sensor's state leaves a judged glucose leaf unknown, whatever
+/// value the reading has: a state other than ok, or one this crate cannot
+/// name, which may be any of them (engine-semantics.md §3, sensor state).
+/// Absent and ok leave the leaf as it is without the fact.
+fn sensor_gate(ctx: &SensorContext, now: DateTime<Utc>) -> Option<UnknownReason> {
+    match ctx.sensor_state_at(now)?.state {
+        Some(SensorState::Ok) => None,
+        Some(_) => Some(UnknownReason::SensorNotOk),
+        None => Some(UnknownReason::Unrecognised),
+    }
+}
+
 /// A judged glucose leaf: `test` of the fresh fact, holding since the newest
 /// reading's timestamp, the instant the context says it held at
 /// (engine-semantics.md §3). A timestamp after `now` is no earlier start than
-/// `now`, which the `sustained` clamp reads.
+/// `now`, which the `sustained` clamp reads. A sensor that is not ok leaves
+/// it unknown before the reading is read.
 fn judged<T>(fact: Option<T>, env: &mut Env, test: impl FnOnce(T) -> bool) -> Held {
+    if let Some(reason) = sensor_gate(env.ctx, env.now) {
+        return Held::unknown(ContextFact::SensorState, reason);
+    }
     match fresh(fact, env) {
         Ok(value) => reading(test(value).into(), env.ctx),
         Err(reason) => Held::unknown(ContextFact::Glucose, reason),
@@ -82,13 +98,17 @@ fn judged<T>(fact: Option<T>, env: &mut Env, test: impl FnOnce(T) -> bool) -> He
 }
 
 /// When a leaf that [`judges_freshness`] can turn unknown with only `now`
-/// advancing: `None` for any other kind, and for a leaf whose fact is absent,
-/// which is unknown already.
+/// advancing: `None` for any other kind, and for a leaf whose fact is absent
+/// or whose sensor is not ok, which is unknown already.
 pub(crate) fn freshness_expiry(
     payload: &Payload,
     ctx: &SensorContext,
     bound: TimeDelta,
+    now: DateTime<Utc>,
 ) -> Option<Elapsed> {
+    if sensor_gate(ctx, now).is_some() {
+        return None;
+    }
     let present = match payload {
         Payload::Threshold(_) => ctx.latest_value.is_some(),
         Payload::RateOfChange(_) => ctx.trend_rate.is_some(),

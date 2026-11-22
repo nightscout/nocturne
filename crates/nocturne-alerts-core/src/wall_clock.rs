@@ -29,6 +29,7 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
         | ConditionKind::TimeSinceLastBolus
         | ConditionKind::PumpState
         | ConditionKind::StateSpanActive
+        | ConditionKind::SensorState
         | ConditionKind::TrackerAge => true,
         ConditionKind::Threshold
         | ConditionKind::RateOfChange
@@ -96,6 +97,7 @@ mod tests {
                 "pump_state",
                 "pump_suspended",
                 "sensor_age",
+                "sensor_state",
                 "signal_loss",
                 "site_age",
                 "staleness",

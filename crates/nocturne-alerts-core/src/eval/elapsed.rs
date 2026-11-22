@@ -245,12 +245,15 @@ fn ceil_to_tick(at: DateTime<Utc>) -> Option<DateTime<Utc>> {
     )))
 }
 
-/// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx`, for
-/// a rule enabled at `enabled_at`; `None` for any other kind.
+/// A wall-clock leaf (`wall_clock::is_wall_clock`) as it stands in `ctx` at
+/// `now`, for a rule enabled at `enabled_at`; `None` for any other kind.
+/// `now` decides only whether the sensor's state has lapsed: every elapsed
+/// time is measured from the returned leaf.
 pub(crate) fn clock_leaf(
     payload: &Payload,
     ctx: &SensorContext,
     enabled_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
 ) -> Option<ClockLeaf> {
     let leaf = match payload {
         Payload::SignalLoss(p) => super::signal::signal_loss(p, ctx, enabled_at),
@@ -273,6 +276,7 @@ pub(crate) fn clock_leaf(
         Payload::DoNotDisturb(p) => super::spans::do_not_disturb(p, ctx),
         Payload::PumpState(p) => super::spans::pump_state(p, ctx),
         Payload::StateSpanActive(p) => super::spans::state_span_active(p, ctx),
+        Payload::SensorState(p) => super::spans::sensor_state(p, ctx, now),
         Payload::TimeSinceLastCarb(p) => {
             super::clock::time_since(p, ctx.last_carb_at, ClockAnchor::LastCarbAt)
         }

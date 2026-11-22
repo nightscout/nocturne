@@ -267,8 +267,8 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
 
     [Theory]
     [InlineData(AlertPayloadKind.Unevaluable, "No channel of the rule carries a notice that it cannot be evaluated")]
-    [InlineData(AlertPayloadKind.Held, "No channel of the rule carries a notice that it has waited for missing data")]
-    [InlineData(AlertPayloadKind.HeldClosed, "No channel of the rule carries a notice that it has waited for missing data")]
+    [InlineData(AlertPayloadKind.Held, "No channel of the rule carries a notice that it has waited for usable data")]
+    [InlineData(AlertPayloadKind.HeldClosed, "No channel of the rule carries a notice that it has waited for usable data")]
     public async Task A_notice_with_only_device_action_channels_names_its_own_kind(AlertPayloadKind kind, string error)
     {
         var instanceId = await SeedInstanceAsync();

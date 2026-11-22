@@ -53,6 +53,7 @@ public class SensorContextEnricherTests
     private readonly Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository> _trackerRepository = new();
     private readonly Mock<IPredictionService> _predictionService = new();
     private readonly Mock<IReservoirEstimationService> _reservoirEstimator = new();
+    private readonly Mock<IDeviceStatusExtrasRepository> _deviceStatusExtras = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -63,6 +64,170 @@ public class SensorContextEnricherTests
         _dndWindows
             .Setup(r => r.GetUnexpiredSnapshotsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
+        StatusesAre();
+    }
+
+    private static readonly ReadingSource CareLink = new("carelink-connector", "CareLink MiniMed 780G");
+
+    private void StatusesAre(params DeviceStatusExtras[] statuses) =>
+        _deviceStatusExtras
+            .Setup(r => r.GetReportedAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime since, DateTime asOf, DateTime latest, CancellationToken _) =>
+                statuses.Where(s => s.Timestamp >= since && s.Timestamp <= latest && s.CreatedAt >= since && s.CreatedAt <= asOf)
+                    .ToList());
+
+    /// <summary>A status of <paramref name="source"/> dated and stored <paramref name="minutesAgo"/> before now.</summary>
+    private DeviceStatusExtras Status(double minutesAgo, string json, ReadingSource? source = null, double? storedMinutesAgo = null)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        source ??= CareLink;
+        return new DeviceStatusExtras
+        {
+            Timestamp = now.AddMinutes(-minutesAgo),
+            CreatedAt = now.AddMinutes(-(storedMinutesAgo ?? minutesAgo)),
+            Extras = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(json),
+            Device = source.Device,
+            DataSource = source.DataSource,
+        };
+    }
+
+    private SensorContext ReadingOf(ReadingSource? source) => BaseContext() with { LatestSource = source };
+
+    private static AlertRuleSnapshot LowRule() =>
+        MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+
+    [Fact]
+    public async Task A_glucose_rule_reads_the_state_its_readings_source_reports_until_it_lapses()
+    {
+        StatusesAre(
+            Status(9, """{"cgm": {"sensorState": "NO_ERROR_MESSAGE"}}"""),
+            Status(4, """{"cgm": {"sensorState": "WARM_UP"}}"""));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        enriched.SensorState.Should().Be(new SensorStateSnapshot(SensorState.WarmingUp, Since: null, now.AddMinutes(7)));
+    }
+
+    [Fact]
+    public async Task A_status_of_another_source_says_nothing_of_the_reading()
+    {
+        var dexcom = new ReadingSource("dexcom-connector", "Dexcom G7");
+        StatusesAre(Status(1, """{"cgm": {"sensorState": "SENSOR_ERROR"}}"""));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(dexcom), [LowRule()], CancellationToken.None);
+
+        enriched.SensorState.Should().BeNull("a Guardian error must not hold a low on Dexcom readings");
+    }
+
+    [Theory]
+    [InlineData(null, "CareLink MiniMed 780G")]
+    [InlineData("carelink-connector", null)]
+    [InlineData("carelink-connector", "")]
+    public async Task A_reading_or_status_that_lacks_its_source_matches_nothing(string? dataSource, string? device)
+    {
+        StatusesAre(Status(1, """{"cgm": {"sensorState": "SENSOR_ERROR"}}""", new ReadingSource(dataSource, device)));
+
+        var asStored = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+        StatusesAre(Status(1, """{"cgm": {"sensorState": "SENSOR_ERROR"}}"""));
+        var asRead = await BuildEnricher().EnrichAsync(
+            ReadingOf(new ReadingSource(dataSource, device)), [LowRule()], CancellationToken.None);
+
+        asStored.SensorState.Should().BeNull();
+        asRead.SensorState.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_newest_reading_that_alternates_between_sources_reads_only_its_own_sources_state()
+    {
+        var dexcom = new ReadingSource("dexcom-connector", "Dexcom G7");
+        StatusesAre(
+            Status(2, """{"cgm": {"sensorState": "SENSOR_ERROR"}}"""),
+            Status(1, """{"xdripjs": {"state": 6}}""", dexcom));
+        var enricher = BuildEnricher();
+
+        var careLink = await enricher.EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+        var g7 = await enricher.EnrichAsync(ReadingOf(dexcom), [LowRule()], CancellationToken.None);
+        var careLinkAgain = await enricher.EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        careLink.SensorState!.State.Should().Be(SensorState.Error);
+        g7.SensorState!.State.Should().Be(SensorState.Ok);
+        careLinkAgain.SensorState!.State.Should().Be(SensorState.Error);
+    }
+
+    [Fact]
+    public async Task A_status_stored_longer_ago_than_the_bound_states_nothing()
+    {
+        StatusesAre(Status(11.5, """{"cgm": {"sensorState": "WARM_UP"}}"""));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        enriched.SensorState.Should().BeNull("a state that is not current must not silence a low alarm");
+    }
+
+    [Fact]
+    public async Task A_status_dated_ahead_lasts_from_its_arrival_and_does_not_outrank_a_newer_one()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        StatusesAre(
+            Status(-4, """{"cgm": {"sensorState": "SENSOR_ERROR"}}""", storedMinutesAgo: 6),
+            Status(1, """{"cgm": {"sensorState": "NO_ERROR_MESSAGE"}}"""));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        enriched.SensorState.Should().Be(new SensorStateSnapshot(SensorState.Ok, null, now.AddMinutes(10)));
+    }
+
+    [Fact]
+    public async Task A_status_dated_ahead_counts_for_the_bound_from_its_arrival()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        StatusesAre(Status(-4, """{"cgm": {"sensorState": "SENSOR_ERROR"}}""", storedMinutesAgo: 6));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        enriched.SensorState.Should().Be(new SensorStateSnapshot(SensorState.Error, null, now.AddMinutes(5)),
+            "it arrived 6 minutes ago, so it counts for 5 more, not until 11 minutes after its time ahead");
+    }
+
+    [Fact]
+    public async Task A_backfilled_old_status_never_counts()
+    {
+        StatusesAre(Status(60, """{"cgm": {"sensorState": "SENSOR_ERROR"}}""", storedMinutesAgo: 0));
+
+        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+
+        enriched.SensorState.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_rule_with_no_glucose_leaf_reads_no_status()
+    {
+        var rule = MakeRule(AlertConditionType.SignalLoss, """{"timeout_minutes":15}""");
+
+        await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [rule], CancellationToken.None);
+
+        _deviceStatusExtras.Verify(
+            r => r.GetReportedAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData("""{"cgm": {"sensorState": "SENSOR_ERROR"}}""", SensorState.Error)]
+    [InlineData("""{"cgm": {"sensorState": "NO_ERROR_MESSAGE"}}""", SensorState.NoValue)]
+    public async Task A_state_that_is_not_ok_says_why_a_reading_has_no_value_and_ok_does_not(string status, SensorState expected)
+    {
+        StatusesAre(Status(1, status));
+        var rule = MakeRule(AlertConditionType.SensorState, """{"states":["error"]}""");
+        var noValue = ReadingOf(CareLink) with
+        {
+            LatestValue = null,
+            SensorState = new SensorStateSnapshot(SensorState.NoValue, _timeProvider.GetUtcNow().UtcDateTime),
+        };
+
+        var enriched = await BuildEnricher().EnrichAsync(noValue, [rule], CancellationToken.None);
+
+        enriched.SensorState!.State.Should().Be(expected);
     }
 
     [Fact]
@@ -744,6 +909,7 @@ public class SensorContextEnricherTests
             _sleepService.Object,
             _trackerRepository.Object,
             _reservoirEstimator.Object,
+            _deviceStatusExtras.Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher2 = new SensorContextEnricher(
             deps2,
@@ -1085,6 +1251,7 @@ public class SensorContextEnricherTests
             _sleepService.Object,
             _trackerRepository.Object,
             _reservoirEstimator.Object,
+            _deviceStatusExtras.Object,
             Options.Create(options ?? new AlertEvaluationOptions()));
 
         return new SensorContextEnricher(
