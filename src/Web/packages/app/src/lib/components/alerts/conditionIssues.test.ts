@@ -66,6 +66,11 @@ describe("conditionIssuesMessage", () => {
 			["margin_on_equality", "clear_margin"],
 			["margin_past_zero", "clear_margin"],
 			["margin_under_sustained", "clear_margin"],
+			["selector_conflict", "min_of"],
+			["selector_conflict", "max_of"],
+			["list_empty", "min_of"],
+			["list_empty", "max_of"],
+			["unknown_value", "curve"],
 		] as const) {
 			expect(
 				conditionIssuesMessage(rejected(400, [issue(reason, field)])),
@@ -94,6 +99,12 @@ describe("conditionIssuesMessage", () => {
 				rejected(400, [issue("field_missing", "from"), issue("field_missing", "to")])
 			)
 		).toBe("A time-of-day condition needs both a start and an end time.");
+		expect(conditionIssuesMessage(rejected(400, [issue("selector_conflict", "max_of")]))).toBe(
+			"A predicted glucose condition can use one forecast choice only: one curve, the lowest of some curves, or the highest of some curves."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("list_empty", "min_of")]))).toBe(
+			"A “lowest of” forecast needs at least one curve chosen."
+		);
 	});
 
 	it("leaves other rejections to the caller", () => {

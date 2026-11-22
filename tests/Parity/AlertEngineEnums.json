@@ -41,7 +41,9 @@
     "sleep_session_active",
     "tracker_age",
     "transmitter_battery",
-    "sensor_state"
+    "sensor_state",
+    "eventual_glucose",
+    "carbs_required"
   ],
   "AlertWeekday": [
     "sunday",
@@ -110,11 +112,23 @@
     "expired",
     "no_value"
   ],
+  "ForecastCurve": [
+    "default",
+    "iob",
+    "cob",
+    "uam",
+    "zt"
+  ],
   "PayloadFields": {
     "alert_state": [
       "alert_id",
       "for_minutes",
       "state"
+    ],
+    "carbs_required": [
+      "clear_margin",
+      "operator",
+      "value"
     ],
     "cob": [
       "clear_margin",
@@ -131,6 +145,11 @@
     "do_not_disturb": [
       "for_minutes",
       "is_active"
+    ],
+    "eventual_glucose": [
+      "clear_margin",
+      "operator",
+      "value"
     ],
     "glucose_bucket": [
       "buckets"
@@ -157,6 +176,9 @@
     ],
     "predicted": [
       "clear_margin",
+      "curve",
+      "max_of",
+      "min_of",
       "operator",
       "value",
       "within_minutes"

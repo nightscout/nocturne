@@ -146,7 +146,7 @@ you what the message is:
 
 | `Kind` | Meaning |
 |--------|---------|
-| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. |
+| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. When a forecast, eventual glucose or carbs needed condition started the alert, `MetBy` gives what made it true, each as `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). |
 | `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
 | `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
 | `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data has been missing for 24 hours. |
@@ -277,6 +277,10 @@ number of minutes ago. This applies to conditions on the glucose value, rate of
 change, trend and glucose range. It does not apply to signal loss, data age,
 predicted glucose or Smart snooze conditions.
 
+The same number of minutes applies to the newest result of your loop, for the
+**Eventual glucose** and **Carbs needed** conditions. Nocturne counts the result as
+missing when the loop made it more than this number of minutes ago.
+
 The bound is a number of minutes. When you leave the field empty, the rule uses
 the default that the setting shows. **Use the default** clears the bound you set.
 
@@ -290,8 +294,8 @@ the value at which the alert starts. You set it on one condition: open the
 condition's actions menu and select **Add a clear margin**. A condition can have
 a margin when it compares a value with a number. These are glucose, rate of
 change, predicted glucose, insulin on board, carbs on board and reservoir. Pump
-battery, uploader battery, transmitter, temp basal and sensitivity can also have
-one. Conditions about time, such as signal loss or site age, cannot have one.
+battery, uploader battery, transmitter, temp basal, sensitivity, eventual glucose
+and carbs needed can also have one. Conditions about time, such as signal loss or site age, cannot have one.
 
 For example, a condition "glucose below 70 mg/dL" with a clear margin of 5 mg/dL:
 
@@ -324,6 +328,57 @@ margin 5 mg/dL".
 
 This section explains what the clear margin does. It does not say if a margin is
 right for you, or which margin to use.
+
+### Forecast curves
+
+A loop that uses the oref algorithm (AAPS, Trio and OpenAPS) makes more than one
+forecast in each cycle. Each forecast is a curve, and each curve uses a different
+assumption:
+
+- **IOB forecast**: the insulin on board only. It does not include carbs.
+- **COB forecast**: the carbs on board, which are absorbed as they were entered.
+- **UAM forecast**: a rise that is occurring now continues as carbs that nobody
+  entered (unannounced meal).
+- **Zero temp forecast**: the pump gives no basal insulin from now.
+- **Default forecast**: the forecast that a predicted glucose condition used
+  before the curve choice was available. For AAPS, Trio and OpenAPS it is the IOB
+  forecast, so a condition on the IOB forecast reads the same curve as the
+  default. Loop sends one forecast only, which is the default.
+
+A predicted glucose condition uses the default forecast. To select a different
+forecast, open the condition's actions menu and select **Choose a forecast
+curve**. Then select one of these:
+
+- **One curve**: the condition uses the curve that you select.
+- **Lowest of**: at each time ahead where all the curves that you select have a
+  value, the condition uses the lowest of these values.
+- **Highest of**: as **Lowest of**, with the highest value.
+
+The loop can send a curve that stops before the others. The IOB, COB and UAM curves
+stop where their values stop changing, so Nocturne continues them at their last
+value. The zero temp curve stops where it starts to increase. Nocturne continues it
+at its last value, which is lower than the values that the loop does not send.
+This is correct for **Lowest of** with below. With all other comparisons, a list
+that has the zero temp curve can use a value that is too low. **Highest of** with
+above and **Lowest of** with above can then miss a high that only the zero temp
+curve shows after it stops. **Highest of** with below can be true when the real zero
+temp values are higher. **Lowest of** and **Highest of** use only
+the times where all of the selected curves have a value. To use the default
+forecast again, select **Use the default forecast** in the actions menu.
+
+If your loop does not send a curve that the condition uses, the condition does
+not know if it is true. A rule with **Wait** then waits and shows "Glucose
+forecast: missing". It does not count the condition as false.
+
+When a predicted glucose condition starts an alert, the alert tells you what made
+the condition true. It gives the curve, the time ahead and the value, for example
+"COB forecast: 65 mg/dL in 20 minutes". **Eventual glucose** and **Carbs needed** give
+their value. Chat bot messages show it, and a webhook message has it in `MetBy`.
+In-app notifications do not show it. When Nocturne sends an alert again after a
+restart, or after a snooze, the message does not show it.
+
+A forecast is a guess, and it changes with each loop cycle. This section explains
+what each curve is. It does not say which curve is right for you.
 
 ## Testing a rule
 

@@ -13,9 +13,11 @@ internal static class AlertPayloads
         Guid instanceId,
         TenantAlertContext? tenant,
         int activeExcursionCount,
-        DateTime now) => new()
+        DateTime now,
+        IReadOnlyList<AlertMetPoint>? metBy = null) => new()
     {
         AlertType = rule.ConditionType,
+        MetBy = metBy is { Count: > 0 } ? metBy : null,
         RuleName = rule.Name,
         GlucoseValue = context.LatestValue,
         Trend = null,

@@ -918,3 +918,95 @@ fn every_producer_shape_saves() {
         assert_eq!(validate_rule(kind, &payload), vec![], "{kind}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// predicted curve selection (§3 `predicted`)
+// ---------------------------------------------------------------------------
+
+fn predicted(selectors: Value) -> Value {
+    let mut payload = json!({ "operator": "<", "value": 70, "within_minutes": 30 });
+    for (k, v) in selectors.as_object().unwrap() {
+        payload[k] = v.clone();
+    }
+    payload
+}
+
+#[test]
+fn a_predicted_takes_at_most_one_selector() {
+    for (selectors, second) in [
+        (json!({ "curve": "iob", "min_of": ["cob"] }), "min_of"),
+        (json!({ "curve": "iob", "max_of": ["cob"] }), "max_of"),
+        (json!({ "min_of": ["iob"], "max_of": ["cob"] }), "max_of"),
+        (
+            json!({ "curve": "iob", "min_of": ["iob"], "max_of": ["cob"] }),
+            "min_of",
+        ),
+    ] {
+        assert_eq!(
+            issues_of("predicted", predicted(selectors)),
+            at_leaf("predicted", &[Reason::SelectorConflict(second)])
+        );
+    }
+}
+
+#[test]
+fn a_selector_names_curves_the_engine_knows_and_lists_at_least_one() {
+    assert_eq!(
+        issues_of("predicted", predicted(json!({ "curve": "ar2" }))),
+        at_leaf("predicted", &[Reason::UnknownValue("curve")])
+    );
+    assert_eq!(
+        issues_of("predicted", predicted(json!({ "curve": "IOB" }))),
+        at_leaf("predicted", &[Reason::UnknownValue("curve")])
+    );
+    assert_eq!(
+        issues_of("predicted", predicted(json!({ "min_of": ["iob", "ar2"] }))),
+        at_leaf("predicted", &[Reason::UnknownValue("min_of")])
+    );
+    assert_eq!(
+        issues_of("predicted", predicted(json!({ "max_of": [] }))),
+        at_leaf("predicted", &[Reason::ListEmpty("max_of")])
+    );
+    assert_eq!(
+        issues_of("predicted", predicted(json!({ "min_of": "iob" }))),
+        at_leaf("predicted", &[Reason::InvalidField("min_of")])
+    );
+}
+
+#[test]
+fn every_selector_alone_and_none_read() {
+    for selectors in [
+        json!({}),
+        json!({ "curve": "default" }),
+        json!({ "curve": "zt" }),
+        json!({ "min_of": ["iob", "cob", "uam", "zt"] }),
+        json!({ "max_of": ["default"] }),
+        json!({ "curve": null, "min_of": ["uam"], "max_of": null }),
+    ] {
+        assert_eq!(issues_of("predicted", predicted(selectors)), []);
+    }
+}
+
+#[test]
+fn the_loop_leaves_take_an_operator_a_value_and_a_clear_margin() {
+    for kind in ["eventual_glucose", "carbs_required"] {
+        assert_eq!(
+            issues_of(
+                kind,
+                json!({ "operator": ">", "value": 10, "clear_margin": 5 })
+            ),
+            []
+        );
+        assert_eq!(
+            issues_of(
+                kind,
+                json!({ "operator": "==", "value": 10, "clear_margin": 5 })
+            ),
+            at_leaf(kind, &[Reason::MarginOnEquality])
+        );
+        assert_eq!(
+            issues_of(kind, json!({ "operator": ">", "value": 10, "minutes": 5 })),
+            at_leaf(kind, &[Reason::UnknownField])
+        );
+    }
+}

@@ -82,6 +82,12 @@ public sealed record AlertEngineEvaluation
     /// unknown (docs/alerts/engine-semantics.md §5.4); empty when none was.
     /// </summary>
     public IReadOnlyList<ClockAnomaly> ClockAnomalies { get; init; } = [];
+
+    /// <summary>
+    /// What each true <c>predicted</c>, <c>eventual_glucose</c> and <c>carbs_required</c> condition of
+    /// the body met its comparison with (docs/alerts/engine-semantics.md §3); empty when none did.
+    /// </summary>
+    public IReadOnlyList<AlertMetPoint> MetBy { get; init; } = [];
 }
 
 /// <summary>

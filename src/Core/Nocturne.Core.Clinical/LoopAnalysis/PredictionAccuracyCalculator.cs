@@ -100,15 +100,6 @@ public static class PredictionAccuracyCalculator
     /// <summary>How long after the range a carb entry or bolus can still interrupt a prediction (<see cref="IsInterrupted"/>).</summary>
     public static long TreatmentsAfterRangeMs => HorizonMinutes[^1] * LocalSlotBinning.MinuteMs;
 
-    /// <summary>
-    /// The fewest values oref leaves when it drops a level tail from its IOB, COB and UAM curves:
-    /// oref0 <c>lib/determine-basal/determine-basal.js:653-690</c> at
-    /// <c>88cf032aa74ff25f69464a7d9cd601ee3940c0b3</c> pops trailing equal values while more than 13
-    /// remain. Its zero-temp curve is cut where it turns up above target instead, so that tail is not
-    /// level and is not held.
-    /// </summary>
-    private const int OrefTrimmedLength = 13;
-
     private const long StepMs = StepMinutes * LocalSlotBinning.MinuteMs;
 
     private static readonly int CurveCount = Enum.GetValues<PredictionCurve>().Length;
@@ -148,9 +139,10 @@ public static class PredictionAccuracyCalculator
     /// its default is dropped rather than counted twice.
     /// </summary>
     /// <remarks>
-    /// An oref IOB, COB or UAM curve that ends before the last horizon with at least
-    /// <see cref="OrefTrimmedLength"/> values had its level tail dropped, so it is read as holding its
-    /// last value from there. Any other short curve simply ends.
+    /// An oref IOB, COB or UAM curve that ends before the last horizon had its level tail dropped
+    /// when <see cref="OrefCurveTails.IsLevelTrimmed"/>, so it is read as holding its last value from
+    /// there. Any other short curve simply ends; accuracy is not measured against the zero-temp
+    /// curve's carried lower bound.
     /// </remarks>
     /// <returns>Null when the snapshot carries no readable curve.</returns>
     public static PredictionSnapshot? Parse(ApsPredictionPoint point)
@@ -205,15 +197,10 @@ public static class PredictionAccuracyCalculator
         }
     }
 
-    private static double?[]? ExtendLevelTail(double?[]? curve)
-    {
-        if (curve is null || curve.Length < OrefTrimmedLength || curve.Length > LastIndex || curve[^1] is not { } last)
-            return curve;
-        var extended = new double?[LastIndex + 1];
-        curve.CopyTo(extended, 0);
-        Array.Fill(extended, last, curve.Length, extended.Length - curve.Length);
-        return extended;
-    }
+    private static double?[]? ExtendLevelTail(double?[]? curve) =>
+        curve is null || !OrefCurveTails.IsLevelTrimmed(curve.Length, LastIndex + 1) || curve[^1] is null
+            ? curve
+            : OrefCurveTails.HoldLast(curve, LastIndex + 1);
 
     /// <summary>
     /// When value <paramref name="index"/> of a curve falls.

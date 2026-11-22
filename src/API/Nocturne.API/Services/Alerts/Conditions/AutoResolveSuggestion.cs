@@ -108,6 +108,8 @@ internal static class AutoResolveSuggestion
             case "uploader_battery":
             case "transmitter_battery":
             case "sensitivity_ratio":
+            case "eventual_glucose":
+            case "carbs_required":
             case "tracker_age":
             {
                 if (payload is null || OppositeOperator(TextOf(payload["operator"])) is not { } turned)

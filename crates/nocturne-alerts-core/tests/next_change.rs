@@ -723,3 +723,32 @@ fn a_stale_or_absent_glucose_fact_contributes_nothing() {
             .assert_contributes_nothing(&format!("{kind} absent"));
     }
 }
+
+/// §5.3: a determination leaf with its value turns stale where the time since the determination
+/// passes the rule's freshness bound; one already stale, or without its value, contributes
+/// nothing; one beyond the tolerance ahead becomes known 5 minutes before it.
+#[test]
+fn a_determination_leaf_changes_where_its_determination_goes_stale() {
+    for kind in ["eventual_glucose", "carbs_required"] {
+        let leaf = rule(kind, json!({ "operator": ">", "value": 10 }));
+        let determination = |made: TimeDelta| {
+            ctx(json!({ "aps_determination": {
+                "at": ago(made), "eventual_mgdl": 60, "carbs_required_grams": 20
+            } }))
+        };
+        assert_next_change(
+            &Case::new(leaf.clone(), determination(min(4))),
+            now() - min(4) + min(11),
+        );
+        Case::new(leaf.clone(), determination(min(12))).assert_contributes_nothing(kind);
+        Case::new(
+            leaf.clone(),
+            ctx(json!({ "aps_determination": { "at": ago(min(4)) } })),
+        )
+        .assert_contributes_nothing(kind);
+        assert_next_change(
+            &Case::new(leaf, determination(-min(20))),
+            now() + min(20) - min(5),
+        );
+    }
+}

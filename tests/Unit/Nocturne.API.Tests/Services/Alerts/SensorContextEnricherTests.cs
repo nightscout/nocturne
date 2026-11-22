@@ -21,6 +21,7 @@ using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -1209,6 +1210,362 @@ public class SensorContextEnricherTests
         enriched.ActiveDoNotDisturb.Source.Should().Be("manual");
     }
 
+    private static readonly AlertRuleSnapshot ForecastRule =
+        MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30,"min_of":["iob","cob"]}""");
+
+    private static IReadOnlyList<(int Offset, decimal Mgdl)> Points(IEnumerable<PredictedGlucosePoint> points) =>
+        points.Select(p => (p.OffsetMinutes, p.Mgdl)).ToList();
+
+    /// <summary>
+    /// The default series is mapped exactly as it always was, and every named curve the source
+    /// returns reaches the context under its name with the same offsets. An empty curve is absent.
+    /// </summary>
+    [Fact]
+    public async Task Every_curve_the_source_returns_reaches_the_context_under_its_name()
+    {
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlucosePredictionResponse
+            {
+                IntervalMinutes = 5,
+                Predictions = new PredictionCurves
+                {
+                    Default = [110, 120, 130],
+                    IobOnly = [110, 100],
+                    Cob = [140],
+                    Uam = null,
+                    ZeroTemp = [],
+                },
+            });
+
+        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), [ForecastRule], CancellationToken.None);
+
+        Points(enriched.Predictions).Should().Equal((5, 110m), (10, 120m), (15, 130m));
+        enriched.PredictionCurves.Keys.Should().BeEquivalentTo([ForecastCurve.Iob, ForecastCurve.Cob]);
+        Points(enriched.PredictionCurves[ForecastCurve.Iob]).Should().Equal((5, 110m), (10, 100m));
+        Points(enriched.PredictionCurves[ForecastCurve.Cob]).Should().Equal((5, 140m));
+    }
+
+    private Task<SensorContext> EnrichFromSnapshot(ApsSnapshot snapshot)
+    {
+        var snapshots = new Mock<IApsSnapshotRepository>();
+        snapshots.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([snapshot]);
+        var source = new DeviceStatusPredictionService(
+            snapshots.Object, _timeProvider, NullLogger<DeviceStatusPredictionService>.Instance);
+        return BuildEnricher(predictionService: source).EnrichAsync(BaseContext(), [ForecastRule], CancellationToken.None);
+    }
+
+    private ApsSnapshot Snapshot(AidAlgorithm algorithm) => new()
+    {
+        Timestamp = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-2),
+        AidAlgorithm = algorithm,
+    };
+
+    /// <summary>
+    /// The device-status source for an AAPS upload: the default column holds the IOB curve, as the
+    /// decomposer stores it, and the four oref curves are sent by name beside it.
+    /// </summary>
+    [Fact]
+    public async Task An_aaps_upload_sends_its_default_and_the_four_oref_curves()
+    {
+        var snapshot = Snapshot(AidAlgorithm.AndroidAps);
+        snapshot.PredictedDefaultJson = "[100,95]";
+        snapshot.PredictedIobJson = "[100,95]";
+        snapshot.PredictedCobJson = "[110,120,130]";
+        snapshot.PredictedUamJson = "[105]";
+        snapshot.PredictedZtJson = "[90,80]";
+
+        var enriched = await EnrichFromSnapshot(snapshot);
+
+        Points(enriched.Predictions).Should().Equal((5, 100m), (10, 95m));
+        enriched.PredictionCurves.Keys.Should().BeEquivalentTo(
+            [ForecastCurve.Iob, ForecastCurve.Cob, ForecastCurve.Uam, ForecastCurve.Zt]);
+        Points(enriched.PredictionCurves[ForecastCurve.Cob]).Should().Equal((5, 110m), (10, 120m), (15, 130m));
+        Points(enriched.PredictionCurves[ForecastCurve.Zt]).Should().Equal((5, 90m), (10, 80m), (15, 80m));
+        Points(enriched.PredictionCurves[ForecastCurve.Iob]).Should().Equal((5, 100m), (10, 95m));
+    }
+
+    private static readonly double[] TrimmedIob = Enumerable.Range(0, 24).Select(i => 118.0 - i).ToArray();
+    private static readonly double[] TrimmedCob =
+        [.. Enumerable.Range(0, 17).Select(i => 140.0 - 4 * i), 62, 64, 66, 68, 70, 72, 74];
+    private static readonly double[] TrimmedUam = [110, 108, 106, 104, 102, 100, 99, 98, 97, 96, 95, 95, 95];
+    private static readonly double[] TrimmedZt = [100, 95, 92, 90, 88, 86, 85, 86];
+
+    private static string Json(IEnumerable<double> values) => System.Text.Json.JsonSerializer.Serialize(values);
+
+    /// <summary>
+    /// An oref upload as AAPS, Trio and OpenAPS send it: <c>predBGs</c> with UAM trimmed to its 13 level
+    /// values and ZT cut at 8 where it turns up, beside full IOB and COB curves, stored by the
+    /// decomposer's column filler. The host carries UAM and ZT at their last value to the longest
+    /// curve, exactly the curves the corpus scenario <c>predicted-oref-trimmed-curves</c> evaluates,
+    /// and leaves the default as it was.
+    /// </summary>
+    [Fact]
+    public async Task An_oref_upload_has_its_trimmed_curves_carried_to_the_longest()
+    {
+        var command = System.Text.Json.JsonSerializer.Deserialize<OpenApsSuggested>($$"""
+            {
+              "timestamp": "2026-03-22T11:58:00Z",
+              "bg": 120,
+              "eventualBG": 74,
+              "reason": "COB: 30, Dev: -12, BGI: -2.1, ISF: 50, CR: 10, minPredBG 62, minGuardBG 62, IOBpredBG 95, COBpredBG 74, UAMpredBG 95",
+              "predBGs": { "IOB": {{Json(TrimmedIob)}}, "ZT": {{Json(TrimmedZt)}}, "COB": {{Json(TrimmedCob)}}, "UAM": {{Json(TrimmedUam)}} }
+            }
+            """)!;
+        var snapshot = Snapshot(AidAlgorithm.Trio);
+        ApsSnapshotCurves.FillColumns(snapshot, command);
+        snapshot.PredictedDefaultJson = Json(TrimmedIob);
+
+        var enriched = await EnrichFromSnapshot(snapshot);
+
+        double[] Held(double[] curve) => [.. curve, .. Enumerable.Repeat(curve[^1], 24 - curve.Length)];
+        Points(enriched.Predictions).Should().Equal(Offsets(TrimmedIob));
+        Points(enriched.PredictionCurves[ForecastCurve.Iob]).Should().Equal(Offsets(TrimmedIob));
+        Points(enriched.PredictionCurves[ForecastCurve.Cob]).Should().Equal(Offsets(TrimmedCob));
+        Points(enriched.PredictionCurves[ForecastCurve.Uam]).Should().Equal(Offsets(Held(TrimmedUam)));
+        Points(enriched.PredictionCurves[ForecastCurve.Zt]).Should().Equal(Offsets(Held(TrimmedZt)));
+    }
+
+    private static IReadOnlyList<(int Offset, decimal Mgdl)> Offsets(double[] curve) =>
+        curve.Select((v, i) => ((i + 1) * 5, v.ToDecimal())).ToList();
+
+    /// <summary>
+    /// The default is never extended, and an IOB, COB or UAM curve shorter than a trimmed one can be
+    /// simply ends: only ZT is carried at any length.
+    /// </summary>
+    [Fact]
+    public async Task Neither_the_default_nor_a_curve_too_short_to_be_trimmed_is_extended()
+    {
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlucosePredictionResponse
+            {
+                IntervalMinutes = 5,
+                Algorithm = AidAlgorithm.AndroidAps,
+                Predictions = new PredictionCurves
+                {
+                    Default = [100, 95],
+                    IobOnly = [100, 95],
+                    Cob = [.. TrimmedCob],
+                    Uam = [110, 105, 100],
+                    ZeroTemp = [90, 88],
+                },
+            });
+
+        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), [ForecastRule], CancellationToken.None);
+
+        Points(enriched.Predictions).Should().Equal((5, 100m), (10, 95m));
+        enriched.PredictionCurves[ForecastCurve.Iob].Should().HaveCount(2);
+        enriched.PredictionCurves[ForecastCurve.Uam].Should().HaveCount(3);
+        enriched.PredictionCurves[ForecastCurve.Zt].Should().HaveCount(24);
+    }
+
+    /// <summary>
+    /// A level-trimmed COB or IOB curve (13 or more values ending flat) that ends before a longer
+    /// named curve is held at its last value out to the longest, as COB is once a meal is absorbed
+    /// while UAM runs on.
+    /// </summary>
+    [Theory]
+    [InlineData(ForecastCurve.Cob)]
+    [InlineData(ForecastCurve.Iob)]
+    public async Task A_level_trimmed_curve_shorter_than_another_is_held_to_the_longest(ForecastCurve trimmed)
+    {
+        double[] levelled = [.. Enumerable.Range(0, 13).Select(i => 150.0 - 5 * i), 90, 90];
+        double[] full = [.. Enumerable.Range(0, 24).Select(i => 130.0 - i)];
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlucosePredictionResponse
+            {
+                IntervalMinutes = 5,
+                Algorithm = AidAlgorithm.Trio,
+                Predictions = new PredictionCurves
+                {
+                    Default = [.. full],
+                    IobOnly = trimmed == ForecastCurve.Iob ? [.. levelled] : [.. full],
+                    Cob = trimmed == ForecastCurve.Cob ? [.. levelled] : [.. full],
+                    Uam = [.. full],
+                },
+            });
+
+        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), [ForecastRule], CancellationToken.None);
+
+        double[] held = [.. levelled, .. Enumerable.Repeat(90.0, 24 - levelled.Length)];
+        Points(enriched.PredictionCurves[trimmed]).Should().Equal(Offsets(held));
+        Points(enriched.Predictions).Should().Equal(Offsets(full));
+    }
+
+    /// <summary>Only an oref source has its curves carried; a source of another or no algorithm is read as sent.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(AidAlgorithm.Loop)]
+    public async Task A_source_that_is_not_oref_sends_its_curves_as_they_are(AidAlgorithm? algorithm)
+    {
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GlucosePredictionResponse
+            {
+                IntervalMinutes = 5,
+                Algorithm = algorithm,
+                Predictions = new PredictionCurves { Default = [100], Cob = [.. TrimmedCob], ZeroTemp = [90, 88] },
+            });
+
+        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), [ForecastRule], CancellationToken.None);
+
+        enriched.PredictionCurves[ForecastCurve.Zt].Should().HaveCount(2);
+    }
+
+    /// <summary>Trio stores no default column; the default is still the IOB curve, as it always was.</summary>
+    [Fact]
+    public async Task A_trio_upload_keeps_the_iob_curve_as_its_default()
+    {
+        var snapshot = Snapshot(AidAlgorithm.Trio);
+        snapshot.PredictedIobJson = "[100,95]";
+        snapshot.PredictedCobJson = "[110]";
+
+        var enriched = await EnrichFromSnapshot(snapshot);
+
+        Points(enriched.Predictions).Should().Equal((5, 100m), (10, 95m));
+        enriched.PredictionCurves.Keys.Should().BeEquivalentTo([ForecastCurve.Iob, ForecastCurve.Cob]);
+    }
+
+    /// <summary>A Loop upload has one forecast, the default, and no named curve.</summary>
+    [Fact]
+    public async Task A_loop_upload_sends_its_one_forecast_as_the_default_only()
+    {
+        var snapshot = Snapshot(AidAlgorithm.Loop);
+        snapshot.PredictedDefaultJson = "[120,118,116]";
+
+        var enriched = await EnrichFromSnapshot(snapshot);
+
+        Points(enriched.Predictions).Should().Equal((5, 120m), (10, 118m), (15, 116m));
+        enriched.PredictionCurves.Should().BeEmpty();
+    }
+
+    private static readonly AlertRuleSnapshot CarbsRule =
+        MakeRule(AlertConditionType.CarbsRequired, """{"operator":">","value":10}""");
+
+    private void NewestSnapshotIs(ApsSnapshot? snapshot) =>
+        _apsSnapshotRepository
+            .Setup(r => r.GetAsync(null, It.IsAny<DateTime?>(), null, null, 1, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot is null ? [] : [snapshot]);
+
+    private Task<SensorContext> EnrichDetermination() =>
+        BuildEnricher().EnrichAsync(BaseContext(), [CarbsRule], CancellationToken.None);
+
+    [Theory]
+    [InlineData(AidAlgorithm.OpenAps)]
+    [InlineData(AidAlgorithm.AndroidAps)]
+    [InlineData(AidAlgorithm.Trio)]
+    [InlineData(AidAlgorithm.IAPS)]
+    public async Task An_oref_determination_carries_its_eventual_glucose_and_carbs_required(AidAlgorithm algorithm)
+    {
+        var snapshot = Snapshot(algorithm);
+        snapshot.EventualBg = 85;
+        snapshot.SuggestedJson = """{"timestamp":"2026-03-22T11:58:00Z","eventualBG":85,"carbsReq":12}""";
+        NewestSnapshotIs(snapshot);
+
+        var enriched = await EnrichDetermination();
+
+        enriched.ApsDetermination.Should().Be(new ApsDetermination(snapshot.Timestamp, 85m, 12m));
+    }
+
+    /// <summary>oref leaves <c>carbsReq</c> out when it needs none, so a readable command without it is 0.</summary>
+    [Theory]
+    [InlineData(AidAlgorithm.OpenAps)]
+    [InlineData(AidAlgorithm.AndroidAps)]
+    [InlineData(AidAlgorithm.Trio)]
+    [InlineData(AidAlgorithm.IAPS)]
+    public async Task An_oref_command_without_carbs_required_reads_zero(AidAlgorithm algorithm)
+    {
+        var snapshot = Snapshot(algorithm);
+        snapshot.EventualBg = 120;
+        snapshot.SuggestedJson = """{"timestamp":"2026-03-22T11:58:00Z","eventualBG":120}""";
+        NewestSnapshotIs(snapshot);
+
+        (await EnrichDetermination()).ApsDetermination!.CarbsRequiredGrams.Should().Be(0m);
+    }
+
+    /// <summary>The carbs come from the command the eventual glucose came from: the later of the two.</summary>
+    [Fact]
+    public async Task The_carbs_required_come_from_the_freshest_command()
+    {
+        var snapshot = Snapshot(AidAlgorithm.AndroidAps);
+        snapshot.SuggestedJson = """{"timestamp":"2026-03-22T11:58:00Z","eventualBG":60,"carbsReq":30}""";
+        snapshot.EnactedJson = """{"timestamp":"2026-03-22T11:53:00Z","eventualBG":70,"carbsReq":5,"received":true}""";
+        NewestSnapshotIs(snapshot);
+
+        (await EnrichDetermination()).ApsDetermination!.CarbsRequiredGrams.Should().Be(30m);
+    }
+
+    /// <summary>
+    /// oref's early returns (a noisy sensor, old readings) upload a reason and none of a
+    /// determination's values: no eventual glucose, so no carbs either, not 0.
+    /// </summary>
+    [Fact]
+    public async Task An_oref_command_that_is_not_a_determination_has_no_carbs_required()
+    {
+        var snapshot = Snapshot(AidAlgorithm.AndroidAps);
+        snapshot.SuggestedJson = """{"timestamp":"2026-03-22T11:58:00Z","reason":"CGM is calibrating, in ??? state, or noise is high"}""";
+        NewestSnapshotIs(snapshot);
+
+        var enriched = await EnrichDetermination();
+
+        enriched.ApsDetermination.Should().Be(new ApsDetermination(snapshot.Timestamp, null, null));
+    }
+
+    [Fact]
+    public async Task A_loop_determination_has_no_carbs_required()
+    {
+        var snapshot = Snapshot(AidAlgorithm.Loop);
+        snapshot.EventualBg = 140;
+        snapshot.LoopJson = """{"timestamp":"2026-03-22T11:58:00Z"}""";
+        NewestSnapshotIs(snapshot);
+
+        var enriched = await EnrichDetermination();
+
+        enriched.ApsDetermination.Should().Be(new ApsDetermination(snapshot.Timestamp, 140m, null));
+    }
+
+    /// <summary>A command that is missing or does not parse says nothing: absent, never 0.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{not json")]
+    public async Task An_oref_snapshot_without_a_readable_command_has_no_carbs_required(string? suggested)
+    {
+        var snapshot = Snapshot(AidAlgorithm.AndroidAps);
+        snapshot.SuggestedJson = suggested;
+        NewestSnapshotIs(snapshot);
+
+        (await EnrichDetermination()).ApsDetermination!.CarbsRequiredGrams.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task No_snapshot_is_no_determination()
+    {
+        NewestSnapshotIs(null);
+
+        (await EnrichDetermination()).ApsDetermination.Should().BeNull();
+    }
+
+    /// <summary>Replay reads the newest snapshot at or before the tick, of any age.</summary>
+    [Fact]
+    public async Task A_replay_tick_reads_the_determination_at_or_before_it()
+    {
+        var tick = new DateTime(2026, 3, 22, 10, 0, 0, DateTimeKind.Utc);
+        NewestSnapshotIs(Snapshot(AidAlgorithm.Trio));
+
+        await BuildEnricher().EnrichAsOfAsync(BaseContext(), [CarbsRule], tick, CancellationToken.None);
+
+        _apsSnapshotRepository.Verify(r => r.GetAsync(null, tick, null, null, 1, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_rule_that_reads_no_determination_does_not_fetch_one()
+    {
+        await BuildEnricher().EnrichAsync(BaseContext(), [LowRule()], CancellationToken.None);
+
+        _apsSnapshotRepository.Verify(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static string TryResolve(string ianaId, string windowsId)
     {
         try { TimeZoneInfo.FindSystemTimeZoneById(ianaId); return ianaId; }
@@ -1218,12 +1575,13 @@ public class SensorContextEnricherTests
     private SensorContextEnricher BuildEnricher(
         bool includePredictionService = true,
         AlertEvaluationOptions? options = null,
-        ITenantCache? iobCobCache = null)
+        ITenantCache? iobCobCache = null,
+        IPredictionService? predictionService = null)
     {
         var services = new ServiceCollection();
         if (includePredictionService)
         {
-            services.AddSingleton(_predictionService.Object);
+            services.AddSingleton(predictionService ?? _predictionService.Object);
         }
         var provider = services.BuildServiceProvider();
 

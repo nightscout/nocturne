@@ -1,20 +1,22 @@
 //! Glucose-fact leaves: threshold, rate_of_change, trend, predicted,
 //! glucose_bucket, staleness.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, TimeDelta, Utc};
 use rust_decimal::Decimal;
 
 use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
 use super::signal::{DataStopped, data_stopped};
-use super::{Env, Held};
+use super::{Env, Held, MetPoint};
 use crate::clock_anomaly::ClockAnchor;
 use crate::compare::Unit;
-use crate::context::SensorContext;
-use crate::enums::{CmpOp, SensorState, holds};
+use crate::context::{PredictedPoint, SensorContext};
+use crate::enums::{CmpOp, ForecastCurve, SensorState};
 use crate::facts::ContextFact;
 use crate::model::{
-    ConditionKind, GlucoseBucketPayload, Margined, Payload, PredictedPayload, RateOfChangePayload,
-    StalenessPayload, ThresholdPayload, TrendPayload,
+    ConditionKind, CurveSelection, Extreme, GlucoseBucketPayload, Margined, Payload,
+    PredictedPayload, RateOfChangePayload, StalenessPayload, ThresholdPayload, TrendPayload,
 };
 use crate::truth::Truth;
 use crate::unknown::UnknownReason;
@@ -147,24 +149,104 @@ pub(super) fn trend(p: &TrendPayload, env: &mut Env) -> Held {
     judged(env.ctx.trend_bucket, env, |bucket| p.bucket == bucket)
 }
 
-/// True if any prediction with `offset_minutes <= within_minutes` satisfies the
-/// comparison; points beyond the horizon are skipped. No predictions is
-/// unknown. Not judged: its points are not facts of the reading.
+/// True if any point of the selected series with `offset_minutes <=
+/// within_minutes` satisfies the comparison; points beyond the horizon are
+/// skipped. A selected series the host did not send is unknown. Not judged:
+/// its points are not facts of the reading.
 pub(super) fn predicted(p: &PredictedPayload, env: &Env) -> Held {
-    if env.ctx.predictions.is_empty() {
-        return Held::unknown(ContextFact::Predictions, UnknownReason::Absent);
-    }
+    predicted_met(p, env).0
+}
+
+/// [`predicted`] with the first point, in offset order, that met the
+/// comparison (engine-semantics.md §3, `predicted`).
+pub(super) fn predicted_met(p: &PredictedPayload, env: &Env) -> (Held, Option<MetPoint>) {
     let limit = env.limit(p);
-    reading(
-        Truth::any(
-            env.ctx
-                .predictions
+    let within = p.within_minutes.get();
+    let meets = |mgdl: Decimal| p.operator.apply(mgdl, limit);
+    let met = match p.selection() {
+        CurveSelection::One(curve) => {
+            let series = env.ctx.prediction_series(curve);
+            if series.is_empty() {
+                return (absent_series(), None);
+            }
+            let mut horizon: Vec<&PredictedPoint> = series
                 .iter()
-                .filter(|point| point.offset_minutes <= p.within_minutes.get())
-                .map(|point| holds(p.operator, Some(point.mgdl), limit)),
-        ),
-        env.ctx,
-    )
+                .filter(|point| point.offset_minutes <= within)
+                .collect();
+            horizon.sort_by_key(|point| point.offset_minutes);
+            horizon
+                .into_iter()
+                .find(|point| meets(point.mgdl))
+                .map(|point| MetPoint::on_curve(curve, point.offset_minutes, point.mgdl))
+        }
+        CurveSelection::Combined(extreme, curves) => {
+            let Some(series) = curves
+                .iter()
+                .map(|&curve| {
+                    let points = env.ctx.prediction_series(curve);
+                    (!points.is_empty()).then_some((curve, points))
+                })
+                .collect::<Option<Vec<_>>>()
+            else {
+                return (absent_series(), None);
+            };
+            shared_offsets(&series, within)
+                .into_iter()
+                .find_map(|offset| {
+                    extreme_at(&series, offset, extreme)
+                        .filter(|&(_, mgdl)| meets(mgdl))
+                        .map(|(curve, mgdl)| MetPoint::on_curve(curve, offset, mgdl))
+                })
+        }
+    };
+    (reading(met.is_some().into(), env.ctx), met)
+}
+
+fn absent_series() -> Held {
+    Held::unknown(ContextFact::Predictions, UnknownReason::Absent)
+}
+
+/// The offsets within the horizon at which every series has a point, in
+/// order: a combined value exists only where each listed curve does.
+fn shared_offsets(series: &[(ForecastCurve, &[PredictedPoint])], within: i32) -> BTreeSet<i32> {
+    let offsets = |points: &[PredictedPoint]| -> BTreeSet<i32> {
+        points
+            .iter()
+            .map(|point| point.offset_minutes)
+            .filter(|&offset| offset <= within)
+            .collect()
+    };
+    let mut all = series.iter().map(|&(_, points)| offsets(points));
+    let first = all.next().unwrap_or_default();
+    all.fold(first, |shared, next| &shared & &next)
+}
+
+/// The lowest (`Min`) or highest (`Max`) point at `offset` across `series`,
+/// with the curve that supplied it: of equal values, the first listed.
+fn extreme_at(
+    series: &[(ForecastCurve, &[PredictedPoint])],
+    offset: i32,
+    extreme: Extreme,
+) -> Option<(ForecastCurve, Decimal)> {
+    series
+        .iter()
+        .flat_map(|&(curve, points)| {
+            points
+                .iter()
+                .filter(move |point| point.offset_minutes == offset)
+                .map(move |point| (curve, point.mgdl))
+        })
+        .fold(None, |best, (curve, mgdl)| match best {
+            Some((_, held))
+                if match extreme {
+                    Extreme::Min => mgdl >= held,
+                    Extreme::Max => mgdl <= held,
+                } =>
+            {
+                best
+            }
+            _ => Some((curve, mgdl)),
+        })
 }
 
 /// Set membership over the precomputed context bucket.

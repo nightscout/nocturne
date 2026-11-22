@@ -67,7 +67,7 @@ public sealed class AlertOrchestratorSupersededPassTests
         var opened = new Mock<IExcursionOpenedHandler>();
         opened
             .Setup(h => h.HandleOpenedAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<Guid>(), It.IsAny<SensorContext>(),
-                It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<IReadOnlyList<AlertMetPoint>>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 if (Interlocked.Increment(ref _deliveries) != 1) return;

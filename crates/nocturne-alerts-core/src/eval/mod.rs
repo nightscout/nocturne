@@ -4,6 +4,7 @@
 //! evaluated as written (§1.4).
 
 pub(crate) mod clock;
+pub(crate) mod determination;
 mod device;
 pub(crate) mod elapsed;
 pub(crate) mod glucose;
@@ -17,7 +18,7 @@ use uuid::Uuid;
 
 use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
-use crate::enums::CompositeOp;
+use crate::enums::{CompositeOp, ForecastCurve};
 use crate::facts::ContextFact;
 use crate::model::{Margined, Node, Payload};
 use crate::paths::node_child_path;
@@ -166,6 +167,79 @@ impl Held {
     }
 }
 
+/// What a true `predicted`, `eventual_glucose` or `carbs_required` leaf met
+/// its comparison with (engine-semantics.md §3): for `predicted`, the curve
+/// and the offset of the point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetPoint {
+    pub curve: Option<ForecastCurve>,
+    pub offset_minutes: Option<i32>,
+    pub value: Decimal,
+}
+
+impl MetPoint {
+    pub(crate) fn on_curve(curve: ForecastCurve, offset_minutes: i32, value: Decimal) -> Self {
+        Self {
+            curve: Some(curve),
+            offset_minutes: Some(offset_minutes),
+            value,
+        }
+    }
+
+    pub(crate) fn value(value: Decimal) -> Self {
+        Self {
+            curve: None,
+            offset_minutes: None,
+            value,
+        }
+    }
+
+    /// `{"leaf_id", "kind", "curve"?, "offset_minutes"?, "value"}`, the value
+    /// as the exact number it prints as.
+    #[must_use]
+    pub fn to_json(&self, leaf_id: usize, kind: crate::model::ConditionKind) -> serde_json::Value {
+        let mut o = serde_json::Map::new();
+        o.insert("leaf_id".into(), leaf_id.into());
+        o.insert("kind".into(), crate::enums::WireEnum::name(kind).into());
+        if let Some(curve) = self.curve {
+            o.insert("curve".into(), crate::enums::WireEnum::name(curve).into());
+        }
+        if let Some(offset) = self.offset_minutes {
+            o.insert("offset_minutes".into(), offset.into());
+        }
+        let value = self
+            .value
+            .to_string()
+            .parse::<serde_json::Number>()
+            .map_or(serde_json::Value::Null, serde_json::Value::Number);
+        o.insert("value".into(), value);
+        serde_json::Value::Object(o)
+    }
+}
+
+/// Whether `kind` reads the loop's determination only while it is fresh
+/// (engine-semantics.md §3).
+#[must_use]
+pub(crate) fn judges_determination_freshness(kind: crate::model::ConditionKind) -> bool {
+    use crate::model::ConditionKind;
+    matches!(
+        kind,
+        ConditionKind::EventualGlucose | ConditionKind::CarbsRequired
+    )
+}
+
+/// The point a leaf met its comparison with, when it is a true leaf of a kind
+/// that names one; `None` for every other leaf.
+pub(crate) fn met_point(payload: &Payload, env: &mut Env) -> Option<MetPoint> {
+    match payload {
+        Payload::Predicted(p) => glucose::predicted_met(p, env).1,
+        Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
+            determination::determined(payload, env).1
+        }
+        _ => None,
+    }
+}
+
 impl From<Truth> for Held {
     fn from(truth: Truth) -> Self {
         Held::since(truth, None)
@@ -219,6 +293,9 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
         Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
         Payload::DayOfWeek(p) => clock::day_of_week(p, env).into(),
         Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env).into(),
+        Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
+            determination::determined(payload, env).0
+        }
         Payload::SignalLoss(_)
         | Payload::Staleness(_)
         | Payload::SiteAge(_)

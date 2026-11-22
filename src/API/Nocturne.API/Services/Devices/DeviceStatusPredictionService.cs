@@ -100,6 +100,7 @@ public class DeviceStatusPredictionService : IPredictionService
             Cob = snapshot.Cob ?? 0,
             SensitivityRatio = snapshot.SensitivityRatio,
             IntervalMinutes = 5,
+            Algorithm = snapshot.AidAlgorithm,
             Predictions = new PredictionCurves
             {
                 Default = defaultCurve,
@@ -141,6 +142,7 @@ public class DeviceStatusPredictionService : IPredictionService
             Cob = snapshot.Cob ?? 0,
             SensitivityRatio = snapshot.SensitivityRatio,
             IntervalMinutes = 5,
+            Algorithm = snapshot.AidAlgorithm,
             Predictions = new PredictionCurves
             {
                 Default = values,

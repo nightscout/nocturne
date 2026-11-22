@@ -204,6 +204,20 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// `ForecastCurve`: a forecast series a `predicted` leaf selects
+    /// (engine-semantics.md §3). `default` is the series a host has always
+    /// sent, not a curve of its own; the others are oref's.
+    #[derive(PartialOrd, Ord)]
+    pub enum ForecastCurve {
+        Default = "default",
+        Iob = "iob",
+        Cob = "cob",
+        Uam = "uam",
+        Zt = "zt",
+    }
+}
+
+wire_enum! {
     /// `threshold.direction`.
     pub enum ThresholdDirection {
         Above = "above",
@@ -278,6 +292,7 @@ mod tests {
             ),
             ("TrendBucket", names::<TrendBucket>()),
             ("SensorState", names::<SensorState>()),
+            ("ForecastCurve", names::<ForecastCurve>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];
         for (enum_name, ours) in tables {

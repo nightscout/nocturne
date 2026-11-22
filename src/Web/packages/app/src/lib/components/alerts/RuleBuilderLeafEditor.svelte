@@ -18,6 +18,7 @@
   import {
     ALERT_STATES,
     alertStateLabel,
+    forecastCurveLabel,
     glucoseBucketLabel,
     pumpModeLabel,
     rateDirectionLabel,
@@ -47,6 +48,10 @@
     StateSpanCategory,
     AlertWeekday,
     SensorState,
+    ForecastCurve,
+    curveChoice,
+    setCurveChoice,
+    type CurveChoice,
   } from "./types";
   import { AlertComparisonOperator } from "@nocturne/api-client";
 
@@ -83,6 +88,7 @@
     switch (node.type) {
       case "threshold":
       case "predicted":
+      case "eventual_glucose":
         return bg(mgdl);
       case "rate_of_change":
         return convertRateToDisplayUnits(mgdl, glucoseUnits.current);
@@ -96,6 +102,7 @@
     switch (node.type) {
       case "threshold":
       case "predicted":
+      case "eventual_glucose":
         return convertFromDisplayUnits(entered, glucoseUnits.current);
       case "rate_of_change":
         return convertRateFromDisplayUnits(entered, glucoseUnits.current);
@@ -108,7 +115,10 @@
     switch (kind) {
       case "threshold":
       case "predicted":
+      case "eventual_glucose":
         return glucoseUnits.current === "mmol" ? "0.1" : "1";
+      case "carbs_required":
+        return "1";
       case "rate_of_change":
         return glucoseUnits.current === "mmol" ? "0.01" : "0.1";
       case "sensitivity_ratio":
@@ -132,6 +142,28 @@
   /** A sensor state's start is known only for No value, so only it can be timed. */
   function onlyNoValue(states: SensorState[] | undefined): boolean {
     return states?.length === 1 && states[0] === SensorState.NoValue;
+  }
+
+  const NAMED_CURVES: readonly ForecastCurve[] = [
+    ForecastCurve.Iob,
+    ForecastCurve.Cob,
+    ForecastCurve.Uam,
+    ForecastCurve.Zt,
+  ];
+
+  function curveChoiceLabel(choice: CurveChoice): string {
+    switch (choice) {
+      case "curve":
+        return "one curve";
+      case "min_of":
+        return "lowest of";
+      case "max_of":
+        return "highest of";
+    }
+  }
+
+  function isCurveChoice(value: string): value is CurveChoice {
+    return value === "curve" || value === "min_of" || value === "max_of";
   }
 
   // Stored on the wire as the symbol; shown in words.
@@ -184,6 +216,7 @@
       case "reservoir":
         return "U";
       case "cob":
+      case "carbs_required":
         return "g";
       case "site_age":
         return "h";
@@ -286,6 +319,102 @@
       }}
     />
     <span class="text-xs text-muted-foreground">min</span>
+    {@const predicted = node.predicted}
+    {@const choice = curveChoice(predicted)}
+    {#if choice}
+      <span class="text-xs text-muted-foreground">from</span>
+      <Select.Root
+        type="single"
+        value={choice}
+        onValueChange={(v) => {
+          if (isCurveChoice(v)) setCurveChoice(predicted, v);
+        }}
+      >
+        <Select.Trigger size="sm" class="w-32" aria-label="Forecast choice">
+          {curveChoiceLabel(choice)}
+        </Select.Trigger>
+        <Select.Content>
+          {#each ["curve", "min_of", "max_of"] as const as option (option)}
+            <Select.Item value={option} label={curveChoiceLabel(option)} />
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      {#if choice === "curve"}
+        <Select.Root
+          type="single"
+          value={predicted.curve ?? ForecastCurve.Iob}
+          onValueChange={(v) => {
+            if (isStringEnumMember(ForecastCurve, v)) predicted.curve = v;
+          }}
+        >
+          <Select.Trigger size="sm" class="w-44" aria-label="Forecast curve">
+            {forecastCurveLabel(predicted.curve ?? ForecastCurve.Iob)}
+          </Select.Trigger>
+          <Select.Content>
+            {#each NAMED_CURVES as curve (curve)}
+              <Select.Item value={curve} label={forecastCurveLabel(curve)} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {:else}
+        {@const listed = (choice === "min_of" ? predicted.min_of : predicted.max_of) ?? []}
+        <ToggleGroup.Root
+          type="multiple"
+          size="sm"
+          spacing={1}
+          value={[...listed]}
+          onValueChange={(v: string[]) => {
+            const curves = v.filter((c) => isStringEnumMember(ForecastCurve, c));
+            if (curves.length === 0) return;
+            if (choice === "min_of") predicted.min_of = curves;
+            else predicted.max_of = curves;
+          }}
+          class="flex-wrap"
+        >
+          {#each NAMED_CURVES as curve (curve)}
+            <ToggleGroup.Item value={curve} aria-label={forecastCurveLabel(curve)}>
+              {forecastCurveLabel(curve)}
+            </ToggleGroup.Item>
+          {/each}
+        </ToggleGroup.Root>
+      {/if}
+      <span class="w-full text-xs text-muted-foreground">
+        If the loop does not send a curve that you select, the rule waits and shows the cause.
+      </span>
+    {/if}
+  {:else if node.type === "eventual_glucose" && node.eventual_glucose}
+    {@const eventual = node.eventual_glucose}
+    <Select.Root
+      type="single"
+      value={eventual.operator ?? "<"}
+      onValueChange={(v) => {
+        eventual.operator = v;
+      }}
+    >
+      <Select.Trigger size="sm" class="w-28" aria-label="Comparison">
+        {operatorLabel(eventual.operator ?? "<")}
+      </Select.Trigger>
+      <Select.Content>
+        {#each OPERATORS as op (op)}
+          <Select.Item value={op} label={operatorLabel(op)} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Input
+      type="number"
+      aria-label="Value"
+      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
+      size="sm"
+      class="w-20 text-right tabular-nums"
+      value={bg(eventual.value ?? 0)}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        eventual.value = convertFromDisplayUnits(
+          parseNumber(e.currentTarget.value, bg(eventual.value ?? 0)),
+          glucoseUnits.current,
+        );
+      }}
+    />
+    <span class="text-xs text-muted-foreground">{bgLabel()}</span>
   {:else if node.type === "rate_of_change" && node.rate_of_change}
     <Select.Root
       type="single"
@@ -416,7 +545,7 @@
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
-  {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio") && node[node.type]}
+  {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio" || node.type === "carbs_required") && node[node.type]}
     {@const payload = node[node.type]!}
     {@const suffix = leafSuffix(node.type)}
     <Select.Root
@@ -438,7 +567,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step={node.type === "sensitivity_ratio" ? "0.01" : "0.1"}
+      step={node.type === "sensitivity_ratio" ? "0.01" : node.type === "carbs_required" ? "1" : "0.1"}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
@@ -973,7 +1102,7 @@
     <span class="text-xs text-muted-foreground">
       {node.type === "rate_of_change"
         ? `${bgLabel()}/min`
-        : node.type === "threshold" || node.type === "predicted"
+        : node.type === "threshold" || node.type === "predicted" || node.type === "eventual_glucose"
           ? bgLabel()
           : leafSuffix(node.type)}
     </span>

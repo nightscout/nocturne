@@ -124,6 +124,16 @@ internal static class EngineTestHarness
                 .OrderBy(kv => kv.Key)
                 .Select(kv => new ExpectedLeaf(kv.Key, kv.Value ?? false, kv.Value is null ? true : null))
                 .ToList(),
+            MetBy = evaluation.MetBy.Count > 0
+                ? evaluation.MetBy
+                    .Select(m => new ExpectedMetPoint(
+                        m.LeafId,
+                        AlertConditionTypeNames.ToWireString(m.Kind),
+                        m.Curve is { } curve ? System.Text.Json.JsonSerializer.Serialize(curve).Trim('"') : null,
+                        m.OffsetMinutes,
+                        m.Value))
+                    .ToList()
+                : null,
             Transition = CorpusWire.TransitionWire(evaluation.Transition.Type),
             CloseReason = evaluation.Transition.CloseReason is { } reason ? CorpusWire.CloseReasonWire(reason) : null,
             Tracker = state is null

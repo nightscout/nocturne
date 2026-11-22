@@ -116,6 +116,7 @@ internal sealed class RustBackedAlertEngine(
             ClockAnomalies = result.ClockAnomaly?
                 .Select(a => new ClockAnomaly(a.Fact, TimeSpan.FromMilliseconds(a.AheadMs)))
                 .ToList() ?? [],
+            MetBy = RustEnvelopeMapper.MetByFromWire(result.MetBy),
         };
     }
 

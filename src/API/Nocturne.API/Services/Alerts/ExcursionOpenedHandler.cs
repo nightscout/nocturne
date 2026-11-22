@@ -22,13 +22,16 @@ namespace Nocturne.API.Services.Alerts;
 public interface IExcursionOpenedHandler
 {
     /// <remarks>
-    /// <c>late</c> is the sweep finishing an opening its evaluation left owed. A late opening whose
+    /// <c>metBy</c> is what the opening evaluation's true forecast and loop conditions met, which the
+    /// payload names (<see cref="AlertPayload.MetBy"/>); a late opening has no evaluation and sends
+    /// none. <c>late</c> is the sweep finishing an opening its evaluation left owed. A late opening whose
     /// excursion has ended by the time its instance is taken is settled without a send. The
     /// evaluation that opened the excursion sends it even when the same evaluation's auto-resolve
     /// has already closed it.
     /// </remarks>
     Task HandleOpenedAsync(
-        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late, CancellationToken ct);
+        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
+        IReadOnlyList<AlertMetPoint> metBy, CancellationToken ct);
 }
 
 internal sealed class ExcursionOpenedHandler(
@@ -41,7 +44,8 @@ internal sealed class ExcursionOpenedHandler(
     : IExcursionOpenedHandler
 {
     public async Task HandleOpenedAsync(
-        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late, CancellationToken ct)
+        AlertRuleSnapshot rule, Guid excursionId, SensorContext context, Guid tenantId, bool late,
+        IReadOnlyList<AlertMetPoint> metBy, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var instance = await repository.EnsureInstanceAsync(excursionId, now, whileOpen: late, ct);
@@ -66,7 +70,7 @@ internal sealed class ExcursionOpenedHandler(
             var activeExcursionCount = await repository.CountActiveExcursionsAsync(ct);
             var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
             var payload = AlertPayloads.Build(
-                rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now);
+                rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now, metBy);
 
             var suppressingScope = await DndGatedDispatch.DispatchAsync(
                 rule, context.ActiveDndScopes, instance.Id, channels, payload, repository, deliveryService, logger, ct);

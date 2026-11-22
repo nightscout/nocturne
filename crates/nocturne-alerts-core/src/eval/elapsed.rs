@@ -298,6 +298,8 @@ pub(crate) fn clock_leaf(
         | Payload::TempBasal(_)
         | Payload::UploaderBattery(_)
         | Payload::TransmitterBattery(_)
+        | Payload::EventualGlucose(_)
+        | Payload::CarbsRequired(_)
         | Payload::SensitivityRatio(_)
         | Payload::GlucoseBucket(_)
         | Payload::DayOfWeek(_)

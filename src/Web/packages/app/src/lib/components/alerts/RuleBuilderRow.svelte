@@ -36,10 +36,14 @@
     isTrendBucket,
     marginedPayload,
     marginPayload,
+    curveChoice,
+    setCurveChoice,
+    clearCurveChoice,
     toAlertConditionType,
     type TrendBucket,
   } from "./types";
   import Ruler from "@lucide/svelte/icons/ruler";
+  import ChartSpline from "@lucide/svelte/icons/chart-spline";
   import { Direction } from "#lib/api/index.js";
   import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import RuleBuilder from "./RuleBuilder.svelte";
@@ -136,6 +140,9 @@
   );
   let margined = $derived(marginedPayload(leafTarget, purpose, isSustained));
   let stored = $derived(marginPayload(leafTarget));
+  let chosenCurve = $derived(
+    leafTarget.type === "predicted" && leafTarget.predicted ? curveChoice(leafTarget.predicted) : undefined,
+  );
   let sustainedNode = $derived(
     child.type === "sustained"
       ? child
@@ -402,6 +409,12 @@
             <Timer class="h-4 w-4 mr-2" /> Add “for at least”
           </DropdownMenu.Item>
         {/if}
+        {#if leafTarget.type === "predicted" && leafTarget.predicted && !curveChoice(leafTarget.predicted)}
+          {@const predicted = leafTarget.predicted}
+          <DropdownMenu.Item onclick={() => setCurveChoice(predicted, "curve")}>
+            <ChartSpline class="h-4 w-4 mr-2" /> Choose a forecast curve
+          </DropdownMenu.Item>
+        {/if}
         {#if margined && margined.clear_margin == null}
           <DropdownMenu.Item
             onclick={() => {
@@ -420,8 +433,14 @@
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "or")}>
           <Brackets class="h-4 w-4 mr-2" /> Put in an “any of” group
         </DropdownMenu.Item>
-        {#if isNot || isSustained || stored?.clear_margin != null}
+        {#if isNot || isSustained || stored?.clear_margin != null || chosenCurve}
           <DropdownMenu.Separator />
+        {/if}
+        {#if chosenCurve && leafTarget.predicted}
+          {@const predicted = leafTarget.predicted}
+          <DropdownMenu.Item onclick={() => clearCurveChoice(predicted)}>
+            Use the default forecast
+          </DropdownMenu.Item>
         {/if}
         {#if isNot || isSustained}
           <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>

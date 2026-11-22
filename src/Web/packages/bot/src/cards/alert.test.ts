@@ -174,6 +174,65 @@ describe("AlertCard with no glucose reading", () => {
   });
 });
 
+describe("AlertCard for an alert a forecast or loop condition started", () => {
+  it("names the curve, the time ahead and the value that met the condition", () => {
+    const card = AlertCard({
+      payload: {
+        ...payload,
+        alertType: "predicted",
+        metBy: [
+          { leafId: 0, kind: "predicted", curve: "cob", offsetMinutes: 20, value: 65 },
+          { leafId: 1, kind: "carbs_required", value: 12 },
+          { leafId: 2, kind: "eventual_glucose", value: 75 },
+        ],
+      },
+    });
+
+    expect(cardFields(card)).toEqual(
+      expect.arrayContaining([
+        "COB forecast: 65 mg/dL in 20 minutes",
+        "Carbs needed: 12 g",
+        "Eventual glucose: 75 mg/dL",
+      ]),
+    );
+  });
+
+  it("shows the forecast in the reader's unit, and a curve this build does not know as it was sent", () => {
+    const card = AlertCard({
+      payload: { ...payload, metBy: [{ leafId: 0, kind: "predicted", curve: "ar2", offsetMinutes: 5, value: 72 }] },
+      unit: "mmol/L",
+    });
+
+    expect(cardFields(card)).toContain("ar2: 4.0 mmol/L in 5 minutes");
+  });
+
+  it("keys each line on its condition, so two from one curve both show", () => {
+    const card = AlertCard({
+      payload: {
+        ...payload,
+        metBy: [
+          { leafId: 0, kind: "predicted", curve: "cob", offsetMinutes: 20, value: 65 },
+          { leafId: 2, kind: "predicted", curve: "cob", offsetMinutes: 30, value: 190 },
+        ],
+      },
+    });
+
+    expect(cardFields(card).filter((f) => f.startsWith("COB forecast"))).toEqual([
+      "COB forecast: 65 mg/dL in 20 minutes",
+      "COB forecast: 190 mg/dL in 30 minutes",
+    ]);
+  });
+
+  it("shows nothing for a kind this build does not know, or with no met point", () => {
+    const fields = cardFields(AlertCard({ payload }));
+    const unknown = cardFields(
+      AlertCard({ payload: { ...payload, metBy: [{ leafId: 0, kind: "warp_core", value: 1 }] } }),
+    );
+
+    expect(unknown).toEqual(fields);
+  });
+});
+
 describe("AcknowledgedCard", () => {
   it("states the outcome and offers no action", () => {
     const card = AcknowledgedCard({ detail: "By Sam Tester." });

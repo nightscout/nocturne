@@ -33,6 +33,7 @@ internal static class ContextFactWrites
     public const string DoNotDisturb = "do_not_disturb";
     public const string TimeZone = "time_zone";
     public const string SensorState = "sensor_state";
+    public const string ApsDetermination = "aps_determination";
 
     /// <param name="EveryWriteAnnounces">
     /// Every write that moves the fact reaches the record-changed event. False where a store writes it
@@ -53,6 +54,8 @@ internal static class ContextFactWrites
     /// device status that reports the sensor, whose extras write announces itself. A reported state
     /// stops counting at an instant the context carries (<see cref="SensorStateSnapshot.Until"/>), which
     /// the engine reports as a next change, so the fact does not move with the clock.
+    /// <see cref="ApsDetermination"/> is moved only by an APS snapshot write, and goes stale at an
+    /// instant the engine reports as a next change, so it does not move with the clock either.
     /// </remarks>
     internal readonly record struct FactTrigger(bool EveryWriteAnnounces, bool MovesWithClock);
 
@@ -74,6 +77,7 @@ internal static class ContextFactWrites
         [DoNotDisturb] = new(EveryWriteAnnounces: false, MovesWithClock: true),
         [TimeZone] = new(EveryWriteAnnounces: true, MovesWithClock: true),
         [SensorState] = new(EveryWriteAnnounces: true, MovesWithClock: false),
+        [ApsDetermination] = new(EveryWriteAnnounces: true, MovesWithClock: false),
     };
 
     /// <summary>
@@ -95,7 +99,7 @@ internal static class ContextFactWrites
         [typeof(BasalInjection)] = [Insulin, Predictions],
         [typeof(CarbIntake)] = [Carbs, Predictions],
         [typeof(PumpSnapshot)] = [Pump, Insulin],
-        [typeof(ApsSnapshot)] = [Aps, Insulin, Carbs, Predictions],
+        [typeof(ApsSnapshot)] = [Aps, Insulin, Carbs, Predictions, ApsDetermination],
         [typeof(UploaderSnapshot)] = [Uploader, Transmitter],
         [typeof(DeviceEvent)] = [DeviceAges, Pump],
         [typeof(ProfileActivation)] = [StateSpans, TimeZone, Glucose, Insulin, Carbs, Pump, Predictions],
@@ -109,8 +113,8 @@ internal static class ContextFactWrites
     /// <summary>
     /// Whether the sweep may wait for the next change of a rule that reads <paramref name="fact"/>:
     /// every write that moves it evaluates the rule, and nothing else does (§5.3). Only
-    /// <see cref="Glucose"/>, <see cref="Aps"/>, <see cref="Uploader"/>, <see cref="Transmitter"/> and
-    /// <see cref="SensorState"/> qualify. An unknown fact does not.
+    /// <see cref="Glucose"/>, <see cref="Aps"/>, <see cref="Uploader"/>, <see cref="Transmitter"/>,
+    /// <see cref="SensorState"/> and <see cref="ApsDetermination"/> qualify. An unknown fact does not.
     /// </summary>
     public static bool SweepMayWaitFor(string fact) =>
         Facts.TryGetValue(fact, out var trigger) && trigger.EveryWriteAnnounces && !trigger.MovesWithClock;

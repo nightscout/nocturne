@@ -3,6 +3,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -125,8 +126,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             var asOf = isReplay
                 ? new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
                 : (DateTimeOffset?)null;
-            var predictions = await FetchPredictionsAsync(asOf, ct);
-            enriched = enriched with { Predictions = predictions };
+            var (predictions, curves) = await FetchPredictionsAsync(asOf, ct);
+            enriched = enriched with { Predictions = predictions, PredictionCurves = curves };
         }
 
         if (needs.NeedsReservoir)
@@ -417,6 +418,15 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
+        if (needs.NeedsApsDetermination)
+        {
+            // At any age: the engine judges the determination's freshness (engine-semantics.md §3).
+            var latest = (await _deps.ApsSnapshots.GetAsync(
+                from: null, to: asOf, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
+                .FirstOrDefault();
+            enriched = enriched with { ApsDetermination = latest is null ? null : ApsDeterminations.Of(latest) };
+        }
+
         if (needs.NeedsPumpStatus)
         {
             var pump = await _deps.PumpSnapshots.GetLatestAsync(asOf, ct);
@@ -604,14 +614,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
     }
 
-    private async Task<IReadOnlyList<PredictedGlucosePoint>> FetchPredictionsAsync(
-        DateTimeOffset? asOf, CancellationToken ct)
+    private static readonly (IReadOnlyList<PredictedGlucosePoint>, IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>)
+        NoPredictions = (Array.Empty<PredictedGlucosePoint>(), new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>());
+
+    /// <summary>
+    /// The default series the prediction service returns and every named curve it returns, each
+    /// under its name with the offsets the default has always had (engine-semantics.md §4).
+    /// </summary>
+    private async Task<(IReadOnlyList<PredictedGlucosePoint> Default, IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>> Curves)>
+        FetchPredictionsAsync(DateTimeOffset? asOf, CancellationToken ct)
     {
         // Optional dependency — registered conditionally based on PredictionOptions.
         // GetService<> returns null when unavailable (PredictionSource.None or DI not wired).
         var predictionService = _serviceProvider.GetService<IPredictionService>();
         if (predictionService is null)
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
 
         GlucosePredictionResponse response;
         try
@@ -622,19 +639,53 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             // Documented "no readings available" path — silent empty mirrors the leaf evaluators.
             _logger.LogWarning(ex, "Prediction service had insufficient data; returning empty predictions");
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Prediction service failed; returning empty predictions");
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
         }
 
-        var curve = response.Predictions.Default;
-        if (curve is null || curve.Count == 0)
-            return Array.Empty<PredictedGlucosePoint>();
-
         var interval = response.IntervalMinutes > 0 ? response.IntervalMinutes : PredictionIntervalMinutes;
+        var curves = new (ForecastCurve Name, IReadOnlyList<double>? Values)[]
+        {
+            (ForecastCurve.Iob, response.Predictions.IobOnly),
+            (ForecastCurve.Cob, response.Predictions.Cob),
+            (ForecastCurve.Uam, response.Predictions.Uam),
+            (ForecastCurve.Zt, response.Predictions.ZeroTemp),
+        };
+        if (response.Algorithm is { } algorithm && LoopHealthCalculator.IsOref(algorithm))
+            curves = UntrimmedOrefCurves(curves);
+        var named = new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>();
+        foreach (var (name, curve) in curves)
+        {
+            if (curve is { Count: > 0 })
+                named[name] = Points(curve, interval);
+        }
+        var main = response.Predictions.Default;
+        return (main is { Count: > 0 } ? Points(main, interval) : Array.Empty<PredictedGlucosePoint>(), named);
+    }
+
+    /// <summary>
+    /// The named oref curves, each one oref shortened carried out to the longest by
+    /// <see cref="OrefCurveTails"/>, so a <c>min_of</c> or <c>max_of</c> reads them as far as any
+    /// goes (engine-semantics.md §4). <c>default</c> is never touched.
+    /// </summary>
+    private static (ForecastCurve Name, IReadOnlyList<double>? Values)[] UntrimmedOrefCurves(
+        (ForecastCurve Name, IReadOnlyList<double>? Values)[] curves)
+    {
+        var longest = curves.Max(c => c.Values?.Count ?? 0);
+        return curves
+            .Select(c => c.Values is { Count: > 0 } values
+                && (c.Name == ForecastCurve.Zt ? values.Count < longest : OrefCurveTails.IsLevelTrimmed(values.Count, longest))
+                    ? (c.Name, (IReadOnlyList<double>?)OrefCurveTails.HoldLast(values, longest))
+                    : c)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<PredictedGlucosePoint> Points(IReadOnlyList<double> curve, int interval)
+    {
         var points = new List<PredictedGlucosePoint>(curve.Count);
         for (var i = 0; i < curve.Count; i++)
         {

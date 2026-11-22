@@ -5,6 +5,7 @@
 
 use crate::engine::OnUnknown;
 use crate::eval::glucose::judges_freshness;
+use crate::eval::judges_determination_freshness;
 use crate::facts::RuleConditions;
 use crate::model::ConditionKind;
 
@@ -49,7 +50,9 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
         | ConditionKind::SensitivityRatio
         | ConditionKind::GlucoseBucket
         | ConditionKind::DayOfWeek
-        | ConditionKind::SleepSessionActive => false,
+        | ConditionKind::SleepSessionActive
+        | ConditionKind::EventualGlucose
+        | ConditionKind::CarbsRequired => false,
     }
 }
 
@@ -60,9 +63,10 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 #[must_use]
 pub fn references_wall_clock(rule: &RuleConditions<'_>) -> bool {
     let reads_unknown = rule.on_unknown != OnUnknown::Hold;
-    rule.kinds()
-        .into_iter()
-        .any(|kind| is_wall_clock(kind) || (reads_unknown && judges_freshness(kind)))
+    rule.kinds().into_iter().any(|kind| {
+        is_wall_clock(kind)
+            || (reads_unknown && (judges_freshness(kind) || judges_determination_freshness(kind)))
+    })
 }
 
 #[cfg(test)]
