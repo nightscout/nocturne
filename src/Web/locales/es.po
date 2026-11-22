@@ -25909,13 +25909,11 @@ msgstr "Yo"
 msgid "Member"
 msgstr "Miembro"
 
-#: src/lib/components/alerts/ChannelsSection.svelte
-msgid "This channel has no recipient. Saving the rule sends it to you."
-msgstr "Este canal no tiene destinatario. Si guardas la regla, se te enviará a ti."
+#~ msgid "This channel has no recipient. Saving the rule sends it to you."
+#~ msgstr "Este canal no tiene destinatario. Si guardas la regla, se te enviará a ti."
 
-#: src/lib/components/alerts/ChannelsSection.svelte
-msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
-msgstr "Esta persona ya no puede recibir alertas en este sitio. Si guardas la regla, las alertas de este canal se te enviarán a ti."
+#~ msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+#~ msgstr "Esta persona ya no puede recibir alertas en este sitio. Si guardas la regla, las alertas de este canal se te enviarán a ti."
 
 #~ msgid "Shown in this person's Nocturne notification centre."
 #~ msgstr ""
@@ -41930,7 +41928,6 @@ msgid "Send a test alert to the places you chose. It is marked as a test."
 msgstr "Envía una alerta de prueba a los destinos elegidos. Se identificará como prueba."
 
 #: src/lib/components/alerts/wizard/CheckStep.svelte
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "<0/> Test alert sent. Make sure that it arrived."
 msgstr "<0/> Alerta de prueba enviada. Comprueba que haya llegado."
 
@@ -48002,4 +47999,132 @@ msgstr ""
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
 msgid "An invite that gives access longer than yours uses this role."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Could not keep this channel. Try again."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Keep this channel"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Saving the rule sends this channel to you."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel has no recipient. {0} cannot receive it."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel has no recipient."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel has stopped."
+msgstr ""
+
+#. 0: date; 1: adder
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel stopped on {0}. {1} added it."
+msgstr ""
+
+#. 0: date
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel stopped on {0}."
+msgstr ""
+
+#. 0: date; 1: adder
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel stops on {0}. {1} added it."
+msgstr ""
+
+#. 0: date
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel stops on {0}."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "This channel does not send."
+msgstr ""
+
+#. 0: count
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} channel is not sending."
+msgstr ""
+
+#. 0: count
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} channels are not sending."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "A channel would not send."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} would not send: it has no recipient."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} would not send: it has stopped."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} would not send."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "A channel"
+msgstr ""
+
+#. 0: rule; 1: channel
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0}: {1} has no recipient."
+msgstr ""
+
+#. 0: channel
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} has no recipient."
+msgstr ""
+
+#. 0: rule; 1: channel; 2: date
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0}: {1} stopped on {2}."
+msgstr ""
+
+#. 0: channel; 1: date
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} stopped on {1}."
+msgstr ""
+
+#. 0: rule; 1: channel
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0}: {1} stopped."
+msgstr ""
+
+#. 0: channel
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} stopped."
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "Edit this alert"
+msgstr ""
+
+#: src/lib/components/alerts/wizard/CheckStep.svelte
+msgid "The test alert did not go to every channel."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "Channels that do not send did not get it."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "<0/> Test alert sent. Make sure that it arrived. <1/>"
 msgstr ""
