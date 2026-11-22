@@ -433,6 +433,7 @@ msgstr ""
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
@@ -4913,6 +4914,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "Unnamed"
 msgstr ""
@@ -5016,6 +5018,7 @@ msgstr ""
 #~ msgid "The owner role cannot be removed from yourself"
 #~ msgstr ""
 
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
 msgid "Permissions from roles"
 msgstr ""
@@ -45433,6 +45436,7 @@ msgstr ""
 msgid "Readings refresh every minute."
 msgstr ""
 
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/people/PeoplePage.svelte
 msgid "View"
 msgstr ""
@@ -47039,4 +47043,27 @@ msgstr ""
 
 #: src/lib/components/members/PublicAccessCard.svelte
 msgid "The public access settings did not load."
+msgstr ""
+
+#: src/lib/components/members/LockedOutMembers.svelte
+#: src/lib/components/members/MemberCard.svelte
+msgid "This member's access lasts longer than yours."
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Direct permissions"
+msgstr ""
+
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "This invite gives access that lasts longer than yours."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
+msgid "A member whose access lasts longer than yours has this role."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
+msgid "An invite that gives access longer than yours uses this role."
 msgstr ""

@@ -433,6 +433,7 @@ msgstr "Unnamed {0}"
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/PendingInvitesList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/members/PendingRequestsList.svelte
@@ -4913,6 +4914,7 @@ msgstr "· Primary"
 #~ msgstr "No insulins added yet. Add your first insulin to get started."
 
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "Unnamed"
 msgstr "Unnamed"
@@ -5016,6 +5018,7 @@ msgstr "Remove"
 #~ msgid "The owner role cannot be removed from yourself"
 #~ msgstr "The owner role cannot be removed from yourself"
 
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
 msgid "Permissions from roles"
 msgstr "Permissions from roles"
@@ -45430,6 +45433,7 @@ msgstr "Statistics for {0}."
 msgid "Readings refresh every minute."
 msgstr "Readings refresh every minute."
 
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/people/PeoplePage.svelte
 msgid "View"
 msgstr "View"
@@ -47037,3 +47041,26 @@ msgstr "Your access ends on {0}, so you cannot change public sharing."
 #: src/lib/components/members/PublicAccessCard.svelte
 msgid "The public access settings did not load."
 msgstr "The public access settings did not load."
+
+#: src/lib/components/members/LockedOutMembers.svelte
+#: src/lib/components/members/MemberCard.svelte
+msgid "This member's access lasts longer than yours."
+msgstr "This member's access lasts longer than yours."
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Direct permissions"
+msgstr "Direct permissions"
+
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "This invite gives access that lasts longer than yours."
+msgstr "This invite gives access that lasts longer than yours."
+
+#: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
+msgid "A member whose access lasts longer than yours has this role."
+msgstr "A member whose access lasts longer than yours has this role."
+
+#: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/members/RolesSection.svelte
+msgid "An invite that gives access longer than yours uses this role."
+msgstr "An invite that gives access longer than yours uses this role."
