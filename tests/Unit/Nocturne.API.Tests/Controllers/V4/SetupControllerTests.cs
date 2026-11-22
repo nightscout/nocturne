@@ -102,7 +102,8 @@ public class SetupControllerTests : IDisposable
     private SetupController BuildController(
         OperatorConfiguration operatorConfig,
         IHttpClientFactory httpClientFactory,
-        ILogger<SetupController> logger) =>
+        ILogger<SetupController> logger,
+        PlatformAdminBootstrapService? platformAdminBootstrap = null) =>
         new(
             _tenantService.Object,
             _passkeyService.Object,
@@ -116,7 +117,7 @@ public class SetupControllerTests : IDisposable
             _oidcAuthService.Object,
             Options.Create(operatorConfig),
             httpClientFactory,
-            _platformAdminBootstrap,
+            platformAdminBootstrap ?? _platformAdminBootstrap,
             new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off)),
             logger)
         {
@@ -1069,6 +1070,71 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task OwnerComplete_EndsTheSetupOwnerRecord()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<OkObjectResult>();
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_HasAlreadyEndedTheSetupOwnerRecord()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+        var failingSubjects = new Mock<ISubjectRepository>();
+        failingSubjects
+            .Setup(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("grant failed"));
+        var controller = BuildController(
+            new OperatorConfiguration(),
+            new Mock<IHttpClientFactory>().Object,
+            new Mock<ILogger<SetupController>>().Object,
+            new PlatformAdminBootstrapService(
+                new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+                new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+                failingSubjects.Object,
+                Options.Create(_platformOptions),
+                NullLogger<PlatformAdminBootstrapService>.Instance));
+
+        var result = await controller.OwnerComplete(
+            new SetupOwnerCompleteRequest { AttestationResponseJson = "{}", ChallengeToken = "challenge-token" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        failingSubjects.Verify(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()), Times.Once);
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OidcCallback_EndsTheSetupOwnerRecordOnlyWhenSetupCompletes(bool succeeds)
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                "auth-code", "expected-state", "expected-state",
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(succeeds
+                ? OidcSetupCallbackResult.Succeeded(
+                    subjectId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 })
+                : OidcSetupCallbackResult.Failed("invalid_grant"));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId
+            .Should().Be(succeeds ? null : subjectId);
+    }
+
+    [Fact]
     public async Task OidcCallback_WhenSetupAlreadyComplete_DoesNotProcessTheCallback()
     {
         // Every sibling setup endpoint dead-ends once an owner holds credentials. Without the
@@ -1208,7 +1274,7 @@ public class SetupControllerTests : IDisposable
     /// <summary>
     /// Seeds the state a fresh install reaches after tenant creation and a first pass
     /// through owner setup: a sole tenant whose credential-less member holds the owner
-    /// role, written directly.
+    /// role and is the tenant's recorded setup owner, written directly.
     /// </summary>
     private async Task<(Guid TenantId, Guid SubjectId)> SeedSoleTenantWithOwnerRoleAsync()
     {
@@ -1217,14 +1283,14 @@ public class SetupControllerTests : IDisposable
         var memberId = Guid.CreateVersion7();
         var ownerRoleId = Guid.CreateVersion7();
 
-        _dbContext.Set<TenantEntity>().Add(new TenantEntity
-        {
-            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
-        });
         _dbContext.Subjects.Add(new SubjectEntity
         {
             Id = subjectId, Name = "Owner", Username = "owner",
             IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance", SetupOwnerSubjectId = subjectId,
         });
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
@@ -1247,28 +1313,8 @@ public class SetupControllerTests : IDisposable
     /// Seeds the sole tenant plus the credential-less owner subject and membership that
     /// <c>owner/options</c> leaves behind, and returns the subject id.
     /// </summary>
-    private async Task<Guid> SeedOwnerlessTenantWithOwnerSubjectAsync()
-    {
-        var tenantId = Guid.CreateVersion7();
-        var subjectId = Guid.CreateVersion7();
-
-        _dbContext.Set<TenantEntity>().Add(new TenantEntity
-        {
-            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
-        });
-        _dbContext.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId, Name = "Owner", Username = "owner",
-            IsActive = true, IsSystemSubject = false,
-        });
-        _dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId,
-        });
-        await _dbContext.SaveChangesAsync();
-
-        return subjectId;
-    }
+    private async Task<Guid> SeedOwnerlessTenantWithOwnerSubjectAsync() =>
+        (await SeedSoleTenantWithOwnerRoleAsync()).SubjectId;
 
     /// <summary>
     /// Makes the passkey service behave as the real one does for a challenge token minted for

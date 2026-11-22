@@ -35,7 +35,8 @@ public static class OrphanedSubjectFilter
     public static readonly Expression<Func<SubjectEntity, bool>> HoldsConfirmedEmail =
         s => s.Email != null && s.EmailConfirmedAt != null;
 
-    private static readonly Expression<Func<SubjectEntity, bool>> LacksConfirmedEmail =
+    /// <summary>The negation of <see cref="HoldsConfirmedEmail"/>.</summary>
+    internal static readonly Expression<Func<SubjectEntity, bool>> LacksConfirmedEmail =
         Expression.Lambda<Func<SubjectEntity, bool>>(
             Expression.Not(HoldsConfirmedEmail.Body), HoldsConfirmedEmail.Parameters);
 

@@ -82,6 +82,36 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var id = await StageSubjectAsync(db, subject, ct);
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<Guid> CreateSetupOwnerAsync(Guid tenantId, NewSubject subject, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var tenant = await db.Tenants.FirstAsync(t => t.Id == tenantId, ct);
+        var id = await StageSubjectAsync(db, subject, ct);
+        tenant.SetupOwnerSubjectId = id;
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        var tenants = await db.Tenants.Where(t => t.SetupOwnerSubjectId == subjectId).ToListAsync(ct);
+        foreach (var tenant in tenants)
+            tenant.SetupOwnerSubjectId = null;
+        await SaveAsync(db, ct);
+    }
+
+    private async Task<Guid> StageSubjectAsync(NocturneDbContext db, NewSubject subject, CancellationToken ct)
+    {
         var entity = new SubjectEntity
         {
             Id = subject.Id ?? Guid.CreateVersion7(),
@@ -128,7 +158,6 @@ public class SubjectRepository : ISubjectRepository
             });
         }
 
-        await SaveAsync(db, ct);
         return entity.Id;
     }
 
@@ -200,14 +229,32 @@ public class SubjectRepository : ISubjectRepository
     public virtual async Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
-        return ToRecord(await db.Subjects.AsNoTracking()
+        var now = Now;
+        var candidates = db.Subjects.AsNoTracking()
             .ExcludeDemo()
-            .Where(s => !s.IsSystemSubject && s.IsActive
+            .Where(s => db.Tenants.Any(t => t.Id == tenantId && t.SetupOwnerSubjectId == s.Id)
+                && !s.IsSystemSubject && s.IsActive
                 && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id))
-            .OrderBy(s => s.Id)
-            .FirstOrDefaultAsync(ct));
+                && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id)
+                && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
+                && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now)
+                && !db.LoginCodes.Any(c => c.SubjectId == s.Id && c.ConsumedAt == null && c.ExpiresAt > now
+                    && SetupOwnerRefusedCodePurposes.Contains(c.Purpose)));
+        if (_linkRoute.IsConfigured)
+            candidates = candidates.Where(OrphanedSubjectFilter.LacksConfirmedEmail);
+        return ToRecord(await candidates.FirstOrDefaultAsync(ct));
     }
+
+    /// <summary>
+    /// The login code purposes that let their holder into the account: a recovery code an
+    /// administrator or the operator issued, an emailed recovery link, the recovery session one of
+    /// those starts, and a login code handed to another browser.
+    /// </summary>
+    private static readonly LoginCodePurpose[] SetupOwnerRefusedCodePurposes =
+    [
+        LoginCodePurpose.Recovery, LoginCodePurpose.OperatorRecovery,
+        LoginCodePurpose.EmailRecovery, LoginCodePurpose.RecoverySession, LoginCodePurpose.Login,
+    ];
 
     /// <inheritdoc/>
     public virtual async Task<Guid?> FindDeviceSubjectAsync(CancellationToken ct)
@@ -829,24 +876,21 @@ public class SubjectRepository : ISubjectRepository
     /// provider identity <paramref name="identityId"/> and a membership of tenant
     /// <paramref name="ownerOf"/> (each only when given), as far as the tables without a tenant
     /// show, by the rule <see cref="ISubjectRepository.TakeUnclaimedOidcIdentityAsync"/> states.
-    /// With <paramref name="ownerOf"/>, only what the setup owner step writes: that membership
-    /// holds the owner role, and no global role but <see cref="GlobalRoles.Admin"/>.
+    /// With <paramref name="ownerOf"/>, only what the setup owner step writes (<see cref="LeftByOwnerStep"/>).
     /// Every table with a foreign key to <c>subjects</c> is named here or in
-    /// <see cref="NamedByTenantRowsAsync"/>, and a caller reads both in one transaction.
+    /// <see cref="NamedByTenantRowsAsync"/>, and a caller reads both in one transaction, except
+    /// <c>tenants.setup_owner_subject_id</c>, which the delete sets to null: a subject that record
+    /// names is one the owner step made, and deleting it ends the record.
     /// </summary>
     private static IQueryable<SubjectEntity> Unclaimed(NocturneDbContext db, Guid? identityId, Guid? ownerOf)
     {
         var otherIdentities = identityId is { } kept
             ? db.SubjectOidcIdentities.Where(o => o.Id != kept)
             : db.SubjectOidcIdentities;
-        var otherMemberships = ownerOf is { } tenantId
-            ? db.TenantMembers.Where(m => m.TenantId != tenantId)
-            : db.TenantMembers;
 
         var unclaimed = db.Subjects.Where(s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject && !s.IsPlatformAdmin
             && s.LastLoginAt == null
             && !otherIdentities.Any(o => o.SubjectId == s.Id)
-            && !otherMemberships.Any(m => m.SubjectId == s.Id)
             && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
             && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
             && !db.RecoveryCodes.Any(c => c.SubjectId == s.Id)
@@ -858,12 +902,22 @@ public class SubjectRepository : ISubjectRepository
             && !db.TenantCreationInvites.Any(i => i.CreatedBySubjectId == s.Id)
             && !db.SubjectRoles.Any(r => r.AssignedById == s.Id));
 
-        return ownerOf is { } ownedTenantId
-            ? unclaimed.Where(s => db.TenantMemberRoles.Any(r => r.TenantMember.SubjectId == s.Id
-                    && r.TenantMember.TenantId == ownedTenantId && r.TenantRole.Slug == RoleSeeds.Owner)
-                && !db.SubjectRoles.Any(r => r.SubjectId == s.Id && r.Role!.Name != GlobalRoles.Admin))
-            : unclaimed;
+        return ownerOf is { } tenantId
+            ? LeftByOwnerStep(db, unclaimed, tenantId)
+            : unclaimed.Where(s => !db.TenantMembers.Any(m => m.SubjectId == s.Id));
     }
+
+    /// <summary>
+    /// The <paramref name="subjects"/> whose memberships and global roles are what the setup owner
+    /// step writes for <paramref name="tenantId"/>: a membership of that tenant holding the owner
+    /// role, no membership of any other tenant, and no global role but <see cref="GlobalRoles.Admin"/>.
+    /// </summary>
+    private static IQueryable<SubjectEntity> LeftByOwnerStep(
+        NocturneDbContext db, IQueryable<SubjectEntity> subjects, Guid tenantId) =>
+        subjects.Where(s => db.TenantMemberRoles.Any(r => r.TenantMember.SubjectId == s.Id
+                && r.TenantMember.TenantId == tenantId && r.TenantRole.Slug == RoleSeeds.Owner)
+            && !db.TenantMembers.Any(m => m.SubjectId == s.Id && m.TenantId != tenantId)
+            && !db.SubjectRoles.Any(r => r.SubjectId == s.Id && r.Role!.Name != GlobalRoles.Admin));
 
     /// <summary>
     /// Whether a row of a tenant-scoped table names the subject, in any tenant: of every table with a
