@@ -495,11 +495,6 @@ public class SensorContextEnricherTests
         StartTimestamp = start,
     };
 
-    private void ActivePumpSpan(string state, DateTime start) =>
-        _stateSpanService.Setup(s => s.GetActiveAtAsync(
-                StateSpanCategory.PumpMode, state, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(PumpSpan(state, start));
-
     private void ActivePumpSpansInCategory(params StateSpan[] spans) =>
         _stateSpanService.Setup(s => s.GetStateSpansAsync(
                 StateSpanCategory.PumpMode, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
@@ -507,67 +502,81 @@ public class SensorContextEnricherTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(spans);
 
-    private async Task<PumpStateSnapshot?> PumpStateFor(string ruleMode)
+    private async Task<IReadOnlyList<PumpModeSnapshot>> PumpModesFor(string ruleMode)
     {
         var rule = MakeRule(AlertConditionType.PumpState, $$"""{"mode":"{{ruleMode}}","is_active":false}""");
         var enriched = await BuildEnricher().EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
-        return enriched.ActivePumpState;
+        return enriched.ActivePumpModes;
     }
 
     [Theory]
-    [InlineData("Automatic", "Automatic", -60)]
-    [InlineData("Suspended", "Suspended", -5)]
-    public async Task A_suspension_overlapping_automatic_leaves_each_referenced_mode_its_own_span(
-        string ruleMode, string expectedMode, int startedMinutesAgo)
+    [InlineData("Automatic")]
+    [InlineData("Suspended")]
+    [InlineData("Manual")]
+    public async Task Every_active_pump_mode_is_sent_whichever_mode_the_rule_names(string ruleMode)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        ActivePumpSpan("Automatic", now.AddMinutes(-60));
-        ActivePumpSpan("Suspended", now.AddMinutes(-5));
+        ActivePumpSpansInCategory(PumpSpan("Suspended", now.AddMinutes(-5)), PumpSpan("Automatic", now.AddMinutes(-60)));
 
-        var state = await PumpStateFor(ruleMode);
+        var modes = await PumpModesFor(ruleMode);
 
-        state.Should().Be(new PumpStateSnapshot(expectedMode, now.AddMinutes(startedMinutesAgo)));
-        _stateSpanService.Verify(s => s.GetStateSpansAsync(
-            It.IsAny<StateSpanCategory?>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-            It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+        modes.Should().Equal(
+            new PumpModeSnapshot("Automatic", now.AddMinutes(-60)),
+            new PumpModeSnapshot("Suspended", now.AddMinutes(-5)));
+        _stateSpanService.Verify(s => s.GetActiveAtAsync(
+            It.IsAny<StateSpanCategory>(), It.IsAny<string?>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task An_unrecognised_state_reaches_the_engine_as_written_when_no_referenced_mode_is_active()
+    public async Task An_unrecognised_state_is_sent_as_written_beside_the_known_modes()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         ActivePumpSpansInCategory(
             PumpSpan("Suspended", now.AddMinutes(-1)),
-            PumpSpan("Zed", now.AddMinutes(-3)),
             PumpSpan("Turbo", now.AddMinutes(-3)),
-            PumpSpan("Older", now.AddMinutes(-30)));
+            PumpSpan("Zed", now.AddMinutes(-3)));
 
-        var state = await PumpStateFor("Manual");
+        var modes = await PumpModesFor("Manual");
 
-        state.Should().Be(new PumpStateSnapshot("Turbo", now.AddMinutes(-3)),
-            "the newest unrecognised span wins, then the ordinal-smallest state, and a known unreferenced mode is never sent");
+        modes.Should().Equal(
+            new PumpModeSnapshot("Turbo", now.AddMinutes(-3)),
+            new PumpModeSnapshot("Zed", now.AddMinutes(-3)),
+            new PumpModeSnapshot("Suspended", now.AddMinutes(-1)));
     }
 
     [Fact]
-    public async Task An_unrecognised_state_never_replaces_an_active_referenced_mode()
+    public async Task Two_spans_of_one_mode_are_both_sent()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        ActivePumpSpan("Manual", now.AddMinutes(-20));
-        ActivePumpSpansInCategory(PumpSpan("Turbo", now.AddMinutes(-1)));
+        ActivePumpSpansInCategory(PumpSpan("Manual", now.AddMinutes(-20)), PumpSpan("Manual", now.AddMinutes(-2)));
 
-        var state = await PumpStateFor("Manual");
-
-        state.Should().Be(new PumpStateSnapshot("Manual", now.AddMinutes(-20)));
+        (await PumpModesFor("Manual")).Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task A_known_unreferenced_mode_is_not_sent_in_place_of_a_referenced_one()
+    public async Task A_span_that_has_ended_or_not_started_is_not_active()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        ActivePumpSpansInCategory(PumpSpan("Suspended", now.AddMinutes(-1)));
+        var ended = PumpSpan("Manual", now.AddMinutes(-20));
+        ended.EndTimestamp = now.AddMinutes(-1);
+        ActivePumpSpansInCategory(ended, PumpSpan("Suspended", now.AddMinutes(1)), PumpSpan("", now.AddMinutes(-3)));
 
-        (await PumpStateFor("Manual")).Should().BeNull();
+        (await PumpModesFor("Manual")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_rule_with_no_pump_state_leaf_loads_no_pump_modes()
+    {
+        var rule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+
+        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
+
+        enriched.ActivePumpModes.Should().BeEmpty();
+        _stateSpanService.Verify(s => s.GetStateSpansAsync(
+            It.IsAny<StateSpanCategory?>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

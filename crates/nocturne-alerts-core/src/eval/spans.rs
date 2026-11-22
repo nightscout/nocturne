@@ -57,33 +57,37 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, ctx: &SensorContext) -> Clock
     )
 }
 
-/// `is_active: false` is true whenever the active mode differs from the
-/// configured one, including when no mode is active. An active pump in a mode
-/// the crate cannot name may or may not be in the configured one: unknown
-/// wherever the answer depends on it. With `is_active: true` and `for_minutes`
-/// both completions are false until the span has lasted that long.
+/// Reads the entry for the mode it names: the latest start when the mode is
+/// repeated, so a repeat never makes `for_minutes` hold sooner. `is_active:
+/// false` is true whenever that mode is not active, including when no mode is.
+/// With the named mode absent, an active mode the crate cannot name may or may
+/// not be it: unknown wherever the answer depends on it, and with `is_active:
+/// true` and `for_minutes` false until the earliest such span has lasted that
+/// long.
 pub(super) fn pump_state(p: &PumpStatePayload, ctx: &SensorContext) -> ClockLeaf {
-    let Some(active) = ctx.active_pump_state else {
-        return active_for(
-            p.is_active,
-            p.for_minutes,
-            None,
-            ClockAnchor::ActivePumpState,
-        );
-    };
-    match (active.mode, p.for_minutes) {
-        (Some(mode), _) => active_for(
-            p.is_active,
-            p.for_minutes,
-            (mode == p.mode).then_some(active.started_at),
-            ClockAnchor::ActivePumpState,
+    let named = ctx
+        .active_pump_modes
+        .iter()
+        .filter(|m| m.mode == Some(p.mode))
+        .map(|m| m.started_at)
+        .max();
+    let unrecognised = ctx
+        .active_pump_modes
+        .iter()
+        .filter(|m| m.mode.is_none())
+        .map(|m| m.started_at)
+        .min();
+    match (named, unrecognised, p.for_minutes) {
+        (None, Some(started_at), Some(m)) if p.is_active => ClockLeaf::UnknownOnceHeld(
+            Elapsed::held_for(started_at, m, ClockAnchor::ActivePumpModes),
         ),
-        (None, Some(m)) if p.is_active => ClockLeaf::UnknownOnceHeld(Elapsed::held_for(
-            active.started_at,
-            m,
-            ClockAnchor::ActivePumpState,
-        )),
-        (None, _) => ClockLeaf::Fixed(Truth::Unknown),
+        (None, Some(_), _) => ClockLeaf::Fixed(Truth::Unknown),
+        _ => active_for(
+            p.is_active,
+            p.for_minutes,
+            named,
+            ClockAnchor::ActivePumpModes,
+        ),
     }
 }
 

@@ -109,6 +109,7 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
             age(),
             any::<bool>(),
         ),
+        (word_or_unrecognised::<PumpMode>("Turbo"), age()),
     )
         .prop_map(
             move |(
@@ -116,9 +117,11 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                 (suspension, override_, dnd, pump_state, span, alert),
                 (glucose, aps_cycled, pump_snapshot, mode, category, alert_state, zone),
                 (rate, trend, bucket, received, scheduled),
+                (second_mode, second_pump_state),
             )| {
                 let at = |s| anchor(now, s);
                 let started = |s| at(s).map(|at| json!({ "started_at": at }));
+                let at_second = |s, mode| at(s).map(|at| json!({ "mode": mode, "started_at": at }));
                 object(vec![
                     ("latest_value", glucose.map(Value::from)),
                     ("trend_rate", rate.map(Value::from)),
@@ -142,8 +145,12 @@ pub(crate) fn clock_context(now: DateTime<Utc>) -> BoxedStrategy<Value> {
                         at(dnd).map(|at| json!({ "started_at": at, "source": "manual" })),
                     ),
                     (
-                        "active_pump_state",
-                        at(pump_state).map(|at| json!({ "mode": mode, "started_at": at })),
+                        "active_pump_modes",
+                        at(pump_state).map(|at| {
+                            let mut modes = vec![json!({ "mode": mode, "started_at": at })];
+                            modes.extend(at_second(second_pump_state, second_mode));
+                            Value::from(modes)
+                        }),
                     ),
                     (
                         "active_state_spans",

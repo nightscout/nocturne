@@ -1675,7 +1675,7 @@ fn unknown_context_enum_values_drop_only_their_facts() {
         "last_reading_at": "2026-01-05T12:00:00Z",
         "trend_bucket": "sideways",
         "glucose_bucket": "off_the_chart",
-        "active_pump_state": { "mode": "Turbo", "started_at": "2026-01-05T11:00:00Z" },
+        "active_pump_modes": [{ "mode": "Turbo", "started_at": "2026-01-05T11:00:00Z" }],
         "active_state_spans": [
             { "category": "NotACategory", "state": null, "started_at": "2026-01-05T11:00:00Z" },
             { "category": "Illness", "state": null, "started_at": "2026-01-05T11:00:00Z" },
@@ -1684,7 +1684,13 @@ fn unknown_context_enum_values_drop_only_their_facts() {
     let ctx: SensorContext = serde_json::from_value(wire).expect("context still parses");
     assert_eq!(ctx.trend_bucket, None);
     assert_eq!(ctx.glucose_bucket, None);
-    assert_eq!(ctx.active_pump_state.map(|s| s.mode), Some(None));
+    assert_eq!(
+        ctx.active_pump_modes
+            .iter()
+            .map(|m| m.mode)
+            .collect::<Vec<_>>(),
+        [None]
+    );
     assert_eq!(ctx.active_state_spans.len(), 1);
 
     assert_eq!(
@@ -1713,17 +1719,16 @@ fn context_with(fields: Value) -> SensorContext {
     serde_json::from_value(fields).expect("context parses")
 }
 
-/// The active span has lasted 60 minutes at `base()`. Rows: configured mode
+/// Every active span has lasted 60 minutes at `base()`. Rows: configured mode
 /// Automatic; columns: `is_active`, `for_minutes` (none, 30 held, 90 not yet).
 #[test]
-fn pump_state_over_every_active_mode_reads_the_spec_table() {
-    let cells = |active: Option<&str>| {
-        let ctx = match active {
-            Some(mode) => context_with(json!({
-                "active_pump_state": { "mode": mode, "started_at": "2026-01-05T11:00:00Z" },
-            })),
-            None => context_with(json!({})),
-        };
+fn pump_state_over_every_set_of_active_modes_reads_the_spec_table() {
+    let cells = |active: &[&str]| {
+        let modes: Vec<Value> = active
+            .iter()
+            .map(|mode| json!({ "mode": mode, "started_at": "2026-01-05T11:00:00Z" }))
+            .collect();
+        let ctx = context_with(json!({ "active_pump_modes": modes }));
         let mut read = Vec::new();
         for is_active in [true, false] {
             for for_minutes in [Value::Null, json!(30), json!(90)] {
@@ -1736,28 +1741,44 @@ fn pump_state_over_every_active_mode_reads_the_spec_table() {
         read
     };
     let (t, f, u) = (True, False, Unknown);
-    assert_eq!(cells(None), [f, f, f, t, t, t], "no active state");
+    let none = [f, f, f, t, t, t];
+    let named = [t, t, f, f, f, f];
+    let unrecognised = [u, u, f, u, u, u];
+    assert_eq!(cells(&[]), none, "no active state");
+    assert_eq!(cells(&["Automatic"]), named, "the configured mode");
+    assert_eq!(cells(&["Manual"]), none, "another known mode");
+    assert_eq!(cells(&["Turbo"]), unrecognised, "an unrecognised mode");
     assert_eq!(
-        cells(Some("Automatic")),
-        [t, t, f, f, f, f],
-        "the configured mode"
+        cells(&["Manual", "Automatic"]),
+        named,
+        "the configured mode beside another"
     );
     assert_eq!(
-        cells(Some("Manual")),
-        [f, f, f, t, t, t],
-        "another known mode"
+        cells(&["Suspended", "Manual"]),
+        none,
+        "other known modes only"
     );
     assert_eq!(
-        cells(Some("Turbo")),
-        [u, u, f, u, u, u],
-        "an unrecognised mode"
+        cells(&["Manual", "Turbo"]),
+        unrecognised,
+        "an unrecognised mode beside another known mode"
+    );
+    assert_eq!(
+        cells(&["Turbo", "Automatic"]),
+        named,
+        "the configured mode decides beside an unrecognised one"
+    );
+    assert_eq!(
+        cells(&["Turbo", "Manual", "Automatic"]),
+        named,
+        "the configured mode decides beside both"
     );
 }
 
 #[test]
 fn a_known_pump_mode_still_answers_both_sides() {
     let ctx = context_with(json!({
-        "active_pump_state": { "mode": "Manual", "started_at": "2026-01-05T11:00:00Z" },
+        "active_pump_modes": [{ "mode": "Manual", "started_at": "2026-01-05T11:00:00Z" }],
     }));
     let at = |mode, is_active| {
         eval_payload(
@@ -1770,6 +1791,119 @@ fn a_known_pump_mode_still_answers_both_sides() {
     assert_eq!(False, at("Manual", false));
     assert_eq!(False, at("Automatic", true));
     assert_eq!(True, at("Automatic", false));
+}
+
+fn pump_state_leaf(mode: &str, is_active: bool, for_minutes: Option<i32>) -> Value {
+    leaf(
+        "pump_state",
+        json!({ "mode": mode, "is_active": is_active, "for_minutes": for_minutes }),
+    )
+}
+
+#[test]
+fn two_pump_state_leaves_for_different_modes_in_one_tree_each_read_their_own() {
+    let ctx = context_with(json!({
+        "active_pump_modes": [
+            { "mode": "Automatic", "started_at": ago(60) },
+            { "mode": "Suspended", "started_at": ago(5) },
+        ],
+    }));
+    let both = |first: Value, second: Value| {
+        eval_tree(
+            &json!({ "type": "composite", "composite": {
+                "operator": "and", "conditions": [first, second] } }),
+            &ctx,
+        )
+    };
+    assert_eq!(
+        True,
+        both(
+            pump_state_leaf("Suspended", true, None),
+            pump_state_leaf("Automatic", true, None),
+        )
+    );
+    assert_eq!(
+        True,
+        both(
+            pump_state_leaf("Suspended", true, Some(5)),
+            pump_state_leaf("Automatic", true, Some(30)),
+        ),
+        "each leaf holds for its own span"
+    );
+    assert_eq!(
+        False,
+        both(
+            pump_state_leaf("Suspended", true, Some(10)),
+            pump_state_leaf("Automatic", true, Some(30)),
+        ),
+        "the suspension has not lasted 10 minutes, whatever the automatic span has lasted"
+    );
+    assert_eq!(
+        True,
+        both(
+            pump_state_leaf("Manual", false, None),
+            pump_state_leaf("Suspended", true, None),
+        ),
+        "a mode that is not active is absent whatever is"
+    );
+}
+
+#[test]
+fn a_repeated_pump_mode_reads_the_later_start_whatever_the_order() {
+    let leaf_for = |starts: &[String; 2], for_minutes| {
+        let ctx = context_with(json!({
+            "active_pump_modes": [
+                { "mode": "Automatic", "started_at": starts[0] },
+                { "mode": "Automatic", "started_at": starts[1] },
+            ],
+        }));
+        eval_payload(
+            ConditionKind::PumpState,
+            &json!({ "mode": "Automatic", "is_active": true, "for_minutes": for_minutes }),
+            &ctx,
+        )
+    };
+    for starts in [[ago(60), ago(10)], [ago(10), ago(60)]] {
+        assert_eq!(False, leaf_for(&starts, 30), "{starts:?}");
+        assert_eq!(True, leaf_for(&starts, 5), "{starts:?}");
+    }
+}
+
+#[test]
+fn unrecognised_pump_modes_are_unknown_from_the_earliest_start() {
+    let leaf_for = |started: &[String], for_minutes| {
+        let modes: Vec<Value> = started
+            .iter()
+            .map(|at| json!({ "mode": "Turbo", "started_at": at }))
+            .collect();
+        eval_payload(
+            ConditionKind::PumpState,
+            &json!({ "mode": "Automatic", "is_active": true, "for_minutes": for_minutes }),
+            &context_with(json!({ "active_pump_modes": modes })),
+        )
+    };
+    assert_eq!(Unknown, leaf_for(&[ago(60), ago(10)], 30));
+    assert_eq!(Unknown, leaf_for(&[ago(10), ago(60)], 30));
+    assert_eq!(False, leaf_for(&[ago(10), ago(20)], 30));
+}
+
+#[test]
+fn a_pump_mode_entry_for_another_mode_ahead_of_the_clock_is_not_read() {
+    let ctx = context_with(json!({
+        "active_pump_modes": [
+            { "mode": "Manual", "started_at": ago(-60) },
+            { "mode": "Automatic", "started_at": ago(40) },
+        ],
+    }));
+    let at = |mode, for_minutes| {
+        eval_payload(
+            ConditionKind::PumpState,
+            &json!({ "mode": mode, "is_active": true, "for_minutes": for_minutes }),
+            &ctx,
+        )
+    };
+    assert_eq!(True, at("Automatic", 30));
+    assert_eq!(Unknown, at("Manual", 5), "its own start is not known");
 }
 
 #[test]
@@ -2241,13 +2375,13 @@ fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
                 "pump_state",
                 json!({"mode": "Automatic", "is_active": true}),
             ),
-            json!({"active_pump_state": {"mode": "Automatic", "started_at": ago(40)}}),
+            json!({"active_pump_modes": [{"mode": "Automatic", "started_at": ago(40)}]}),
             minutes(40),
         ),
         (
             "pump_state, inactive side",
             leaf("pump_state", json!({"mode": "Manual", "is_active": false})),
-            json!({"active_pump_state": {"mode": "Automatic", "started_at": ago(40)}}),
+            json!({"active_pump_modes": [{"mode": "Automatic", "started_at": ago(40)}]}),
             base(),
         ),
         (

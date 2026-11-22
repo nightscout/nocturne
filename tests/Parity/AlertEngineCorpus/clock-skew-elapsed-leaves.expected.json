@@ -755,7 +755,7 @@
           "next_change_at": "2026-04-01T11:55:00Z",
           "clock_anomaly": [
             {
-              "fact": "active_pump_state",
+              "fact": "active_pump_modes",
               "ahead_ms": 360000
             }
           ]

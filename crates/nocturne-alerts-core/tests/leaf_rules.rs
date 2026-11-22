@@ -48,7 +48,7 @@ use nocturne_alerts_core::model::{ConditionKind, parse_payload};
 use nocturne_alerts_core::sustained::TimerStore;
 use nocturne_alerts_core::truth::Truth;
 
-use full_context::{ALERT_IDS, TRACKER_IDS, full_context, quantity};
+use full_context::{ALERT_IDS, TRACKER_IDS, age_in, full_context, pump_modes, quantity};
 use generators::{base, object, word, word_value, words};
 
 const FRESHNESS_MINUTES: i64 = 11;
@@ -1048,37 +1048,87 @@ family!(
     ]
 );
 
-/// §3 table: no active state, the named mode, another known mode, or one the crate has no
-/// member for (unknown wherever the answer depends on the mode).
+/// §3 table over the set of active modes: none, one of the named mode (whatever else is
+/// active), only other known modes, or none of the named mode with one the crate has no member
+/// for (unknown wherever the answer depends on the mode).
 fn pump_state_model(c: &Case) -> Verdict {
     let wanted = c.payload["mode"].as_str().unwrap();
     let active = is_active(c);
-    let Some(state) = field(&c.ctx, "active_pump_state") else {
-        return verdict(!active, "no state");
-    };
-    let mode = state["mode"].as_str().unwrap();
-    let lasting = held(
-        passed(ago_of_instant(&state["started_at"])),
-        for_minutes(c).unwrap_or(0),
-    );
     let waits = for_minutes(c).is_some();
-    if PumpMode::from_name(mode).is_none() {
-        return match (active, waits) {
-            (false, _) | (true, false) => unknown("unrecognised"),
-            (true, true) => match lasting {
-                Truth::False => verdict(false, "unrecognised, not yet"),
-                _ => unknown("unrecognised"),
+    let entries: Vec<(&str, i64)> = field(&c.ctx, "active_pump_modes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|m| {
+            (
+                m["mode"].as_str().unwrap(),
+                ago_of_instant(&m["started_at"]),
+            )
+        })
+        .collect();
+    let unrecognised_present = entries
+        .iter()
+        .any(|(mode, _)| PumpMode::from_name(mode).is_none());
+    let named: Vec<i64> = entries
+        .iter()
+        .filter(|(mode, _)| *mode == wanted)
+        .map(|(_, ago)| *ago)
+        .collect();
+    if let Some(&latest_start) = named.iter().min() {
+        let repeated = match (named.len() > 1, unrecognised_present, entries.len() > 1) {
+            (true, _, _) => " repeated",
+            (_, true, _) => " beside unrecognised",
+            (_, _, true) => " beside others",
+            _ => "",
+        };
+        if !active {
+            return verdict(false, &format!("named, wanted absent{repeated}"));
+        }
+        return match for_minutes(c) {
+            None => verdict(true, &format!("named{repeated}")),
+            Some(m) => match held(passed(latest_start), m) {
+                Truth::Unknown => unknown("ahead"),
+                t => verdict(
+                    t,
+                    if named.len() > 1 {
+                        "named, lasting repeated"
+                    } else {
+                        "named, lasting"
+                    },
+                ),
             },
         };
     }
-    if mode == wanted && active {
-        return match (waits, lasting) {
-            (false, _) => verdict(true, "named"),
-            (true, Truth::Unknown) => unknown("ahead"),
-            (true, t) => verdict(t, "named, lasting"),
+    if let Some(earliest_start) = entries
+        .iter()
+        .filter(|(mode, _)| PumpMode::from_name(mode).is_none())
+        .map(|(_, ago)| *ago)
+        .max()
+    {
+        let beside = if entries
+            .iter()
+            .any(|(mode, _)| PumpMode::from_name(mode).is_some())
+        {
+            " beside others"
+        } else {
+            ""
+        };
+        return match (active, waits) {
+            (false, _) | (true, false) => unknown(&format!("unrecognised{beside}")),
+            (true, true) => match held(passed(earliest_start), for_minutes(c).unwrap()) {
+                Truth::False => verdict(false, "unrecognised, not yet"),
+                _ => unknown(&format!("unrecognised{beside}")),
+            },
         };
     }
-    verdict(mode != wanted && !active, "other")
+    verdict(
+        !active,
+        if entries.is_empty() {
+            "no state"
+        } else {
+            "other"
+        },
+    )
 }
 
 fn pump_state_case() -> BoxedStrategy<Case> {
@@ -1088,19 +1138,46 @@ fn pump_state_case() -> BoxedStrategy<Case> {
         any::<bool>(),
         any::<bool>(),
         option::of(select(vec![0i32, 1, 5])),
+        any::<prop::sample::Index>(),
+        option::of(age_in(60)),
+        option::weighted(0.85, pump_modes(1)),
     )
-        .prop_map(|(ctx, random, from_context, is_active, for_minutes)| {
-            let active = field(&ctx, "active_pump_state")
-                .map(|s| s["mode"].clone())
-                .filter(|m| PumpMode::from_name(m.as_str().unwrap()).is_some());
-            let mode = active.filter(|_| from_context).unwrap_or(random);
-            let payload = object(vec![
-                ("mode", Some(mode)),
-                ("is_active", Some(is_active.into())),
-                ("for_minutes", for_minutes.map(Value::from)),
-            ]);
-            case(ctx, payload)
-        })
+        .prop_map(
+            |(mut ctx, random, from_context, is_active, for_minutes, index, repeat, modes)| {
+                if let (Some(modes), Some(fields)) = (modes, ctx.as_object_mut()) {
+                    fields.insert("active_pump_modes".into(), modes);
+                }
+                if let (Some(ago), Some(modes)) = (
+                    repeat,
+                    ctx.get_mut("active_pump_modes")
+                        .and_then(Value::as_array_mut),
+                ) && let Some(first) = modes.first().cloned()
+                {
+                    modes.push(json!({
+                        "mode": first["mode"],
+                        "started_at": (base() - TimeDelta::seconds(ago)).to_rfc3339(),
+                    }));
+                }
+                let present: Vec<Value> = field(&ctx, "active_pump_modes")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(|m| m["mode"].clone())
+                    .filter(|m| PumpMode::from_name(m.as_str().unwrap()).is_some())
+                    .collect();
+                let mode = if from_context && !present.is_empty() {
+                    present[index.index(present.len())].clone()
+                } else {
+                    random
+                };
+                let payload = object(vec![
+                    ("mode", Some(mode)),
+                    ("is_active", Some(is_active.into())),
+                    ("for_minutes", for_minutes.map(Value::from)),
+                ]);
+                case(ctx, payload)
+            },
+        )
         .boxed()
 }
 
@@ -1115,9 +1192,17 @@ family!(
         "true:named",
         "true:named, lasting",
         "false:named, lasting",
+        "false:named, wanted absent",
+        "true:named beside others",
+        "true:named beside unrecognised",
+        "false:named, wanted absent beside others",
+        "false:named, wanted absent beside unrecognised",
+        "true:named repeated",
+        "false:named, lasting repeated",
         "true:other",
         "false:other",
         "unknown:unrecognised",
+        "unknown:unrecognised beside others",
         "false:unrecognised, not yet"
     ]
 );
@@ -1486,7 +1571,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         last_carb_at,
         last_bolus_at,
         tenant_time_zone_id,
-        active_pump_state,
+        active_pump_modes,
         active_state_spans,
         active_trackers,
         sleep_session_active,
@@ -1530,7 +1615,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         ("last_carb_at", last_carb_at.is_some()),
         ("last_bolus_at", last_bolus_at.is_some()),
         ("tenant_time_zone_id", tenant_time_zone_id.is_some()),
-        ("active_pump_state", active_pump_state.is_some()),
+        ("active_pump_modes", !active_pump_modes.is_empty()),
         ("active_state_spans", !active_state_spans.is_empty()),
         ("active_trackers", !active_trackers.is_empty()),
         ("sleep_session_active", *sleep_session_active),

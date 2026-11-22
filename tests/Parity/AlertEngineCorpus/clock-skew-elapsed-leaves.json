@@ -192,10 +192,12 @@
         "active_do_not_disturb": {
           "started_at": "2026-04-01T12:00:00Z"
         },
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-04-01T12:00:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
         "active_state_spans": [
           {
             "category": "Illness",
@@ -236,10 +238,12 @@
         "active_do_not_disturb": {
           "started_at": "2026-04-01T12:00:00Z"
         },
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-04-01T12:00:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
         "active_state_spans": [
           {
             "category": "Illness",
@@ -280,10 +284,12 @@
         "active_do_not_disturb": {
           "started_at": "2026-04-01T12:00:00Z"
         },
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-04-01T12:00:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
         "active_state_spans": [
           {
             "category": "Illness",
@@ -324,10 +330,12 @@
         "active_do_not_disturb": {
           "started_at": "2026-04-01T12:00:00Z"
         },
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-04-01T12:00:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-04-01T12:00:00Z"
+          }
+        ],
         "active_state_spans": [
           {
             "category": "Illness",

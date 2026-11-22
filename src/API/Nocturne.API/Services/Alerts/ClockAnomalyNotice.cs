@@ -103,6 +103,7 @@ internal sealed class ClockAnomalyNotice(
     internal const string NotificationSource = "alert-clock";
     internal const string ReadingFact = "last_reading_at";
     internal const string AheadUntilKey = "aheadUntil";
+    private const string PumpModesFact = "active_pump_modes";
     private const string TitleKey = "device_clock_ahead";
 
     /// <summary>Instants the host writes from its own clock (docs/alerts/engine-semantics.md §5.4).</summary>
@@ -152,6 +153,12 @@ internal sealed class ClockAnomalyNotice(
     private static bool Passed(string fact, DateTime? aheadUntil, DateTime now) =>
         !ReadingFacts.Contains(fact) && aheadUntil is { } until && until <= now;
 
+    /// <summary>
+    /// The fact a stored notification stands for: one raised before pump modes became a set is keyed
+    /// by the retired anchor name, and stands for the same span as the set's.
+    /// </summary>
+    private static string FactOf(string sourceId) => sourceId == "active_pump_state" ? PumpModesFact : sourceId;
+
     private static DateTime? AheadUntil(InAppNotificationDto notification) =>
         notification.Metadata?.TryGetValue(AheadUntilKey, out var value) == true
         && DateTime.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
@@ -194,9 +201,17 @@ internal sealed class ClockAnomalyNotice(
             return;
         }
 
-        var standing = (await notifications.GetActiveNotificationsAsync(owner, ct))
+        var active = (await notifications.GetActiveNotificationsAsync(owner, ct))
             .Where(n => n.Type == NotificationType && n.SourceId is not null)
-            .ToDictionary(n => n.SourceId!, AheadUntil, StringComparer.Ordinal);
+            .ToList();
+        var standing = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
+        var sourceOf = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var n in active)
+        {
+            var fact = FactOf(n.SourceId!);
+            standing[fact] = AheadUntil(n);
+            sourceOf[fact] = n.SourceId!;
+        }
 
         foreach (var (fact, ahead) in raise)
         {
@@ -210,7 +225,7 @@ internal sealed class ClockAnomalyNotice(
             {
                 if (!Covers(fact, stored))
                 {
-                    await notifications.ReplaceMetadataBySourceAsync(owner, NotificationType, fact, metadata, ct);
+                    await notifications.ReplaceMetadataBySourceAsync(owner, NotificationType, sourceOf.GetValueOrDefault(fact, fact), metadata, ct);
                     standing[fact] = aheadUntil;
                 }
                 continue;
@@ -230,7 +245,7 @@ internal sealed class ClockAnomalyNotice(
 
         foreach (var (fact, _) in standing.Where(f => Clears(f.Key, f.Value)).ToList())
         {
-            await notifications.ArchiveBySourceAsync(owner, NotificationType, fact, NotificationArchiveReason.ConditionMet, ct);
+            await notifications.ArchiveBySourceAsync(owner, NotificationType, sourceOf.GetValueOrDefault(fact, fact), NotificationArchiveReason.ConditionMet, ct);
             standing.Remove(fact);
         }
 
@@ -249,7 +264,7 @@ internal sealed class ClockAnomalyNotice(
         ["active_pump_suspension"] = context.ActivePumpSuspension?.StartedAt,
         ["active_override"] = context.ActiveOverride?.StartedAt,
         ["active_do_not_disturb"] = context.ActiveDoNotDisturb?.StartedAt,
-        ["active_pump_state"] = context.ActivePumpState?.StartedAt,
+        [PumpModesFact] = context.ActivePumpModes.Select(m => (DateTime?)m.StartedAt).Max(),
         ["active_state_spans"] = context.ActiveStateSpans.Values.Select(s => (DateTime?)s.StartedAt).Max(),
         ["active_trackers"] = context.ActiveTrackers.Values.Where(t => !t.IsScheduled)
             .Select(t => (DateTime?)t.ReferenceAt).Max(),

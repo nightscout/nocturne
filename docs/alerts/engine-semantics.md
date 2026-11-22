@@ -238,30 +238,37 @@ as false or true.
 | `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
-| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard; no active span is an answer; an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on that mode (table below) |
+| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpModes` | `is_active:false`: true whenever no active span is of `mode` (**including no active span**). `is_active:true`: a span of `mode` must be active; `for_minutes` anchors at its `StartedAt` (double, `>=`) | no guard; no active span is an answer; with no span of `mode`, an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on it (table below) |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown; a span of a category the engine has no member for (§4) is not in the lookup |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
 
-`pump_state` by what the pump is in, for a leaf naming mode `X`. An unrecognised mode is one
-the engine has no member for (§4): the pump may or may not be in `X`, so the leaf is unknown
-wherever the answer differs between the two, and `for_minutes` on the inactive side is a
-no-op as for every span leaf. On the active side with `for_minutes`, a span that has not yet
-lasted that long is false whatever its mode, so the leaf is false until then and unknown from
-then on (§5.3 reports that instant).
+`pump_state` over the set of active pump modes, for a leaf naming mode `X`. Pump-mode spans
+overlap (a suspension runs on top of an automatic or manual span), so the context carries every
+active span, and the leaf reads only the entry for `X`: another mode's span never hides it, and
+two leaves naming different modes in one tree each read their own. Of two entries for `X`, the
+leaf reads the one with the later start, so a repeat never makes `for_minutes` hold sooner. An
+unrecognised mode is one the engine has no member for (§4). It is not `X`, but a host newer than
+the engine may call by that name what the leaf names, so with no entry for `X` the pump may or
+may not be in `X`, and the leaf is unknown wherever the answer differs between the two. The
+unrecognised entries matter only then: an entry for `X` decides the leaf alone. `for_minutes` on
+the inactive side is a no-op as for every span leaf. On the active side with `for_minutes`, no
+span of `X` that has lasted that long gives false, so with only unrecognised entries the leaf is
+false until the earliest of them has lasted `for_minutes` and unknown from then on (§5.3 reports
+that instant). The empty set is the "no active state" rows.
 
-| Pump is | `is_active` | no `for_minutes` | `for_minutes` not yet held | `for_minutes` held |
+| Active modes | `is_active` | no `for_minutes` | `for_minutes` not yet held | `for_minutes` held |
 |---|---|---|---|---|
-| no active state | true | false | false | false |
-| no active state | false | true | true | true |
-| in `X` | true | true | false | true |
-| in `X` | false | false | false | false |
-| in another known mode | true | false | false | false |
-| in another known mode | false | true | true | true |
-| in an unrecognised mode | true | unknown | false | unknown |
-| in an unrecognised mode | false | unknown | unknown | unknown |
+| none | true | false | false | false |
+| none | false | true | true | true |
+| `X`, with or without other modes | true | true | false | true |
+| `X`, with or without other modes | false | false | false | false |
+| only other known modes | true | false | false | false |
+| only other known modes | false | true | true | true |
+| no `X`, an unrecognised mode (with or without other known modes) | true | unknown | false | unknown |
+| no `X`, an unrecognised mode (with or without other known modes) | false | unknown | unknown | unknown |
 
 **Glucose freshness.** `threshold`, `rate_of_change`, `trend` and `glucose_bucket` read their
 glucose fact only while the reading it came from is fresh. A reading's age runs from its
@@ -460,11 +467,14 @@ in §3 plus:
   name degrades only the fact that carries it, by what each leaf can honestly say:
   - `trend_bucket` and `glucose_bucket`: read as an absent bucket, so `trend` and
     `glucose_bucket` are **unknown**, whatever bucket the leaf names.
-  - `active_pump_state.mode`: the pump is in some mode the engine cannot name, so it may or may
-    not be the mode a `pump_state` leaf names. The leaf is **unknown** for every configured
-    mode wherever the answer depends on it, and **false** where every mode gives false (the
-    table in §3); the one change over time, false to unknown when `for_minutes` has passed,
-    is a next change (§5.3).
+  - `active_pump_modes[].mode`: the entry is kept with no mode, so the pump is in some mode the
+    engine cannot name, which may or may not be the mode a `pump_state` leaf names. With no
+    entry for that mode the leaf is **unknown** wherever the answer depends on it, and
+    **false** where every mode gives false (the table in §3); an entry for the mode it names
+    decides it whatever else is active. The one change over time, false to unknown when
+    `for_minutes` has passed, is a next change (§5.3). Several entries are each kept: the
+    context lists one entry per active span, in any order, and a repeated mode is not an
+    error.
   - `active_state_spans[].category`: the span is ignored. A `state_span_active` leaf names a
     category the engine knows, and a span of a name the engine does not know is a different
     category, so it can neither be the leaf's span nor stand for its absence. The leaf reads
@@ -481,7 +491,7 @@ in §3 plus:
   `HasEverApsSensitivity`: distinguish "never had this data" from "data is old/absent".
   Guarded leaves are listed in §3; a guard that is false makes its leaf unknown. Facts whose
   absence is naturally meaningful
-  (`ActiveTempBasal`, `ActiveOverride`, `ActiveDoNotDisturb`, `ActivePumpState`,
+  (`ActiveTempBasal`, `ActiveOverride`, `ActiveDoNotDisturb`, `ActivePumpModes`,
   state spans) have **no** flag.
 - `ActiveAlerts`: `Dictionary<Guid, {State, TriggeredAt, AcknowledgedAt}>` — live state
   of *other* rules, for `alert_state`. State strings observed: `"firing"` (open
@@ -611,7 +621,7 @@ reads a rule's kinds the same way.
 | `aps` | `LastApsCycleAt`, `LastApsEnactedAt`, `HasEverApsCycled`, `SensitivityRatio`, `HasEverApsSensitivity` | `loop_stale`, `loop_enaction_stale`, `sensitivity_ratio` |
 | `uploader` | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `uploader_battery` |
 | `transmitter` | `TransmitterVoltageA`, `TransmitterVoltageB`, `TransmitterResistance`, `TransmitterDays` | `transmitter_battery` |
-| `state_spans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpState`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
+| `state_spans` | `ActiveOverride`, `ActivePumpSuspension`, `ActivePumpModes`, `ActiveStateSpans` | `override_active`, `pump_suspended`, `pump_state`, `state_span_active` |
 | `device_ages` | `LastSiteChangeAt`, `LastSensorStartAt` | `site_age`, `sensor_age` |
 | `trackers` | `ActiveTrackers` | `tracker_age` |
 | `sleep` | `SleepSessionActive` | `sleep_session_active` |
@@ -738,7 +748,7 @@ The rule applies to every comparison of `now - anchor`:
 | `active_trackers` | `tracker_age` over a **duration** instance |
 | `last_carb_at`, `last_bolus_at` | `time_since_last_carb`, `time_since_last_bolus` |
 | `active_alerts` | `alert_state` `for_minutes` |
-| `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_state`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
+| `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_modes`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
 | `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
 
@@ -750,6 +760,10 @@ stored after its tick as fresh there (§8), so an arrival after `now` is fresh (
 `enabled_at` and the two state instants are written from the host's clock, so they are ahead of
 `now` only when that clock went back, or when two hosts' clocks differ. The rule treats them as
 any anchor.
+
+`active_pump_modes` holds one start per active span, and a `pump_state` leaf judges the start it
+reads (§3): the later start of the mode it names, or with none, the earliest unrecognised one. An
+entry for another mode, ahead of the clock or not, is not read by the leaf and is not reported.
 
 What each kind does beyond the tolerance follows from the leaf being unknown:
 

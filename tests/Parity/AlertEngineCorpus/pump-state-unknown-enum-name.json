@@ -64,10 +64,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Automatic",
-          "started_at": "2026-01-05T11:00:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },
@@ -82,10 +84,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Turbo",
-          "started_at": "2026-01-05T12:04:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Turbo",
+            "started_at": "2026-01-05T12:04:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },
@@ -100,10 +104,12 @@
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
         "has_ever_aps_sensitivity": false,
-        "active_pump_state": {
-          "mode": "Turbo",
-          "started_at": "2026-01-05T12:04:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Turbo",
+            "started_at": "2026-01-05T12:04:00Z"
+          }
+        ],
         "sleep_session_active": false
       }
     },

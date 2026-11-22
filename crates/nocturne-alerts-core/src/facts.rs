@@ -186,7 +186,7 @@ mod tests {
 
     use super::*;
     use crate::context::{
-        ActiveAlertSnapshot, PredictedPoint, PumpStateSnapshot, SensorContext, StartedSpan,
+        ActiveAlertSnapshot, PredictedPoint, PumpModeSnapshot, SensorContext, StartedSpan,
         StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
     use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket};
@@ -530,10 +530,14 @@ mod tests {
             transmitter_days: has(F::Transmitter).then(|| Decimal::from(100)),
             active_override: span(F::StateSpans),
             active_pump_suspension: span(F::StateSpans),
-            active_pump_state: spans.then(|| PumpStateSnapshot {
-                mode: Some(PumpMode::Exercise),
-                started_at: ago(30),
-            }),
+            active_pump_modes: if spans {
+                vec![PumpModeSnapshot {
+                    mode: Some(PumpMode::Exercise),
+                    started_at: ago(30),
+                }]
+            } else {
+                Vec::new()
+            },
             active_state_spans: if spans {
                 HashMap::from([(
                     (StateSpanCategory::Illness, None),

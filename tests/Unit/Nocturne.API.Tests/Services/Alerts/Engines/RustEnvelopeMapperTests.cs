@@ -70,14 +70,25 @@ public class RustEnvelopeMapperTests
     [Theory]
     [InlineData("Automatic")]
     [InlineData("Turbo")]
-    public void BuildContext_sends_the_active_pump_mode_as_written(string mode)
+    public void BuildContext_sends_every_active_pump_mode_as_written(string mode)
     {
         var started = new DateTime(2026, 1, 5, 11, 0, 0, DateTimeKind.Utc);
-        var context = BuildContext() with { ActivePumpState = new PumpStateSnapshot(mode, started) };
+        var context = BuildContext() with
+        {
+            ActivePumpModes = [new PumpModeSnapshot("Suspended", started.AddHours(1)), new PumpModeSnapshot(mode, started)],
+        };
 
-        var wire = RustEnvelopeMapper.BuildContext(context).GetProperty("active_pump_state");
+        var wire = RustEnvelopeMapper.BuildContext(context).GetProperty("active_pump_modes");
 
-        wire.GetProperty("mode").GetString().Should().Be(mode);
+        wire.EnumerateArray().Select(m => m.GetProperty("mode").GetString()).Should().Equal("Suspended", mode);
+        wire[1].GetProperty("started_at").GetDateTime().Should().Be(started);
+    }
+
+    [Fact]
+    public void BuildContext_omits_the_pump_modes_when_none_is_active()
+    {
+        RustEnvelopeMapper.BuildContext(BuildContext()).TryGetProperty("active_pump_modes", out _)
+            .Should().BeFalse();
     }
 
     [Theory]

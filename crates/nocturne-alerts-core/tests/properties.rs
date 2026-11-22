@@ -1962,7 +1962,7 @@ proptest! {
 /// or one the crate has no member for.
 #[derive(Debug, Clone)]
 struct NamedFacts {
-    pump_mode: Option<&'static str>,
+    pump_modes: Vec<&'static str>,
     spans: Vec<(&'static str, Option<&'static str>)>,
     trend: Option<&'static str>,
     glucose: Option<&'static str>,
@@ -1978,7 +1978,7 @@ fn named_facts() -> impl Strategy<Value = NamedFacts> {
         .chain(["NotACategory"])
         .collect();
     (
-        option::of(word_or_unrecognised::<PumpMode>("Turbo")),
+        vec(word_or_unrecognised::<PumpMode>("Turbo"), 0..=3),
         vec(
             (select(categories), option::of(select(vec!["a", "b"]))),
             0..=3,
@@ -1986,8 +1986,8 @@ fn named_facts() -> impl Strategy<Value = NamedFacts> {
         option::of(word_or_unrecognised::<TrendBucket>("sideways")),
         option::of(word_or_unrecognised::<GlucoseBucket>("off_the_chart")),
     )
-        .prop_map(|(pump_mode, spans, trend, glucose)| NamedFacts {
-            pump_mode,
+        .prop_map(|(pump_modes, spans, trend, glucose)| NamedFacts {
+            pump_modes,
             spans,
             trend,
             glucose,
@@ -2000,7 +2000,7 @@ fn recognised<E: WireEnum>(name: Option<&str>) -> Option<E> {
 
 proptest! {
     /// §3, §4: a name the crate has no member for is unknown where it decides
-    /// the answer (`pump_state` over an active pump unless `for_minutes` has
+    /// the answer (`pump_state` over an active mode, with none named, unless `for_minutes` has
     /// not yet passed, `trend` and `glucose_bucket` over a bucket), and is
     /// ignored where it could only
     /// name a category no leaf can name (`state_span_active`).
@@ -2024,10 +2024,14 @@ proptest! {
         let started = (base() - TimeDelta::minutes(PUMP_SPAN_MINUTES.into())).to_rfc3339();
         let context: SensorContext = serde_json::from_value(generators::object(vec![
             (
-                "active_pump_state",
-                facts
-                    .pump_mode
-                    .map(|m| json!({ "mode": m, "started_at": started })),
+                "active_pump_modes",
+                Some(
+                    facts
+                        .pump_modes
+                        .iter()
+                        .map(|m| json!({ "mode": m, "started_at": started }))
+                        .collect(),
+                ),
             ),
             (
                 "active_state_spans",
@@ -2054,16 +2058,21 @@ proptest! {
             json!({ "mode": mode, "is_active": is_active, "for_minutes": for_minutes }),
         );
         let held = for_minutes.is_none_or(|m| m <= PUMP_SPAN_MINUTES);
-        let expected = match facts.pump_mode {
-            None => Truth::from(!is_active),
-            Some(active) if recognised::<PumpMode>(Some(active)).is_none() => {
-                if is_active && !held {
-                    Truth::False
-                } else {
-                    Truth::Unknown
-                }
+        let names_the_mode = facts.pump_modes.contains(&mode);
+        let unrecognised = facts
+            .pump_modes
+            .iter()
+            .any(|m| recognised::<PumpMode>(Some(*m)).is_none());
+        let expected = if names_the_mode {
+            Truth::from(is_active && held)
+        } else if unrecognised {
+            if is_active && !held {
+                Truth::False
+            } else {
+                Truth::Unknown
             }
-            Some(active) => Truth::from((active == mode) == is_active && (!is_active || held)),
+        } else {
+            Truth::from(!is_active)
         };
         prop_assert_eq!(pump, expected);
 

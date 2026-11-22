@@ -306,12 +306,28 @@ fn for_minutes_kinds_change_when_the_span_has_held() {
         (
             "pump_state",
             json!({ "mode": "Automatic", "is_active": true, "for_minutes": 10 }),
-            json!({ "active_pump_state": { "mode": "Automatic", "started_at": ago(min(4)) } }),
+            json!({ "active_pump_modes": [{ "mode": "Automatic", "started_at": ago(min(4)) }] }),
+        ),
+        (
+            "pump_state",
+            json!({ "mode": "Suspended", "is_active": true, "for_minutes": 10 }),
+            json!({ "active_pump_modes": [
+                { "mode": "Automatic", "started_at": ago(min(60)) },
+                { "mode": "Suspended", "started_at": ago(min(4)) }
+            ] }),
         ),
         (
             "pump_state",
             json!({ "mode": "Automatic", "is_active": true, "for_minutes": 10 }),
-            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
+            json!({ "active_pump_modes": [
+                { "mode": "Turbo", "started_at": ago(min(60)) },
+                { "mode": "Automatic", "started_at": ago(min(4)) }
+            ] }),
+        ),
+        (
+            "pump_state",
+            json!({ "mode": "Automatic", "is_active": true, "for_minutes": 10 }),
+            json!({ "active_pump_modes": [{ "mode": "Turbo", "started_at": ago(min(4)) }] }),
         ),
         (
             "state_span_active",
@@ -351,12 +367,12 @@ fn a_guard_that_holds_the_leaf_constant_contributes_nothing() {
         (
             "pump_state",
             json!({ "mode": "Automatic", "is_active": true }),
-            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
+            json!({ "active_pump_modes": [{ "mode": "Turbo", "started_at": ago(min(4)) }] }),
         ),
         (
             "pump_state",
             json!({ "mode": "Automatic", "is_active": false, "for_minutes": 10 }),
-            json!({ "active_pump_state": { "mode": "Turbo", "started_at": ago(min(4)) } }),
+            json!({ "active_pump_modes": [{ "mode": "Turbo", "started_at": ago(min(4)) }] }),
         ),
         (
             "time_since_last_carb",
