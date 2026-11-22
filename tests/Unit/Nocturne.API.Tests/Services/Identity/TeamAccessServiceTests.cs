@@ -199,6 +199,7 @@ public class TeamAccessServiceTests
                 Role("Owner", RoleSeeds.Owner, RoleSeeds.Permissions[RoleSeeds.Owner]),
                 Role("Wider", "wider", [Scope.GlucoseReadWrite]),
                 Role("Not grantable", "not-grantable", [Scope.GlucoseRead]) with { CanGrant = false },
+                Role("Denied", RoleSeeds.Denied, []),
             ]);
 
         var (details, _) = await Service().GetLinkAsync(Token, Session(), default);

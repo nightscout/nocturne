@@ -42,7 +42,7 @@ public sealed class TeamAccessService(
         foreach (var site in sites)
         {
             var offered = (await roles.GetRolesAsync(site.Tenant.Id, site.Scopes, ct))
-                .Where(r => r.CanGrant && Scope.IsDataOnly(r.Permissions) && Scope.ValidateGrant(r.Permissions, suggested) is null)
+                .Where(r => r.CanGrant && r.Permissions.Count > 0 && Scope.IsDataOnly(r.Permissions) && Scope.ValidateGrant(r.Permissions, suggested) is null)
                 .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(r => new TeamAccessRoleOption(r.Id, r.Name, r.Slug, r.Permissions))
                 .ToList();

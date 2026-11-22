@@ -307,7 +307,7 @@ public partial class TeamRepository
             l.Link.CreatedBySubjectId, l.CreatedByName, SuggestionOf(l.Link))).ToList();
     }
 
-    private static async Task<IReadOnlyList<TeamSiteAccess>> SitesOfAsync(NocturneDbContext db, Guid teamId, CancellationToken ct)
+    private static async Task<IReadOnlyList<TeamSiteAccess>> SitesOfAsync(NocturneDbContext db, Guid teamId, DateTime now, CancellationToken ct)
     {
         var sites = await db.TeamTenantAccess.AsNoTracking()
             .Where(a => a.TeamId == teamId)
@@ -325,6 +325,7 @@ public partial class TeamRepository
             .ToListAsync(ct);
         return sites.Select(s => new TeamSiteAccess(
             s.TenantId, s.DisplayName, s.RoleNames, s.LimitTo24Hours, Utc(s.AccessEndsAt),
+            MembershipLiveness.HasEnded(s.AccessEndsAt, now),
             DateTime.SpecifyKind(s.SysCreatedAt, DateTimeKind.Utc))).ToList();
     }
 

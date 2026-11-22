@@ -291,6 +291,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(RoleSeeds.Owner, 7, null, TeamProblemCodes.AccessRoleInvalid)]
     [InlineData(RoleSeeds.Admin, 7, null, TeamProblemCodes.AccessRoleInvalid)]
+    [InlineData(RoleSeeds.Denied, 7, null, TeamProblemCodes.AccessRoleInvalid)]
     [InlineData("no-such-role", 7, null, TeamProblemCodes.AccessRoleInvalid)]
     [InlineData(RoleSeeds.Caretaker, 0, null, TeamProblemCodes.ExpiryInvalid)]
     [InlineData(RoleSeeds.Caretaker, 7, -1, TeamProblemCodes.AccessEndInvalid)]
@@ -411,7 +412,7 @@ public class TeamsControllerTests
         typeof(TeamAccessSiteOption).GetProperties().Select(p => p.Name).Should().BeEquivalentTo(
             "TenantId", "DisplayName", "AlreadyGiven", "Roles", "DefaultRoleId", "LimitForced", "LatestEnd");
         typeof(TeamSiteAccess).GetProperties().Select(p => p.Name).Should().BeEquivalentTo(
-            ["TenantId", "DisplayName", "RoleNames", "LimitTo24Hours", "AccessEndsAt", "GivenAt"],
+            ["TenantId", "DisplayName", "RoleNames", "LimitTo24Hours", "AccessEndsAt", "HasEnded", "GivenAt"],
             "a team learns a site's name and what it was given, never who approved or who is in it");
     }
 

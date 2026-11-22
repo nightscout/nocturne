@@ -274,10 +274,10 @@ public class TeamsController(
         if (LinkProblem(request.ExpiresInDays, request.MaxUses, request.Label, out var label) is { } problem)
             return problem;
 
-        if (!RoleSeeds.Permissions.TryGetValue(request.RoleSlug, out var suggested) || !Scope.IsDataOnly(suggested))
+        if (TeamSuggestableRoles.PermissionsOf(request.RoleSlug) is null)
             return this.ProblemWithCode(
                 TeamProblemCodes.AccessRoleInvalid,
-                "The role must be a role for data only.",
+                "The role must be one an access link may suggest.",
                 StatusCodes.Status400BadRequest);
 
         var suggestedEnd = AccessEndRequest.Instant(request.AccessEndsAt);

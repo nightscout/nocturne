@@ -26,6 +26,7 @@ const LABEL_MAP: Record<string, string> = {
   alert_channel_no_recipient_subtitle: "An alert channel has no recipient.",
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
+  team_renamed: "A team has a new name",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",

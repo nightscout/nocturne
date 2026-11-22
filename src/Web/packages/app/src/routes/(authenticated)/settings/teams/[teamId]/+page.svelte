@@ -32,8 +32,11 @@
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import { inviteLabelMaxLength, teamNameMaxLength } from "#lib/teams/limits.js";
   import { MANAGER_KIND } from "#lib/teams/member-kind.svelte.js";
+  import { linkExpiryOptions } from "#lib/teams/link-expiry.svelte.js";
   import { teamProblemMessages } from "#lib/teams/problem-messages.svelte.js";
   import TeamsUnavailable from "#lib/components/teams/TeamsUnavailable.svelte";
+  import AccessLinksSection from "#lib/components/teams/AccessLinksSection.svelte";
+  import TeamSitesSection from "#lib/components/teams/TeamSitesSection.svelte";
 
   const refused = $derived(page.data.refusedAsDemoSubject === true);
   const teamId = $derived(page.params.teamId ?? "");
@@ -89,13 +92,6 @@
       removingId = null;
     }
   }
-
-  const EXPIRY_OPTIONS = [
-    ["1", "1 day"],
-    ["7", "7 days"],
-    ["30", "30 days"],
-    ["90", "90 days"],
-  ] as const;
 
   let inviteLabel = $state("");
   let expiresInDays = $state("7");
@@ -374,7 +370,7 @@
           <div class="space-y-2">
             <Label>The link stops working after</Label>
             <RadioGroup.Root bind:value={expiresInDays} class="flex flex-wrap gap-4">
-              {#each EXPIRY_OPTIONS as [value, text] (value)}
+              {#each linkExpiryOptions() as [value, text] (value)}
                 <div class="flex items-center gap-2">
                   <RadioGroup.Item {value} id={`team-invite-expiry-${value}`} />
                   <Label for={`team-invite-expiry-${value}`} variant="option">{text}</Label>
@@ -444,6 +440,15 @@
         </div>
       </Card.Content>
     </Card.Root>
+    {/if}
+
+    {#if isManager}
+      <AccessLinksSection
+        {teamId}
+        links={team.accessLinks ?? []}
+        roles={team.suggestableRoles ?? []}
+      />
+      <TeamSitesSection sites={team.sites ?? []} />
     {/if}
 
     {#if isManager && team.canDelete}

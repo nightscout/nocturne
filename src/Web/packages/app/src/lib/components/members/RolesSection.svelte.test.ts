@@ -237,3 +237,134 @@ describe("RolesSection", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("RolesSection roles a team holds", () => {
+  const held: TenantRoleDto = { ...caretaker, heldByTeam: true };
+
+  beforeEach(() => {
+    createImpl = () => Promise.resolve({});
+    updateImpl = () => Promise.resolve({});
+    deleteImpl = () => Promise.resolve();
+  });
+
+  it("says a role is held by a team and disables its delete with the reason", async () => {
+    roles = [held];
+    render(RolesSection);
+
+    await expect.element(page.getByText("Held by a team")).toBeVisible();
+    await expect
+      .element(
+        page.getByText("A team has this role. It cannot be deleted, and it can hold only permissions for data."),
+      )
+      .toBeVisible();
+    const remove = page.getByRole("button", { name: "Delete role" });
+    await expect.element(remove).toBeDisabled();
+    await expect.element(remove).toHaveAccessibleDescription(/A team has this role/);
+    await expect.element(page.getByRole("button", { name: "Edit" })).toBeEnabled();
+  });
+
+  it("leaves delete enabled, and says nothing about a team, for a role no team holds", async () => {
+    roles = [caretaker];
+    render(RolesSection);
+
+    await expect.element(page.getByRole("button", { name: "Delete role" })).toBeEnabled();
+    expect(page.getByText("Held by a team").elements()).toHaveLength(0);
+    expect(page.getByText("A team has this role", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it("tells a caller who is not an owner that only an owner can add permissions", async () => {
+    roles = [{ ...held, onlyOwnersMayWiden: true }];
+    render(RolesSection);
+
+    await expect.element(page.getByText("Only an owner can add permissions to it.")).toBeVisible();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect
+      .element(page.getByRole("dialog"))
+      .toHaveTextContent("You can remove permissions from it, and only an owner can add permissions.");
+  });
+
+  it("does not say only an owner can add permissions to an owner", async () => {
+    roles = [held];
+    render(RolesSection);
+
+    await expect.element(page.getByText("Held by a team")).toBeVisible();
+    expect(page.getByText("Only an owner can add permissions", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it.each([
+    ["role_held_by_team", "A team has this role, so it can hold only permissions for data and you cannot delete it."],
+    ["role_held_by_team_owner_only", "A team has this role, so only an owner can add permissions to it."],
+  ])("words a refused save with the code %s", async (code, sentence) => {
+    roles = [held];
+    updateImpl = async () => {
+      throw { status: 409, body: { message: "English detail", code } };
+    };
+    await openEditAndRename("Carer");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(page.getByRole("dialog").getByRole("alert")).toHaveTextContent(sentence);
+    expect(page.getByText("English detail").elements()).toHaveLength(0);
+  });
+});
+
+describe("RolesSection what a caller may choose for a role a team holds", () => {
+  const option = (name: string) => page.getByRole("option", { name, exact: true });
+
+  it("lets a caller who is not an owner choose Read for a role that holds read and write", async () => {
+    roles = [
+      {
+        ...caretaker,
+        permissions: ["treatments.read", "treatments.readwrite"],
+        heldByTeam: true,
+        onlyOwnersMayWiden: true,
+        coveredPermissions: ["treatments.read", "treatments.readwrite"],
+      },
+    ];
+    render(RolesSection);
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await page.getByRole("dialog").getByText("Read & write", { exact: true }).first().click();
+
+    await expect.element(option("Read")).not.toHaveAttribute("data-disabled");
+    await expect.element(option("No access")).not.toHaveAttribute("data-disabled");
+    await expect.element(option("Read & write")).not.toHaveAttribute("data-disabled");
+  });
+
+  it("does not let a caller who is not an owner add a permission the role lacks", async () => {
+    roles = [
+      {
+        ...caretaker,
+        permissions: ["glucose.read"],
+        heldByTeam: true,
+        onlyOwnersMayWiden: true,
+        coveredPermissions: ["glucose.read"],
+      },
+    ];
+    render(RolesSection);
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await page.getByRole("dialog").getByText("Read", { exact: true }).first().click();
+
+    await expect.element(option("Read & write")).toHaveAttribute("data-disabled");
+    await expect.element(option("No access")).not.toHaveAttribute("data-disabled");
+  });
+
+  it("does not let an owner choose a level the API refuses for a role a team holds, before any save", async () => {
+    roles = [
+      {
+        ...caretaker,
+        permissions: ["glucose.read"],
+        heldByTeam: true,
+        teamRefusedPermissions: ["glucose.readwrite"],
+      },
+    ];
+    render(RolesSection);
+    await page.getByRole("button", { name: "Edit" }).click();
+
+    await page.getByRole("dialog").getByText("Read", { exact: true }).first().click();
+
+    await expect.element(option("Read & write")).toHaveAttribute("data-disabled");
+    await expect.element(option("Read")).not.toHaveAttribute("data-disabled");
+  });
+});
+

@@ -25,11 +25,12 @@ export const TENANTLESS_NAV_HREFS: readonly string[] = [
 ];
 
 /**
- * Routes the whole-path list cannot name: one team's page, and the page a team invite link opens.
+ * Routes the whole-path list cannot name: one team's page, and the pages a team's invite link and access link open.
  */
 const TENANTLESS_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/settings\/teams\/[^/]+$/,
   /^\/teams\/join$/,
+  /^\/teams\/access$/,
 ];
 
 interface NavLike {

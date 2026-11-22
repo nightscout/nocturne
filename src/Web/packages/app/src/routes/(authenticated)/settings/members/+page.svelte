@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { describeSubmitError } from "#lib/forms/index.js";
+  import { describeRemoteError, errorStatus } from "#lib/forms/submit-error.js";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "#lib/components/ui/card/index.js";
@@ -27,6 +28,8 @@
     setMemberPermissions,
     setMemberLimitTo24Hours,
     setMemberAccessEnd,
+    getTeamAccess,
+    stopTeamAccess,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     getPendingRequests,
@@ -37,6 +40,7 @@
   import PendingInvitesList from "#lib/components/members/PendingInvitesList.svelte";
   import PendingRequestsList from "#lib/components/members/PendingRequestsList.svelte";
   import MemberCard, { type MemberChanges } from "#lib/components/members/MemberCard.svelte";
+  import TeamAccessList from "#lib/components/members/TeamAccessList.svelte";
   import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "#lib/components/members/MembershipRequestsCard.svelte";
@@ -79,11 +83,13 @@
   const membersQuery = $derived(canListMembers ? getMembers() : null);
   const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = $derived(canListRoles ? getRoles() : null);
+  const teamAccessQuery = $derived(canListMembers ? getTeamAccess() : null);
   const pendingRequestsQuery = $derived(canReviewRequests ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
   retainQuery(() => membersQuery);
   retainQuery(() => invitesQuery);
   retainQuery(() => rolesQuery);
+  retainQuery(() => teamAccessQuery);
   retainQuery(() => pendingRequestsQuery);
   retainQuery(() => shareQuery);
 
@@ -92,6 +98,7 @@
   const invites = $derived(invitesQuery?.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
   const allRoles = $derived(rolesQuery?.current ?? []);
+  const teamsWithAccess = $derived(teamAccessQuery?.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
@@ -119,6 +126,7 @@
   let isSavingMember = $state(false);
   let memberSaveError = $state<string | null>(null);
   let isRevokingInvite = $state<string | null>(null);
+  let stoppingTeamId = $state<string | null>(null);
 
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.
@@ -174,6 +182,26 @@
       memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
     } finally {
       isSavingMember = false;
+    }
+  }
+
+  async function handleStopTeamAccess(teamId: string) {
+    stoppingTeamId = teamId;
+    errorMessage = null;
+    try {
+      await stopTeamAccess(teamId);
+      successMessage = { text: "Access of the team stopped.", wash: false };
+      clearMessages();
+    } catch (err) {
+      errorMessage = describeRemoteError(err, "Failed to stop the access of the team. Try again.", {
+        missing: () => "This team no longer has access.",
+        forbiddenReason: true,
+        serverError: false,
+      });
+      if (errorStatus(err) === 404) void teamAccessQuery?.refresh();
+      clearMessages();
+    } finally {
+      stoppingTeamId = null;
     }
   }
 
@@ -371,6 +399,15 @@
       {/if}
 
     </div>
+  {/if}
+
+  {#if canListMembers}
+    <TeamAccessList
+      teams={teamsWithAccess}
+      canStop={canEditMemberRoles}
+      stoppingId={stoppingTeamId}
+      onStop={handleStopTeamAccess}
+    />
   {/if}
 
   <!-- Temporary Guest Links (self-gates on sharing.guest) -->

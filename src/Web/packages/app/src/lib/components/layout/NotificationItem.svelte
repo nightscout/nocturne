@@ -72,6 +72,8 @@
       resolveNotificationLabel(notification.subtitle)
   );
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
+  const renamedFrom = $derived(notification.metadata?.["oldName"]?.toString());
+  const renamedTo = $derived(notification.metadata?.["newName"]?.toString());
 </script>
 
 <div
@@ -97,6 +99,8 @@
           Nocturne {releaseVersion} is available
         {:else if notification.type === "system.release_installed" && releaseVersion}
           Nocturne is now on version {releaseVersion}
+        {:else if notification.type === "team.renamed" && renamedFrom && renamedTo}
+          The team {renamedFrom} is now named {renamedTo}.
         {:else}
           {resolveNotificationLabel(notification.title) || "Notification"}
         {/if}

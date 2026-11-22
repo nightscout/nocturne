@@ -9,6 +9,7 @@ import {
   type MembershipRequestDto,
   type TenantMemberDto,
   type TenantRoleDto,
+  type TenantTeamAccess,
 } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { accessEndInstant } from "#lib/components/members/access-end.js";
@@ -23,11 +24,14 @@ const mocks = vi.hoisted(() => ({
   setMemberAccessEnd: vi.fn(),
   approveRequest: vi.fn(),
   getLockedOutMembers: vi.fn(),
+  stopTeamAccess: vi.fn(),
+  refreshTeamAccess: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
 let lockedOut: LockedOutMember[] = [];
 let pendingRequests: MembershipRequestDto[] = [];
+let teamAccess: TenantTeamAccess[] = [];
 
 const viewer: TenantRoleDto = {
   id: "22222222-2222-2222-2222-222222222222",
@@ -54,6 +58,16 @@ vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
     return remoteQuery(() => members);
   },
   listInvites: () => remoteQuery(() => []),
+  getTeamAccess: () => {
+    const query = remoteQuery(() => teamAccess);
+    const refresh = query.refresh.bind(query);
+    query.refresh = () => {
+      mocks.refreshTeamAccess();
+      return refresh();
+    };
+    return query;
+  },
+  stopTeamAccess: (teamId: string) => mocks.stopTeamAccess(teamId),
   revokeInvite: () => Promise.resolve(),
   createInvite: vi.fn(),
   removeMember: () => Promise.resolve(),
@@ -546,5 +560,162 @@ describe("members page recovery email badge", () => {
 
     await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
     expect(browserPage.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+});
+
+describe("members page listing the teams with access", () => {
+  const clinicId = "66666666-6666-6666-6666-666666666666";
+  const clinic: TenantTeamAccess = {
+    teamId: clinicId,
+    teamName: "Clinic",
+    roles: [
+      { id: viewer.id, name: "Viewer", slug: "viewer" },
+      { id: "77777777-7777-7777-7777-777777777777", name: "Caretaker", slug: "caretaker" },
+    ],
+    limitTo24Hours: true,
+    accessEndsAt: "2099-01-01T00:00:00Z",
+    hasEnded: false,
+    approvedByName: "Sam",
+    givenAt: "2026-11-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [];
+    teamAccess = [clinic];
+    mocks.stopTeamAccess.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    teamAccess = [];
+  });
+
+  it("lists a team as one row in its own section, apart from the people", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByRole("heading", { name: "Teams" })).toBeVisible();
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    await expect.element(browserPage.getByText("Roles: Viewer, Caretaker")).toBeVisible();
+    await expect.element(browserPage.getByText("Only the last 24 hours", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("Access ends", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("Approved by Sam", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("Clinic", { exact: true }).elements()).toHaveLength(1);
+  });
+
+  it("says a team's access has ended when the API says so", async () => {
+    teamAccess = [{ ...clinic, hasEnded: true }];
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Access ended", { exact: false })).toBeVisible();
+    expect(browserPage.getByText("Access ends", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it("shows no Teams section when no team has access", async () => {
+    teamAccess = [];
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("heading", { name: "Teams" }).elements()).toHaveLength(0);
+  });
+
+  it("stops the access only after a confirmation that names the team and states what follows", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+
+    const dialog = browserPage.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Stop the access of Clinic?");
+    await expect.element(dialog).toHaveTextContent("The staff of the team lose access at once.");
+    await expect.element(dialog).toHaveTextContent("A manager of the team must ask again.");
+    expect(mocks.stopTeamAccess).not.toHaveBeenCalled();
+
+    await dialog.getByRole("button", { name: "Stop access" }).click();
+
+    await vi.waitFor(() => expect(mocks.stopTeamAccess).toHaveBeenCalledWith(clinicId));
+  });
+
+  it("does not stop the access when the confirmation is cancelled", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+
+    await expect.element(browserPage.getByRole("alertdialog")).not.toBeInTheDocument();
+    expect(mocks.stopTeamAccess).not.toHaveBeenCalled();
+  });
+
+  it("shows the team but no Stop access to a caller who may only invite", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: /Stop the access of/ }).elements()).toHaveLength(0);
+  });
+
+  it("shows the team but no Stop access to a caller who may only manage sharing", async () => {
+    page.data.effectivePermissions = ["sharing.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: /Stop the access of/ }).elements()).toHaveLength(0);
+  });
+
+  it("reports a refused stop on the page", async () => {
+    mocks.stopTeamAccess.mockRejectedValue(new Error("down"));
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect
+      .element(browserPage.getByText("Failed to stop the access of the team. Try again.", { exact: false }))
+      .toBeVisible();
+  });
+
+  it("says the team no longer has access, and reads the list again, when the stop finds it gone", async () => {
+    mocks.stopTeamAccess.mockRejectedValue({ status: 404, body: { message: "Not found" } });
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(browserPage.getByText("This team no longer has access.")).toBeVisible();
+    expect(mocks.refreshTeamAccess).toHaveBeenCalled();
+  });
+
+  it("says the person may not do this, and does not read the list again, when the stop is refused", async () => {
+    mocks.stopTeamAccess.mockRejectedValue({
+      status: 403,
+      body: { message: "English detail", code: "missing_scope" },
+    });
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(browserPage.getByText("You do not have permission to do this.")).toBeVisible();
+    expect(browserPage.getByText("English detail").elements()).toHaveLength(0);
+    expect(mocks.refreshTeamAccess).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Teams section outside the Members & invites block", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    const teams = browserPage.getByRole("heading", { name: "Teams" });
+    await expect.element(teams).toBeVisible();
+    const block = browserPage.getByRole("heading", { name: "Members & invites" }).element().parentElement!;
+    expect(block.contains(teams.element())).toBe(false);
   });
 });

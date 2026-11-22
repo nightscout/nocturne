@@ -1,4 +1,8 @@
-import { CreateTeamInviteRequestSchema, TeamNameRequestSchema } from "@nocturne/api-client/schemas";
+import {
+  CreateTeamAccessLinkRequestSchema,
+  CreateTeamInviteRequestSchema,
+  TeamNameRequestSchema,
+} from "@nocturne/api-client/schemas";
 
 function hasUnwrap(value: unknown): value is { unwrap(): unknown } {
   return (
@@ -27,3 +31,5 @@ function maxLengthOf(field: unknown): number | undefined {
 export const teamNameMaxLength = maxLengthOf(TeamNameRequestSchema.shape.name);
 
 export const inviteLabelMaxLength = maxLengthOf(CreateTeamInviteRequestSchema.shape.label);
+
+export const accessLinkLabelMaxLength = maxLengthOf(CreateTeamAccessLinkRequestSchema.shape.label);
