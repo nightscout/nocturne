@@ -146,6 +146,7 @@ public record MemberInviteInfo(
 /// See <see cref="Nocturne.Core.Models.Authorization.Scope.IsViewOnlyForRecordsAndAccess"/>.
 /// </param>
 /// <param name="Viewer">Where the caller stands relative to the invite.</param>
+/// <param name="AccessEndsAt">When the membership the invite creates ends, in UTC; null when it does not.</param>
 public record JoinInviteInfo(
     string TenantName,
     string CreatedByName,
@@ -155,7 +156,8 @@ public record JoinInviteInfo(
     DateTime ExpiresAt,
     bool GrantsAccess,
     bool IsViewOnlyForRecordsAndAccess,
-    InviteViewer? Viewer);
+    InviteViewer? Viewer,
+    DateTime? AccessEndsAt);
 
 /// <summary>
 /// Where the caller of the join page's invite lookup stands relative to the invite.

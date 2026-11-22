@@ -15,25 +15,47 @@
     TenantRoleDto,
   } from "@nocturne/api-client";
   import { relativeAge } from "#lib/utils/formatting.js";
+  import AccessEndField from "#lib/components/members/AccessEndField.svelte";
+  import { accessEndInstant, isAccessEndChoiceValid } from "#lib/components/members/access-end.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
 
   interface Props {
     requests: MembershipRequestDto[];
     roles: TenantRoleDto[];
-    onApprove: (requestId: string, roleIds: string[]) => Promise<void>;
+    onApprove: (requestId: string, roleIds: string[], accessEndsAt?: string) => Promise<void>;
     onDeny: (requestId: string) => Promise<void>;
+    /** When the approver's own access ends. An approval cannot give access that lasts longer. */
+    callerAccessEndsAt?: string;
   }
 
-  let { requests, roles, onApprove, onDeny }: Props = $props();
+  let { requests, roles, onApprove, onDeny, callerAccessEndsAt }: Props = $props();
 
   const grantableRoles = $derived(roles.filter((r) => r.canGrant));
 
   // Per-request state keyed by request id
   let selectedRoles = $state<Record<string, string[]>>({});
+  let accessEndDays = $state<Record<string, string>>({});
   let approvingIds = $state(new Set<string>());
   let denyingIds = $state(new Set<string>());
 
   function getSelectedRoles(requestId: string): string[] {
     return selectedRoles[requestId] ?? [];
+  }
+
+  function givesOwner(requestId: string): boolean {
+    return getSelectedRoles(requestId).some((id) => roles.find((r) => r.id === id)?.slug === "owner");
+  }
+
+  const now = new Now(60_000);
+
+  function accessEndOffered(requestId: string): boolean {
+    return (
+      givesOwner(requestId) ||
+      isAccessEndChoiceValid(accessEndDays[requestId] ?? "", {
+        now: now.current,
+        ceiling: callerAccessEndsAt,
+      })
+    );
   }
 
   function toggleRole(requestId: string, roleId: string) {
@@ -48,7 +70,12 @@
   async function handleApprove(requestId: string) {
     approvingIds = new Set([...approvingIds, requestId]);
     try {
-      await onApprove(requestId, getSelectedRoles(requestId));
+      const day = accessEndDays[requestId] ?? "";
+      await onApprove(
+        requestId,
+        getSelectedRoles(requestId),
+        givesOwner(requestId) || day === "" ? undefined : accessEndInstant(day),
+      );
     } finally {
       approvingIds = new Set([...approvingIds].filter((id) => id !== requestId));
     }
@@ -124,6 +151,18 @@
           </div>
         </div>
 
+        <AccessEndField
+          id="request-access-end-{request.id}"
+          bind:value={
+            () => accessEndDays[request.id ?? ""] ?? "",
+            (day) => (accessEndDays[request.id ?? ""] = day)
+          }
+          now={now.current}
+          isOwner={givesOwner(request.id ?? "")}
+          ceiling={callerAccessEndsAt}
+          disabled={isBusy}
+        />
+
         <!-- Actions -->
         <div class="flex gap-3">
           <Button
@@ -141,7 +180,7 @@
           </Button>
           <Button
             class="flex-1"
-            disabled={isBusy}
+            disabled={isBusy || !accessEndOffered(request.id ?? "")}
             onclick={() => handleApprove(request.id ?? "")}
           >
             {#if isApproving}

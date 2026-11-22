@@ -2,6 +2,8 @@
   export interface MemberChanges {
     access?: { roleIds: string[]; permissions: string[] };
     limitTo24Hours?: boolean;
+    /** The new end instant, or null to remove the end. */
+    accessEndsAt?: string | null;
   }
 </script>
 
@@ -20,13 +22,23 @@
   import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import CalendarX from "@lucide/svelte/icons/calendar-x";
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import History from "@lucide/svelte/icons/history";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatMediumDateTime, formatShortDate } from "#lib/utils/formatting.js";
+  import AccessEndField from "#lib/components/members/AccessEndField.svelte";
+  import {
+    accessEndDate,
+    accessEndDay,
+    accessEndInstant,
+    isAccessEndChoiceValid,
+  } from "#lib/components/members/access-end.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
   import FormError from "#lib/forms/FormError.svelte";
   import type { TenantMemberDto, TenantRoleDto } from "@nocturne/api-client";
 
@@ -42,6 +54,8 @@
     isSaving: boolean;
     saveError?: string | null;
     currentSubjectId?: string;
+    /** When the caller's own access ends. The member's end cannot pass it or be removed. */
+    callerAccessEndsAt?: string;
     onToggleExpand: () => void;
     onSave: (changes: MemberChanges) => void;
     onRemove: () => void;
@@ -58,6 +72,7 @@
     isSaving = false,
     saveError = null,
     currentSubjectId,
+    callerAccessEndsAt,
     onToggleExpand,
     onSave,
     onRemove,
@@ -80,6 +95,8 @@
   let editingLimitTo24Hours = $state(false);
   let originalLimitTo24Hours = $state(false);
   let showDirectPermissions = $state(false);
+  let editingEndDay = $state("");
+  let originalEndDay = $state("");
 
   const grantableRoles = $derived(roles.filter((r) => r.canGrant));
 
@@ -102,7 +119,33 @@
     JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
   );
   const isLimitDirty = $derived(editingLimitTo24Hours !== originalLimitTo24Hours);
-  const isDirty = $derived(isAccessDirty || isLimitDirty);
+  const isEndDirty = $derived(editingEndDay !== originalEndDay);
+  const isDirty = $derived(isAccessDirty || isLimitDirty || isEndDirty);
+
+  function isOwnerRole(roleId: string | undefined): boolean {
+    return (
+      roles.find((r) => r.id === roleId)?.slug === "owner" ||
+      (member.roles ?? []).some((r) => r.roleId === roleId && r.slug === "owner")
+    );
+  }
+
+  const editingOwner = $derived(editingRoleIds.some(isOwnerRole));
+  const now = new Now(60_000);
+  const endOffered = $derived(
+    !isEndDirty ||
+      isAccessEndChoiceValid(
+        editingEndDay,
+        { now: now.current, ceiling: callerAccessEndsAt },
+        originalEndDay !== "",
+      ),
+  );
+  const canRemoveEnd = $derived(
+    originalEndDay !== "" && editingEndDay !== "" && !callerAccessEndsAt && !editingOwner,
+  );
+  const ownerBlockedByEnd = $derived(editingEndDay !== "" && !editingOwner);
+  const endShown = $derived(
+    member.accessEndsAt ? formatShortDate(accessEndDate(member.accessEndsAt), true) : null,
+  );
 
   function toggleExpand() {
     if (!isExpanded) {
@@ -112,6 +155,8 @@
       originalPermissions = [...editingPermissions];
       editingLimitTo24Hours = member.limitTo24Hours ?? false;
       originalLimitTo24Hours = member.limitTo24Hours ?? false;
+      editingEndDay = member.accessEndsAt ? accessEndDay(member.accessEndsAt) : "";
+      originalEndDay = editingEndDay;
       showDirectPermissions = false;
     }
     onToggleExpand();
@@ -131,6 +176,11 @@
         ? { roleIds: editingRoleIds, permissions: editingPermissions }
         : undefined,
       limitTo24Hours: isLimitDirty ? editingLimitTo24Hours : undefined,
+      accessEndsAt: isEndDirty
+        ? editingEndDay === ""
+          ? null
+          : accessEndInstant(editingEndDay)
+        : undefined,
     });
   }
 
@@ -138,6 +188,7 @@
     editingRoleIds = [...originalRoleIds];
     editingPermissions = [...originalPermissions];
     editingLimitTo24Hours = originalLimitTo24Hours;
+    editingEndDay = originalEndDay;
     onToggleExpand();
   }
 </script>
@@ -152,7 +203,7 @@
             {member.name ?? "Unknown"}
           </span>
           {#each member.roles ?? [] as role (role.slug)}
-            <Badge variant="secondary">
+            <Badge variant={member.hasEnded ? "outline" : "secondary"}>
               {role.name ?? role.slug ?? "Unknown"}
             </Badge>
           {/each}
@@ -174,6 +225,17 @@
                 .directPermissions.length !== 1
                 ? "s"
                 : ""}
+            </Badge>
+          {/if}
+          {#if endShown && member.hasEnded}
+            <Badge variant="warning">
+              <CalendarX class="h-3 w-3" />
+              Ended {endShown}
+            </Badge>
+          {:else if endShown}
+            <Badge variant="outline">
+              <CalendarClock class="h-3 w-3" />
+              Until {endShown}
             </Badge>
           {/if}
         </Card.Title>
@@ -214,6 +276,7 @@
                 {...props}
                 variant="outline-destructive"
                 size="sm"
+                aria-label="Remove member"
                 disabled={isSaving}
               >
                 {#if isSaving}
@@ -266,6 +329,10 @@
               <Checkbox
                 id="member-role-{member.subjectId}-{role.id}"
                 checked={editingRoleIds.includes(role.id ?? '')}
+                disabled={isOwnerRole(role.id) && ownerBlockedByEnd}
+                aria-describedby={isOwnerRole(role.id) && ownerBlockedByEnd
+                  ? `member-owner-reason-${member.subjectId}`
+                  : undefined}
                 onCheckedChange={() => toggleRole(role.id ?? '')}
               />
               <label
@@ -277,6 +344,11 @@
             </div>
           {/each}
         </div>
+        {#if ownerBlockedByEnd && grantableRoles.some((r) => isOwnerRole(r.id))}
+          <p id="member-owner-reason-{member.subjectId}" class="text-xs text-muted-foreground">
+            Clear the access end date before you make this member an owner.
+          </p>
+        {/if}
         {#if ungrantableHeldRoles.length > 0}
           <p class="text-xs text-muted-foreground">
             You cannot change a role that gives more access than you have.
@@ -344,6 +416,23 @@
         </div>
       </div>
 
+      <div class="space-y-2">
+        <AccessEndField
+          id="member-access-end-{member.subjectId}"
+          bind:value={editingEndDay}
+          now={now.current}
+          isOwner={editingOwner}
+          ceiling={callerAccessEndsAt}
+          forMember
+          hasStoredEnd={originalEndDay !== ""}
+        />
+        {#if canRemoveEnd}
+          <Button variant="outline" size="sm" onclick={() => (editingEndDay = "")}>
+            Remove the end date
+          </Button>
+        {/if}
+      </div>
+
       <!-- Cancel / Save - only when dirty -->
       {#if isDirty}
         <FormError issues={saveError} focusOnShow />
@@ -357,7 +446,7 @@
           </Button>
           <Button
             class="flex-1"
-            disabled={isSaving}
+            disabled={isSaving || !endOffered}
             onclick={handleSave}
           >
             {#if isSaving}

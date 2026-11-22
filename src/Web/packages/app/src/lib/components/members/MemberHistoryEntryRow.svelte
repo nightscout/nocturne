@@ -8,7 +8,8 @@
     type TenantRoleDto,
   } from "@nocturne/api-client";
   import { scopeLabels } from "#lib/constants/scope-labels.svelte.js";
-  import { formatDateTime } from "#lib/utils/formatting.js";
+  import { formatDateTime, formatMediumDate } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
 
   interface Props {
     entry: MemberHistoryEntry;
@@ -50,6 +51,18 @@
   const permission = $derived(
     labels[entry.permission ?? ""] ?? entry.permission ?? "",
   );
+  const accessEnd = $derived(
+    entry.accessEndsAt ? formatMediumDate(accessEndDate(entry.accessEndsAt)) : "",
+  );
+  /**
+   * A membership made by an invite is recorded with the person who joined as its actor, so "gave"
+   * would name them as the giver of their own access.
+   */
+  const joined = $derived(
+    !!entry.viaInvite &&
+      !!entry.member?.subjectId &&
+      entry.actor?.subjectId === entry.member.subjectId,
+  );
   const gained = $derived((entry.gained ?? []).map((p) => labels[p] ?? p).join(", "));
   const lost = $derived((entry.lost ?? []).map((p) => labels[p] ?? p).join(", "));
 </script>
@@ -63,7 +76,17 @@
   </time>
   <div class="min-w-0 flex-1 space-y-1 text-sm">
     <p>
-      {#if entry.kind === MemberHistoryKind.RoleGiven}
+      {#if joined && entry.kind === MemberHistoryKind.RoleGiven}
+        {actor} joined with the role {role}.
+      {:else if joined && entry.kind === MemberHistoryKind.PermissionGiven}
+        {actor} joined with the permission {permission}.
+      {:else if joined && entry.kind === MemberHistoryKind.AccessGiven}
+        {actor} joined with a role or a permission. The detail is no longer stored.
+      {:else if joined && entry.historyLimit === MemberHistoryLimit.TwentyFourHours}
+        {actor} joined with access to the last 24 hours only.
+      {:else if joined && entry.kind === MemberHistoryKind.AccessEndSet}
+        {actor} joined with access that ends on {accessEnd}.
+      {:else if entry.kind === MemberHistoryKind.RoleGiven}
         {actor} gave {member} the role {role}.
       {:else if entry.kind === MemberHistoryKind.RoleTaken}
         {actor} removed the role {role} from {member}.
@@ -83,6 +106,12 @@
         {:else}
           {actor} changed the history limit of {member}. The detail is no longer stored.
         {/if}
+      {:else if entry.kind === MemberHistoryKind.AccessEndSet}
+        {actor} set {member}'s access to end on {accessEnd}.
+      {:else if entry.kind === MemberHistoryKind.AccessEndCleared}
+        {actor} removed the end date of {member}'s access.
+      {:else if entry.kind === MemberHistoryKind.AccessEndChanged}
+        {actor} changed the end date of {member}'s access. The detail is no longer stored.
       {:else if entry.kind === MemberHistoryKind.RolePermissionsChanged}
         {#if entry.role}
           {actor} changed the permissions of the role {role}.

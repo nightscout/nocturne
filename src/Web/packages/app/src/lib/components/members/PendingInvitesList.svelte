@@ -6,7 +6,8 @@
   import Link from "@lucide/svelte/icons/link";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import type { MemberInviteInfo } from "@nocturne/api-client";
 
   interface Props {
@@ -28,6 +29,10 @@
   </Card.Header>
   <Card.Content class="space-y-3">
     {#each invites as invite (invite.id)}
+      {@const inviteName = invite.label ?? "Invite link"}
+      {@const accessEnd = invite.accessEndsAt
+        ? formatMediumDate(accessEndDate(invite.accessEndsAt))
+        : null}
       <div
         class="flex items-center justify-between gap-4 rounded-md border p-3"
       >
@@ -52,6 +57,9 @@
             {/if}
             {#if invite.limitTo24Hours}
               &middot; Last 24 hours only
+            {/if}
+            {#if accessEnd}
+              &middot; Access ends {accessEnd}
             {/if}
           </p>
           {#if invite.usedBy && invite.usedBy.length > 0}
@@ -78,6 +86,7 @@
           variant="ghost-destructive"
           size="sm"
           class="shrink-0"
+          aria-label="Revoke {inviteName}"
           disabled={isRevoking && !!invite.id}
           onclick={() => onRevoke(invite.id!)}
         >

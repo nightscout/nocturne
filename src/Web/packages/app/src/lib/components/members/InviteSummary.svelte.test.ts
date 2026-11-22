@@ -2,6 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import type { JoinInviteInfo } from "@nocturne/api-client";
+import { formatMediumDate } from "#lib/utils/formatting.js";
+import { accessEndInstant } from "./access-end.js";
 import InviteSummary from "./InviteSummary.svelte";
 
 const viewerInvite: JoinInviteInfo = {
@@ -22,6 +24,28 @@ describe("InviteSummary", () => {
     await expect
       .element(page.getByText("Sam's Diabetes").first())
       .toBeVisible();
+  });
+
+  it("states the day the invited access ends", async () => {
+    render(InviteSummary, {
+      props: {
+        invite: { ...viewerInvite, accessEndsAt: accessEndInstant("2099-07-14") },
+        signedIn: false,
+      },
+    });
+
+    await expect
+      .element(
+        page.getByText(`Your access ends on ${formatMediumDate(new Date(2099, 6, 14))}.`),
+      )
+      .toBeVisible();
+  });
+
+  it("states no end when the invited access has none", async () => {
+    render(InviteSummary, { props: { invite: viewerInvite, signedIn: false } });
+
+    await expect.element(page.getByText("Alex Carer")).toBeVisible();
+    expect(page.getByText("Your access ends", { exact: false }).elements()).toHaveLength(0);
   });
 
   it("describes the role and what it gives access to", async () => {

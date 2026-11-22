@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
@@ -18,7 +19,9 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// rows and from a global role's permission change. Deleting a subject clears the details of every
 /// row that names it, so a row with no details is kept and reads as a change whose detail is unknown.
 /// A <c>SubjectService</c> row cleared the same way is indistinguishable from one of these when it
-/// carries a tenant id, and reads the same way.
+/// carries a tenant id, and reads the same way. An <c>access_end_changed</c> row is told apart by its
+/// <c>access_ends_at</c> key: a string is the new end, a null is a cleared end, and no key is a row
+/// whose detail is unknown.
 /// </remarks>
 public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHistoryReader
 {
@@ -27,6 +30,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         AuthAuditEventType.RoleAssigned,
         AuthAuditEventType.RoleRemoved,
         AuthAuditEventType.HistoryLimitChanged,
+        AuthAuditEventType.AccessEndChanged,
         AuthAuditEventType.RolePermissionsChanged,
     ];
 
@@ -88,6 +92,12 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         {
             AuthAuditEventType.HistoryLimitChanged => MemberHistoryKind.HistoryLimitChanged,
             AuthAuditEventType.RolePermissionsChanged => MemberHistoryKind.RolePermissionsChanged,
+            AuthAuditEventType.AccessEndChanged => details switch
+            {
+                { AccessEndRecorded: false } => MemberHistoryKind.AccessEndChanged,
+                { AccessEndsAt: null } => MemberHistoryKind.AccessEndCleared,
+                _ => MemberHistoryKind.AccessEndSet,
+            },
             _ when details.Role is not null => given ? MemberHistoryKind.RoleGiven : MemberHistoryKind.RoleTaken,
             _ when details.Permission is not null => given ? MemberHistoryKind.PermissionGiven : MemberHistoryKind.PermissionTaken,
             _ => given ? MemberHistoryKind.AccessGiven : MemberHistoryKind.AccessTaken,
@@ -104,6 +114,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             details.HistoryLimit,
             details.Gained,
             details.Lost,
+            details.AccessEndsAt,
             details.InviteId is not null,
             details.InviteId is { } invite ? labels.GetValueOrDefault(invite) : null);
     }
@@ -130,9 +141,9 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
     private sealed record Details(
         string? Role, string? Permission, MemberHistoryLimit? HistoryLimit, Guid? InviteId,
-        IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost)
+        IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost, bool AccessEndRecorded, DateTime? AccessEndsAt)
     {
-        private static readonly Details Unknown = new(null, null, null, null, null, null);
+        private static readonly Details Unknown = new(null, null, null, null, null, null, false, null);
 
         public static Details Of(string? json)
         {
@@ -144,6 +155,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             if (root.ValueKind != JsonValueKind.Object)
                 return Unknown;
 
+            var instant = Instant(root, MemberAccessAudit.AccessEndsAtKey);
             return new Details(
                 Text(root, MemberAccessAudit.RoleKey),
                 Text(root, MemberAccessAudit.PermissionKey),
@@ -155,11 +167,20 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 },
                 Guid.TryParse(Text(root, MemberAccessAudit.InviteKey), out var invite) ? invite : null,
                 List(root, MemberAccessAudit.GainedKey),
-                List(root, MemberAccessAudit.LostKey));
+                List(root, MemberAccessAudit.LostKey),
+                root.TryGetProperty(MemberAccessAudit.AccessEndsAtKey, out var end)
+                    && (end.ValueKind == JsonValueKind.Null || instant is not null),
+                instant);
         }
 
         private static string? Text(JsonElement root, string key) =>
             root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+        private static DateTime? Instant(JsonElement root, string key) =>
+            DateTime.TryParse(Text(root, key), CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var instant)
+                ? instant
+                : null;
 
         private static List<string>? List(JsonElement root, string key) =>
             root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Array

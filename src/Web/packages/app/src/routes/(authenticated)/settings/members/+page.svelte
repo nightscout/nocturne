@@ -26,6 +26,7 @@
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
+    setMemberAccessEnd,
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import {
     getPendingRequests,
@@ -92,6 +93,10 @@
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
+  const callerAccessEndsAt = $derived(
+    allMembers.find((m) => m.subjectId === page.data.user?.subjectId)?.accessEndsAt,
+  );
+
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
   const publicStatus = $derived(
@@ -138,8 +143,11 @@
   async function saveMemberChanges(memberId: string, changes: MemberChanges) {
     isSavingMember = true;
     memberSaveError = null;
-    const { access, limitTo24Hours } = changes;
+    const { access, limitTo24Hours, accessEndsAt } = changes;
     try {
+      if (accessEndsAt === null) {
+        await setMemberAccessEnd({ id: memberId, request: { accessEndsAt } });
+      }
       await Promise.all([
         ...(access
           ? [
@@ -154,6 +162,9 @@
           ? [setMemberLimitTo24Hours({ id: memberId, request: { limitTo24Hours } })]
           : []),
       ]);
+      if (typeof accessEndsAt === "string") {
+        await setMemberAccessEnd({ id: memberId, request: { accessEndsAt } });
+      }
       successMessage = { text: "Member updated successfully.", wash: true };
       expandedMember = null;
       clearMessages();
@@ -164,10 +175,10 @@
     }
   }
 
-  async function handleApproveRequest(requestId: string, roleIds: string[]) {
+  async function handleApproveRequest(requestId: string, roleIds: string[], accessEndsAt?: string) {
     errorMessage = null;
     try {
-      await approveRequest({ id: requestId, request: { roleIds } });
+      await approveRequest({ id: requestId, request: { roleIds, accessEndsAt } });
       successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {
@@ -262,6 +273,7 @@
         <PendingRequestsList
           requests={pendingRequests}
           roles={allRoles}
+          {callerAccessEndsAt}
           onApprove={handleApproveRequest}
           onDeny={handleDenyRequest}
         />
@@ -285,6 +297,7 @@
               canViewHistory={canViewMemberHistory}
               canSeeRecoveryEmail={canEditMemberRoles}
               currentSubjectId={page.data.user?.subjectId}
+              {callerAccessEndsAt}
               isExpanded={expandedMember === member.subjectId}
               isSaving={isSavingMember}
               saveError={expandedMember === member.subjectId ? memberSaveError : null}
@@ -313,6 +326,7 @@
         {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
+            {callerAccessEndsAt}
             onCancel={() => (showCreateInvite = false)}
           />
         {:else}
