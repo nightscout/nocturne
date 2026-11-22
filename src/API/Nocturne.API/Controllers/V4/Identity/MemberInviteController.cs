@@ -603,7 +603,7 @@ public class MemberInviteController : ControllerBase
         if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, now) is (var status, var detail))
             return Problem(detail: detail, statusCode: status);
 
-        return await _members.SetAccessEndUnlessOwnerAsync(tenantId, member.Id, accessEndsAt, now, ct) switch
+        return await _tenantService.SetMemberAccessEndAsync(tenantId, member.Id, accessEndsAt, now, ct) switch
         {
             OwnerGuardedChange.NotFound => NotFound(),
             OwnerGuardedChange.OwnerAccessEnds => Problem(detail: AccessEndRequest.OwnerDetail, statusCode: 400),

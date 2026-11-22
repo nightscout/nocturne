@@ -1,8 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -11,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
@@ -393,6 +397,61 @@ public class HubCredentialVerifierTests
         _guestLinks
             .Setup(g => g.ValidateSessionAsync(_grant, It.IsAny<CancellationToken>()))
             .ReturnsAsync((GuestSessionInfo?)null);
+
+        (await StillCoveredAsync(admitted)).Should().BeFalse();
+    }
+
+    /// <summary>A guest link made, activated and admitted on the real guest link service, which the hub proves it against.</summary>
+    private async Task<(GuestLinkService Links, INocturneDbContextFactory Contexts, HubAuthorization Admitted)> AdmittedGuestAsync()
+    {
+        await SeedAsync();
+        var contexts = _contexts.AsNocturneFactory();
+        var sessions = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
+        var links = new GuestLinkService(
+            contexts, new OAuthGrantRepository(contexts), sessions, new GrantRevocationService(sessions),
+            NullLogger<GuestLinkService>.Instance);
+        _guestLinks
+            .Setup(g => g.ValidateSessionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => links.ValidateSessionAsync(id, ct));
+        var created = await links.CreateGuestLinkAsync(
+            _subject, _subject, "Link", "https://example.test",
+            new HashSet<string> { Scope.FullAccess }, expiresNoLaterThan: null);
+        (await links.ActivateAsync(created.Code, null, null)).Success.Should().BeTrue();
+
+        var admitted = await AdmittedAsync(Credential(AuthType.Guest, created.Info.Id, HubCredentialKind.Restricted));
+        (await StillCoveredAsync(admitted)).Should().BeTrue();
+        return (links, contexts, admitted);
+    }
+
+    [Fact]
+    public async Task A_guest_credential_ends_when_its_link_is_capped_to_an_instant_that_has_passed()
+    {
+        var (_, contexts, admitted) = await AdmittedGuestAsync();
+
+        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, Tenant))
+        {
+            var capped = await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(
+                _subject, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow, CancellationToken.None);
+            capped.Should().ContainSingle();
+            await unit.Context.SaveChangesAsync();
+        }
+
+        (await StillCoveredAsync(admitted)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_guest_credential_ends_when_its_link_is_revoked_with_the_member_who_made_it()
+    {
+        var (_, contexts, admitted) = await AdmittedGuestAsync();
+
+        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, Tenant))
+        {
+            var grants = new OAuthGrantRepository(unit);
+            var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(_subject, DateTime.UtcNow, CancellationToken.None);
+            await new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())))
+                .StageAsync(unit, handedOut, CancellationToken.None);
+            await unit.Context.SaveChangesAsync();
+        }
 
         (await StillCoveredAsync(admitted)).Should().BeFalse();
     }

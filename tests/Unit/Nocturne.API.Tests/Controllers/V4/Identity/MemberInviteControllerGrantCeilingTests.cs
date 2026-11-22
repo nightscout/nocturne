@@ -2,8 +2,12 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
@@ -136,7 +140,20 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
-            Mock.Of<ITenantService>(),
+            // The real service: setting an end date also caps the guest links the member made.
+            new TenantService(
+                _dbContext.AsFactory(),
+                new TenantRepository(_dbContext.AsFactory()),
+                new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+                new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+                new MemoryCache(new MemoryCacheOptions()),
+                Options.Create(new OperatorConfiguration()),
+                Mock.Of<IHttpClientFactory>(),
+                Mock.Of<ITenantRoleService>(),
+                new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+                TimeProvider.System,
+                Mock.Of<ILogger<TenantService>>(),
+                AccountLinkRoutes.Off),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
             new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
@@ -836,6 +853,54 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
 
         ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.PastDetail);
         (await TargetAccessEndAsync()).Should().BeNull();
+    }
+
+    private async Task<Guid> SeedGuestLinkMadeByTargetAsync(DateTime expiresAt)
+    {
+        var id = Guid.CreateVersion7();
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = id,
+            TenantId = _tenantId,
+            SubjectId = _callerSubjectId,
+            CreatedBySubjectId = _targetSubjectId,
+            GrantType = OAuthGrantTypes.Guest,
+            Scopes = [Scope.GlucoseRead],
+            TokenHash = id.ToString("N"),
+            ExpiresAt = expiresAt,
+        });
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        return id;
+    }
+
+    private async Task<DateTime?> GrantExpiryAsync(Guid id) =>
+        (await _dbContext.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == id)).ExpiresAt;
+
+    [Fact]
+    public async Task SetMemberAccessEnd_capsTheGuestLinksTheMemberMadeAtTheNewDate()
+    {
+        var expiresAt = AccessEndNow.UtcDateTime.AddHours(48);
+        var link = await SeedGuestLinkMadeByTargetAsync(expiresAt);
+        var controller = BuildController(AdministratorScopes);
+
+        (await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(1))).Should().BeOfType<NoContentResult>();
+
+        (await GrantExpiryAsync(link)).Should().Be(AccessEndNow.UtcDateTime.AddDays(1));
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_refusedForAPastDate_capsNoLink()
+    {
+        var expiresAt = AccessEndNow.UtcDateTime.AddHours(48);
+        var link = await SeedGuestLinkMadeByTargetAsync(expiresAt);
+        var controller = BuildController(AdministratorScopes);
+
+        ShouldRefuse(
+            await SetTargetAccessEndAsync(controller, AccessEndNow.AddMinutes(-1)),
+            StatusCodes.Status400BadRequest, AccessEndRequest.PastDetail);
+
+        (await GrantExpiryAsync(link)).Should().Be(expiresAt);
     }
 
     [Fact]

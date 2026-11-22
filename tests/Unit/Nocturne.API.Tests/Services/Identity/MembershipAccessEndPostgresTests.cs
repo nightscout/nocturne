@@ -2,11 +2,13 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.API.Configuration;
 using Nocturne.API.Multitenancy;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
@@ -17,6 +19,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -321,5 +324,353 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         await ShouldBeUntouchedAsync(state);
         (await new SubjectRepository(state.Seeded.Contexts, AccountLinkRoutes.Off).GetAsync(state.Seeded.Guest, CancellationToken.None))!
             .Should().Match<SubjectRecord>(s => !s.IsActive && s.ApprovalStatus == "Pending", "the activation rolled back with the rest");
+    }
+
+    private static readonly string[] GuestScopes = [Scope.GlucoseRead];
+
+    private TenantService Service(INocturneDbContextFactory contexts, GuestSessionCacheService sessions) => new(
+        contexts,
+        new TenantRepository(contexts),
+        new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+        new SubjectRepository(contexts, AccountLinkRoutes.Off),
+        new MemoryCache(new MemoryCacheOptions()),
+        Options.Create(new OperatorConfiguration()),
+        Mock.Of<IHttpClientFactory>(),
+        Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(sessions),
+        new FakeTimeProvider(Now),
+        Mock.Of<ILogger<TenantService>>(),
+        AccountLinkRoutes.Off);
+
+    private static GuestSessionCacheService Sessions() => new(new MemoryCache(new MemoryCacheOptions()));
+
+    private Task<Guid> NewSubjectAsync(Seeded seeded, string name) =>
+        new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), CancellationToken.None);
+
+    private async Task<Guid> GuestLinkAsync(
+        Seeded seeded, Guid createdBy, Guid dataOwner, DateTime expiresAt, GuestSessionCacheService? sessions = null)
+    {
+        var id = await new OAuthGrantRepository(seeded.Contexts).CreateAsync(
+            new NewOAuthGrant(
+                null, dataOwner, OAuthGrantTypes.Guest, GuestScopes, "link", Guid.NewGuid().ToString("N"), null, expiresAt, false,
+                CreatedBySubjectId: createdBy),
+            CancellationToken.None);
+        sessions?.Set(seeded.Tenant, id, new GuestSessionInfo(id, seeded.Tenant, dataOwner, GuestScopes, "link", expiresAt, false));
+        return id;
+    }
+
+    private async Task<OAuthGrantRecord> LinkAsync(Seeded seeded, Guid id) =>
+        (await new OAuthGrantRepository(seeded.Contexts).GetAsync(id, CancellationToken.None))!;
+
+    private async Task<List<(string EventType, string Details)>> LinkAuditAsync(Seeded seeded, Guid target)
+    {
+        await using var db = Context(seeded.Tenant);
+        return (await db.AuthAuditLog.AsNoTracking()
+                .Where(r => r.TargetSubjectId == target
+                    && (r.EventType == AuthAuditEventType.GuestLinkCapped || r.EventType == AuthAuditEventType.GuestLinkRevoked))
+                .Select(r => new { r.EventType, r.DetailsJson })
+                .ToListAsync())
+            .Select(r => (r.EventType, r.DetailsJson ?? string.Empty))
+            .ToList();
+    }
+
+    private async Task<OwnerGuardedChange> SetEndAsync(Seeded seeded, GuestSessionCacheService sessions, DateTime? end) =>
+        await Service(seeded.Contexts, sessions).SetMemberAccessEndAsync(
+            seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id, end, Now.UtcDateTime);
+
+    [Fact]
+    public async Task SettingAnEndDateCapsTheLinkThatWouldOutliveItAndLeavesOneThatEndsSooner()
+    {
+        var seeded = await SeedAsync("cap", accessEndsAt: null);
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "cap-owner");
+        var long48 = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(48), sessions);
+        var short6 = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(6), sessions);
+        var end = Now.UtcDateTime.AddDays(1);
+
+        (await SetEndAsync(seeded, sessions, end)).Should().Be(OwnerGuardedChange.Changed);
+
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().Be(end);
+        (await LinkAsync(seeded, long48)).ExpiresAt.Should().Be(end);
+        (await LinkAsync(seeded, short6)).ExpiresAt.Should().Be(Now.UtcDateTime.AddHours(6));
+        sessions.TryGet(seeded.Tenant, long48, out _).Should().BeFalse("the capped link's cached session is evicted");
+        sessions.TryGet(seeded.Tenant, short6, out _).Should().BeTrue("a link that was not changed keeps its session");
+        var audit = (await LinkAuditAsync(seeded, seeded.Guest)).Should().ContainSingle().Subject;
+        audit.EventType.Should().Be(AuthAuditEventType.GuestLinkCapped);
+        using var details = System.Text.Json.JsonDocument.Parse(audit.Details);
+        details.RootElement.GetProperty("grant").GetString().Should().Be(long48.ToString());
+        details.RootElement.GetProperty("expires_at").GetDateTime().ToUniversalTime().Should().Be(end);
+        details.RootElement.GetProperty("kind").GetString().Should().Be("tenant");
+    }
+
+    [Fact]
+    public async Task ShorteningTheEndDateCapsTheLinksAgain()
+    {
+        var seeded = await SeedAsync("shorten", accessEndsAt: null);
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "shorten-owner");
+        var first = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(40));
+        var second = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(30));
+
+        await SetEndAsync(seeded, sessions, Now.UtcDateTime.AddHours(36));
+        (await LinkAsync(seeded, first)).ExpiresAt.Should().Be(Now.UtcDateTime.AddHours(36));
+        (await LinkAsync(seeded, second)).ExpiresAt.Should().Be(Now.UtcDateTime.AddHours(30));
+
+        await SetEndAsync(seeded, sessions, Now.UtcDateTime.AddHours(12));
+
+        (await LinkAsync(seeded, first)).ExpiresAt.Should().Be(Now.UtcDateTime.AddHours(12));
+        (await LinkAsync(seeded, second)).ExpiresAt.Should().Be(Now.UtcDateTime.AddHours(12));
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().HaveCount(3, "one row per link capped, in each change");
+    }
+
+    [Fact]
+    public async Task MovingTheEndDateLaterOrClearingItChangesNoLink()
+    {
+        var seeded = await SeedAsync("lengthen", Now.UtcDateTime.AddDays(1));
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "lengthen-owner");
+        var expiresAt = Now.UtcDateTime.AddHours(12);
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt, sessions);
+
+        (await SetEndAsync(seeded, sessions, Now.UtcDateTime.AddDays(3))).Should().Be(OwnerGuardedChange.Changed);
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().Be(Now.UtcDateTime.AddDays(3));
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(expiresAt, "a later end date is not a cap");
+
+        (await SetEndAsync(seeded, sessions, null)).Should().Be(OwnerGuardedChange.Changed);
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().BeNull();
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(expiresAt, "clearing the end date lengthens nothing");
+        sessions.TryGet(seeded.Tenant, link, out _).Should().BeTrue();
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ACapLeavesTheLinksAnotherMemberMadeAndTheOnesThisMemberMadeInAnotherTenant()
+    {
+        var seeded = await SeedAsync("cap-scope", accessEndsAt: null);
+        var elsewhere = await SeedAsync("cap-scope-other", accessEndsAt: null);
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "cap-scope-owner");
+        var otherMember = await NewSubjectAsync(seeded, "cap-scope-member");
+        var expiresAt = Now.UtcDateTime.AddHours(48);
+        var theirs = await GuestLinkAsync(seeded, otherMember, owner, expiresAt);
+        var otherTenant = await GuestLinkAsync(elsewhere, seeded.Guest, elsewhere.Guest, expiresAt);
+
+        await SetEndAsync(seeded, sessions, Now.UtcDateTime.AddHours(1));
+
+        (await LinkAsync(seeded, theirs)).ExpiresAt.Should().Be(expiresAt);
+        (await LinkAsync(elsewhere, otherTenant)).ExpiresAt.Should().Be(expiresAt);
+        (await LinkAuditAsync(seeded, otherMember)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARefusedEndDateCapsNothing()
+    {
+        var seeded = await SeedAsync("cap-refused", accessEndsAt: null);
+        var owner = await NewSubjectAsync(seeded, "cap-refused-owner");
+        var members = new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off);
+        var ownerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
+        (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, owner, [ownerRole]), CancellationToken.None)).Should().BeTrue();
+        var ownerMember = (await members.FindMemberAsync(seeded.Tenant, owner, CancellationToken.None))!;
+        var expiresAt = Now.UtcDateTime.AddHours(48);
+        var link = await GuestLinkAsync(seeded, owner, owner, expiresAt);
+
+        (await Service(seeded.Contexts, Sessions()).SetMemberAccessEndAsync(
+                seeded.Tenant, ownerMember.Id, Now.UtcDateTime.AddHours(1), Now.UtcDateTime))
+            .Should().Be(OwnerGuardedChange.OwnerAccessEnds);
+
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(expiresAt);
+        (await LinkAuditAsync(seeded, owner)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ACapThatFailsToCommitLeavesTheDateAndTheLinksAsTheyWere()
+    {
+        var seeded = await SeedAsync("cap-rollback", accessEndsAt: null);
+        var owner = await NewSubjectAsync(seeded, "cap-rollback-owner");
+        var expiresAt = Now.UtcDateTime.AddHours(48);
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt);
+        var memberId = (await MembershipRowsAsync(seeded)).Single().Id;
+
+        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(seeded.Contexts, seeded.Tenant))
+        {
+            var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
+            await FluentActions.Awaiting(() => unit.CommitAsync(async ct =>
+            {
+                await members.SetAccessEndUnlessOwnerAsync(seeded.Tenant, memberId, Now.UtcDateTime.AddHours(1), Now.UtcDateTime, ct);
+                await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(seeded.Guest, Now.UtcDateTime.AddHours(1), Now.UtcDateTime, ct);
+                await unit.Context.SaveChangesAsync(ct);
+                throw new InvalidOperationException("rolled back");
+            })).Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(expiresAt);
+        (await MembershipRowsAsync(seeded)).Should().ContainSingle().Which.AccessEndsAt.Should().BeNull();
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().BeEmpty();
+    }
+
+    private sealed class RefuseGrantSaves : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<OAuthGrantEntity>().Any(e => e.State == EntityState.Modified))
+                throw new InvalidOperationException("grant save refused");
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    private NocturneDbContext ContextRefusingGrantSaves(Guid tenant) =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor(), new RefuseGrantSaves())
+            .Options) { TenantId = tenant };
+
+    [Fact]
+    public async Task ASetMemberAccessEndThatFailsAfterTheCapIsStagedChangesNothingAndEvictsNothing()
+    {
+        var seeded = await SeedAsync("cap-service-rollback", accessEndsAt: null);
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "cap-service-rollback-owner");
+        var expiresAt = Now.UtcDateTime.AddHours(48);
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt, sessions);
+        var memberId = (await MembershipRowsAsync(seeded)).Single().Id;
+        var failing = new Factory(ContextRefusingGrantSaves, seeded.Tenant);
+
+        await FluentActions.Awaiting(() => Service(failing, sessions).SetMemberAccessEndAsync(
+                seeded.Tenant, memberId, Now.UtcDateTime.AddHours(1), Now.UtcDateTime))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("grant save refused");
+
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().BeNull("the date and the cap commit together or not at all");
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(expiresAt);
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().BeEmpty();
+        await using (var db = Context(seeded.Tenant))
+        {
+            (await db.AuthAuditLog.AsNoTracking().AnyAsync(r =>
+                    r.TargetSubjectId == seeded.Guest && r.EventType == AuthAuditEventType.AccessEndChanged))
+                .Should().BeFalse();
+        }
+
+        sessions.TryGet(seeded.Tenant, link, out _).Should().BeTrue("a change that did not commit evicts nothing");
+    }
+
+    private MemberInviteService InviteService(Seeded seeded, GuestSessionCacheService sessions, bool staleInvites) =>
+        new(
+            new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off),
+            staleInvites ? new StaleInviteReads(seeded.Contexts) : new MemberInviteRepository(seeded.Contexts),
+            new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off),
+            seeded.Contexts,
+            Mock.Of<IJwtService>(),
+            Mock.Of<ITenantRoleService>(),
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }),
+            new FakeTimeProvider(Now),
+            NullLogger<MemberInviteService>.Instance,
+            AccountLinkRoutes.Off,
+            new GrantRevocationService(sessions));
+
+    private async Task<(string Token, Guid Link)> InviteAndLinkOfEndedMemberAsync(
+        Seeded seeded, Guid dataOwner, GuestSessionCacheService sessions, bool claimLastUse)
+    {
+        var link = await GuestLinkAsync(seeded, seeded.Guest, dataOwner, Now.UtcDateTime.AddHours(48), sessions);
+        var token = $"token-{Guid.NewGuid():N}";
+        var invites = new MemberInviteRepository(seeded.Contexts);
+        var inviteId = await invites.CreateAsync(
+            new NewMemberInvite(
+                seeded.Tenant, seeded.Guest, HashUtils.Sha256Hex(token), [seeded.CaretakerRole], null, null, false,
+                Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
+            CancellationToken.None);
+        if (claimLastUse)
+            (await invites.TryClaimUseAsync(inviteId, CancellationToken.None)).Should().BeTrue();
+        return (token, link);
+    }
+
+    [Fact]
+    public async Task JoiningAgainRevokesTheLiveLinksTheEndedMemberMadeAndEvictsTheirSessionsAfterTheCommit()
+    {
+        var seeded = await SeedAsync("rejoin-links", Now.UtcDateTime.AddDays(-1));
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "rejoin-links-owner");
+        var (token, link) = await InviteAndLinkOfEndedMemberAsync(seeded, owner, sessions, claimLastUse: false);
+
+        var result = await InviteService(seeded, sessions, staleInvites: false).AcceptInviteAsync(token, seeded.Guest, seeded.Tenant);
+
+        result.Success.Should().BeTrue();
+        (await LinkAsync(seeded, link)).RevokedAt.Should().NotBeNull();
+        sessions.TryGet(seeded.Tenant, link, out _).Should().BeFalse();
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().ContainSingle()
+            .Which.EventType.Should().Be(AuthAuditEventType.GuestLinkRevoked);
+    }
+
+    [Fact]
+    public async Task AJoinRefusedAfterTheReplaceRollsBackTheLinkRevocationItsAuditRowAndTheEviction()
+    {
+        var seeded = await SeedAsync("rejoin-links-refused", Now.UtcDateTime.AddDays(-1));
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "rejoin-links-refused-owner");
+        var (token, link) = await InviteAndLinkOfEndedMemberAsync(seeded, owner, sessions, claimLastUse: true);
+
+        var result = await InviteService(seeded, sessions, staleInvites: true).AcceptInviteAsync(token, seeded.Guest, seeded.Tenant);
+
+        result.ErrorCode.Should().Be("exhausted");
+        (await LinkAsync(seeded, link)).RevokedAt.Should().BeNull();
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().BeEmpty();
+        sessions.TryGet(seeded.Tenant, link, out _).Should().BeTrue("a refused join evicts nothing");
+        (await MembershipRowsAsync(seeded)).Should().ContainSingle().Which.AccessEndsAt.Should().Be(Now.UtcDateTime.AddDays(-1));
+    }
+
+    [Fact]
+    public async Task RemovingAMemberRevokesTheLinksTheyMadeAndLeavesTheOthers()
+    {
+        var seeded = await SeedAsync("remove-links", accessEndsAt: null);
+        var elsewhere = await SeedAsync("remove-links-other", accessEndsAt: null);
+        var sessions = Sessions();
+        var owner = await NewSubjectAsync(seeded, "remove-links-owner");
+        var otherMember = await NewSubjectAsync(seeded, "remove-links-member");
+        var expiresAt = Now.UtcDateTime.AddHours(48);
+        var made = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt, sessions);
+        var madeOnTheirOwnData = await GuestLinkAsync(seeded, seeded.Guest, seeded.Guest, expiresAt, sessions);
+        var expired = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(-1));
+        var anothers = await GuestLinkAsync(seeded, otherMember, owner, expiresAt, sessions);
+        var otherTenant = await GuestLinkAsync(elsewhere, seeded.Guest, elsewhere.Guest, expiresAt);
+
+        (await Service(seeded.Contexts, sessions).RemoveMemberAsync(seeded.Tenant, seeded.Guest)).Ok.Should().BeTrue();
+
+        (await LinkAsync(seeded, made)).RevokedAt.Should().NotBeNull();
+        (await LinkAsync(seeded, madeOnTheirOwnData)).RevokedAt.Should().NotBeNull();
+        (await LinkAsync(seeded, expired)).RevokedAt.Should().BeNull("an expired link has nothing left to revoke");
+        (await LinkAsync(seeded, anothers)).RevokedAt.Should().BeNull();
+        (await LinkAsync(elsewhere, otherTenant)).RevokedAt.Should().BeNull();
+        sessions.TryGet(seeded.Tenant, made, out _).Should().BeFalse();
+        sessions.TryGet(seeded.Tenant, madeOnTheirOwnData, out _).Should().BeFalse();
+        sessions.TryGet(seeded.Tenant, anothers, out _).Should().BeTrue();
+
+        var audit = await LinkAuditAsync(seeded, seeded.Guest);
+        audit.Should().HaveCount(2).And.OnlyContain(r => r.EventType == AuthAuditEventType.GuestLinkRevoked);
+        audit.Select(r => System.Text.Json.JsonDocument.Parse(r.Details).RootElement.GetProperty("grant").GetString())
+            .Should().BeEquivalentTo([made.ToString(), madeOnTheirOwnData.ToString()]);
+        (await LinkAuditAsync(seeded, otherMember)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARemovalThatRollsBackRevokesNoLink()
+    {
+        var seeded = await SeedAsync("remove-rollback", accessEndsAt: null);
+        var owner = await NewSubjectAsync(seeded, "remove-rollback-owner");
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(48));
+
+        await using (var unit = await DbUnitOfWork.OpenForTenantAsync(seeded.Contexts, seeded.Tenant))
+        {
+            var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
+            var member = (await members.FindMemberAsync(seeded.Tenant, seeded.Guest, CancellationToken.None))!;
+            await FluentActions.Awaiting(() => unit.CommitAsync(async ct =>
+            {
+                await MembershipRemoval.StageAsync(unit, members, Revocation(), seeded.Tenant, member, Now.UtcDateTime, ct);
+                throw new InvalidOperationException("rolled back");
+            })).Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        (await LinkAsync(seeded, link)).RevokedAt.Should().BeNull();
+        (await MembershipRowsAsync(seeded)).Should().ContainSingle();
+        (await LinkAuditAsync(seeded, seeded.Guest)).Should().BeEmpty();
     }
 }

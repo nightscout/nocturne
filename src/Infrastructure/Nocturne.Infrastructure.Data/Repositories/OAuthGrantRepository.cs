@@ -207,6 +207,52 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> GetLiveGuestLinksCreatedByAsync(
+        Guid createdBySubjectId, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        return ToRecords(await LiveGuestLinksCreatedBy(Grants(lease.Context), createdBySubjectId, now)
+            .OrderBy(g => g.CreatedAt)
+            .ToListAsync(ct));
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> CapGuestLinksCreatedByAsync(
+        Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct)
+    {
+        var unit = _unit ?? throw new InvalidOperationException(
+            "Capping guest links stages audit rows with the change, so it needs the caller's unit of work.");
+        var db = unit.Context;
+        var links = await LiveGuestLinksCreatedBy(db.OAuthGrants, createdBySubjectId, now)
+            .Where(g => g.ExpiresAt > notAfter)
+            .OrderBy(g => g.CreatedAt)
+            .ToListAsync(ct);
+        foreach (var link in links)
+        {
+            link.ExpiresAt = notAfter;
+            MemberAccessAudit.StageGuestLinkCapped(db, link.TenantId, createdBySubjectId, link.Id, notAfter);
+        }
+
+        return ToRecords(links);
+    }
+
+    /// <inheritdoc/>
+    public virtual void StageMemberRemovalGuestLinkAudit(IEnumerable<OAuthGrantRecord> links, Guid memberSubjectId)
+    {
+        var unit = _unit ?? throw new InvalidOperationException(
+            "Auditing revoked guest links stages rows with the revocation, so it needs the caller's unit of work.");
+        foreach (var link in links)
+            MemberAccessAudit.StageGuestLinkRevoked(unit.Context, link.TenantId, memberSubjectId, link.Id);
+    }
+
+    private static IQueryable<OAuthGrantEntity> LiveGuestLinksCreatedBy(
+        IQueryable<OAuthGrantEntity> grants, Guid createdBySubjectId, DateTime now) =>
+        grants.Where(g => g.GrantType == OAuthGrantTypes.Guest
+                          && g.CreatedBySubjectId == createdBySubjectId
+                          && g.RevokedAt == null
+                          && g.ExpiresAt > now);
+
+    /// <inheritdoc/>
     public virtual async Task<int> CountLiveGuestLinksAsync(Guid dataOwnerSubjectId, DateTime now, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
