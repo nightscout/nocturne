@@ -267,7 +267,7 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
-    /// List all members of the current tenant.
+    /// List all members of the current tenant. Whether each has a confirmed recovery email is reported only to a caller who holds <c>members.manage</c>.
     /// </summary>
     [HttpGet("members")]
     [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
@@ -281,7 +281,10 @@ public class MemberInviteController : ControllerBase
         if (tenant == null)
             return NotFound();
 
-        return Ok(tenant.Members);
+        var managesMembers = Scope.Satisfies(HttpContext.GetGrantedScopes(), Scope.MembersManage);
+        return Ok(managesMembers
+            ? tenant.Members
+            : tenant.Members.Select(m => m with { HasConfirmedRecoveryEmail = null }).ToList());
     }
 
     /// <summary>

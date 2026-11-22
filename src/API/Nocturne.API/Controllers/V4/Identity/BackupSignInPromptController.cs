@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.CoachMarks;
 using Nocturne.Core.Models.Authorization;
@@ -45,9 +45,7 @@ public class BackupSignInPromptController : ControllerBase
     public async Task<ActionResult<BackupSignInPromptResponse>> GetBackupSignInPrompt(
         CancellationToken cancellationToken)
     {
-        var auth = HttpContext.GetAuthContext();
-        if (auth?.SubjectId is not { } subjectId
-            || auth.AuthType is AuthType.PlatformAccess or AuthType.ApiKey or AuthType.InstanceKey)
+        if (OwnAccountCaller.SubjectId(HttpContext) is not { } subjectId)
             return Ok(new BackupSignInPromptResponse());
 
         if (!await _subjectService.HasSingleSignInMethodAsync(subjectId))

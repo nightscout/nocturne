@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.CoachMarks;
 using Nocturne.Core.Models.Authorization;
@@ -18,6 +19,7 @@ public class CoachMarkServiceTests
 
     private readonly NocturneDbContext _dbContext;
     private readonly CoachMarkService _service;
+    private readonly HttpContextAccessor _httpContextAccessor;
 
     public CoachMarkServiceTests()
     {
@@ -31,10 +33,10 @@ public class CoachMarkServiceTests
             SubjectId = TestSubjectId,
         };
 
-        var httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
+        _httpContextAccessor = new HttpContextAccessor { HttpContext = httpContext };
         var logger = new Mock<ILogger<CoachMarkService>>();
 
-        _service = new CoachMarkService(_dbContext.AsFactory(), httpContextAccessor, TimeProvider.System, logger.Object);
+        _service = new CoachMarkService(_dbContext.AsFactory(), _httpContextAccessor, TimeProvider.System, logger.Object);
     }
 
     [Fact]
@@ -132,5 +134,33 @@ public class CoachMarkServiceTests
 
         updated.SeenAt.Should().Be(originalSeenAt);
         updated.CompletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RestampsCompletedAt_OnEachDismissal()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        var service = new CoachMarkService(
+            _dbContext.AsFactory(), _httpContextAccessor, time, Mock.Of<ILogger<CoachMarkService>>());
+        await service.UpsertAsync("reminder", "dismissed");
+
+        time.Advance(TimeSpan.FromDays(45));
+        var again = await service.UpsertAsync("reminder", "dismissed");
+
+        again.CompletedAt.Should().Be(time.GetUtcNow().UtcDateTime);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_KeepsTheFirstCompletedAt_OnALaterCompletion()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
+        var service = new CoachMarkService(
+            _dbContext.AsFactory(), _httpContextAccessor, time, Mock.Of<ILogger<CoachMarkService>>());
+        var first = await service.UpsertAsync("tour", "completed");
+
+        time.Advance(TimeSpan.FromDays(45));
+        var again = await service.UpsertAsync("tour", "completed");
+
+        again.CompletedAt.Should().Be(first.CompletedAt);
     }
 }

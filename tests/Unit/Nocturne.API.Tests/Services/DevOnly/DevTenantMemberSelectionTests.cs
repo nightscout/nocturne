@@ -49,6 +49,7 @@ public sealed class DevTenantMemberSelectionTests
         IsSystemSubject: isSystemSubject,
         IsDemoSubject: false,
         IsPlatformAdmin: false,
+        HasConfirmedEmail: false,
         Roles: isOwner
             ? [new TenantMemberRoleRecord(OwnerRoleId, "Owner", RoleSeeds.Owner, [Scope.FullAccess])]
             : [],

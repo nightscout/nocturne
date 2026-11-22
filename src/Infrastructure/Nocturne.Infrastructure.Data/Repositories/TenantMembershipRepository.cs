@@ -958,6 +958,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             m.Subject?.IsSystemSubject ?? false,
             m.Subject?.IsDemoSubject ?? false,
             m.Subject?.IsPlatformAdmin ?? false,
+            m.Subject?.EmailConfirmedAt is not null,
             m.MemberRoles
                 .Where(mr => mr.TenantRole is not null)
                 .Select(mr => new TenantMemberRoleRecord(mr.TenantRoleId, mr.TenantRole.Name, mr.TenantRole.Slug, [.. mr.TenantRole.Permissions]))
