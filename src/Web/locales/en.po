@@ -46455,6 +46455,8 @@ msgid "<0/> View history"
 msgstr "<0/> View history"
 
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "A deleted member"
 msgstr "A deleted member"
 
@@ -47317,3 +47319,83 @@ msgstr "Closed because its data was missing for 24 hours."
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "{0} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert."
 msgstr "{0} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert."
+
+#. 0: memberFirst; 1: entry.inviteLabel; 2: by
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined through the invite {1}, made by {2}."
+msgstr "{0} joined through the invite {1}, made by {2}."
+
+#. 0: memberFirst; 1: by
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined through an invite made by {1}."
+msgstr "{0} joined through an invite made by {1}."
+
+#. 0: memberFirst; 1: entry.inviteLabel
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined through the invite {1}."
+msgstr "{0} joined through the invite {1}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined through an invite."
+msgstr "{0} joined through an invite."
+
+#. 0: approver; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} approved {1}'s request to join."
+msgstr "{0} approved {1}'s request to join."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} added {1}."
+msgstr "{0} added {1}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set up this site."
+msgstr "{0} set up this site."
+
+#. 0: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The system added {0}."
+msgstr "The system added {0}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined. The detail is no longer stored."
+msgstr "{0} joined. The detail is no longer stored."
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} removed {1}."
+msgstr "{0} removed {1}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} left."
+msgstr "{0} left."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0}'s account was deleted."
+msgstr "{0}'s account was deleted."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined again. The earlier membership was replaced."
+msgstr "{0} joined again. The earlier membership was replaced."
+
+#. 0: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "The system removed {0}."
+msgstr "The system removed {0}."
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0}'s membership ended. The detail is no longer stored."
+msgstr "{0}'s membership ended. The detail is no longer stored."
+
+#. 0: formatMediumDate(accessEndDate(accessEndedAt))
+#: src/routes/(authenticated)/settings/members/history/+page.svelte
+msgid "<0/> Access ended on {0}."
+msgstr "<0/> Access ended on {0}."
