@@ -59,6 +59,9 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
         var baseUrl = $"{Request.PublicScheme()}://{Request.Host}";
 

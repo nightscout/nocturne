@@ -549,7 +549,7 @@ public class SubjectRepository : ISubjectRepository
         await using var lease = await OpenAsync(ct);
         return await lease.Context.Subjects.AsNoTracking()
             .Where(s => s.Id == subjectId)
-            .Select(s => s.IsPlatformAdmin)
+            .Select(s => s.IsPlatformAdmin && s.IsActive)
             .FirstOrDefaultAsync(ct);
     }
 

@@ -248,6 +248,17 @@ public static class HttpContextExtensions
             : null;
 
     /// <summary>
+    /// Whether the request's subject was read as inactive when the request authenticated. A session or
+    /// OAuth access token outlives its subject's deactivation by up to its lifetime, so an action that
+    /// mints a credential refuses that caller here, from the read the request already made, and
+    /// answers it with <see cref="ControllerBase.Challenge()"/>, as it answers an anonymous caller,
+    /// or as the action answers a refused request where it has such an answer.
+    /// </summary>
+    public static bool IsCallerInactive(this HttpContext context) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
+        && RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true };
+
+    /// <summary>
     /// The maker a device credential this caller creates is stamped with, or null when no subject is
     /// authenticated. Its end is the earlier of the caller's own access end
     /// (<see cref="CallerAccessEndsAt"/>) and the expiry of the grant the request presented, so a

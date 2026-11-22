@@ -63,6 +63,9 @@ public class AlertInvitesController : ControllerBase
     public async Task<ActionResult<AlertInviteResponse>> CreateInvite(
         [FromBody] CreateAlertInviteRequest request, CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         if (!await _alertRules.ChannelExistsAsync(request.AlertRuleChannelId, ct))
             return Problem(detail: "Channel not found", statusCode: 400, title: "Bad Request");
 

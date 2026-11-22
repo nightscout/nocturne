@@ -545,7 +545,8 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 joined => joined.members.DefaultIfEmpty(),
                 (joined, m) => new MembershipRow
                 {
-                    IsPlatformAdmin = joined.s.IsPlatformAdmin,
+                    IsPlatformAdmin = joined.s.IsPlatformAdmin && joined.s.IsActive,
+                    IsActive = joined.s.IsActive,
                     MemberId = (Guid?)m!.Id,
                     DirectPermissions = m.DirectPermissions,
                     RolePermissions = m.MemberRoles.Select(mr => mr.TenantRole.Permissions).ToList(),
@@ -555,13 +556,15 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 })
             .FirstOrDefaultAsync(ct);
 
-        return row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.Facts());
+        return row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.IsActive, row.Facts());
     }
 
     /// <summary>The subject's flag with the membership columns of the left join; <see cref="MemberId"/> is null when there is none.</summary>
     private sealed class MembershipRow
     {
         public bool IsPlatformAdmin { get; init; }
+
+        public bool IsActive { get; init; }
 
         public Guid? MemberId { get; init; }
 

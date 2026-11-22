@@ -298,7 +298,7 @@ public class TenantMembershipRepositoryTests : IDisposable
 
         (await Members().ReadSubjectMembershipAsync(subject, _otherTenant, Now, CancellationToken.None))!.Membership.Should().BeNull();
         (await Members().ReadSubjectMembershipAsync(outsider, _tenant, Now, CancellationToken.None)).Should().BeEquivalentTo(
-            new SubjectMembershipRead(false, null));
+            new SubjectMembershipRead(false, true, null));
         (await Members().ReadSubjectMembershipAsync(Guid.CreateVersion7(), _tenant, Now, CancellationToken.None)).Should().BeNull();
     }
 
