@@ -36,7 +36,12 @@ const ISSUE_MESSAGES: Record<string, string> = {
 	"list_empty:buckets": "A glucose bucket condition needs at least one bucket chosen.",
 	"list_empty:days": "A day-of-week condition needs at least one day chosen.",
 	list_empty: "A condition needs at least one option chosen.",
-	pump_mode_category: "Pump modes cannot be checked with a “State active” condition. Use a “Pump mode” condition instead.",
+	margin_negative: "A clear margin must be 0 or more.",
+	margin_on_equality: "A condition that checks for an exact value cannot have a clear margin. Remove the margin or choose another comparison.",
+	"invalid_field:clear_margin": "A clear margin must be a number, 0 or more.",
+	margin_past_zero: "A clear margin on a rate of change cannot be more than the rate.",
+	margin_under_sustained: "A condition inside “for at least” cannot have a clear margin. Remove the margin or the “for at least”.",
+	pump_mode_category:"Pump modes cannot be checked with a “State active” condition. Use a “Pump mode” condition instead.",
 	unknown_field: "Part of this rule's conditions has a setting its kind of condition does not have, so it cannot be saved.",
 	condition_missing: MALFORMED,
 	type_missing: MALFORMED,
@@ -73,6 +78,11 @@ export function storedConditionIssuesMessage(
 ): string | null {
 	if (issues === undefined || issues.length === 0) return null;
 	return distinct(issues.map((issue) => sentenceFor(issue) ?? STORED_MALFORMED)).join(" ");
+}
+
+/** The sentence for one reason code, and the field it is on when there is one. */
+export function conditionIssueSentence(reason: string, field?: string): string | undefined {
+	return sentenceFor({ reason, field });
 }
 
 function distinct(sentences: string[]): string[] {

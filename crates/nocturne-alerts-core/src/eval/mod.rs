@@ -12,13 +12,14 @@ mod signal;
 mod spans;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
 use crate::enums::CompositeOp;
 use crate::facts::ContextFact;
-use crate::model::{Node, Payload};
+use crate::model::{Margined, Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
@@ -39,6 +40,12 @@ pub struct Env<'a> {
     /// state: the rule's `enabled_at` on its first evaluation, else `now`
     /// (`None`).
     pub(crate) first_evaluation_bound: Option<DateTime<Utc>>,
+    /// Whether the rule's excursion is open (engine-semantics.md §3, clear
+    /// margin), so a margined leaf compares against its widened limit.
+    pub(crate) excursion_open: bool,
+    /// Whether the node being evaluated is under an odd number of `not`s, so
+    /// a margin moves its limit toward the leaf's false side.
+    pub(crate) negated: bool,
     pub(crate) ctx: &'a SensorContext,
     pub(crate) timers: &'a mut TimerStore,
     clock_anomaly: ClockAnomalies,
@@ -59,6 +66,8 @@ impl<'a> Env<'a> {
             glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
             enabled_at: None,
             first_evaluation_bound: None,
+            excursion_open: false,
+            negated: false,
             ctx,
             timers,
             clock_anomaly: ClockAnomalies::default(),
@@ -85,6 +94,20 @@ impl<'a> Env<'a> {
             first_evaluation_bound: bound,
             ..self
         }
+    }
+
+    /// See [`Env::excursion_open`].
+    #[must_use]
+    pub(crate) fn with_excursion_open(self, excursion_open: bool) -> Self {
+        Self {
+            excursion_open,
+            ..self
+        }
+    }
+
+    /// The limit `p` compares against in this environment.
+    pub(crate) fn limit(&self, p: &impl Margined) -> Decimal {
+        p.limit(self.excursion_open, self.negated)
     }
 
     /// Every anchor the evaluations in this environment read beyond the
@@ -269,8 +292,11 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> H
 
 /// The child inverted; unknown stays unknown, by the child's facts. The
 /// child's instant is when it began to hold, not when it stopped, so `not`
-/// knows none.
+/// knows none. The child is evaluated with its polarity turned, so a margin
+/// under it still widens the rule's truth.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> Held {
+    env.negated = !env.negated;
     let child = eval_held(&p.child, &node_child_path(path, 0, &p.child), env);
+    env.negated = !env.negated;
     Held::from(!child.truth).because(child.unknown)
 }

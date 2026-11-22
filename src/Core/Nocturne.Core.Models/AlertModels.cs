@@ -297,14 +297,23 @@ public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? 
 /// </summary>
 /// <param name="Direction">Comparison direction: "above" or "below".</param>
 /// <param name="Value">Glucose threshold in mg/dL.</param>
-public record ThresholdCondition(string Direction, decimal Value);
+/// <param name="ClearMargin">How far past its limit the condition stays true while the rule's alert
+/// is open, in the unit of its value; absent or 0 for none (docs/alerts/engine-semantics.md §3).</param>
+public record ThresholdCondition(
+    string Direction,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Rate-of-change alert condition. Triggers when glucose change rate exceeds <paramref name="Rate"/> in the specified <paramref name="Direction"/>.
 /// </summary>
 /// <param name="Direction">Rate direction: "rising" or "falling".</param>
 /// <param name="Rate">Rate threshold in mg/dL per minute.</param>
-public record RateOfChangeCondition(string Direction, decimal Rate);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, in mg/dL per minute.</param>
+public record RateOfChangeCondition(
+    string Direction,
+    decimal Rate,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Signal loss alert condition. Triggers when no CGM reading is received for <paramref name="TimeoutMinutes"/>.
@@ -345,7 +354,12 @@ public record StalenessCondition(string Operator, int Value);
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Glucose value in mg/dL to compare against.</param>
 /// <param name="WithinMinutes">Forecast horizon in minutes.</param>
-public record PredictedCondition(string Operator, decimal Value, [property: JsonPropertyName("within_minutes")] int WithinMinutes);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, for every point.</param>
+public record PredictedCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("within_minutes")] int WithinMinutes,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Trend condition matching a coarse direction bucket.
@@ -366,21 +380,33 @@ public record TimeOfDayCondition(string From, string To, string? Timezone);
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">IOB in units to compare against.</param>
-public record IobCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record IobCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Carbs-on-board comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">COB in grams to compare against.</param>
-public record CobCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record CobCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Pump-reservoir comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Reservoir level in units to compare against.</param>
-public record ReservoirCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record ReservoirCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Infusion-site age comparison.
@@ -419,19 +445,35 @@ public record PumpSuspendedCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
-/// <summary>Pump battery comparison (percent).</summary>
-public record PumpBatteryCondition(string Operator, decimal Value);
+/// <summary>Pump battery comparison (percent). <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record PumpBatteryCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Active temp basal comparison. Metric selects rate (U/hr) or percent of scheduled.
-/// Returns false when no temp basal is active — the condition concerns active temps only.</summary>
-public record TempBasalCondition(TempBasalMetric Metric, string Operator, decimal Value);
+/// Returns false when no temp basal is active — the condition concerns active temps only.
+/// <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record TempBasalCondition(
+    TempBasalMetric Metric,
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
-/// <summary>Uploader (phone) battery comparison (percent).</summary>
-public record UploaderBatteryCondition(string Operator, decimal Value);
+/// <summary>Uploader (phone) battery comparison (percent). <c>ClearMargin</c> as
+/// <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record UploaderBatteryCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>CGM transmitter battery comparison. Metric selects the reading; a reading no uploader
-/// has reported is false.</summary>
-public record TransmitterBatteryCondition(TransmitterBatteryMetric Metric, string Operator, decimal Value);
+/// has reported is false. <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record TransmitterBatteryCondition(
+    TransmitterBatteryMetric Metric,
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
 public record OverrideActiveCondition(
@@ -439,8 +481,12 @@ public record OverrideActiveCondition(
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
-/// silently false on Loop iOS via null-suppression.</summary>
-public record SensitivityRatioCondition(string Operator, decimal Value);
+/// silently false on Loop iOS via null-suppression. <c>ClearMargin</c> as
+/// <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record SensitivityRatioCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Tenant Do Not Disturb state. Active when DND is on by manual toggle
 /// (with optional auto-expire) or by scheduled window. Optional ForMinutes

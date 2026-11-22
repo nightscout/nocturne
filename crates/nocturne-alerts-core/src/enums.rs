@@ -6,6 +6,8 @@
 //! which the backend's `EnumManifestTests` keeps equal to the C# enums, and
 //! `enums_match_manifest` pins each one to it.
 
+use rust_decimal::Decimal;
+
 use crate::truth::Truth;
 
 /// An enum with a fixed set of wire names.
@@ -81,6 +83,21 @@ impl CmpOp {
             Self::Le => actual <= threshold,
             Self::Eq => actual == threshold,
         }
+    }
+
+    /// `limit` moved by `margin` toward the side where the comparison holds,
+    /// so it holds `margin` further past `limit`; a negative `margin` moves it
+    /// toward the side where it does not (engine-semantics.md §3, clear
+    /// margin). `==` has no side, and a limit the move would take past the
+    /// decimal range stays where it is.
+    #[must_use]
+    pub fn widened(self, limit: Decimal, margin: Decimal) -> Decimal {
+        match self {
+            Self::Gt | Self::Ge => limit.checked_sub(margin),
+            Self::Lt | Self::Le => limit.checked_add(margin),
+            Self::Eq => None,
+        }
+        .unwrap_or(limit)
     }
 }
 

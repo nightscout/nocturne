@@ -35,6 +35,28 @@ export function convertFromDisplayUnits(value: number, units: GlucoseUnits): num
   return Math.round(value);
 }
 
+/**
+ * Convert a glucose rate of change (per minute) from mg/dL to the given display units, to the
+ * precision a rate is entered in: 0.1 mg/dL or 0.01 mmol/L.
+ */
+export function convertRateToDisplayUnits(mgdl: number, units: GlucoseUnits): number {
+  if (units === "mmol") {
+    return Math.round((mgdl / MGDL_PER_MMOL) * 100) / 100;
+  }
+  return Math.round(mgdl * 10) / 10;
+}
+
+/**
+ * Convert a glucose rate of change (per minute) from display units back to mg/dL, keeping the
+ * fraction: 0.01 mmol/L is 0.18 mg/dL, not 0.
+ */
+export function convertRateFromDisplayUnits(value: number, units: GlucoseUnits): number {
+  if (units === "mmol") {
+    return Math.round(value * MGDL_PER_MMOL * 100) / 100;
+  }
+  return Math.round(value * 10) / 10;
+}
+
 /** Format a glucose value for display (number; 1 dp for mmol, integer for mg/dL). */
 export function formatGlucoseValue(mgdl: number, units: GlucoseUnits): number {
   const value = convertToDisplayUnits(mgdl, units);

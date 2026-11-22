@@ -62,6 +62,10 @@ describe("conditionIssuesMessage", () => {
 			["minutes_not_positive", "timeout_minutes"],
 			["minutes_not_positive", "within_minutes"],
 			["minutes_negative", "minutes"],
+			["margin_negative", "clear_margin"],
+			["margin_on_equality", "clear_margin"],
+			["margin_past_zero", "clear_margin"],
+			["margin_under_sustained", "clear_margin"],
 		] as const) {
 			expect(
 				conditionIssuesMessage(rejected(400, [issue(reason, field)])),
@@ -71,6 +75,20 @@ describe("conditionIssuesMessage", () => {
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("list_empty", "buckets")]))
 		).toBe("A glucose bucket condition needs at least one bucket chosen.");
+		expect(
+			conditionIssuesMessage(rejected(400, [issue("margin_negative", "clear_margin")]))
+		).toBe("A clear margin must be 0 or more.");
+		expect(
+			conditionIssuesMessage(rejected(400, [issue("invalid_field", "clear_margin")]))
+		).toBe("A clear margin must be a number, 0 or more.");
+		expect(
+			conditionIssuesMessage(rejected(400, [issue("margin_past_zero", "clear_margin")]))
+		).toBe("A clear margin on a rate of change cannot be more than the rate.");
+		expect(
+			conditionIssuesMessage(rejected(400, [issue("margin_under_sustained", "clear_margin")]))
+		).toBe(
+			"A condition inside “for at least” cannot have a clear margin. Remove the margin or the “for at least”."
+		);
 		expect(
 			conditionIssuesMessage(
 				rejected(400, [issue("field_missing", "from"), issue("field_missing", "to")])

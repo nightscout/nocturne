@@ -188,6 +188,20 @@ tree that cannot be evaluated never resolves and is not an error.
 `result.skipped` belongs to the corpus shape; since a body that cannot be
 evaluated is an error envelope, this envelope never sets it.
 
+### Clear margin
+
+A comparison leaf may carry `clear_margin` in its payload (`docs/alerts/engine-semantics.md` §3,
+clear margin): while the rule's excursion is open, the leaf compares against its limit moved by the
+margin toward the side that keeps the rule true. It adds no request field: the engine reads
+"open" from the `tracker` the request already sends (`active` or `hysteresis` with an
+excursion), so a request without a tracker reads every leaf closed, as `evaluate_node` always
+does. It is an additive member of the stored condition, and `schema_version` stays 1. An engine
+from before it reads the member as an unknown field (§1.4) and returns the malformed-body error
+(`unknown_field`), so a host running that engine skips the rule rather than evaluating it without
+its margin. New reason codes: `margin_negative`, `margin_on_equality`, `margin_past_zero` (a
+`rate_of_change` margin above its `rate`) and `margin_under_sustained` (a margin above 0 on a leaf
+anywhere under a `sustained`), each on the field `clear_margin`.
+
 ### Next change
 
 `result.next_change_at` (RFC 3339, on the 100 ns tick grid) is the earliest

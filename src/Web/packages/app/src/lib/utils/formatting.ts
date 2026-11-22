@@ -43,6 +43,8 @@ export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
 export {
   convertToDisplayUnits,
   convertFromDisplayUnits,
+  convertRateToDisplayUnits,
+  convertRateFromDisplayUnits,
   formatGlucoseValue,
   formatGlucoseDelta,
   getUnitLabel,

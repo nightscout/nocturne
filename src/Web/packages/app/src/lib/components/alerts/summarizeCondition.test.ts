@@ -26,6 +26,43 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition(reading(TransmitterBatteryMetric.Resistance, ">=", 1400))).toBe("Transmitter resistance ≥ 1400");
 	});
 
+	it("says a clear margin above 0 and leaves out a margin of 0", () => {
+		glucoseUnits.current = "mg/dl";
+		const low = (clear_margin?: number): ConditionNode => ({
+			type: "threshold",
+			threshold: { direction: "below", value: 70, clear_margin },
+		});
+		expect(summarizeCondition(low(5))).toBe("Glucose below 70 mg/dL, clear margin 5 mg/dL");
+		expect(summarizeCondition(low(0))).toBe("Glucose below 70 mg/dL");
+		expect(summarizeCondition(low())).toBe("Glucose below 70 mg/dL");
+		expect(
+			summarizeCondition({ type: "iob", iob: { operator: ">", value: 2, clear_margin: 0.5 } }),
+		).toBe("Insulin on board > 2 U, clear margin 0.5 U");
+	});
+
+	it("says a rate margin with its fraction", () => {
+		glucoseUnits.current = "mg/dl";
+		expect(
+			summarizeCondition({
+				type: "rate_of_change",
+				rate_of_change: { direction: "falling", rate: 2, clear_margin: 0.4 },
+			}),
+		).toBe("Glucose falling at least 2 mg/dL per minute, clear margin 0.4 mg/dL per minute");
+	});
+
+	it("says a glucose margin in the display unit", () => {
+		glucoseUnits.current = "mmol";
+		try {
+			const summary = summarizeCondition({
+				type: "threshold",
+				threshold: { direction: "below", value: 72, clear_margin: 18 },
+			});
+			expect(summary).toBe("Glucose below 4 mmol/L, clear margin 1 mmol/L");
+		} finally {
+			glucoseUnits.current = "mg/dl";
+		}
+	});
+
 	it("renders day-of-week days by name", () => {
 		const node: ConditionNode = {
 			type: "day_of_week",

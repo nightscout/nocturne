@@ -11,7 +11,7 @@ use crate::unknown::{UnknownFacts, UnknownReason};
 
 pub(super) fn iob(p: &ComparePayload, env: &Env) -> Held {
     unknown_by(
-        holds(p.operator, env.ctx.iob_units, p.value),
+        holds(p.operator, env.ctx.iob_units, env.limit(p)),
         ContextFact::Insulin,
         UnknownReason::Absent,
     )
@@ -19,7 +19,7 @@ pub(super) fn iob(p: &ComparePayload, env: &Env) -> Held {
 
 pub(super) fn cob(p: &ComparePayload, env: &Env) -> Held {
     unknown_by(
-        holds(p.operator, env.ctx.cob_grams, p.value),
+        holds(p.operator, env.ctx.cob_grams, env.limit(p)),
         ContextFact::Carbs,
         UnknownReason::Absent,
     )
@@ -34,13 +34,14 @@ pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> Held {
     let Some(bound) = env.ctx.reservoir_units else {
         return Held::unknown(ContextFact::Pump, UnknownReason::Absent);
     };
+    let limit = env.limit(p);
     if !env.ctx.reservoir_is_lower_bound {
-        return Truth::from(p.operator.apply(bound, p.value)).into();
+        return Truth::from(p.operator.apply(bound, limit)).into();
     }
     let decided = match p.operator {
-        CmpOp::Gt | CmpOp::Ge => p.operator.apply(bound, p.value).then_some(true),
-        CmpOp::Lt => (bound >= p.value).then_some(false),
-        CmpOp::Le | CmpOp::Eq => (bound > p.value).then_some(false),
+        CmpOp::Gt | CmpOp::Ge => p.operator.apply(bound, limit).then_some(true),
+        CmpOp::Lt => (bound >= limit).then_some(false),
+        CmpOp::Le | CmpOp::Eq => (bound > limit).then_some(false),
     };
     unknown_by(
         Truth::of(decided),
@@ -68,7 +69,7 @@ pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> Held {
             .and_then(|ratio| ratio.checked_mul(Decimal::ONE_HUNDRED)),
     };
     let since = (p.metric == TempBasalMetric::Rate).then_some(temp.started_at);
-    Held::since(holds(p.operator, actual, p.value), since).because(UnknownFacts::of(
+    Held::since(holds(p.operator, actual, env.limit(p)), since).because(UnknownFacts::of(
         ContextFact::Insulin,
         UnknownReason::Absent,
     ))
