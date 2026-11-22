@@ -80,6 +80,7 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [_invalidator.Object],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 
@@ -148,7 +149,7 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
 
         (await controller.SaveSecrets(
                 NocturneRemote, new Dictionary<string, string> { ["accessToken"] = "t" }, default))
-            .Should().BeOfType<NoContentResult>();
+            .Should().BeOfType<OkObjectResult>();
 
         var verifier = new RecordingVerifier(_service);
         var verified = await controller.VerifyCredentials(
@@ -195,7 +196,7 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
             Nightscout, """{"url":"https://mine.example","writeBackEnabled":true}""", new() { ["apiSecret"] = "s" });
         var controller = Controller(AuthType.OAuthAccessToken);
 
-        (await controller.SaveSecrets(Nightscout, [], default)).Should().BeOfType<NoContentResult>();
+        (await controller.SaveSecrets(Nightscout, [], default)).Should().BeOfType<OkObjectResult>();
         var result = await controller.SaveConfiguration(
             Nightscout,
             JsonDocument.Parse("""{"url":"https://attacker.example","writeBackEnabled":true}"""),
@@ -232,7 +233,7 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
             Nightscout, """{"url":"https://mine.example","writeBackEnabled":true}""", new() { ["apiSecret"] = "s" });
         var controller = Controller(AuthType.SessionCookie);
 
-        (await controller.SaveSecrets(Nightscout, [], default)).Should().BeOfType<NoContentResult>();
+        (await controller.SaveSecrets(Nightscout, [], default)).Should().BeOfType<OkObjectResult>();
         (await controller.SaveConfiguration(
                 Nightscout,
                 JsonDocument.Parse("""{"url":"https://other.example","writeBackEnabled":true}"""),

@@ -132,7 +132,7 @@ public class OAuthTokenRepositoryTests : IDisposable
         var found = await repo.FindRefreshTokenAsync("t1", CancellationToken.None);
 
         found!.Grant.Should().Be(new OAuthRefreshTokenGrant(
-            _grant, _tenant, _subject, found.Grant!.Scopes, "app", LimitTo24Hours: true, IsRevoked: false));
+            _grant, _tenant, _subject, found.Grant!.Scopes, "app", LimitTo24Hours: true, IsRevoked: false, ExpiresAt: null));
         found.Grant.Scopes.Should().Equal("glucose.read");
         (await repo.FindRefreshTokenAsync("missing", CancellationToken.None)).Should().BeNull();
     }

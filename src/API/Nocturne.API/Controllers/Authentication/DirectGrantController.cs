@@ -87,6 +87,7 @@ public class DirectGrantController : ControllerBase
             limitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
+            createdBySubjectId: null,
             ct: HttpContext.RequestAborted);
 
         if (result.Error != null)
@@ -179,6 +180,38 @@ public class DirectGrantController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Remove the expiry of a device credential that a member set up, so it does not stop when that
+    /// member's access ends.
+    /// </summary>
+    /// <remarks>
+    /// Keeping a credential gives the site's uploader access with no end, so it takes a caller who
+    /// manages the members and whose own access does not end
+    /// (<see cref="HttpContextExtensions.MayKeepDeviceCredentials"/>).
+    /// </remarks>
+    /// <param name="id">The device credential, as the connections list shows it.</param>
+    /// <returns><c>204 No Content</c> on success; <c>404 Not Found</c> when it is not a device credential.</returns>
+    [HttpPost("{id:guid}/keep")]
+    [RequireScope(Scope.MembersManage)]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["List", "Services_GetConnections"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Keep(Guid id)
+    {
+        if (!HttpContext.MayKeepDeviceCredentials())
+        {
+            return HttpContext.CallerAccessEndsAt() is null
+                ? Forbid()
+                : Problem(detail: HttpContextExtensions.KeepDeviceCredentialEndDateDetail, statusCode: 403, title: "Forbidden");
+        }
+
+        return await _directGrantService.KeepDeviceCredentialAsync(id, HttpContext.RequestAborted)
+            ? NoContent()
+            : Problem(detail: "No device credential has this id.", statusCode: 404, title: "Not Found");
     }
 
     /// <summary>

@@ -163,7 +163,7 @@ public class RecoveryEmailPipelineTests : IClassFixture<RecoveryEmailPipelineTes
         using (var scope = _factory.Services.CreateScope())
         {
             var created = await scope.ServiceProvider.GetRequiredService<IDirectGrantService>().CreateAsync(
-                TestDatabaseSeeder.TenantId, id, "App", [Scope.FullAccess], null, false, null, null);
+                TestDatabaseSeeder.TenantId, id, "App", [Scope.FullAccess], null, false, null, null, createdBySubjectId: null);
             token = created.Response!.Token;
         }
 

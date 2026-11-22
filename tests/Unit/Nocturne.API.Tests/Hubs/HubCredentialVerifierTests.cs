@@ -430,7 +430,7 @@ public class HubCredentialVerifierTests
 
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, Tenant))
         {
-            var capped = await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(
+            var capped = await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(
                 _subject, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow, CancellationToken.None);
             capped.Should().ContainSingle();
             await unit.Context.SaveChangesAsync();

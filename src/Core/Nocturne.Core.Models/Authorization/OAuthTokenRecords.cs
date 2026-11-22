@@ -48,6 +48,7 @@ public sealed record OAuthRefreshTokenRecord(
 
 /// <summary>What a refresh token needs of its grant to mint an access token.</summary>
 /// <param name="ClientId">The public <c>client_id</c>; null for a grant with no client row.</param>
+/// <param name="ExpiresAt">When the grant stops authorizing; null when it does not.</param>
 public sealed record OAuthRefreshTokenGrant(
     Guid Id,
     Guid TenantId,
@@ -55,7 +56,8 @@ public sealed record OAuthRefreshTokenGrant(
     IReadOnlyList<string> Scopes,
     string? ClientId,
     bool LimitTo24Hours,
-    bool IsRevoked);
+    bool IsRevoked,
+    DateTime? ExpiresAt);
 
 /// <summary>A device code to store, hashed by the caller, with its user code already normalized.</summary>
 public sealed record NewDeviceCode(

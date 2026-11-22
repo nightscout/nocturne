@@ -73,13 +73,13 @@ public interface IOAuthGrantService
     Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default);
 
     /// <summary>
-    /// Whether the grant is revoked, for authenticating an access token that carries a grant id.
-    /// A grant that cannot be found is reported as revoked.
+    /// Whether the grant still authorizes, for authenticating an access token that carries a grant
+    /// id: not revoked and not past its expiry. A grant that cannot be found is not live.
     /// </summary>
     /// <param name="grantId">The grant id carried by the access token.</param>
     /// <param name="tenantId">The tenant the presented token is pinned to, already verified against
     /// the request's tenant by the caller. Used to scope the lookup.</param>
-    Task<bool> IsGrantRevokedAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
+    Task<bool> IsGrantLiveAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
 
     Task UpdateLastUsedAsync(
         Guid grantId,
@@ -147,6 +147,9 @@ public class OAuthGrantInfo
     public string? LastUsedUserAgent { get; set; }
 
     public bool IsRevoked { get; set; }
+
+    /// <summary>When the grant stops authorizing; null when it does not.</summary>
+    public DateTime? ExpiresAt { get; set; }
 
     /// <summary>Whether tokens minted from the grant may read only the last 24 hours.</summary>
     public bool LimitTo24Hours { get; set; }

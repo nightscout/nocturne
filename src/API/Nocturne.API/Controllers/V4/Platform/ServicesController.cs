@@ -118,7 +118,8 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectionsOverview), 200)]
     public async Task<ActionResult<ConnectionsOverview>> GetConnections(CancellationToken cancellationToken = default) =>
-        Ok(await _connectionService.GetConnectionsAsync(HttpContext.GetSubjectId(), cancellationToken));
+        Ok(await _connectionService.GetConnectionsAsync(
+            HttpContext.GetSubjectId(), HttpContext.MayKeepDeviceCredentials(), cancellationToken));
 
     /// <summary>
     /// Get all active data sources that have been sending data to this Nocturne instance.
@@ -187,7 +188,7 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
-    /// Get capabilities for a specific connector.
+    /// Get capabilities for a specific connector, and when an API secret the caller saves on it stops.
     /// </summary>
     /// <param name="id">The connector ID (e.g., "dexcom", "libre")</param>
     /// <returns>Connector capabilities</returns>
@@ -204,6 +205,9 @@ public class ServicesController : ControllerBase
         {
             return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
         }
+
+        if (ConnectorConfigurationService.AdoptsSecret(id))
+            capabilities.SavedSecretStopsAt = HttpContext.CallerAccessEndsAt();
 
         return Ok(capabilities);
     }

@@ -158,6 +158,28 @@ public class ConnectionCredential
     /// <summary>Whether the grant belongs to the caller, who alone can revoke it here.</summary>
     [JsonPropertyName("isOwn")]
     public bool IsOwn { get; set; }
+
+    /// <summary>
+    /// When a device credential a member set up stops authenticating: the end of that member's
+    /// access, or earlier. Null for any other credential and for a device credential that does not stop.
+    /// </summary>
+    [JsonPropertyName("stopsAt")]
+    public DateTime? StopsAt { get; set; }
+
+    /// <summary>Whether <see cref="StopsAt"/> has passed.</summary>
+    [JsonPropertyName("hasStopped")]
+    public bool HasStopped { get; set; }
+
+    /// <summary>The name of the member who set up a credential that stops, when it is known.</summary>
+    [JsonPropertyName("setUpByName")]
+    public string? SetUpByName { get; set; }
+
+    /// <summary>
+    /// Whether the viewer may remove <see cref="StopsAt"/>, so the credential does not stop: only a
+    /// viewer whose own access does not end and who manages the site's members.
+    /// </summary>
+    [JsonPropertyName("canKeep")]
+    public bool CanKeep { get; set; }
 }
 
 /// <summary>

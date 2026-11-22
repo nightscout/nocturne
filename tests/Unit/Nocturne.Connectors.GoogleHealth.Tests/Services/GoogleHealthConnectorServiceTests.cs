@@ -1010,10 +1010,10 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), null,
-                    It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
+                    It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Models.Authorization.CredentialMaker?, CancellationToken>((_, values, _, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
-                .Returns(Task.CompletedTask);
+                .ReturnsAsync(new Nocturne.Core.Contracts.Connectors.ConnectorSecretsSaveResult());
             configurations.Setup(value => value.SaveRuntimeSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) =>

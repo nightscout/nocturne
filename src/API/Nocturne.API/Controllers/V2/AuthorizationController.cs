@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
@@ -186,7 +187,8 @@ public class AuthorizationController : ControllerBase
         Subject createdSubject;
         try
         {
-            createdSubject = await _authorizationService.CreateSubjectAsync(subject);
+            createdSubject = await _authorizationService.CreateSubjectAsync(
+                subject, await HttpContext.CredentialMakerAsync(HttpContext.RequestAborted));
         }
         catch (ArgumentException ex)
         {

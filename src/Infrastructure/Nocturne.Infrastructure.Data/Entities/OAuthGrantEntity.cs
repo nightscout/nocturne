@@ -100,7 +100,8 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
 
     /// <summary>
     /// When this grant expires; null means it never does. Guest grants are always given one
-    /// (creation + 48h); direct grants carry one only when the caller asked for it.
+    /// (creation + 48h); direct grants carry one when the caller asked for it, and a device
+    /// credential carries the end of its maker's access (<see cref="CreatedBySubjectId"/>).
     /// </summary>
     [Column("expires_at")]
     public DateTime? ExpiresAt { get; set; }
@@ -126,8 +127,9 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public string? ActivatedUserAgent { get; set; }
 
     /// <summary>
-    /// Subject ID of the member who created this grant (for guest grants created by
-    /// a family member on behalf of the data owner).
+    /// The member who created this grant for another subject: a guest link made on behalf of the
+    /// data owner, or a device credential held by the device subject. Null for a grant a subject made
+    /// for itself and for a system write.
     /// </summary>
     [Column("created_by_subject_id")]
     public Guid? CreatedBySubjectId { get; set; }
@@ -270,7 +272,9 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
         IEnumerable<string> scopes,
         string? tokenHash = null,
         string? legacySecretHash = null,
-        string? legacyTokenDigest = null)
+        string? legacyTokenDigest = null,
+        Guid? createdBySubjectId = null,
+        DateTime? expiresAt = null)
     {
         if (tokenHash is null && legacySecretHash is null && legacyTokenDigest is null)
         {
@@ -289,6 +293,8 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
             TokenHash = tokenHash,
             LegacySecretHash = legacySecretHash,
             LegacyTokenDigest = legacyTokenDigest,
+            CreatedBySubjectId = createdBySubjectId,
+            ExpiresAt = expiresAt,
             IsMigrated = true,
         };
     }

@@ -53,6 +53,7 @@ vi.mock("#lib/api/generated/connectedApps.generated.remote.js", () => ({
 vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   create: mocks.createToken,
   revoke: mocks.revokeToken,
+  keep: vi.fn(),
 }));
 vi.mock("#lib/api/generated/clientDevices.generated.remote.js", () => ({
   getDevices: () => ({ current: [] }),

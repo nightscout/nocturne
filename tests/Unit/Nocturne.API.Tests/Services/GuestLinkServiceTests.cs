@@ -335,7 +335,7 @@ public class GuestLinkServiceTests : IDisposable
     private async Task CapAsync(DateTime notAfter)
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_dbContext.AsFactory(), _tenantId);
-        await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(_creatorId, notAfter, DateTime.UtcNow, CancellationToken.None);
+        await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(_creatorId, notAfter, DateTime.UtcNow, CancellationToken.None);
         await unit.Context.SaveChangesAsync();
     }
 

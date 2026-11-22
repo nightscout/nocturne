@@ -71,7 +71,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         await using var db = await OpenForTenantAsync(tenantId, ct);
         return await PinnedGrants(db, tenantId)
             .Where(g => g.Id == grantId)
-            .Select(g => new OAuthGrantState(g.RevokedAt, g.ExpiresAt, g.Scopes, g.LimitTo24Hours))
+            .Select(g => new OAuthGrantState(g.RevokedAt, g.ExpiresAt, g.Scopes, g.LimitTo24Hours, g.CreatedBySubjectId))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -174,13 +174,15 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> HasUnrevokedLegacySecretAsync(string legacySecretHash, CancellationToken ct)
+    public virtual async Task<OAuthGrantRecord?> FindLiveLegacySecretAsync(
+        string legacySecretHash, DateTime now, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
-        return await lease.Context.OAuthGrants.AnyAsync(
-            g => g.LegacySecretHash == legacySecretHash
-                 && g.GrantType == OAuthGrantTypes.Direct
-                 && g.RevokedAt == null, ct);
+        return ToRecord(await Grants(lease.Context)
+            .Where(IsLiveDirectGrant(now))
+            .Where(g => g.LegacySecretHash == legacySecretHash)
+            .OrderBy(g => g.CreatedAt)
+            .FirstOrDefaultAsync(ct));
     }
 
     /// <inheritdoc/>
@@ -217,23 +219,51 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> CapGuestLinksCreatedByAsync(
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
         Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct)
     {
         var unit = _unit ?? throw new InvalidOperationException(
-            "Capping guest links stages audit rows with the change, so it needs the caller's unit of work.");
+            "Capping the grants a member made stages audit rows with the change, so it needs the caller's unit of work.");
         var db = unit.Context;
-        var links = await LiveGuestLinksCreatedBy(db.OAuthGrants, createdBySubjectId, now)
-            .Where(g => g.ExpiresAt > notAfter)
+        var made = await LiveGrantsCreatedBy(db.OAuthGrants, createdBySubjectId, now)
+            .Where(g => g.ExpiresAt == null || g.ExpiresAt > notAfter)
             .OrderBy(g => g.CreatedAt)
             .ToListAsync(ct);
-        foreach (var link in links)
+        // A revocation staged earlier on the unit is not saved yet, so the store still reads its grant as live.
+        var capped = made.Where(g => g.RevokedAt == null).ToList();
+        foreach (var grant in capped)
         {
-            link.ExpiresAt = notAfter;
-            MemberAccessAudit.StageGuestLinkCapped(db, link.TenantId, createdBySubjectId, link.Id, notAfter);
+            grant.ExpiresAt = notAfter;
+            MemberAccessAudit.StageGrantCapped(db, grant.GrantType, grant.TenantId, createdBySubjectId, grant.Id, notAfter);
         }
 
-        return ToRecords(links);
+        return ToRecords(capped);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> KeepDeviceCredentialAsync(Guid grantId, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
+        if (await db.FindDeviceSubjectOf(db.TenantId, ct) is not { } deviceSubjectId)
+            return false;
+
+        var grant = await db.OAuthGrants.FirstOrDefaultAsync(
+            g => g.Id == grantId
+                 && g.SubjectId == deviceSubjectId
+                 && g.GrantType == OAuthGrantTypes.Direct
+                 && g.RevokedAt == null
+                 && g.CreatedBySubjectId != null
+                 && g.CreatedBySubjectId != g.SubjectId, ct);
+        if (grant is null)
+            return false;
+
+        MemberAccessAudit.StageDeviceCredentialKept(db, grant.TenantId, grant.CreatedBySubjectId, grant.Id);
+        grant.ExpiresAt = null;
+        // With no maker, no later change to that member's access can cap the credential again.
+        grant.CreatedBySubjectId = null;
+        await SaveAsync(db, ct);
+        return true;
     }
 
     /// <inheritdoc/>
@@ -247,10 +277,18 @@ public class OAuthGrantRepository : IOAuthGrantRepository
 
     private static IQueryable<OAuthGrantEntity> LiveGuestLinksCreatedBy(
         IQueryable<OAuthGrantEntity> grants, Guid createdBySubjectId, DateTime now) =>
-        grants.Where(g => g.GrantType == OAuthGrantTypes.Guest
+        LiveGrantsCreatedBy(grants, createdBySubjectId, now).Where(g => g.GrantType == OAuthGrantTypes.Guest);
+
+    /// <summary>
+    /// The guest links and device credentials <paramref name="createdBySubjectId"/> made that are
+    /// unrevoked and unexpired at <paramref name="now"/>.
+    /// </summary>
+    private static IQueryable<OAuthGrantEntity> LiveGrantsCreatedBy(
+        IQueryable<OAuthGrantEntity> grants, Guid createdBySubjectId, DateTime now) =>
+        grants.Where(g => (g.GrantType == OAuthGrantTypes.Guest || g.GrantType == OAuthGrantTypes.Direct)
                           && g.CreatedBySubjectId == createdBySubjectId
                           && g.RevokedAt == null
-                          && g.ExpiresAt > now);
+                          && (g.ExpiresAt == null || g.ExpiresAt > now));
 
     /// <inheritdoc/>
     public virtual async Task<int> CountLiveGuestLinksAsync(Guid dataOwnerSubjectId, DateTime now, CancellationToken ct)
@@ -335,7 +373,9 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             credential.Scopes,
             credential.TokenHash,
             credential.LegacySecretHash,
-            credential.LegacyTokenDigest);
+            credential.LegacyTokenDigest,
+            credential.CreatedBySubjectId,
+            credential.ExpiresAt);
         db.OAuthGrants.Add(entity);
         await SaveAsync(db, ct);
         return entity.Id;

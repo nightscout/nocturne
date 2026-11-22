@@ -64,6 +64,7 @@ public class ConnectorConfigurationAllowedNumbersTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
 
         _controller = new ConfigurationController(_service, NullLogger<ConfigurationController>.Instance)

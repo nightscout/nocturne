@@ -11,7 +11,12 @@ public interface IConnectionService
     /// The caller, whose unrevoked credentials are listed whether or not they wrote a record. A
     /// credential of another member is listed only when it wrote one.
     /// </param>
-    Task<ConnectionsOverview> GetConnectionsAsync(Guid? viewerSubjectId, CancellationToken ct = default);
+    /// <param name="viewerMayKeep">
+    /// Whether the caller may remove the expiry of a device credential, as each such credential's
+    /// <c>CanKeep</c> says.
+    /// </param>
+    Task<ConnectionsOverview> GetConnectionsAsync(
+        Guid? viewerSubjectId, bool viewerMayKeep, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes every record the connection of <paramref name="grantIds"/> wrote

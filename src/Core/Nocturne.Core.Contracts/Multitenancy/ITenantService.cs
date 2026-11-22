@@ -98,11 +98,11 @@ public interface ITenantService
     /// <summary>
     /// Sets when a member's access ends, or clears it with null, as
     /// <see cref="ITenantMembershipRepository.SetAccessEndUnlessOwnerAsync"/> does. When a date is set,
-    /// every live guest link the member made in the tenant that would outlive it has its expiry
-    /// lowered to it, in the same transaction. A link's expiry only ever shrinks: a later date
-    /// lengthens none, and clearing the date changes none.
+    /// every live guest link and device credential the member made in the tenant that would outlive
+    /// it has its expiry lowered to it, in the same transaction. An expiry only ever shrinks: a later
+    /// date lengthens none, and clearing the date changes none.
     /// </summary>
-    /// <param name="now">The instant the change is made at, which decides which links are live.</param>
+    /// <param name="now">The instant the change is made at, which decides which grants are live.</param>
     Task<OwnerGuardedChange> SetMemberAccessEndAsync(
         Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct = default);
 

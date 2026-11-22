@@ -10,6 +10,7 @@ using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Conditions;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
@@ -619,8 +620,7 @@ public class AlertRulesController : ControllerBase
 
     /// <summary>
     /// Sets each channel's state, the member a channel without a recipient goes to, and who added a
-    /// stamped channel and when it stops. A member is named by their label on the site, and one who
-    /// has since been removed by their own name.
+    /// stamped channel and when it stops, each named as <see cref="PeopleNames.OfAsync"/> names them.
     /// </summary>
     private async Task DescribeChannelStatesAsync(
         IReadOnlyList<AlertRuleRecord> rules,
@@ -642,18 +642,7 @@ public class AlertRulesController : ControllerBase
             })
             .OfType<Guid>()
             .ToHashSet();
-        var names = new Dictionary<Guid, string?>();
-        if (named.Count > 0)
-        {
-            foreach (var person in await _members.ListPeopleAsync(tenantId, ct))
-                names.TryAdd(person.SubjectId, person.Label ?? person.SubjectName);
-            var removed = named.Where(id => !names.ContainsKey(id)).ToList();
-            if (removed.Count > 0)
-            {
-                foreach (var subject in await _subjects.GetManyAsync(removed, ct))
-                    names.TryAdd(subject.Id, subject.Name);
-            }
-        }
+        var names = await PeopleNames.OfAsync(_members, _subjects, tenantId, named, ct);
 
         foreach (var (channel, response, verdict) in described)
         {

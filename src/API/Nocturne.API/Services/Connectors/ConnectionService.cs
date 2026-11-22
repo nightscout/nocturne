@@ -1,8 +1,10 @@
 using Nocturne.API.Models;
+using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Services;
@@ -26,13 +28,17 @@ public class ConnectionService(
     IConnectorHealthService connectorHealth,
     IClientDeviceService devices,
     IDataSourceService dataSources,
+    ITenantMembershipRepository members,
+    ISubjectRepository subjects,
+    ITenantAccessor tenant,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
     private static readonly TimeSpan ReaderActiveWindow = TimeSpan.FromHours(24);
 
     /// <inheritdoc />
-    public async Task<ConnectionsOverview> GetConnectionsAsync(Guid? viewerSubjectId, CancellationToken ct = default)
+    public async Task<ConnectionsOverview> GetConnectionsAsync(
+        Guid? viewerSubjectId, bool viewerMayKeep, CancellationToken ct = default)
     {
         var now = time.GetUtcNow();
         var windowStart = now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime;
@@ -48,6 +54,13 @@ public class ConnectionService(
             .ToList();
         var grantsById = grantRecords.ToDictionary(g => g.Id);
         var deviceCounts = await devices.GetDeviceCountsByGrantAsync([.. grantsById.Keys], ct);
+        var stopping = new DeviceCredentialStops(
+            await PeopleNames.OfAsync(
+                members, subjects, tenant.TenantId,
+                [.. grantRecords.Where(IsStoppingDeviceCredential).Select(g => g.CreatedBySubjectId!.Value).Distinct()],
+                ct),
+            viewerMayKeep,
+            now.UtcDateTime);
 
         var connectorBuckets = new Dictionary<string, List<WriterBucket>>(StringComparer.OrdinalIgnoreCase);
         var otherBuckets = new List<WriterBucket>();
@@ -71,7 +84,7 @@ public class ConnectionService(
             {
                 var connection = FromGrants(
                     group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts,
-                    viewerSubjectId, now, androidApsDevices);
+                    viewerSubjectId, now, androidApsDevices, stopping);
                 connection.CanDeleteRecords =
                     viewerSubjectId is { } viewer && AllOwnedBy(folded[group.Key], viewer);
                 return connection;
@@ -185,7 +198,8 @@ public class ConnectionService(
         IReadOnlyDictionary<Guid, int> deviceCounts,
         Guid? viewerSubjectId,
         DateTimeOffset now,
-        IReadOnlySet<string> androidApsDevices)
+        IReadOnlySet<string> androidApsDevices,
+        DeviceCredentialStops stopping)
     {
         var newest = credentials[0];
         var isApp = newest.GrantType == OAuthGrantTypes.App;
@@ -206,7 +220,7 @@ public class ConnectionService(
             LastUsedAt = lastUsed is { } used ? new DateTimeOffset(used, TimeSpan.Zero) : null,
             Credentials =
             [
-                .. credentials.Select(g => g.SubjectId == viewerSubjectId
+                .. credentials.Select(g => stopping.Describe(g, g.SubjectId == viewerSubjectId
                     ? new ConnectionCredential
                     {
                         GrantId = g.Id,
@@ -226,13 +240,40 @@ public class ConnectionService(
                         Label = g.Label,
                         CreatedAt = g.CreatedAt,
                         IsRevoked = g.IsRevoked,
-                    }),
+                    })),
             ],
         };
         ApplyRecords(connection, buckets, androidApsDevices);
 
         connection.Status = StatusOf(connection, credentials, now);
         return connection;
+    }
+
+    /// <summary>
+    /// An unrevoked device credential that a member set up and that stops when their access ends: a
+    /// direct grant made for another subject, with an expiry.
+    /// </summary>
+    private static bool IsStoppingDeviceCredential(OAuthGrantRecord grant) =>
+        grant is { GrantType: OAuthGrantTypes.Direct, RevokedAt: null, ExpiresAt: not null, CreatedBySubjectId: { } maker }
+        && maker != grant.SubjectId;
+
+    /// <summary>
+    /// When each device credential of the list stops, who set it up, and whether the viewer may keep it.
+    /// </summary>
+    private sealed record DeviceCredentialStops(
+        IReadOnlyDictionary<Guid, string?> MakerNames, bool ViewerMayKeep, DateTime Now)
+    {
+        public ConnectionCredential Describe(OAuthGrantRecord grant, ConnectionCredential credential)
+        {
+            if (!IsStoppingDeviceCredential(grant))
+                return credential;
+
+            credential.StopsAt = grant.ExpiresAt;
+            credential.HasStopped = grant.ExpiresAt <= Now;
+            credential.SetUpByName = MakerNames.GetValueOrDefault(grant.CreatedBySubjectId!.Value);
+            credential.CanKeep = ViewerMayKeep;
+            return credential;
+        }
     }
 
     /// <summary>The data types an uploader sends continuously, so their absence means it stopped.</summary>

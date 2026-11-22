@@ -36,6 +36,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly IEnumerable<IConnectorCacheInvalidator> _cacheInvalidators;
+    private readonly TimeProvider _time;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -52,6 +53,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <param name="configuration">The application configuration a connector's effective configuration is bound from.</param>
     /// <param name="environment">The host environment.</param>
     /// <param name="cacheInvalidators">Each is told the connector and tenant of a written configuration.</param>
+    /// <param name="time">The clock an adopted secret's credential is judged live against.</param>
     /// <param name="logger">Logs configuration and secret writes, refusals and unknown connectors.</param>
     public ConnectorConfigurationService(
         IConnectorConfigurationRepository configurations,
@@ -63,8 +65,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         IConfiguration configuration,
         IHostEnvironment environment,
         IEnumerable<IConnectorCacheInvalidator> cacheInvalidators,
+        TimeProvider time,
         ILogger<ConnectorConfigurationService> logger)
     {
+        _time = time;
         _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _grants = grants ?? throw new ArgumentNullException(nameof(grants));
@@ -207,10 +211,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <inheritdoc />
-    public async Task SaveSecretsAsync(
+    public async Task<ConnectorSecretsSaveResult> SaveSecretsAsync(
         string connectorName,
         Dictionary<string, string> secrets,
-        string? modifiedBy = null,
+        string? modifiedBy,
+        CredentialMaker? maker,
         CancellationToken ct = default)
     {
         var entity = await StoreSecretsAsync(connectorName, secrets, modifiedBy, ct);
@@ -218,7 +223,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         // When saving Nightscout connector secrets that include an API secret,
         // create a DirectGrant with the SHA-1 hash so existing uploaders keep working.
-        await TryCreateLegacyGrantAsync(connectorName, secrets, ct);
+        var result = await TryCreateLegacyGrantAsync(connectorName, secrets, maker, ct);
 
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
@@ -227,6 +232,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             ChangeType = "secrets_updated",
             ModifiedBy = modifiedBy
         });
+        return result;
     }
 
     /// <inheritdoc />
@@ -261,13 +267,17 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         return entity;
     }
 
+    /// <summary>Whether saving secrets on <paramref name="connectorName"/> can adopt one as a working api-secret credential.</summary>
+    public static bool AdoptsSecret(string connectorName) =>
+        connectorName.Equals("nightscout", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// The Nightscout API secret a save would adopt as a working api-secret credential, or null
     /// when it adopts none. The key is the <c>ApiSecret</c> connector property in either casing.
     /// </summary>
     public static string? AdoptedSecret(string connectorName, IReadOnlyDictionary<string, string> secrets)
     {
-        if (!connectorName.Equals("nightscout", StringComparison.OrdinalIgnoreCase))
+        if (!AdoptsSecret(connectorName))
             return null;
 
         if (!secrets.TryGetValue("ApiSecret", out var apiSecret)
@@ -280,32 +290,36 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <summary>
     /// When a Nightscout connector's API secret is saved, creates a DirectGrant with the
     /// SHA-1 hash of the secret so that legacy uploaders authenticated via the old
-    /// <c>api-secret</c> header continue to work without reconfiguration.
+    /// <c>api-secret</c> header continue to work without reconfiguration. The grant is a device
+    /// credential of <paramref name="maker"/>, and stops when their access ends. A secret a live
+    /// credential already holds is not adopted again: that credential governs, and the result says
+    /// when it stops. One that has stopped or been revoked no longer holds the secret.
     /// </summary>
-    private async Task TryCreateLegacyGrantAsync(
+    private async Task<ConnectorSecretsSaveResult> TryCreateLegacyGrantAsync(
         string connectorName,
         Dictionary<string, string> secrets,
+        CredentialMaker? maker,
         CancellationToken ct)
     {
         if (AdoptedSecret(connectorName, secrets) is not { } apiSecret)
-            return;
+            return new ConnectorSecretsSaveResult();
 
         // Adopting a credential is a person's decision, made by saving it from the connector page;
         // a job that writes the connector's secrets on its own does not hand out a working key.
-        if (_auditContext.SubjectId is null)
+        if (maker is null)
         {
             _logger.LogWarning("Not adopting the Nightscout API secret: no authenticated subject saved it");
-            return;
+            return new ConnectorSecretsSaveResult();
         }
 
         // SHA-1 is required here: the Nightscout `api-secret` protocol hashes the secret
         // with SHA-1, so legacy clients (xDrip, etc.) send that hash and we must match it.
         var sha1Hash = HashUtils.Sha1Hex(apiSecret);
 
-        if (await _grants.HasUnrevokedLegacySecretAsync(sha1Hash, ct))
+        if (await _grants.FindLiveLegacySecretAsync(sha1Hash, _time.GetUtcNow().UtcDateTime, ct) is { } holder)
         {
-            _logger.LogDebug("Legacy grant for Nightscout API secret already exists, skipping creation");
-            return;
+            _logger.LogDebug("A live grant already holds the Nightscout API secret, skipping creation");
+            return new ConnectorSecretsSaveResult { SecretAlreadyInUse = true, SecretInUseStopsAt = holder.ExpiresAt };
         }
 
         // A site's secret, not the saver's: see ISubjectRepository.FindDeviceSubjectAsync.
@@ -314,10 +328,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 await _subjects.EnsureDeviceSubjectAsync(ct),
                 "Nightscout (migrated)",
                 [Scope.HealthReadWrite],
-                LegacySecretHash: sha1Hash),
+                LegacySecretHash: sha1Hash,
+                CreatedBySubjectId: maker.SubjectId,
+                ExpiresAt: maker.AccessEndsAt),
             ct);
 
         _logger.LogInformation("Created legacy DirectGrant {GrantId} for Nightscout migration", grantId);
+        return new ConnectorSecretsSaveResult();
     }
 
     /// <inheritdoc />

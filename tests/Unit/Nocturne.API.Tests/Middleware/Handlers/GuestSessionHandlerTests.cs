@@ -186,7 +186,7 @@ public class GuestSessionHandlerTests
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(ctx.AsFactory(), _tenantId);
-        var capped = await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(
+        var capped = await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(
             _dataOwnerId, notAfter, DateTime.UtcNow, CancellationToken.None);
         await unit.Context.SaveChangesAsync();
         new GrantRevocationService(_sessionCache).EvictSessions(capped);
