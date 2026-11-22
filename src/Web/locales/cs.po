@@ -5487,6 +5487,7 @@ msgstr "Bolusový inzulin:"
 msgid "Total carbs:"
 msgstr "Sacharidy celkem:"
 
+#. 0: m
 #. 0: snapshot.cob.toFixed(0)
 #. 0: cob.toFixed(0)
 #. 0: cob.toFixed(0)
@@ -5498,6 +5499,7 @@ msgstr "Sacharidy celkem:"
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.fat)
 #. 0: event.grams
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -14936,12 +14938,14 @@ msgstr "Problém"
 msgid "Total: {0} records deleted"
 msgstr "Celkem odstraněno záznamů: {0}"
 
+#. 0: m
 #. 0: (point.profileBasalRate ?? 0).toFixed(2)
 #. 0: d.basalRate.toFixed(2)
 #. 0: d.scheduledBasalRate.toFixed(2)
 #. 0: data.injection.estimatedRate
 #. 0: data.scheduledBasal.toFixed(3)
 #. 0: attributeValue(ProfileAttribute.Basal, basal.value)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
@@ -37011,6 +37015,8 @@ msgid "Glucose above {0} {1}"
 msgstr ""
 
 #. 0: bg(p.rate ?? 0); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(m, glucoseUnits.current); 1: bgLabel()
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "{0} {1} per minute"
 msgstr ""
@@ -40807,22 +40813,22 @@ msgstr ""
 #~ msgid "CGM transmitter voltage, resistance, or days since activation (xDrip+ only)"
 #~ msgstr ""
 
-#. 0: opSymbol(p.operator); 1: p.value
+#. 0: opSymbol(operator); 1: value
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Transmitter voltage A {0} {1}"
 msgstr ""
 
-#. 0: opSymbol(p.operator); 1: p.value
+#. 0: opSymbol(operator); 1: value
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Transmitter voltage B {0} {1}"
 msgstr ""
 
-#. 0: opSymbol(p.operator); 1: p.value
+#. 0: opSymbol(operator); 1: value
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Transmitter resistance {0} {1}"
 msgstr ""
 
-#. 0: opSymbol(p.operator); 1: formatDays(p.value ?? 0)
+#. 0: opSymbol(operator); 1: formatDays(value ?? 0)
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Transmitter age {0} {1}"
 msgstr ""
@@ -47398,4 +47404,46 @@ msgstr ""
 #. 0: formatMediumDate(accessEndDate(accessEndedAt))
 #: src/routes/(authenticated)/settings/members/history/+page.svelte
 msgid "<0/> Access ended on {0}."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Clear margin"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "clear margin"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Remove the clear margin"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Add a clear margin"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A clear margin must be 0 or more."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A condition that checks for an exact value cannot have a clear margin. Remove the margin or choose another comparison."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A clear margin must be a number, 0 or more."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A clear margin on a rate of change cannot be more than the rate."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A condition inside “for at least” cannot have a clear margin. Remove the margin or the “for at least”."
+msgstr ""
+
+#. 0: chip; 1: amount(margin)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "{0}, clear margin {1}"
 msgstr ""
