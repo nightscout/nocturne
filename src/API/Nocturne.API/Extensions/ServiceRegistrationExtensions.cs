@@ -139,8 +139,8 @@ public static class ServiceRegistrationExtensions
         // stateless Data Protection token, so what these bound is the work each attempt costs —
         // the credential lookup, the audit row a failure writes, and the crypto the completion
         // step runs. Two things set the ceilings well above that work: a ceremony spends two
-        // permits (options then complete), and a household or clinic behind one NAT is a single
-        // partition, so the whole family signs in from one bucket.
+        // permits (options then complete), and a household or clinic behind one NAT or on one IPv6
+        // network is a single partition, so the whole family signs in from one bucket.
         ("passkey-login", 30, TimeSpan.FromMinutes(1)),
         ("passkey-register", 20, TimeSpan.FromMinutes(1)),
         // A recovery code is a one-time human-typed secret and the last way back into an account,
@@ -167,7 +167,7 @@ public static class ServiceRegistrationExtensions
         // The anonymous invite lookups, member and alert. Their tokens are long random strings, so
         // grinding one is infeasible at any rate; what the ceiling bounds is the database query
         // each anonymous request costs. An invite page reads once per visit, which leaves the
-        // ceiling room for reloads and for a clinic behind one NAT.
+        // ceiling room for reloads and for a clinic behind one NAT or on one IPv6 network.
         ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
         // One address. GuestActivationLimiter bounds every address at one tenant together.
         ("guest-activate", 5, TimeSpan.FromMinutes(10)),
