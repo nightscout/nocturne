@@ -153,10 +153,10 @@ public class SubjectRepositoryTests : IDisposable
         found.Roles.Select(r => r.Name).Should().Equal("public");
         (await Subjects().FindSystemSubjectAsync("Nobody", CancellationToken.None)).Should().BeNull();
 
-        (await Subjects().FindMemberByUsernameAsync(_tenant, "sam", activeOnly: true, CancellationToken.None))!.Id.Should().Be(active);
-        (await Subjects().FindMemberByUsernameAsync(_tenant, "pat", activeOnly: true, CancellationToken.None)).Should().BeNull();
-        (await Subjects().FindMemberByUsernameAsync(_tenant, "pat", activeOnly: false, CancellationToken.None))!.Id.Should().Be(inactive);
-        (await Subjects().FindMemberByUsernameAsync(_otherTenant, "sam", activeOnly: false, CancellationToken.None))
+        (await Subjects().FindMemberByUsernameAsync(_tenant, "sam", activeOnly: true, Now, CancellationToken.None))!.Id.Should().Be(active);
+        (await Subjects().FindMemberByUsernameAsync(_tenant, "pat", activeOnly: true, Now, CancellationToken.None)).Should().BeNull();
+        (await Subjects().FindMemberByUsernameAsync(_tenant, "pat", activeOnly: false, Now, CancellationToken.None))!.Id.Should().Be(inactive);
+        (await Subjects().FindMemberByUsernameAsync(_otherTenant, "sam", activeOnly: false, Now, CancellationToken.None))
             .Should().BeNull("the username is resolved through the tenant's memberships");
     }
 
@@ -180,7 +180,7 @@ public class SubjectRepositoryTests : IDisposable
         await CreateAsync(new NewSubject("No membership", Email: "a@example.test", EmailConfirmedAt: Now));
         await Member(new NewSubject("Lookalike", Email: "aa@example.test", EmailConfirmedAt: Now));
 
-        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "a@example.test", CancellationToken.None))
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "a@example.test", Now, CancellationToken.None))
             .Select(s => s.Id).Should().BeEquivalentTo([parent, child]);
     }
 
@@ -190,9 +190,9 @@ public class SubjectRepositoryTests : IDisposable
         var kate = await CreateAsync(new NewSubject("Kate", Email: "kate@example.test", EmailConfirmedAt: Now));
         AddMember(_tenant, kate);
 
-        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "Kate@example.test", CancellationToken.None))
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "Kate@example.test", Now, CancellationToken.None))
             .Should().BeEmpty();
-        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "KATE@example.test", CancellationToken.None))
+        (await Subjects().FindMembersByConfirmedEmailAsync(_tenant, "KATE@example.test", Now, CancellationToken.None))
             .Select(s => s.Id).Should().Equal(kate);
     }
 

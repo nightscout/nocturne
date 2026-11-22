@@ -74,6 +74,7 @@ public class AlertRulesController : ControllerBase
     private readonly AlertRuleRearm _rearm;
     private readonly AlertRuleRetirement _retirement;
     private readonly ILogger<AlertRulesController> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
@@ -91,8 +92,10 @@ public class AlertRulesController : ControllerBase
         ISecretEncryptionService encryption,
         AlertRuleRearm rearm,
         AlertRuleRetirement retirement,
-        ILogger<AlertRulesController> logger)
+        ILogger<AlertRulesController> logger,
+        TimeProvider timeProvider)
     {
+        _time = timeProvider;
         _contextFactory = contextFactory;
         _members = members;
         _alerts = alerts;
@@ -463,7 +466,7 @@ public class AlertRulesController : ControllerBase
         NocturneDbContext db,
         CancellationToken ct) =>
         await _channels.ResolveAndValidateAsync(
-            channels, storedRecipients, db, _members, HttpContext?.GetSubjectId(), ct) is { } message
+            channels, storedRecipients, db, _members, HttpContext?.GetSubjectId(), _time.GetUtcNow().UtcDateTime, ct) is { } message
             ? BadRequest(new { message })
             : null;
 
@@ -520,7 +523,7 @@ public class AlertRulesController : ControllerBase
             return responses;
         }
 
-        var recipients = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, ct);
+        var recipients = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, _time.GetUtcNow().UtcDateTime, ct);
         foreach (var channel in inApp)
         {
             Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
@@ -546,7 +549,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(typeof(List<InAppRecipientResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<InAppRecipientResponse>>> GetInAppRecipients(CancellationToken ct)
     {
-        var members = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, ct);
+        var members = await InAppRecipients.ListAsync(_members, _tenantAccessor.TenantId, _time.GetUtcNow().UtcDateTime, ct);
         return Ok(members
             .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, CanReceive = true })
             .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)

@@ -395,7 +395,7 @@ internal sealed class AlertDeliveryService(
         }
 
         return await InAppRecipients.ResolveAsync(
-            members, tenantAccessor.TenantId, destination, ct) is null
+            members, tenantAccessor.TenantId, destination, timeProvider.GetUtcNow().UtcDateTime, ct) is null
             ? "In-app recipient is not a member of this site who holds any access"
             : null;
     }

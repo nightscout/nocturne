@@ -124,7 +124,9 @@ public class AuthenticationMiddleware
                 {
                     var (membership, isPlatformAdmin) = await RequestMembership.ReadAsync(
                         context.RequestServices.GetRequiredService<Nocturne.Core.Contracts.Multitenancy.ITenantMembershipRepository>(),
-                        subjectId, tenantId, context.RequestAborted);
+                        subjectId, tenantId,
+                        context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime,
+                        context.RequestAborted);
                     membership.StoreOn(context);
                     authContext.IsPlatformAdmin = carriesPlatformAdmin && isPlatformAdmin;
                 }

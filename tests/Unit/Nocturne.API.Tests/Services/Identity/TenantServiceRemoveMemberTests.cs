@@ -219,6 +219,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         await using (var db = Context())
         {
             db.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other", DisplayName = "Other" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = otherTenantId, SubjectId = subjectId });
             db.ChatIdentityDirectory.AddRange(
                 Link("chat-user", _tenantId, subjectId, "here"),
                 Link("chat-user", otherTenantId, subjectId, "elsewhere"),
@@ -230,7 +231,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))

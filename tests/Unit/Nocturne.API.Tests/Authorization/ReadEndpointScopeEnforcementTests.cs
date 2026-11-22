@@ -73,6 +73,9 @@ public class ReadEndpointScopeEnforcementTests
         /// <summary>Rows keyed by the caller's own subject id or memberships; nothing another member holds is read.</summary>
         public const string OwnData = "caller's own data, keyed by their subject";
 
+        /// <summary>The caller's own private data, refused to every credential but the person's own sign-in by [RequireInteractiveSession].</summary>
+        public const string OwnDataInteractiveOnly = "caller's own data, only for the person's own sign-in";
+
         /// <summary>The action, or the service it calls, checks the scope or the share and guest access itself and answers Forbid, NotFound or a narrowed result.</summary>
         public const string ActionChecksAccess = "scope or share access checked in the action or its service";
 
@@ -108,6 +111,8 @@ public class ReadEndpointScopeEnforcementTests
             ["ChatIdentityController.GetLinks"] = V4Reason.OwnData,
             ["ChatIdentityController.GetPending"] = V4Reason.CapabilityToken,
             ["BackupSignInPromptController.GetBackupSignInPrompt"] = V4Reason.OwnData,
+            ["RecoveryEmailController.GetRecoveryEmail"] = V4Reason.OwnDataInteractiveOnly,
+            ["RecoveryEmailPromptController.GetRecoveryEmailPrompt"] = V4Reason.OwnData,
             ["MembershipRequestController.GetMyRequest"] = V4Reason.OwnData,
             ["MyPermissionsController.GetMyPermissions"] = V4Reason.OwnData,
             ["MyTenantsController.GetMyTenants"] = V4Reason.OwnData,

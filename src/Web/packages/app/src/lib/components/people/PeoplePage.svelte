@@ -1,24 +1,24 @@
 <script lang="ts">
   import { afterNavigate, replaceState } from "$app/navigation";
   import { tick, untrack } from "svelte";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import {
-    getOverview,
-    getReview,
-  } from "#lib/api/generated/myTenants.generated.remote.js";
+  import { getReview } from "#lib/api/generated/myTenants.generated.remote.js";
   import type { TenantOverviewItem } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/shared/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
   import { formatMediumDateRange } from "#lib/utils/formatting.js";
   import { plural } from "#lib/utils/plural.js";
-  import { pollWhileVisible } from "#lib/utils/poll-while-visible.svelte.js";
+  import Monitor from "@lucide/svelte/icons/monitor";
   import Users from "@lucide/svelte/icons/users";
   import PeopleRoster from "./PeopleRoster.svelte";
-  import { followOverview } from "./live-overview.svelte.js";
+  import { followPeople } from "./people-overview.svelte.js";
+  import { setReadState } from "./read-state.js";
   import PersonPanel from "./PersonPanel.svelte";
-  import { PERSON_PANEL_HEADING_ID, PERSON_POLL_MS } from "./person.js";
+  import { PERSON_PANEL_HEADING_ID } from "./person.js";
   import {
     REVIEW_DAYS,
     pageUrl,
@@ -33,7 +33,17 @@
   /** The content width of Tailwind's @4xl container, from which the panel sits beside the list. */
   const SIDE_BY_SIDE_MIN_PX = 896;
 
-  const overviewQuery = getOverview();
+  const overview = followPeople();
+  const overviewQuery = overview.query;
+  const clock = new Now();
+  setReadState({
+    get disconnected() {
+      return !!overviewQuery.error;
+    },
+    get now() {
+      return clock.current;
+    },
+  });
   const data = $derived(overviewQuery.current);
   const loadError = $derived(overviewQuery.error);
   const people = $derived(data?.tenants ?? []);
@@ -158,10 +168,6 @@
         .finally(() => (rereads[period] = (rereads[period] ?? 1) - 1));
     });
   });
-
-  // A bare await would answer with the value this page already holds.
-  pollWhileVisible(() => overviewQuery.refresh(), PERSON_POLL_MS);
-  const overviewFeed = followOverview(() => overviewQuery.refresh());
 </script>
 
 <svelte:head>
@@ -192,7 +198,7 @@
               new Date(reviewData.to)
             )}.
           {/if}
-        {:else if overviewFeed.live}
+        {:else if overview.live}
           Readings update as they arrive.
         {:else}
           Readings refresh every minute.
@@ -214,7 +220,16 @@
         <ToggleGroup.Item value="now" class="flex-1 @2xl:flex-none">Now</ToggleGroup.Item>
         <ToggleGroup.Item value="review" class="flex-1 @2xl:flex-none">Review</ToggleGroup.Item>
       </ToggleGroup.Root>
-      {#if lens === "review"}
+      {#if lens === "now"}
+        <Button
+          variant="outline"
+          size="sm"
+          href={resolve("/(authenticated)/tenants/wall")}
+        >
+          <Monitor class="size-4" aria-hidden="true" />
+          Wall display
+        </Button>
+      {:else}
         <ToggleGroup.Root
           type="single"
           value={String(days)}

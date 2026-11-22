@@ -63,6 +63,12 @@ public static class AuthAuditEventType
     public const string HistoryLimitChanged = "history_limit_changed";
 
     /// <summary>
+    /// Event type when the date a tenant membership ends is set, changed or cleared. The details name
+    /// the end after the change as an ISO 8601 UTC instant, or null when it no longer ends.
+    /// </summary>
+    public const string AccessEndChanged = "access_end_changed";
+
+    /// <summary>
     /// Event type when a subject (user) is created.
     /// </summary>
     public const string SubjectCreated = "subject_created";

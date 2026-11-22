@@ -2753,6 +2753,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("AccessEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("access_ends_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -5669,6 +5673,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateTime?>("AccessEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("access_ends_at");
 
                     b.Property<Guid?>("CreatedFromInviteId")
                         .HasColumnType("uuid")

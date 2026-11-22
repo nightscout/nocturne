@@ -513,7 +513,7 @@ public class OidcAuthServiceLoginGateTests
         CreatedAt: DateTime.UtcNow,
         UsedBy: [],
         RoleNames: ["Viewer"],
-        Permissions: []);
+        Permissions: [], null);
 
     [Fact]
     [Trait("Category", "Unit")]

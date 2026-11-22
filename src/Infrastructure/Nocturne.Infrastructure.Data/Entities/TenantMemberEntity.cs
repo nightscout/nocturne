@@ -68,6 +68,14 @@ public class TenantMemberEntity : ISystemTimestamped
     public bool LimitTo24Hours { get; set; } = false;
 
     /// <summary>
+    /// When the membership ends, in UTC; null when it does not. From that instant every access read
+    /// treats it as absent (<see cref="Extensions.MembershipLiveness"/>), and nothing is revoked, so a
+    /// later date restores the same access. An owner's membership never has one.
+    /// </summary>
+    [Column("access_ends_at")]
+    public DateTime? AccessEndsAt { get; set; }
+
+    /// <summary>
     /// Identifier of the invite used to create this membership, if applicable
     /// </summary>
     [Column("created_from_invite_id")]
