@@ -636,6 +636,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
         await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migratorConnectionString, logger);
+
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
         await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
