@@ -4641,10 +4641,8 @@ msgstr "· {0}/{1} použití"
 msgid "· Last 24 hours only"
 msgstr "· Pouze posledních 24 hodin"
 
-#. 0: formatMediumDateTime(invite.expiresAt)
-#: src/lib/components/members/PendingInvitesList.svelte
-msgid "Expires {0} <0/> <1/>"
-msgstr "Vyprší {0} <0/> <1/>"
+#~ msgid "Expires {0} <0/> <1/>"
+#~ msgstr "Vyprší {0} <0/> <1/>"
 
 #: src/lib/components/members/PendingInvitesList.svelte
 msgid "Used by"
@@ -4998,6 +4996,7 @@ msgstr "Vytváření..."
 msgid "{0} direct permission{1}"
 msgstr "Přímá oprávnění: {0}"
 
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
 msgid "Remove member"
 msgstr "Odebrat člena"
@@ -33723,6 +33722,7 @@ msgid "<0/> Pending invites"
 msgstr ""
 
 #: src/lib/components/members/PendingInvitesList.svelte
+#: src/lib/components/members/PendingInvitesList.svelte
 msgid "Invite link"
 msgstr ""
 
@@ -46830,4 +46830,113 @@ msgstr ""
 
 #: src/lib/components/alerts/AdvancedSection.svelte
 msgid "Use the default"
+msgstr ""
+
+#: src/lib/components/members/AccessEndField.svelte
+msgid "An owner's access does not end."
+msgstr ""
+
+#: src/lib/components/members/AccessEndField.svelte
+msgid "Access ends"
+msgstr ""
+
+#: src/lib/components/members/AccessEndField.svelte
+msgid "Access ends (optional)"
+msgstr ""
+
+#. 0: ceilingDate
+#: src/lib/components/members/AccessEndField.svelte
+msgid "You cannot remove the end date. Your own access ends on {0}."
+msgstr ""
+
+#. 0: ceilingDate
+#: src/lib/components/members/AccessEndField.svelte
+msgid "Your own access ends on {0}. You cannot give access that lasts longer."
+msgstr ""
+
+#. 0: ceilingDate
+#: src/lib/components/members/AccessEndField.svelte
+msgid "Your own access ends on {0}. The access you give ends then, or on an earlier day that you choose."
+msgstr ""
+
+#: src/lib/components/members/AccessEndField.svelte
+msgid "Access stays through the end of this day. Leave it empty for no end date."
+msgstr ""
+
+#. 0: accessEnd
+#: src/lib/components/members/InviteSummary.svelte
+msgid "Your access ends on {0}."
+msgstr ""
+
+#. 0: endShown
+#: src/lib/components/members/MemberCard.svelte
+msgid "<0/> Ended {0}"
+msgstr ""
+
+#. 0: endShown
+#: src/lib/components/members/MemberCard.svelte
+msgid "<0/> Until {0}"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Clear the access end date before you make this member an owner."
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Remove the end date"
+msgstr ""
+
+#. 0: actor; 1: role
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined with the role {1}."
+msgstr ""
+
+#. 0: actor; 1: permission
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined with the permission {1}."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined with a role or a permission. The detail is no longer stored."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined with access to the last 24 hours only."
+msgstr ""
+
+#. 0: actor; 1: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined with access that ends on {1}."
+msgstr ""
+
+#. 0: actor; 1: member; 2: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} set {1}'s access to end on {2}."
+msgstr ""
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} removed the end date of {1}'s access."
+msgstr ""
+
+#. 0: actor; 1: member
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} changed the end date of {1}'s access. The detail is no longer stored."
+msgstr ""
+
+#. 0: accessEnd
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "· Access ends {0}"
+msgstr ""
+
+#. 0: formatMediumDateTime(invite.expiresAt)
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "Expires {0} <0/> <1/> <2/>"
+msgstr ""
+
+#. 0: inviteName
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "Revoke {0}"
 msgstr ""
