@@ -229,6 +229,35 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     }
 
     [Theory]
+    [InlineData(null, true)]
+    [InlineData(11, true)]
+    [InlineData(10, false)]
+    [InlineData(3, false)]
+    public async Task The_locked_out_list_marks_a_member_whose_access_outlasts_a_caller_whose_access_ends(
+        int? orphanEndDays, bool outlasts)
+    {
+        var now = DateTime.UtcNow;
+        OrphanAccessEndsAt(orphanEndDays is { } days ? now.AddDays(days) : null);
+        CallerAccessEndsAt(now.AddDays(10));
+
+        var dated = await _controller.GetLockedOutMembers(CancellationToken.None);
+
+        dated.Should().BeOfType<OkObjectResult>().Which.Value.As<List<LockedOutMember>>()
+            .Single().OutlastsCaller.Should().Be(outlasts);
+    }
+
+    [Fact]
+    public async Task The_locked_out_list_marks_no_member_for_a_caller_whose_access_does_not_end()
+    {
+        OrphanAccessEndsAt(null);
+
+        var result = await _controller.GetLockedOutMembers(CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.As<List<LockedOutMember>>()
+            .Single().OutlastsCaller.Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     public async Task A_member_with_a_confirmed_address_is_left_to_the_emailed_link_only_while_delivery_is_configured(

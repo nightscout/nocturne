@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -17,7 +19,8 @@ namespace Nocturne.API.Services.Identity;
 /// <see cref="ITenantMembershipRepository"/>. A role id alone is not an authorization decision.
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
-public partial class TenantRoleService(ITenantMembershipRepository members, TimeProvider time) : ITenantRoleService
+public partial class TenantRoleService(
+    ITenantMembershipRepository members, TimeProvider time, IMemberInviteRepository invites) : ITenantRoleService
 {
     public async Task<List<TenantRoleDto>> GetRolesAsync(
         Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default)
@@ -32,6 +35,32 @@ public partial class TenantRoleService(ITenantMembershipRepository members, Time
     {
         var roles = await GetRolesAsync(tenantId, granterScopes, ct);
         return roles.Where(r => r.CanGrant).ToList();
+    }
+
+    public async Task<RoleHolders> GetRoleHoldersAsync(
+        Guid tenantId, DateTime? callerEnd, CancellationToken ct = default)
+    {
+        var all = await members.ListMembersAsync(tenantId, ct);
+        var heldByPublic = all
+            .Where(m => m.IsPublicSubject())
+            .SelectMany(m => m.Roles.Select(r => r.RoleId))
+            .ToHashSet();
+
+        if (callerEnd is null)
+            return new RoleHolders([], [], heldByPublic);
+
+        var heldPast = all
+            .Where(m => HttpContextExtensions.Outlasts(callerEnd, m.AccessEndsAt))
+            .SelectMany(m => m.Roles.Select(r => r.RoleId))
+            .ToHashSet();
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var invitedPast = (await invites.GetForTenantAsync(tenantId, ct))
+            .Where(i => i.IsValidAt(now) && HttpContextExtensions.Outlasts(callerEnd, i.AccessEndsAt))
+            .SelectMany(i => i.RoleIds)
+            .ToHashSet();
+
+        return new RoleHolders(heldPast, invitedPast, heldByPublic);
     }
 
     public async Task<TenantRoleDto?> GetRoleByIdAsync(

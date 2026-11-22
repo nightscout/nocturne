@@ -96,7 +96,7 @@ public sealed class MemberInviteControllerAuditTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>()),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
             new TenantMembershipRepository(_db.AsFactory(), AccountLinkRoutes.Off))

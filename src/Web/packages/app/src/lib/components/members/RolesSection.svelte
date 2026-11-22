@@ -50,6 +50,7 @@
   let originalEditDescription = $state("");
   let originalEditPermissions = $state<string[]>([]);
   let isEditReadonly = $state(false);
+  let editReadonlyReason = $state<"system" | "member" | "invite">("system");
 
   const isEditDirty = $derived(
     editName !== originalEditName ||
@@ -96,7 +97,8 @@
     originalEditName = editName;
     originalEditDescription = editDescription;
     originalEditPermissions = [...editPermissions];
-    isEditReadonly = role.isSystem === true;
+    isEditReadonly = role.isSystem === true || role.outlastsCaller === true || role.inviteOutlastsCaller === true;
+    editReadonlyReason = role.outlastsCaller ? "member" : role.inviteOutlastsCaller ? "invite" : "system";
     dialogError = null;
     isEditOpen = true;
   }
@@ -189,7 +191,13 @@
 
   <div class="space-y-2.5">
     {#each roles as role (role.id)}
-      <div class="flex items-center gap-3 rounded-xl border border-border bg-background p-3.5">
+      {@const outlastsReasonId = `role-outlasts-${role.id}`}
+      <div
+        class="flex items-center gap-3 rounded-xl border border-border bg-background p-3.5"
+        role="group"
+        aria-label={role.name ?? "Unnamed"}
+        aria-describedby={role.outlastsCaller || role.inviteOutlastsCaller ? outlastsReasonId : undefined}
+      >
         <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           {#if role.slug === "denied"}
             <Ban class="h-4 w-4" />
@@ -216,9 +224,18 @@
               {role.memberCount ?? 0} member{(role.memberCount ?? 0) !== 1 ? "s" : ""}
             </Badge>
           </div>
+          {#if role.outlastsCaller}
+            <p id={outlastsReasonId} class="mt-1.5 text-xs text-muted-foreground">
+              A member whose access lasts longer than yours has this role.
+            </p>
+          {:else if role.inviteOutlastsCaller}
+            <p id={outlastsReasonId} class="mt-1.5 text-xs text-muted-foreground">
+              An invite that gives access longer than yours uses this role.
+            </p>
+          {/if}
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          {#if role.slug === "owner"}
+          {#if role.slug === "owner" || role.outlastsCaller || role.inviteOutlastsCaller}
             <Button variant="outline" size="sm" onclick={() => openEditDialog(role)}>
               <Eye class="mr-1.5 h-3.5 w-3.5" />
               View
@@ -302,9 +319,15 @@
     <Dialog.Header>
       <Dialog.Title>{isEditReadonly ? "View role" : "Edit role"}</Dialog.Title>
       <Dialog.Description>
-        {isEditReadonly
-          ? "System roles are managed by Nocturne and cannot be changed."
-          : "Update the role name, description, and permissions."}
+        {#if !isEditReadonly}
+          Update the role name, description, and permissions.
+        {:else if editReadonlyReason === "member"}
+          A member whose access lasts longer than yours has this role.
+        {:else if editReadonlyReason === "invite"}
+          An invite that gives access longer than yours uses this role.
+        {:else}
+          System roles are managed by Nocturne and cannot be changed.
+        {/if}
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">

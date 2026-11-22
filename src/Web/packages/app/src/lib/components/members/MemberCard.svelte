@@ -88,6 +88,10 @@
    */
   const isSelf = $derived(!!currentSubjectId && member.subjectId === currentSubjectId);
 
+  /** The API says the caller may not change this member, because the member's access outlasts the caller's. */
+  const outlastsCaller = $derived(member.outlastsCaller === true);
+  const outlastsReasonId = $derived(`member-outlasts-${member.subjectId}`);
+
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
   let originalRoleIds = $state<string[]>([]);
@@ -193,7 +197,12 @@
   }
 </script>
 
-<Card.Root class="@container">
+<Card.Root
+  class="@container"
+  role="group"
+  aria-label={member.name ?? "Unknown"}
+  aria-describedby={outlastsCaller ? outlastsReasonId : undefined}
+>
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
       <UserAvatar name={member.name} size="md" />
@@ -242,6 +251,11 @@
         {#if member.label}
           <Card.Description>{member.label}</Card.Description>
         {/if}
+        {#if outlastsCaller}
+          <p id={outlastsReasonId} class="text-xs text-muted-foreground">
+            This member's access lasts longer than yours.
+          </p>
+        {/if}
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if canViewHistory && member.subjectId}
@@ -262,10 +276,10 @@
             onclick={toggleExpand}
           >
             <Settings2 class="mr-1.5 h-3.5 w-3.5" />
-            {isExpanded ? "Close" : "Edit"}
+            {isExpanded ? "Close" : outlastsCaller ? "View" : "Edit"}
           </Button>
         {/if}
-        {#if canManage && !isSelf}
+        {#if canManage && !isSelf && !outlastsCaller}
           <ConfirmDialog
             title="Remove member"
             confirmLabel="Remove"
@@ -302,6 +316,23 @@
         You cannot change your own roles or permissions. Ask another member who can manage
         members to change them for you.
       </p>
+    </Card.Content>
+  {:else if isExpanded && canEditRoles && outlastsCaller}
+    <Card.Content class="space-y-4 border-t pt-4">
+      <div class="space-y-2">
+        <Label>Permissions from roles</Label>
+        <div class="rounded-lg border p-3 bg-muted/30">
+          <PermissionSummary
+            permissions={(member.roles ?? []).flatMap((r) => r.permissions ?? [])}
+          />
+        </div>
+      </div>
+      {#if (member.directPermissions ?? []).length > 0}
+        <div class="space-y-2">
+          <Label>Direct permissions</Label>
+          <PermissionCategorySelector selected={member.directPermissions ?? []} readonly />
+        </div>
+      {/if}
     </Card.Content>
   {:else if isExpanded && canEditRoles}
     <Card.Content class="space-y-4 border-t pt-4">

@@ -160,6 +160,10 @@ public record TenantDetailDto(Guid Id, string Slug, string DisplayName, bool IsA
 /// </summary>
 /// <param name="AccessEndsAt">When the membership ends, in UTC; null when it does not.</param>
 /// <param name="HasEnded">Whether the membership has ended, so it grants nothing until the date is moved later.</param>
+/// <param name="OutlastsCaller">
+/// Whether the caller the member was read for has an end date and this member's access outlasts it,
+/// so the caller may not change or remove the member. Always false when read for no caller.
+/// </param>
 /// <param name="HasConfirmedRecoveryEmail">
 /// Whether the member holds a recovery email they confirmed. Null for a system or demo subject,
 /// which has no one to recover, and for every member where this site cannot send the confirming
@@ -180,7 +184,8 @@ public record TenantMemberDto(
     bool IsPlatformAdmin,
     DateTime? AccessEndsAt,
     bool HasEnded,
-    bool? HasConfirmedRecoveryEmail);
+    bool? HasConfirmedRecoveryEmail,
+    bool OutlastsCaller = false);
 
 /// <summary>
 /// A role a <see cref="TenantMemberDto"/> holds, with the permissions it confers.

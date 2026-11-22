@@ -108,6 +108,10 @@ public record MemberInviteResult(
 /// the direct permissions, as a member's effective permissions are.
 /// </param>
 /// <param name="AccessEndsAt">When the membership the invite creates ends, in UTC; null when it does not.</param>
+/// <param name="OutlastsCaller">
+/// Whether the caller the invite was read for has an end date and the access the invite gives
+/// outlasts it, so the caller may not revoke it. Always false when read for no caller.
+/// </param>
 public record MemberInviteInfo(
     Guid Id,
     Guid TenantId,
@@ -127,7 +131,8 @@ public record MemberInviteInfo(
     List<InviteUsageInfo> UsedBy,
     List<string> RoleNames,
     List<string> Permissions,
-    DateTime? AccessEndsAt);
+    DateTime? AccessEndsAt,
+    bool OutlastsCaller = false);
 
 /// <summary>
 /// What the holder of an invite link is shown before joining. Anonymous, so it carries only what

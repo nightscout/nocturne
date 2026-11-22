@@ -124,7 +124,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     /// Builds the controller for a caller holding <paramref name="grantedScopes"/>, as
     /// <c>MemberScopeMiddleware</c> leaves the request.
     /// </summary>
-    private MemberInviteController BuildController(params string[] grantedScopes)
+    private MemberInviteController BuildController(params string[] grantedScopes) =>
+        BuildController(Mock.Of<IMemberInviteService>(), grantedScopes);
+
+    private MemberInviteController BuildController(IMemberInviteService invites, params string[] grantedScopes)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(t => t.TenantId).Returns(_tenantId);
@@ -139,7 +142,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         };
 
         return new MemberInviteController(
-            Mock.Of<IMemberInviteService>(),
+            invites,
             // The real service: setting an end date also caps the guest links the member made.
             new TenantService(
                 _dbContext.AsFactory(),
@@ -156,7 +159,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
                 AccountLinkRoutes.Off),
             // The real service, not a mock: the tenant check and the ceiling are the properties
             // under test, and a mock would assert the mock.
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>()),
             Mock.Of<ITenantMemberService>(),
             tenantAccessor.Object,
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off))
@@ -793,6 +796,14 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
                 new MembershipFacts(_callerMemberId, new TenantMemberAccess(AdministratorScopes.ToHashSet(), false, accessEndsAt), null))
             .StoreOn(controller.HttpContext);
 
+    private async Task GiveTargetAccessEndAsync(DateTime? accessEndsAt)
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.AccessEndsAt = accessEndsAt;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
     private async Task<DateTime?> TargetAccessEndAsync() =>
         (await _dbContext.TenantMembers.AsNoTracking().FirstAsync(m => m.Id == _targetMemberId)).AccessEndsAt;
 
@@ -967,6 +978,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     [Fact]
     public async Task SetMemberAccessEnd_byACallerWhoseAccessEnds_allowsAnEndNoLaterThanTheirs()
     {
+        await GiveTargetAccessEndAsync(AccessEndNow.UtcDateTime.AddDays(10));
         var controller = BuildController(AdministratorScopes);
         CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
 
@@ -978,6 +990,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     [Fact]
     public async Task SetMemberAccessEnd_byACallerWhoseAccessEnds_refusesALaterEndOrNone()
     {
+        await GiveTargetAccessEndAsync(AccessEndNow.UtcDateTime.AddDays(5));
         var controller = BuildController(AdministratorScopes);
         CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
 
@@ -987,7 +1000,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         ShouldRefuse(
             await SetTargetAccessEndAsync(controller, null),
             StatusCodes.Status403Forbidden, HttpContextExtensions.AccessEndCeilingDetail);
-        (await TargetAccessEndAsync()).Should().BeNull();
+        (await TargetAccessEndAsync()).Should().Be(AccessEndNow.UtcDateTime.AddDays(5));
     }
 
     private async Task MakeTargetThePublicSubjectAsync()
@@ -1051,12 +1064,170 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     [MemberData(nameof(PublicMemberEdits))]
     public async Task EditingAnotherMember_byACallerWhoseAccessEnds_isNotRefusedForPublicSharing(string edit)
     {
+        await GiveTargetAccessEndAsync(AccessEndNow.UtcDateTime.AddDays(5));
         var controller = BuildController(Scope.FullAccess);
         CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
 
         var result = await EditTargetAsync(controller, edit);
 
         result.Should().BeOfType<NoContentResult>();
+    }
+
+    private static readonly DateTime CallerEnd = AccessEndNow.UtcDateTime.AddDays(10);
+
+    /// <summary>The target's end in days from now against the caller's ten: none, later, the same, earlier.</summary>
+    public static TheoryData<string, int?> MemberActionsAndTargetEnds()
+    {
+        var data = new TheoryData<string, int?>();
+        foreach (var action in new[] { "roles", "permissions", "limit", "access-end", "remove" })
+            foreach (var end in new int?[] { null, 11, 10, 3 })
+                data.Add(action, end);
+        return data;
+    }
+
+    private async Task<IActionResult> ActOnTargetAsync(MemberInviteController controller, string action) => action switch
+    {
+        "access-end" => await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(2)),
+        "remove" => await controller.RemoveMember(_targetSubjectId, CancellationToken.None),
+        _ => await EditTargetAsync(controller, action),
+    };
+
+    private async Task<string> TargetWholeStateAsync()
+    {
+        var member = await _dbContext.TenantMembers.AsNoTracking().FirstOrDefaultAsync(m => m.Id == _targetMemberId);
+        if (member is null)
+            return "removed";
+
+        var roles = await _dbContext.TenantMemberRoles.CountAsync(r => r.TenantMemberId == _targetMemberId);
+        return string.Join(",", member.DirectPermissions ?? []) + "|" + member.LimitTo24Hours + "|" + member.AccessEndsAt?.ToString("O") + "|" + roles;
+    }
+
+    [Theory]
+    [MemberData(nameof(MemberActionsAndTargetEnds))]
+    public async Task ChangingAMember_byACallerWhoseAccessEnds_isRefusedOnlyWhenTheMemberOutlastsThem(string action, int? targetEndDays)
+    {
+        await GiveTargetAccessEndAsync(targetEndDays is { } days ? AccessEndNow.UtcDateTime.AddDays(days) : null);
+        var before = await TargetWholeStateAsync();
+        var controller = BuildController(Scope.FullAccess);
+        CallerAccessEndsAt(controller, CallerEnd);
+
+        var result = await ActOnTargetAsync(controller, action);
+
+        if (targetEndDays is null or > 10)
+        {
+            ShouldRefuse(result, StatusCodes.Status403Forbidden, HttpContextExtensions.MemberOutlastsCallerDetail);
+            (await TargetWholeStateAsync()).Should().Be(before, "a refusal writes nothing");
+        }
+        else
+        {
+            result.Should().BeOfType<NoContentResult>();
+            (await TargetWholeStateAsync()).Should().NotBe(before);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(MemberActionsAndTargetEnds))]
+    public async Task ChangingAMember_byACallerWithNoEnd_isNeverRefusedForItsEnd(string action, int? targetEndDays)
+    {
+        await GiveTargetAccessEndAsync(targetEndDays is { } days ? AccessEndNow.UtcDateTime.AddDays(days) : null);
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await ActOnTargetAsync(controller, action);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    private static MemberInviteInfo InviteEndingAt(DateTime? accessEndsAt) => new(
+        Guid.CreateVersion7(), Guid.Empty, "Tenant", "Chris", [], [Scope.GlucoseRead], null, false,
+        AccessEndNow.UtcDateTime.AddDays(7), null, 0, true, false, false, AccessEndNow.UtcDateTime, [], [], [Scope.GlucoseRead],
+        accessEndsAt);
+
+    private static Mock<IMemberInviteService> InviteService(params MemberInviteInfo[] invites)
+    {
+        var service = new Mock<IMemberInviteService>();
+        service.Setup(i => i.GetInvitesForTenantAsync(It.IsAny<Guid>())).ReturnsAsync([.. invites]);
+        service.Setup(i => i.RevokeInviteAsync(It.IsAny<Guid>(), It.IsAny<Guid>())).ReturnsAsync(true);
+        return service;
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(11, true)]
+    [InlineData(10, false)]
+    [InlineData(3, false)]
+    public async Task RevokeInvite_byACallerWhoseAccessEnds_isRefusedOnlyWhenTheInviteOutlastsThem(int? inviteEndDays, bool refused)
+    {
+        var invite = InviteEndingAt(inviteEndDays is { } days ? AccessEndNow.UtcDateTime.AddDays(days) : null);
+        var invites = InviteService(invite);
+        var controller = BuildController(invites.Object, Scope.MembersInvite);
+        CallerAccessEndsAt(controller, CallerEnd);
+
+        var result = await controller.RevokeInvite(invite.Id);
+
+        if (refused)
+            ShouldRefuse(result, StatusCodes.Status403Forbidden, HttpContextExtensions.InviteOutlastsCallerDetail);
+        else
+            result.Should().BeOfType<NoContentResult>();
+        invites.Verify(i => i.RevokeInviteAsync(invite.Id, _tenantId), refused ? Times.Never() : Times.Once());
+    }
+
+    [Fact]
+    public async Task RevokeInvite_byACallerWithNoEnd_revokesAnInviteWithNoEnd()
+    {
+        var invite = InviteEndingAt(null);
+        var invites = InviteService(invite);
+        var controller = BuildController(invites.Object, Scope.MembersInvite);
+
+        (await controller.RevokeInvite(invite.Id)).Should().BeOfType<NoContentResult>();
+        invites.Verify(i => i.RevokeInviteAsync(invite.Id, _tenantId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListInvites_marksTheInvitesThatOutlastACallerWhoseAccessEnds()
+    {
+        var invites = InviteService(
+            InviteEndingAt(null),
+            InviteEndingAt(AccessEndNow.UtcDateTime.AddDays(11)),
+            InviteEndingAt(CallerEnd),
+            InviteEndingAt(AccessEndNow.UtcDateTime.AddDays(3)));
+        var dated = BuildController(invites.Object, Scope.MembersInvite);
+        CallerAccessEndsAt(dated, CallerEnd);
+        var undated = BuildController(invites.Object, Scope.MembersInvite);
+
+        var datedList = (await dated.ListInvites()).Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeAssignableTo<List<MemberInviteInfo>>().Subject;
+        var undatedList = (await undated.ListInvites()).Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeAssignableTo<List<MemberInviteInfo>>().Subject;
+
+        datedList.Select(i => i.OutlastsCaller).Should().Equal(true, true, false, false);
+        undatedList.Should().HaveCount(4).And.OnlyContain(i => !i.OutlastsCaller);
+    }
+
+    [Fact]
+    public async Task GetMembers_marksTheMembersThatOutlastACallerWhoseAccessEnds()
+    {
+        var caller = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _callerMemberId);
+        caller.AccessEndsAt = CallerEnd;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var dated = BuildController(Scope.FullAccess);
+        CallerAccessEndsAt(dated, CallerEnd);
+        var undated = BuildController(Scope.FullAccess);
+
+        async Task<List<TenantMemberDto>> MembersAsync(MemberInviteController controller) =>
+            (await controller.GetMembers(CancellationToken.None)).Should().BeOfType<OkObjectResult>().Subject.Value
+                .Should().BeAssignableTo<List<TenantMemberDto>>().Subject;
+
+        var cases = new (int? Days, bool Outlasts)[] { (null, true), (11, true), (10, false), (3, false) };
+        foreach (var (days, outlasts) in cases)
+        {
+            await GiveTargetAccessEndAsync(days is { } d ? AccessEndNow.UtcDateTime.AddDays(d) : null);
+
+            (await MembersAsync(dated)).Single(m => m.Id == _targetMemberId).OutlastsCaller
+                .Should().Be(outlasts, $"the target ends in {days} days and the caller in 10");
+            (await MembersAsync(dated)).Single(m => m.Id == _callerMemberId).OutlastsCaller.Should().BeFalse();
+            (await MembersAsync(undated)).Should().OnlyContain(m => !m.OutlastsCaller);
+        }
     }
 
     public void Dispose() => _dbContext.Dispose();

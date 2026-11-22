@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -14,6 +15,13 @@ public sealed class RoleControllerNameCollisionTests
 {
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Mock<ITenantRoleService> _roles = new();
+
+    public RoleControllerNameCollisionTests()
+    {
+        _roles
+            .Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RoleHolders([], [], []));
+    }
 
     private RoleController BuildController()
     {
@@ -72,7 +80,7 @@ public sealed class RoleControllerNameCollisionTests
             .ReturnsAsync(refusal);
 
         var result = await BuildController()
-            .UpdateRole(roleId, new UpdateRoleRequest("Day Shift", null, ["glucose.read"]), CancellationToken.None);
+            .UpdateRole(roleId, new UpdateRoleRequest("Day Shift", null, ["glucose.read"]), TestPublicAccessCache.Create(), CancellationToken.None);
 
         ShouldBeProblem(result, refusal);
     }
@@ -105,7 +113,7 @@ public sealed class RoleControllerNameCollisionTests
             .ReturnsAsync((SaveRoleResult?)null);
 
         var result = await BuildController()
-            .UpdateRole(Guid.CreateVersion7(), new UpdateRoleRequest("x", null, ["glucose.read"]), CancellationToken.None);
+            .UpdateRole(Guid.CreateVersion7(), new UpdateRoleRequest("x", null, ["glucose.read"]), TestPublicAccessCache.Create(), CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
     }

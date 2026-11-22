@@ -59,7 +59,7 @@ public class TenantRoleServiceTests : IDisposable
             DisplayName = "Test Tenant",
         });
         _context.SaveChanges();
-        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System);
+        _service = new TenantRoleService(new TenantMembershipRepository(factory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>());
     }
 
     [Fact]
@@ -225,7 +225,7 @@ public class TenantRoleServiceTests : IDisposable
         repository
             .Setup(r => r.CreateRoleAsync(It.IsAny<NewTenantRole>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>());
 
         var result = await service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
@@ -242,7 +242,7 @@ public class TenantRoleServiceTests : IDisposable
             .ThrowsAsync(new DbUpdateException(
                 "foreign key",
                 new PostgresException("foreign key", "ERROR", "ERROR", PostgresErrorCodes.ForeignKeyViolation)));
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>());
 
         var act = () => service.CreateRoleAsync(_tenantId, "Night Shift", null, ["glucose.read"], [Scope.FullAccess]);
 
@@ -356,7 +356,7 @@ public class TenantRoleServiceTests : IDisposable
             .Setup(r => r.UpdateRoleAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<TenantRoleEdit>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(UniqueViolation());
-        var service = new TenantRoleService(repository.Object, TimeProvider.System);
+        var service = new TenantRoleService(repository.Object, TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>());
 
         var result = await service.UpdateRoleAsync(
             _tenantId, custom.Id, "Day Shift", null, ["glucose.read"], [Scope.FullAccess]);

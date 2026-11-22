@@ -1756,7 +1756,7 @@ public class PasskeyControllerTests : IDisposable
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             contexts,
-            new TenantRoleService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>()),
             _notifications.Object,
             _requestAudit.Object,
             TimeProvider.System,

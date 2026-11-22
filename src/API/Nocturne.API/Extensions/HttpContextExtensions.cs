@@ -254,7 +254,37 @@ public static class HttpContextExtensions
     /// <see cref="CallerAccessEndsAt"/>, or no end at all, for a caller whose access ends.
     /// </summary>
     public static bool OutlastsCallerAccess(this HttpContext context, DateTime? requested) =>
-        context.CallerAccessEndsAt() is { } ceiling && (requested is not { } end || end > ceiling);
+        Outlasts(context.CallerAccessEndsAt(), requested);
+
+    /// <summary>
+    /// Whether <paramref name="end"/> outlasts <paramref name="callerEnd"/>: the caller's access
+    /// ends and <paramref name="end"/> is later or none. The one date test behind every ceiling;
+    /// a member or invite for which it holds is beyond the caller's reach.
+    /// </summary>
+    public static bool Outlasts(DateTime? callerEnd, DateTime? end) =>
+        callerEnd is { } ceiling && (end is not { } e || e > ceiling);
+
+    /// <summary>The refusal a caller whose access ends reads on a member whose access outlasts the caller's.</summary>
+    public const string MemberOutlastsCallerDetail = "This member's access lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on an invite that would give access that outlasts the caller's.</summary>
+    public const string InviteOutlastsCallerDetail = "This invite gives access that lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role held by a member whose access outlasts the caller's.</summary>
+    public const string RoleHeldPastCallerDetail = "A member whose access lasts longer than yours has this role.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role a live invite gives, where the invite's access outlasts the caller's.</summary>
+    public const string RoleInvitedPastCallerDetail = "An invite that gives access longer than yours uses this role.";
+
+    /// <summary>
+    /// The 403 for a change to a member whose access ends at <paramref name="memberEnd"/>, or null
+    /// when the caller may go on (<see cref="OutlastsCallerAccess"/>). Checked before anything is
+    /// written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? MemberOutlastsCallerRefusal(this ControllerBase controller, DateTime? memberEnd) =>
+        controller.HttpContext.OutlastsCallerAccess(memberEnd)
+            ? controller.Problem(detail: MemberOutlastsCallerDetail, statusCode: StatusCodes.Status403Forbidden)
+            : null;
 
     private const string ReaderItemKey = "TenantReader";
 

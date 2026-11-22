@@ -96,4 +96,13 @@ describe("LockedOutMembers", () => {
     await expect.element(page.getByText("Sign in again to make a recovery link.")).toBeVisible();
     expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
   });
+
+  it("offers no Create link and says why for a member who outlasts the caller", async () => {
+    members = [{ ...orphan, outlastsCaller: true }];
+
+    render(LockedOutMembers);
+
+    await expect.element(page.getByText("This member's access lasts longer than yours.")).toBeVisible();
+    expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
+  });
 });

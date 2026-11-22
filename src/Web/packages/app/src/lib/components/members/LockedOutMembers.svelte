@@ -80,6 +80,10 @@
               <p class="text-right text-xs text-muted-foreground">
                 Only the operator can recover this account
               </p>
+            {:else if member.outlastsCaller}
+              <p class="text-right text-xs text-muted-foreground">
+                This member's access lasts longer than yours.
+              </p>
             {:else if !signInRequired}
               <Button
                 size="sm"

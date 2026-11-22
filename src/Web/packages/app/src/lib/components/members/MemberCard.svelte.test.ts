@@ -409,4 +409,56 @@ describe("MemberCard access end", () => {
     expect(page.getByLabelText(accessEndLabel).elements()).toHaveLength(0);
     await expect.element(page.getByText(`Until ${shortEnd(day)}`)).toBeVisible();
   });
+
+  describe("a member whose access lasts longer than the caller's", () => {
+    const reason = "This member's access lasts longer than yours.";
+    const props = {
+      roles: administratorRoles,
+      canEditRoles: true,
+      canManage: true,
+      isExpanded: false,
+      isSaving: false,
+      onToggleExpand: () => {},
+      onSave: () => {},
+      onRemove: () => {},
+    };
+
+    it("offers no remove or edit control, only a read-only view, and says why", async () => {
+      render(MemberCard, { ...props, member: { ...ownerMember, outlastsCaller: true } });
+
+      await expect.element(page.getByText(reason)).toBeVisible();
+      expect(page.getByRole("button", { name: "Edit" }).elements()).toHaveLength(0);
+      expect(page.getByRole("button", { name: "Remove member" }).elements()).toHaveLength(0);
+      await expect.element(page.getByRole("button", { name: "View", exact: true })).toBeVisible();
+    });
+
+    it("lists the member's permissions when expanded and offers no save", async () => {
+      render(MemberCard, {
+        ...props,
+        isExpanded: true,
+        member: { ...ownerMember, outlastsCaller: true, directPermissions: ["glucose.read"] },
+      });
+
+      await expect.element(page.getByText("Permissions from roles")).toBeVisible();
+      await expect.element(page.getByText("Direct permissions")).toBeVisible();
+      expect(page.getByRole("button", { name: "Save changes" }).elements()).toHaveLength(0);
+      expect(page.getByRole("checkbox", { name: "Caretaker" }).elements()).toHaveLength(0);
+    });
+
+    it("ties the reason to the row for a screen reader", async () => {
+      render(MemberCard, { ...props, member: { ...ownerMember, outlastsCaller: true } });
+
+      await expect
+        .element(page.getByRole("group", { name: "Alex" }))
+        .toHaveAccessibleDescription(reason);
+    });
+
+    it("offers edit and remove and no reason when the member is within reach", async () => {
+      render(MemberCard, { ...props, member: { ...ownerMember, outlastsCaller: false } });
+
+      await expect.element(page.getByRole("button", { name: "Edit" })).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Remove member" })).toBeVisible();
+      expect(page.getByText(reason).elements()).toHaveLength(0);
+    });
+  });
 });
