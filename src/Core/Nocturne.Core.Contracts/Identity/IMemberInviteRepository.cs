@@ -18,7 +18,8 @@ public interface IMemberInviteRepository
     /// <summary>
     /// The invite of <paramref name="tenantId"/> whose token hashes to <paramref name="tokenHash"/>,
     /// with its tenant's and creator's names. Its uses are not read: the token lookup serves the
-    /// invitee, who is not shown them.
+    /// invitee, who is not shown them. Read pinned to <paramref name="tenantId"/>, so a sign-in on a
+    /// host that resolves no tenant can check a join link of the sole tenant it serves.
     /// </summary>
     Task<MemberInviteRecord?> FindByTokenHashAsync(string tokenHash, Guid tenantId, CancellationToken ct);
 

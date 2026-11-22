@@ -40,6 +40,8 @@ public class OidcAuthServiceLinkTests
             _httpFactory.Object,
             _tenantMemberService.Object,
             new Mock<IMemberInviteService>().Object,
+            new Mock<ITenantCreationInviteService>().Object,
+            new Mock<ITenantRepository>().Object,
             new Mock<ITotpService>().Object,
             new EphemeralDataProtectionProvider(),
             options,

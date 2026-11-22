@@ -65,7 +65,7 @@ public class MemberInviteRepository : IMemberInviteRepository
     /// <inheritdoc/>
     public virtual async Task<MemberInviteRecord?> FindByTokenHashAsync(string tokenHash, Guid tenantId, CancellationToken ct)
     {
-        await using var db = await Standalone.CreateAsync(ct);
+        await using var db = await Standalone.CreateForTenantAsync(tenantId, ct);
         var entity = await db.MemberInvites
             .AsNoTracking()
             .Include(i => i.Tenant)

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
@@ -13,14 +14,16 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
-/// An identity-provider sign-in on a tenant host decides admission before it writes anything, so a
-/// refused sign-in leaves no subject and no identity link behind.
+/// An identity-provider sign-in decides admission before it writes anything, so a
+/// refused sign-in leaves no subject and no identity link behind. On a tenant host admission is
+/// membership or a join link; on a host that resolves no tenant it is an existing subject, or a
+/// link that authorises an account.
 /// </summary>
 /// <remarks>
 /// The provider redirect, the code exchange and the ID-token validation of
 /// <c>GET /api/auth/oidc/callback</c> need a live provider and are not driven. Each test calls
 /// <see cref="OidcAuthService.CompleteLoginAsync"/> with the claims and the resolved tenant the
-/// callback passes it, in a scope whose tenant is resolved as the callback's request would be,
+/// callback passes it, in a scope whose tenant is resolved (or not) as the callback's request would be,
 /// against Postgres under the app role. The controller's audit row and redirect
 /// are not exercised here.
 /// </remarks>
@@ -64,8 +67,9 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM subject_oidc_identities WHERE provider_id = @provider;
                 DELETE FROM subjects WHERE id IN (SELECT subject_id FROM admission_subjects);
                 DELETE FROM oidc_providers WHERE id = @provider;
+                DELETE FROM tenant_creation_invites WHERE label = @issuer;
                 """,
-                ("provider", _providerId), ("tenantText", Fixture.TenantId.ToString()));
+                ("provider", _providerId), ("tenantText", Fixture.TenantId.ToString()), ("issuer", _issuer));
         }
 
         await base.DisposeAsync();
@@ -141,23 +145,100 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
         result.SubjectId.Should().Be(member);
     }
 
+    [Fact]
+    public async Task On_the_apex_a_first_time_identity_with_nothing_authorising_an_account_leaves_nothing_behind()
+    {
+        var result = await SignInAsync("apex-stranger", currentTenantId: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.Tokens.Should().BeNull();
+        result.SubjectId.Should().BeNull();
+        result.ExternalIdentityDigest.Should().Be(OidcAuthService.ExternalIdentityDigest(_issuer, "apex-stranger"));
+        (await IdentityLinkCountAsync("apex-stranger")).Should().Be(0);
+        (await SubjectsNamedAsync("apex-stranger")).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task On_the_apex_a_tenant_creation_link_that_is_not_usable_authorises_no_account()
+    {
+        var token = await SeedTenantCreationInviteAsync(revoked: true);
+
+        var result = await SignInAsync(
+            "apex-revoked", currentTenantId: null, returnUrl: $"/start?token={token}&slug=x&name=y");
+
+        result.IsAccessDenied.Should().BeTrue();
+        (await IdentityLinkCountAsync("apex-revoked")).Should().Be(0);
+        (await SubjectsNamedAsync("apex-revoked")).Should().Be(0);
+    }
+
     /// <summary>
-    /// A tenant-creation invite is redeemed by a caller signed in on the apex, so a first-time
-    /// identity signing in there still gets a subject and a session.
+    /// The link's own page signs a visitor in with a provider before it redeems, so the link is
+    /// what authorises the account.
     /// </summary>
     [Fact]
-    public async Task On_the_apex_a_first_time_identity_gets_a_subject_and_a_session()
+    public async Task On_the_apex_a_first_time_identity_holding_a_usable_tenant_creation_link_gets_a_subject_and_a_session()
     {
-        var result = await SignInAsync("apex-newcomer", currentTenantId: null);
+        var token = await SeedTenantCreationInviteAsync(revoked: false);
+
+        var result = await SignInAsync(
+            "apex-founder", currentTenantId: null, returnUrl: $"/start?token={token}&slug=x&name=y");
 
         result.Success.Should().BeTrue(result.ErrorDescription);
         result.Tokens.Should().NotBeNull();
-        (await LinkedSubjectAsync("apex-newcomer")).Should().Be(result.SubjectId!.Value);
+        (await LinkedSubjectAsync("apex-founder")).Should().Be(result.SubjectId!.Value);
+        (await GlobalRolesAsync(result.SubjectId!.Value)).Should().Contain(_defaultRole);
+        (await RefreshTokenCountAsync(result.SubjectId!.Value)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task On_the_apex_an_existing_subject_that_is_a_member_of_nothing_signs_in_as_before()
+    {
+        var existing = await CreateFromProviderAsync("apex-known", name: "apex-known");
+
+        var result = await SignInAsync("apex-known", currentTenantId: null);
+
+        result.Success.Should().BeTrue(result.ErrorDescription);
+        result.Tokens.Should().NotBeNull();
+        result.SubjectId.Should().Be(existing);
+        (await RefreshTokenCountAsync(existing)).Should().Be(1);
+    }
+
+    /// <summary>
+    /// A single-tenant install hands out join links on the bare domain, whose login callback
+    /// resolves no tenant. The scope here resolves none either, so the invite is read as that
+    /// callback reads it.
+    /// </summary>
+    [Fact]
+    public async Task On_the_bare_domain_of_a_single_tenant_install_a_first_time_identity_holding_a_join_link_gets_a_subject()
+    {
+        var token = await SeedInviteAsync();
+
+        var result = await SignInAsync(
+            "sole-invitee", currentTenantId: null, returnUrl: $"/join?token={token}", soleTenantAtApex: Fixture.TenantId);
+
+        result.Success.Should().BeTrue(result.ErrorDescription);
+        (await LinkedSubjectAsync("sole-invitee")).Should().Be(result.SubjectId!.Value);
         (await GlobalRolesAsync(result.SubjectId!.Value)).Should().Contain(_defaultRole);
     }
 
+    [Fact]
+    public async Task On_the_bare_domain_of_several_tenants_a_join_link_authorises_no_account()
+    {
+        var token = await SeedInviteAsync();
+
+        var result = await SignInAsync("multi-invitee", currentTenantId: null, returnUrl: $"/join?token={token}");
+
+        result.IsAccessDenied.Should().BeTrue();
+        (await IdentityLinkCountAsync("multi-invitee")).Should().Be(0);
+    }
+
+    /// <param name="soleTenantAtApex">
+    /// The tenant the bare domain serves alone. The shared database holds other tests' tenants,
+    /// so the sole-tenant lookup is answered here; null answers that there is none.
+    /// </param>
     private async Task<OidcCallbackResult> SignInAsync(
-        string externalId, Guid? currentTenantId, string returnUrl = "/", string? name = null)
+        string externalId, Guid? currentTenantId, string returnUrl = "/", string? name = null,
+        Guid? soleTenantAtApex = null)
     {
         using var scope = Fixture.Services.CreateScope();
         if (currentTenantId is { } tenantId)
@@ -166,7 +247,14 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
                 new TenantContext(tenantId, "admission", "Admission", true, false));
         }
 
-        var service = (OidcAuthService)scope.ServiceProvider.GetRequiredService<IOidcAuthService>();
+        var realTenants = scope.ServiceProvider.GetRequiredService<ITenantRepository>();
+        var soleTenant = soleTenantAtApex is { } soleId
+            ? await realTenants.GetAsync(soleId, CancellationToken.None)
+            : null;
+        var tenants = new Mock<ITenantRepository>();
+        tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(soleTenant);
+
+        var service = ActivatorUtilities.CreateInstance<OidcAuthService>(scope.ServiceProvider, tenants.Object);
         var provider = await scope.ServiceProvider.GetRequiredService<IOidcProviderService>()
             .GetProviderByIdAsync(_providerId);
 
@@ -211,6 +299,26 @@ public class ProviderSignInAdmissionIntegrationTests : ApiIntegrationTestBase
             ("tenantId", Fixture.TenantId), ("ownerId", Fixture.OwnerSubjectId),
             ("hash", HashUtils.Sha256Hex(token)), ("roleIds", $"[\"{viewerRoleId}\"]"));
         return token;
+    }
+
+    private async Task<string> SeedTenantCreationInviteAsync(bool revoked)
+    {
+        await using var conn = await OpenAsync();
+        var token = $"start-{Guid.NewGuid():N}";
+        await ExecuteAsync(conn, """
+            INSERT INTO tenant_creation_invites (id, created_by_subject_id, token_hash, label, expires_at, use_count, revoked_at)
+            VALUES (@id, @creator, @hash, @label, now() + interval '1 day', 0, CASE WHEN @revoked THEN now() END);
+            """,
+            ("id", Guid.CreateVersion7()), ("creator", Fixture.OwnerSubjectId),
+            ("hash", HashUtils.Sha256Hex(token)), ("label", _issuer), ("revoked", revoked));
+        return token;
+    }
+
+    private async Task<long> RefreshTokenCountAsync(Guid subjectId)
+    {
+        await using var conn = await OpenAsync();
+        return await ScalarAsync<long>(conn,
+            "SELECT count(*) FROM refresh_tokens WHERE subject_id = @subject;", ("subject", subjectId));
     }
 
     private async Task<long> IdentityLinkCountAsync(string externalId)
