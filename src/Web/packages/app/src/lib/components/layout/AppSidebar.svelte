@@ -121,6 +121,7 @@
       user,
       isGuestSession,
       isPlatformAdmin,
+      refusedAsDemoSubject: page.data.refusedAsDemoSubject ?? false,
       grantedScopes: page.data.effectivePermissions ?? [],
       tenantCount: tenantTargets.length,
       tenantless,

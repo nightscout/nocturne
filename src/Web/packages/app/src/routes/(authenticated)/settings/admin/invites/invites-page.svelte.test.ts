@@ -11,6 +11,7 @@ import {
 const mocks = vi.hoisted(() => ({
   overview: undefined as unknown as TenantCreationInviteOverview,
   allowOwnerSlugChange: false,
+  restrictTeamCreationToAdmins: false,
   create: vi.fn(),
   revoke: vi.fn(),
   setPolicy: vi.fn(),
@@ -23,7 +24,10 @@ vi.mock("#lib/api/generated/tenantCreationInviteAdmins.generated.remote.js", () 
 }));
 
 vi.mock("#lib/api/generated/platformPolicies.generated.remote.js", () => ({
-  getPolicy: () => remoteQuery(() => ({ allowOwnerSlugChange: mocks.allowOwnerSlugChange })),
+  getPolicy: () => remoteQuery(() => ({
+    allowOwnerSlugChange: mocks.allowOwnerSlugChange,
+    restrictTeamCreationToAdmins: mocks.restrictTeamCreationToAdmins,
+  })),
   setPolicy: (arg: unknown) => remoteCommand(mocks.setPolicy)(arg),
 }));
 
@@ -40,6 +44,7 @@ describe("invite people page", () => {
   beforeEach(() => {
     mocks.overview = { invites: [], baseDomain: "example.org", subdomainNotice: undefined };
     mocks.allowOwnerSlugChange = false;
+    mocks.restrictTeamCreationToAdmins = false;
     mocks.create.mockReset();
     mocks.revoke.mockReset();
     mocks.setPolicy.mockReset();
@@ -154,6 +159,58 @@ describe("invite people page", () => {
 
     await page.getByRole("switch", { name: "Owners can change the address of their site" }).click();
 
-    await vi.waitFor(() => expect(mocks.setPolicy).toHaveBeenCalledWith({ allowOwnerSlugChange: true }));
+    await vi.waitFor(() => expect(mocks.setPolicy).toHaveBeenCalledTimes(1));
+    expect(mocks.setPolicy).toHaveBeenCalledWith({ allowOwnerSlugChange: true });
+  });
+
+  it("turns team creation restriction on, sending only that field", async () => {
+    mocks.setPolicy.mockResolvedValue({ restrictTeamCreationToAdmins: true });
+    render(InvitesPage);
+
+    await page.getByRole("switch", { name: "Only platform administrators can create a team" }).click();
+
+    await vi.waitFor(() => expect(mocks.setPolicy).toHaveBeenCalledTimes(1));
+    expect(mocks.setPolicy).toHaveBeenCalledWith({ restrictTeamCreationToAdmins: true });
+  });
+
+  it("shows the saved team creation restriction and turns it off, sending only that field", async () => {
+    mocks.restrictTeamCreationToAdmins = true;
+    mocks.setPolicy.mockResolvedValue({ restrictTeamCreationToAdmins: false });
+    render(InvitesPage);
+
+    const restrict = page.getByRole("switch", { name: "Only platform administrators can create a team" });
+    await expect.element(restrict).toBeChecked();
+    await expect
+      .element(page.getByRole("switch", { name: "Owners can change the address of their site" }))
+      .not.toBeChecked();
+
+    await restrict.click();
+
+    await vi.waitFor(() => expect(mocks.setPolicy).toHaveBeenCalledTimes(1));
+    expect(mocks.setPolicy).toHaveBeenCalledWith({ restrictTeamCreationToAdmins: false });
+  });
+
+  it.each([
+    ["Owners can change the address of their site", "Only platform administrators can create a team"],
+    ["Only platform administrators can create a team", "Owners can change the address of their site"],
+  ])("returns the %s switch to its saved value and shows the error beside it alone", async (failing, other) => {
+    mocks.setPolicy.mockRejectedValue({ status: 500, body: { message: "boom" } });
+    render(InvitesPage);
+
+    const failed = page.getByRole("switch", { name: failing });
+    const untouched = page.getByRole("switch", { name: other });
+    await expect.element(failed).not.toBeChecked();
+    await failed.click();
+
+    await vi.waitFor(() => expect(mocks.setPolicy).toHaveBeenCalledTimes(1));
+    await expect.element(failed).not.toBeChecked();
+    await expect.element(untouched).not.toBeChecked();
+    const alerts = page.getByText("Could not save the setting. Try again.");
+    await expect.element(alerts).toBeVisible();
+    expect(alerts.elements()).toHaveLength(1);
+    const owningCard = failing.startsWith("Owners")
+      ? page.getByText("Site addresses").element().closest("[data-slot=card]")
+      : page.getByText("Teams", { exact: true }).element().closest("[data-slot=card]");
+    expect(owningCard?.textContent).toContain("Could not save the setting. Try again.");
   });
 });

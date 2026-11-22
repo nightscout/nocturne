@@ -37,6 +37,7 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import User from "@lucide/svelte/icons/user";
 import UserPlus from "@lucide/svelte/icons/user-plus";
 import Users from "@lucide/svelte/icons/users";
+import UsersRound from "@lucide/svelte/icons/users-round";
 import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
 import Wrench from "@lucide/svelte/icons/wrench";
 import ZoomIn from "@lucide/svelte/icons/zoom-in";
@@ -62,6 +63,8 @@ export interface CommandPaletteItem {
 	scope?: string;
 	/** Shown only to a platform administrator. */
 	platformAdmin?: boolean;
+	/** Not offered to the demo visitor, whom the API refuses on the page behind it. */
+	notForDemoSubject?: boolean;
 	href?: string;
 	linkedHref?: string;
 }
@@ -243,6 +246,15 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["account", "email", "password"],
 		icon: User,
 		href: "/settings/account",
+	},
+	{
+		id: "settings-teams",
+		label: "Teams",
+		group: "settings",
+		keywords: ["teams", "managers", "invite a manager"],
+		icon: UsersRound,
+		href: "/settings/teams",
+		notForDemoSubject: true,
 	},
 	{
 		id: "settings-profile",

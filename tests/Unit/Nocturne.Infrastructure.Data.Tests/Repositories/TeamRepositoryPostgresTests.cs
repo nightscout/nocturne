@@ -88,6 +88,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         detail.Managers.Select(m => m.SubjectId).Should().Equal(creator);
         detail.IsLastManager.Should().BeTrue();
         detail.CanDelete.Should().BeTrue();
+        detail.CallerKind.Should().Be(TeamMemberKind.Manager);
 
         var rows = await AuditOfAsync(team.Id);
         rows.Select(r => r.EventType).Should().BeEquivalentTo([AuthAuditEventType.TeamCreated, AuthAuditEventType.TeamManagerAdded]);
@@ -111,7 +112,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         await AddManagerAsync(shared.Id, a, b);
 
         (await Teams().GetTeamsOfAsync(a, default)).Should().Equal(
-            new TeamSummary(shared.Id, "A team"), new TeamSummary(mine.Id, "B team"));
+            new TeamSummary(shared.Id, "A team", TeamMemberKind.Manager), new TeamSummary(mine.Id, "B team", TeamMemberKind.Manager));
     }
 
     [Fact]
@@ -166,6 +167,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var info = await Teams().GetInviteInfoAsync(token, joiner, Now, default);
         info.Should().BeEquivalentTo(new { TeamId = team.Id, TeamName = "Camp", Refusal = (TeamInviteRefusal?)null });
         info!.CreatedByName.Should().StartWith("manager-");
+        info.Kind.Should().Be(TeamMemberKind.Manager);
 
         (await Teams(joiner).AcceptInviteAsync(token, joiner, Now, default)).Should().Be(new TeamInviteAcceptance(team.Id, null));
         (await Teams(joiner).AcceptInviteAsync(token, joiner, Now, default)).Refusal.Should().Be(TeamInviteRefusal.AlreadyMember);

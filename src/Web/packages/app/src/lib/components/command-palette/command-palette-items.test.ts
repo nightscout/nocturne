@@ -38,6 +38,7 @@ describe("paletteItemsFor", () => {
     expect(paletteItemsFor(true, OWNER).map((item) => item.id)).toEqual([
       "page-dashboard",
       "settings-account",
+      "settings-teams",
       "settings-appearance",
     ]);
   });
@@ -60,6 +61,15 @@ describe("paletteItemsFor", () => {
 
     const tenantlessGroups = new Set(paletteItemsFor(true, OWNER).map((item) => item.group));
     expect(tenantlessGroups).toEqual(new Set(["pages", "settings"]));
+  });
+});
+
+describe("the demo visitor", () => {
+  it("is not offered Teams by the palette flag", () => {
+    const teams = items.find((item) => item.id === "settings-teams");
+
+    expect(teams?.notForDemoSubject).toBe(true);
+    expect(items.filter((item) => item.notForDemoSubject).map((item) => item.id)).toEqual(["settings-teams"]);
   });
 });
 

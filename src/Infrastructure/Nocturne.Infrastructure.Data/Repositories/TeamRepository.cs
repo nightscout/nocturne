@@ -22,7 +22,8 @@ public class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepositor
             .Where(t => t.Members.Any(m => m.SubjectId == subjectId))
             .OrderBy(t => t.Name)
             .ThenBy(t => t.Id)
-            .Select(t => new TeamSummary(t.Id, t.Name))
+            .Select(t => new TeamSummary(
+                t.Id, t.Name, t.Members.Where(m => m.SubjectId == subjectId).Select(m => m.Kind).First()))
             .ToListAsync(ct);
     }
 
@@ -47,7 +48,7 @@ public class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepositor
         TeamAudit.StageCreated(db, team.Id, name);
         TeamAudit.StageManagerAdded(db, team.Id, creatorSubjectId, inviteId: null);
         await db.SaveChangesAsync(ct);
-        return new TeamSummary(team.Id, team.Name);
+        return new TeamSummary(team.Id, team.Name, TeamMemberKind.Manager);
     }
 
     /// <inheritdoc/>
@@ -60,6 +61,7 @@ public class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepositor
             {
                 t.Id,
                 t.Name,
+                CallerKind = t.Members.Where(m => m.SubjectId == callerSubjectId).Select(m => m.Kind).First(),
                 Managers = t.Members
                     .Where(m => m.Kind == TeamMemberKind.Manager)
                     .OrderBy(m => m.SysCreatedAt)
@@ -88,7 +90,8 @@ public class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepositor
             team.Managers,
             invites,
             await db.IsLastManagerAsync(teamId, callerSubjectId, ct),
-            await CanDeleteAsync(db, teamId, callerSubjectId, ct));
+            await CanDeleteAsync(db, teamId, callerSubjectId, ct),
+            team.CallerKind);
     }
 
     /// <inheritdoc/>
@@ -204,7 +207,7 @@ public class TeamRepository(INocturneDbContextFactory contexts) : ITeamRepositor
 
         var refusal = await RefusalAsync(db, invite.Invite, now, ct)
             ?? (invite.IsMember ? TeamInviteRefusal.AlreadyMember : null);
-        return new TeamInviteInfo(invite.Invite.TeamId, invite.TeamName, invite.CreatedByName, refusal);
+        return new TeamInviteInfo(invite.Invite.TeamId, invite.TeamName, invite.CreatedByName, invite.Invite.Kind, refusal);
     }
 
     /// <inheritdoc/>

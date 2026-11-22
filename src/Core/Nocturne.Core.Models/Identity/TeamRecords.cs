@@ -8,7 +8,8 @@ public static class TeamMemberKind
 }
 
 /// <summary>A team the caller is a member of.</summary>
-public sealed record TeamSummary(Guid Id, string Name);
+/// <param name="Kind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
+public sealed record TeamSummary(Guid Id, string Name, string Kind);
 
 /// <summary>One manager of a team.</summary>
 public sealed record TeamManager(Guid SubjectId, string DisplayName);
@@ -28,13 +29,15 @@ public sealed record TeamManagerInvite(
 /// </param>
 /// <param name="Invites">The live manager invites; empty unless the caller is a manager.</param>
 /// <param name="CanDelete">Whether the caller may delete the team now.</param>
+/// <param name="CallerKind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
 public sealed record TeamDetail(
     Guid Id,
     string Name,
     IReadOnlyList<TeamManager> Managers,
     IReadOnlyList<TeamManagerInvite> Invites,
     bool IsLastManager,
-    bool CanDelete);
+    bool CanDelete,
+    string CallerKind);
 
 /// <summary>A manager invite as it is stored, before it has an id.</summary>
 public sealed record NewTeamInvite(
@@ -60,8 +63,10 @@ public enum TeamInviteRefusal
 /// <summary>
 /// The team a manager invite is for, read by the person holding its token.
 /// </summary>
+/// <param name="Kind">What accepting makes the person, a <see cref="TeamMemberKind"/> value.</param>
 /// <param name="Refusal">Why it cannot be accepted, or null when it can.</param>
-public sealed record TeamInviteInfo(Guid TeamId, string TeamName, string CreatedByName, TeamInviteRefusal? Refusal);
+public sealed record TeamInviteInfo(
+    Guid TeamId, string TeamName, string CreatedByName, string Kind, TeamInviteRefusal? Refusal);
 
 /// <summary>What accepting a team invite did: the team joined, or why it was refused.</summary>
 public sealed record TeamInviteAcceptance(Guid? TeamId, TeamInviteRefusal? Refusal);

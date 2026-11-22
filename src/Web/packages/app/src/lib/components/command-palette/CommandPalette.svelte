@@ -56,7 +56,8 @@
       (item) =>
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
-        (!item.platformAdmin || page.data.isPlatformAdmin)
+        (!item.platformAdmin || page.data.isPlatformAdmin) &&
+        !(item.notForDemoSubject && page.data.refusedAsDemoSubject)
     )
   );
 
