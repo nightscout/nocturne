@@ -1426,7 +1426,8 @@ internal class MigrationJob
         {
             ("subjects", false, (client, _, token) => MigrateSubjectsViaApiAsync(
                 client, dbContext, scope.ServiceProvider.GetRequiredService<IOAuthGrantRepository>(),
-                scope.ServiceProvider.GetRequiredService<IRoleRepository>(), token)),
+                scope.ServiceProvider.GetRequiredService<IRoleRepository>(),
+                scope.ServiceProvider.GetRequiredService<ITenantRepository>(), token)),
             ("entries", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_entriesCollection, pass, token)),
             ("treatments", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, pass, token)),
             ("devicestatus", true, (client, pass, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, pass, token)),
@@ -2823,6 +2824,7 @@ internal class MigrationJob
         NocturneDbContext dbContext,
         IOAuthGrantRepository grants,
         IRoleRepository roleCatalogue,
+        ITenantRepository tenants,
         CancellationToken ct)
     {
         var collectionName = "subjects";
@@ -2869,6 +2871,7 @@ internal class MigrationJob
         var existingHashes = (await grants.GetTokenHashesAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         var nocturneRoles = (await roleCatalogue.ListAsync(ct)).ToDictionary(r => r.Name, r => r);
+        var addsMissingRoles = await Auth.InstanceStanding.IsOnlyTenantAsync(tenants, _tenantId, ct);
 
         // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
         // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
@@ -2908,8 +2911,9 @@ internal class MigrationJob
                     continue;
                 }
 
-                var roles = await ResolveRolesAsync(roleCatalogue, nocturneRoles, rolePermissions, subject.Roles, ct);
-                var scopes = ScopeTranslator.FromPermissions(GrantedPermissions(roles, rolePermissions));
+                if (addsMissingRoles)
+                    await AddMissingRolesAsync(roleCatalogue, nocturneRoles, rolePermissions, subject.Roles, ct);
+                var scopes = ScopeTranslator.FromPermissions(GrantedPermissions(subject.Roles, nocturneRoles, rolePermissions));
 
                 // A subject whose permissions all fall outside Nocturne's vocabulary would get a
                 // credential that authorizes nothing. Skip it rather than leave a token on the list
@@ -2962,40 +2966,34 @@ internal class MigrationJob
     }
 
     /// <summary>
-    /// Resolves a Nightscout subject's role names to Nocturne roles, creating any the instance does
-    /// not already have from the permissions fetched off the source. The <paramref name="knownRoles"/>
-    /// lookup is updated so each custom role is created once per run.
+    /// Adds each of a subject's role names the instance lacks to the global roles, with the source's
+    /// definition, so a later edit through the V2 subjects API can name it. The grant's scopes do not
+    /// depend on it (<see cref="GrantedPermissions"/>). Every tenant reads the global roles, so the
+    /// caller adds them only on the instance's only tenant
+    /// (<see cref="Auth.InstanceStanding.IsOnlyTenantAsync"/>): the job holds no record of whether whoever
+    /// started it had standing over the instance. <paramref name="knownRoles"/> is updated so each
+    /// role is added once per run.
     /// </summary>
     /// <remarks>
-    /// "denied" is dropped: it is Nightscout's way of spelling "no access", carried instead by
-    /// the subject's <c>is_active</c> flag, and a role row for it would grant nothing anyway.
+    /// "denied" is skipped: it is Nightscout's way of spelling "no access", carried instead by the
+    /// subject's <c>is_active</c> flag. <see cref="PlatformAdminCredentials.RoleName"/> is reserved.
     /// </remarks>
-    private static async Task<List<AuthRole>> ResolveRolesAsync(
+    private static async Task AddMissingRolesAsync(
         IRoleRepository roleCatalogue,
         Dictionary<string, AuthRole> knownRoles,
         Dictionary<string, List<string>> sourcePermissions,
         List<string>? roleNames,
         CancellationToken ct)
     {
-        var resolved = new List<AuthRole>();
-
         foreach (var roleName in roleNames ?? [])
         {
-            if (roleName == "denied")
+            if (roleName == "denied" || PlatformAdminCredentials.IsRoleName(roleName) || knownRoles.ContainsKey(roleName))
                 continue;
 
-            if (!knownRoles.TryGetValue(roleName, out var role))
-            {
-                role = await roleCatalogue.CreateAsync(
-                    new NewRole(roleName, "Migrated from Nightscout", sourcePermissions.GetValueOrDefault(roleName, []), IsSystemRole: false),
-                    ct);
-                knownRoles[roleName] = role;
-            }
-
-            resolved.Add(role);
+            knownRoles[roleName] = await roleCatalogue.CreateAsync(
+                new NewRole(roleName, "Migrated from Nightscout", sourcePermissions.GetValueOrDefault(roleName, []), IsSystemRole: false),
+                ct);
         }
-
-        return resolved;
     }
 
     /// <summary>
@@ -3003,13 +3001,14 @@ internal class MigrationJob
     /// definition wins over the same-named Nocturne role, which may be a wider seeded role that
     /// merely shares a name (a hand-written Nightscout role called <c>admin</c> need not mean
     /// <c>*</c>). The local definition is the fallback for a source whose roles endpoint was
-    /// inaccessible.
+    /// inaccessible. "denied" grants nothing.
     /// </summary>
     private static IEnumerable<string> GrantedPermissions(
-        List<AuthRole> roles, Dictionary<string, List<string>> sourcePermissions) =>
-        roles.SelectMany(role => sourcePermissions.TryGetValue(role.Name, out var fromSource)
-            ? fromSource
-            : role.Permissions);
+        List<string>? roleNames, Dictionary<string, AuthRole> knownRoles, Dictionary<string, List<string>> sourcePermissions) =>
+        (roleNames ?? []).Where(name => name != "denied").SelectMany(name =>
+            sourcePermissions.TryGetValue(name, out var fromSource) ? fromSource
+            : knownRoles.TryGetValue(name, out var local) ? local.Permissions
+            : []);
 
     /// <summary>
     /// Fetches Nightscout role definitions and returns a name-to-permissions lookup.
