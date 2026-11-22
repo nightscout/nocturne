@@ -17,12 +17,15 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 
 /// <summary>
 /// The one writer of the <c>auth_audit_log</c> rows that record a change to what a member can read:
-/// the roles they hold, their direct permissions, their 24-hour history limit, the date their access
-/// ends and the permissions a role itself grants.
+/// the membership starting and ending, the roles they hold, their direct permissions, their 24-hour
+/// history limit, the date their access ends and the permissions a role itself grants.
 /// </summary>
 /// <remarks>
 /// Rows are staged on the context that stages the membership write, so one save commits both and a
-/// write that fails leaves no row. A role or permission is one row per item:
+/// write that fails leaves no row. A membership added is one <see cref="AuthAuditEventType.MemberJoined"/>
+/// row before its other rows, and one removed is one <see cref="AuthAuditEventType.MemberRemoved"/> row
+/// after them, both staged by <see cref="MembershipReasons"/> and naming how under <c>how</c>.
+/// A role or permission is one row per item:
 /// <see cref="AuthAuditEventType.RoleRemoved"/> for each the change took away, then
 /// <see cref="AuthAuditEventType.RoleAssigned"/> for each it gave, named in the details under
 /// <c>role</c> or <c>permission</c>. A history limit that moved is one
@@ -60,6 +63,68 @@ internal static class MemberAccessAudit
     internal const string InviteKey = "invite";
     internal const string TwentyFourHours = "24_hours";
     internal const string FullHistory = "full";
+    internal const string HowKey = "how";
+    internal const string ByKey = "by";
+
+    /// <summary>The <c>how</c> each way of joining is stored as.</summary>
+    internal static readonly IReadOnlyDictionary<MembershipJoinHow, string> JoinedHow = new Dictionary<MembershipJoinHow, string>
+    {
+        [MembershipJoinHow.Invite] = "invite",
+        [MembershipJoinHow.Request] = "request",
+        [MembershipJoinHow.Direct] = "direct",
+        [MembershipJoinHow.Setup] = "setup",
+        [MembershipJoinHow.System] = "system",
+    };
+
+    /// <summary>The <c>how</c> each way of leaving is stored as.</summary>
+    internal static readonly IReadOnlyDictionary<MembershipEndHow, string> RemovedHow = new Dictionary<MembershipEndHow, string>
+    {
+        [MembershipEndHow.Removed] = "removed",
+        [MembershipEndHow.Left] = "left",
+        [MembershipEndHow.AccountDeleted] = "account_deleted",
+        [MembershipEndHow.Replaced] = "replaced",
+        [MembershipEndHow.System] = "system",
+    };
+
+    /// <summary>
+    /// Stages the <see cref="AuthAuditEventType.MemberJoined"/> row of a membership being added, naming
+    /// <paramref name="how"/>, the invite and <paramref name="by"/> when there is one.
+    /// </summary>
+    public static void StageJoined(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipJoinHow how, Guid? inviteId, Guid? by,
+        MemberAccessSource? source)
+    {
+        var details = new Dictionary<string, object?>
+        {
+            [AuthAuditRows.KindKey] = TenantKind,
+            [HowKey] = JoinedHow[how],
+        };
+        if (inviteId is { } invite)
+            details[InviteKey] = invite.ToString();
+        if (by is { } responsible)
+            details[ByKey] = responsible.ToString();
+
+        Add(db, AuthAuditEventType.MemberJoined, tenantId, subjectId, details, source);
+    }
+
+    /// <summary>
+    /// Stages the <see cref="AuthAuditEventType.MemberRemoved"/> row of a membership being removed. A
+    /// removal whose actor is the member is recorded as <see cref="MembershipEndHow.Left"/>.
+    /// </summary>
+    public static void StageRemoved(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipEndHow how, MemberAccessSource? source)
+    {
+        var actor = source is not null ? source.ActorSubjectId
+            : db.AuditContext is { IsSystem: false } audit ? audit.SubjectId : null;
+        if (how == MembershipEndHow.Removed && actor == subjectId)
+            how = MembershipEndHow.Left;
+
+        Add(db, AuthAuditEventType.MemberRemoved, tenantId, subjectId, new Dictionary<string, object?>
+        {
+            [AuthAuditRows.KindKey] = TenantKind,
+            [HowKey] = RemovedHow[how],
+        }, source);
+    }
 
     /// <summary>Stages a row for each role slug in <paramref name="removed"/>, then each in <paramref name="added"/>.</summary>
     public static void StageRoles(

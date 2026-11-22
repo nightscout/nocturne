@@ -49,7 +49,7 @@ public class TenantMembershipRepositoryTests : IDisposable
 
     private async Task<TenantMemberRecord> JoinAsync(Guid subject, params Guid[] roles)
     {
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, roles), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, roles) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         return (await Members().FindMemberAsync(_tenant, subject, CancellationToken.None))!;
     }
 
@@ -90,7 +90,7 @@ public class TenantMembershipRepositoryTests : IDisposable
     {
         var subject = await SubjectAsync("Rhys");
         (await Members().AddMemberAsync(
-            new NewTenantMember(_tenant, subject, [_ownerRole, _caretakerRole], ["extra.read"], "Label", "rhys", LimitTo24Hours: true), CancellationToken.None))
+            new NewTenantMember(_tenant, subject, [_ownerRole, _caretakerRole], ["extra.read"], "Label", "rhys", LimitTo24Hours: true) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
             .Should().BeTrue();
 
         var member = await Members().FindMemberAsync(_tenant, subject, CancellationToken.None);
@@ -104,7 +104,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         member.EffectivePermissions(excludingRoleId: _ownerRole).Should().NotContain(Scope.FullAccess);
         member.Holds(Scope.MembersManage).Should().BeTrue();
 
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, []), CancellationToken.None)).Should().BeFalse("already a member");
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, []) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeFalse("already a member");
         (await Members().GetMemberAsync(_tenant, member.Id, CancellationToken.None))!.Id.Should().Be(member.Id);
         (await Members().GetMemberAsync(_otherTenant, member.Id, CancellationToken.None)).Should().BeNull();
         (await Members().FindMemberByUsernameAsync(_tenant, "rhys", CancellationToken.None))!.Id.Should().Be(member.Id);
@@ -135,7 +135,7 @@ public class TenantMembershipRepositoryTests : IDisposable
 
         var subject = await SubjectAsync("Invited");
         (await Members().AddMemberAsync(
-            new NewTenantMember(_tenant, subject, [_caretakerRole], CreatedFromInviteId: invite), CancellationToken.None)).Should().BeTrue();
+            new NewTenantMember(_tenant, subject, [_caretakerRole], CreatedFromInviteId: invite) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
 
         (await Members().FindMemberAsync(_tenant, subject, CancellationToken.None))!.CreatedFromInviteId.Should().Be(invite);
     }
@@ -146,7 +146,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         var subject = await SubjectAsync("Rejected");
 
         var act = () => Members().AddMemberAsync(
-            new NewTenantMember(_tenant, subject, [Guid.CreateVersion7()]), CancellationToken.None);
+            new NewTenantMember(_tenant, subject, [Guid.CreateVersion7()]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None);
 
         await act.Should().ThrowAsync<DbUpdateException>();
         (await Members().IsMemberAsync(_tenant, subject, Now, CancellationToken.None)).Should().BeFalse();
@@ -158,7 +158,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         var subject = await SubjectAsync("Doubled");
 
         (await Members().AddMemberAsync(
-            new NewTenantMember(_tenant, subject, [_caretakerRole, _caretakerRole]), CancellationToken.None)).Should().BeTrue();
+            new NewTenantMember(_tenant, subject, [_caretakerRole, _caretakerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
 
         (await Members().FindMemberAsync(_tenant, subject, CancellationToken.None))!
             .Roles.Select(r => r.RoleId).Should().Equal(_caretakerRole);
@@ -185,8 +185,8 @@ public class TenantMembershipRepositoryTests : IDisposable
         (await Members().ListMembersAsync(_tenant, CancellationToken.None)).Should().HaveCount(5);
 
         (await Members().AnyOtherOwnerAsync(_tenant, first.Id, CancellationToken.None)).Should().BeTrue();
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, second.Id, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, first.Id, CancellationToken.None))
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, second.Id, MembershipEndHow.Removed, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, first.Id, MembershipEndHow.Removed, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.LastOwner, "the deactivated owner does not count");
         (await Members().ReplaceRolesUnlessLastOwnerAsync(_tenant, first.Id, [_ownerRole], [_caretakerRole], Now, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.LastOwner);
@@ -237,7 +237,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         (await Members().ReplaceRolesAsync(_tenant, missing, [], [], Now, CancellationToken.None)).Should().BeFalse();
         (await Members().ReplaceRolesUnlessLastOwnerAsync(_tenant, missing, [_ownerRole], [], Now, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.NotFound);
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, missing, CancellationToken.None)).Should().Be(OwnerGuardedChange.NotFound);
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, missing, MembershipEndHow.Removed, CancellationToken.None)).Should().Be(OwnerGuardedChange.NotFound);
     }
 
     [Fact]
@@ -308,8 +308,8 @@ public class TenantMembershipRepositoryTests : IDisposable
         var subject = await SubjectAsync("Carer");
         await Members(_otherTenant).SeedRolesAsync(_otherTenant, CancellationToken.None);
         var otherOwner = (await Members(_otherTenant).FindRoleIdBySlugAsync(_otherTenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, [_caretakerRole]), CancellationToken.None)).Should().BeTrue();
-        (await Members().AddMemberAsync(new NewTenantMember(_otherTenant, subject, [otherOwner]), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, [_caretakerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_otherTenant, subject, [otherOwner]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
 
         (await Members().ListTenantIdsOfSubjectAsync(subject, CancellationToken.None)).Should().BeEquivalentTo([_tenant, _otherTenant]);
         (await Members().ListTenantsOfSubjectAsync(subject, activeOnly: false, Now, CancellationToken.None)).Select(t => t.Slug).Should().Equal("other", "home");
@@ -370,7 +370,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         string name, bool signsIn, Guid[] roles, IReadOnlyList<string>? direct = null, bool confirmedEmail = false)
     {
         var subject = await SubjectAsync(name);
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, roles, direct), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, roles, direct) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         if (signsIn)
             AddPasskey(subject);
         if (confirmedEmail)
@@ -473,10 +473,10 @@ public class TenantMembershipRepositoryTests : IDisposable
     {
         await SeedAsync("Owner", signsIn: false, [_ownerRole]);
         var devices = await SubjectAsync("Devices", system: true);
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, devices, [], [Scope.FullAccess]), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, devices, [], [Scope.FullAccess]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         AddPasskey(devices);
         var retired = await SubjectAsync("Retired", active: false);
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, retired, [_ownerRole]), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, retired, [_ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         AddPasskey(retired);
 
         (await Members().ReadSetupGateAsync(_tenant, Now, CancellationToken.None)).Should().Be(new SetupGate(true, true));
@@ -487,7 +487,7 @@ public class TenantMembershipRepositoryTests : IDisposable
     {
         await SeedAsync("Owner", signsIn: false, [_ownerRole]);
         var visitor = await SubjectAsync("Visitor", demo: true);
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, visitor, [], [Scope.MembersManage]), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, visitor, [], [Scope.MembersManage]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         AddPasskey(visitor);
 
         (await Members().ReadSetupGateAsync(_tenant, Now, CancellationToken.None)).Should().Be(new SetupGate(true, true));
@@ -500,7 +500,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         await SeedAsync("Follower", signsIn: true, [_caretakerRole]);
         var elsewhere = await SubjectAsync("Elsewhere");
         (await Members(_otherTenant).AddMemberAsync(
-            new NewTenantMember(_otherTenant, elsewhere, [], [Scope.FullAccess]), CancellationToken.None)).Should().BeTrue();
+            new NewTenantMember(_otherTenant, elsewhere, [], [Scope.FullAccess]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         AddPasskey(elsewhere);
 
         (await Members().ReadSetupGateAsync(_tenant, Now, CancellationToken.None)).Should().Be(new SetupGate(true, true));
@@ -512,7 +512,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         await SeedAsync("Owner", signsIn: false, [_ownerRole]);
         var clamped = await SubjectAsync("Clamped");
         (await Members().AddMemberAsync(
-            new NewTenantMember(_tenant, clamped, [], [Scope.MembersManage], LimitTo24Hours: true), CancellationToken.None)).Should().BeTrue();
+            new NewTenantMember(_tenant, clamped, [], [Scope.MembersManage], LimitTo24Hours: true) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         AddPasskey(clamped);
 
         (await Members().ReadSetupGateAsync(_tenant, Now, CancellationToken.None))
@@ -527,7 +527,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         var retired = await SubjectAsync("Retired", active: false);
         await Subjects().GrantPlatformAdminAsync([admin, homeless, retired], CancellationToken.None);
         var home = await JoinAsync(admin, _ownerRole);
-        (await Members().AddMemberAsync(new NewTenantMember(_otherTenant, admin, []), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_otherTenant, admin, []) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         var other = (await Members().FindMemberAsync(_otherTenant, admin, CancellationToken.None))!;
         SetJoinedAt(other.Id, Now);
         SetJoinedAt(home.Id, Now.AddDays(1));
@@ -632,7 +632,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         await using var unit = DbUnitOfWork.Own(owned);
         var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
 
-        (await members.AddMemberAsync(new NewTenantMember(_tenant, subject, [_ownerRole]), CancellationToken.None)).Should().BeTrue();
+        (await members.AddMemberAsync(new NewTenantMember(_tenant, subject, [_ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         (await Members().IsMemberAsync(_tenant, subject, Now, CancellationToken.None)).Should().BeFalse("the unit has not been saved");
 
         await owned.SaveChangesAsync();

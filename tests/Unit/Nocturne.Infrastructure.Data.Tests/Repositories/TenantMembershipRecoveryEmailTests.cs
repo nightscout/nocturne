@@ -37,7 +37,7 @@ public class TenantMembershipRecoveryEmailTests : IDisposable
     {
         var subject = await Subjects().CreateAsync(
             new NewSubject(name, Email: email, EmailConfirmedAt: confirmedAt), CancellationToken.None);
-        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, []), CancellationToken.None)).Should().BeTrue();
+        (await Members().AddMemberAsync(new NewTenantMember(_tenant, subject, []) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]

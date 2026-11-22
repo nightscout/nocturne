@@ -112,7 +112,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         var guest = await new SubjectRepository(contexts, AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject($"{slug}-guest"), CancellationToken.None);
-        (await members.AddMemberAsync(new NewTenantMember(tenant, guest, [caretaker], AccessEndsAt: accessEndsAt), CancellationToken.None))
+        (await members.AddMemberAsync(new NewTenantMember(tenant, guest, [caretaker], AccessEndsAt: accessEndsAt) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
             .Should().BeTrue();
         return new Seeded(tenant, guest, caretaker, contexts);
     }
@@ -145,7 +145,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             {
                 (await MembershipRemoval.ReplaceEndedAsync(
                     unit, members, Revocation(), seeded.Tenant, seeded.Guest, Now.UtcDateTime, ct)).Should().ContainSingle(g => g.Id == grant);
-                (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, seeded.Guest, [seeded.CaretakerRole]), ct)).Should().BeTrue();
+                (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, seeded.Guest, [seeded.CaretakerRole]) { How = MembershipJoinHow.Direct, By = null }, ct)).Should().BeTrue();
                 await unit.Context.SaveChangesAsync(ct);
             });
         }
@@ -469,7 +469,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var owner = await NewSubjectAsync(seeded, "cap-refused-owner");
         var members = new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off);
         var ownerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
-        (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, owner, [ownerRole]), CancellationToken.None)).Should().BeTrue();
+        (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, owner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         var ownerMember = (await members.FindMemberAsync(seeded.Tenant, owner, CancellationToken.None))!;
         var expiresAt = Now.UtcDateTime.AddHours(48);
         var link = await GuestLinkAsync(seeded, owner, owner, expiresAt);
@@ -664,7 +664,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             var member = (await members.FindMemberAsync(seeded.Tenant, seeded.Guest, CancellationToken.None))!;
             await FluentActions.Awaiting(() => unit.CommitAsync(async ct =>
             {
-                await MembershipRemoval.StageAsync(unit, members, Revocation(), seeded.Tenant, member, Now.UtcDateTime, ct);
+                await MembershipRemoval.StageAsync(unit, members, Revocation(), seeded.Tenant, member, MembershipEndHow.Removed, Now.UtcDateTime, ct);
                 throw new InvalidOperationException("rolled back");
             })).Should().ThrowAsync<InvalidOperationException>();
         }

@@ -191,7 +191,8 @@ public class MembershipRequestService : IMembershipRequestService
 
                     if (!await members.AddMemberAsync(
                             new NewTenantMember(
-                                tenantId, request.SubjectId, roleIds, LimitTo24Hours: limitTo24Hours, AccessEndsAt: accessEndsAt),
+                                tenantId, request.SubjectId, roleIds, LimitTo24Hours: limitTo24Hours, AccessEndsAt: accessEndsAt)
+                                { How = MembershipJoinHow.Request, By = decidedBySubjectId },
                             token))
                         throw new RefusedCommitException<DecideMembershipRequestResult>(AlreadyAMember);
 

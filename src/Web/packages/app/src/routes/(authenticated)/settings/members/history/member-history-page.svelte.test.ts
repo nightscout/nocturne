@@ -7,6 +7,8 @@ import {
   type MemberHistoryEntry,
 } from "@nocturne/api-client";
 import { remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
+import { accessEndInstant } from "#lib/components/members/access-end.js";
+import { formatMediumDate } from "#lib/utils/formatting.js";
 
 const mocks = vi.hoisted(() => ({
   getMemberHistory: vi.fn(),
@@ -218,5 +220,33 @@ describe("member history page", () => {
     expect(mocks.getMemberHistory.mock.calls).toEqual([
       [{ memberSubjectId: memberId, limit: 25, offset: 0 }],
     ]);
+  });
+});
+
+describe("member history page, a member whose access ended", () => {
+  const ended = accessEndInstant("2026-11-20");
+
+  it("states the day the access ended above the changes, apart from them", async () => {
+    nav.url = new URL(`http://localhost/settings/members/history?member=${memberId}`);
+    mocks.getMemberHistory.mockReturnValue(
+      remoteQuery(() => ({ data: entries(1), pagination: { limit: 25, offset: 0, total: 1 }, accessEndedAt: ended })),
+    );
+    render(HistoryPage);
+
+    const line = browserPage.getByText(
+      `Access ended on ${formatMediumDate(new Date(2026, 10, 20))}.`,
+    );
+    await expect.element(line).toBeVisible();
+    expect(browserPage.getByRole("listitem").elements()).toHaveLength(1);
+    expect(line.element().closest("li")).toBeNull();
+  });
+
+  it("states no end when the API sends none", async () => {
+    nav.url = new URL(`http://localhost/settings/members/history?member=${memberId}`);
+    mocks.getMemberHistory.mockReturnValue(pageOf(entries(1), 0, 1));
+    render(HistoryPage);
+
+    await expect.element(browserPage.getByRole("listitem")).toBeVisible();
+    expect(browserPage.getByText(/Access ended on/).elements()).toHaveLength(0);
   });
 });

@@ -3,6 +3,8 @@
     MemberHistoryActorKind,
     MemberHistoryKind,
     MemberHistoryLimit,
+    MembershipEndHow,
+    MembershipJoinHow,
     type MemberHistoryActor,
     type MemberHistoryEntry,
     type TenantRoleDto,
@@ -45,6 +47,9 @@
 
   const actor = $derived(actorName(entry.actor));
   const member = $derived(entry.member?.name ?? "a deleted member");
+  const memberFirst = $derived(entry.member?.name ?? "A deleted member");
+  const by = $derived(entry.by ? (entry.by.name ?? "a deleted member") : undefined);
+  const approver = $derived(entry.by ? (entry.by.name ?? "A deleted member") : actor);
   const role = $derived(
     roles.find((r) => r.slug === entry.role)?.name ?? entry.role ?? "",
   );
@@ -56,7 +61,8 @@
   );
   /**
    * A membership made by an invite is recorded with the person who joined as its actor, so "gave"
-   * would name them as the giver of their own access.
+   * would name them as the giver of their own access. A join with its own Joined entry already
+   * names the invite, so its changes do not repeat it.
    */
   const joined = $derived(
     !!entry.viaInvite &&
@@ -76,7 +82,43 @@
   </time>
   <div class="min-w-0 flex-1 space-y-1 text-sm">
     <p>
-      {#if joined && entry.kind === MemberHistoryKind.RoleGiven}
+      {#if entry.kind === MemberHistoryKind.Joined}
+        {#if entry.joinedHow === MembershipJoinHow.Invite}
+          {#if entry.inviteLabel && by}
+            {memberFirst} joined through the invite {entry.inviteLabel}, made by {by}.
+          {:else if by}
+            {memberFirst} joined through an invite made by {by}.
+          {:else if entry.inviteLabel}
+            {memberFirst} joined through the invite {entry.inviteLabel}.
+          {:else}
+            {memberFirst} joined through an invite.
+          {/if}
+        {:else if entry.joinedHow === MembershipJoinHow.Request}
+          {approver} approved {member}'s request to join.
+        {:else if entry.joinedHow === MembershipJoinHow.Direct}
+          {actor} added {member}.
+        {:else if entry.joinedHow === MembershipJoinHow.Setup}
+          {memberFirst} set up this site.
+        {:else if entry.joinedHow === MembershipJoinHow.System}
+          The system added {member}.
+        {:else}
+          {memberFirst} joined. The detail is no longer stored.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.Removed}
+        {#if entry.removedHow === MembershipEndHow.Removed}
+          {actor} removed {member}.
+        {:else if entry.removedHow === MembershipEndHow.Left}
+          {memberFirst} left.
+        {:else if entry.removedHow === MembershipEndHow.AccountDeleted}
+          {memberFirst}'s account was deleted.
+        {:else if entry.removedHow === MembershipEndHow.Replaced}
+          {memberFirst} joined again. The earlier membership was replaced.
+        {:else if entry.removedHow === MembershipEndHow.System}
+          The system removed {member}.
+        {:else}
+          {memberFirst}'s membership ended. The detail is no longer stored.
+        {/if}
+      {:else if joined && entry.kind === MemberHistoryKind.RoleGiven}
         {actor} joined with the role {role}.
       {:else if joined && entry.kind === MemberHistoryKind.PermissionGiven}
         {actor} joined with the permission {permission}.
@@ -126,7 +168,7 @@
     {#if entry.lost?.length}
       <p class="text-muted-foreground">Permissions removed: {lost}</p>
     {/if}
-    {#if entry.viaInvite}
+    {#if entry.viaInvite && !entry.inRecordedJoin && entry.kind !== MemberHistoryKind.Joined}
       <p class="text-muted-foreground">
         {#if entry.inviteLabel}
           Through the invite {entry.inviteLabel}.

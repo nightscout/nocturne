@@ -304,17 +304,19 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
-    /// A page of the changes to what the current tenant's members can read, newest first: roles and
-    /// direct permissions given or taken, history limits, and the permissions a role grants. Narrow it
-    /// to one member with <c>memberSubjectId</c>.
+    /// A page of the changes to what the current tenant's members can read, newest first: members
+    /// joining and leaving, roles and direct permissions given or taken, history limits, end dates, and
+    /// the permissions a role grants. Narrow it to one member with <c>memberSubjectId</c>, which also
+    /// says when that member's access ended.
     /// </summary>
     [HttpGet("members/history")]
     [RequireScope(Scope.MembersManage)]
     [RemoteQuery]
-    [ProducesResponseType(typeof(PaginatedResponse<MemberHistoryEntry>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MemberHistoryPage), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<PaginatedResponse<MemberHistoryEntry>>> GetMemberHistory(
+    public async Task<ActionResult<MemberHistoryPage>> GetMemberHistory(
         [FromServices] IMemberHistoryReader history,
+        [FromServices] TimeProvider time,
         [FromQuery] Guid? memberSubjectId = null,
         [FromQuery] int limit = DefaultHistoryPageSize,
         [FromQuery] int offset = 0,
@@ -325,6 +327,7 @@ public class MemberInviteController : ControllerBase
             memberSubjectId,
             V4ReadLimits.ClampPageSize(limit),
             V4ReadLimits.ClampOffset(offset),
+            time.GetUtcNow().UtcDateTime,
             ct);
         return Ok(page);
     }

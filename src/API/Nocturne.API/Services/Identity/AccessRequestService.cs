@@ -61,7 +61,8 @@ public class AccessRequestService(
             var tenantMembers = new TenantMembershipRepository(unit, linkRoute);
             if (!await tenantMembers.AddMemberAsync(
                     new NewTenantMember(
-                        tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours),
+                        tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours)
+                        { How = MembershipJoinHow.Request, By = decidedBySubjectId },
                     ct))
                 return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
 

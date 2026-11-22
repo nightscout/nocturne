@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
@@ -459,6 +460,15 @@ public class SubjectRepository : ISubjectRepository
             var (soleMemberOf, lastManagerOf) = await db.LockTeamsOfSubjectAsync(subjectId, ct);
             if (lastManagerOf.Count > 0)
                 return new SubjectChange.LastManagerOf(lastManagerOf);
+
+            // Removed here rather than by the subject's cascade so each membership leaves its removed
+            // row; saved before the scrub below, which then clears that row's details like the rest.
+            // The teams are staged after that save, so their rows keep their details.
+            var memberships = await db.TenantMembers.Where(m => m.SubjectId == subjectId).ToListAsync(ct);
+            foreach (var membership in memberships)
+                await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.AccountDeleted, ct);
+            await db.SaveChangesAsync(ct);
+
             foreach (var team in soleMemberOf)
                 TeamRepository.Remove(db, team);
 
@@ -712,7 +722,8 @@ public class SubjectRepository : ISubjectRepository
             var tenantId = await db.Tenants.AsNoTracking()
                 .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
             var holder = await AdoptableBySetup(db, identityId).FirstOrDefaultAsync(s => s.Id == holderId, ct);
-            var memberships = await db.TenantMembers.Where(m => m.SubjectId == createdId).Take(2).ToListAsync(ct);
+            var memberships = await db.TenantMembers.Include(m => m.MemberRoles)
+                .Where(m => m.SubjectId == createdId).Take(2).ToListAsync(ct);
             if (tenantId is null || holder is null || memberships.Count != 1)
                 return false;
 
@@ -722,7 +733,17 @@ public class SubjectRepository : ISubjectRepository
                 return false;
 
             var now = Now;
-            memberships[0].SubjectId = holderId;
+            var moved = memberships[0];
+            var held = new NewTenantMember(
+                moved.TenantId, holderId, moved.MemberRoles.Select(mr => mr.TenantRoleId).ToList(),
+                moved.DirectPermissions?.ToList(), moved.Label, moved.Username, moved.LimitTo24Hours,
+                moved.CreatedFromInviteId, MembershipMadeBy.Member, moved.AccessEndsAt)
+            {
+                How = MembershipJoinHow.Setup,
+                By = null,
+            };
+            await TenantMembershipRepository.StageRemoveAsync(db, moved, MembershipEndHow.System, ct);
+            await TenantMembershipRepository.StageAddAsync(db, held, ct);
             holder.Name = created.Name;
             holder.Username = created.Username;
             var heldRoleIds = db.SubjectRoles.Where(r => r.SubjectId == holderId).Select(r => r.RoleId);

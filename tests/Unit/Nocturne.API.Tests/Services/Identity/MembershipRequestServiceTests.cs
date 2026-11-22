@@ -386,6 +386,7 @@ public class MembershipRequestServiceTests : IDisposable
         rows.Should().OnlyContain(a => a.ActorSubjectId == _adminSubjectId && a.TenantId == _tenantId);
         rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
         {
+            (AuthAuditEventType.MemberJoined, $$"""{"kind":"tenant","how":"request","by":"{{_adminSubjectId}}"}"""),
             (AuthAuditEventType.RoleAssigned, """{"role":"admin","kind":"tenant"}"""),
             (AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"24_hours","kind":"tenant"}"""),
         });

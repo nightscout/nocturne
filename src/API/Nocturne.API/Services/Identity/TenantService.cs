@@ -119,7 +119,8 @@ public partial class TenantService : ITenantService
 
         var ownerRoleId = await _members.FindRoleIdBySlugAsync(created.Id, RoleSeeds.Owner, ct)
             ?? throw new InvalidOperationException($"Tenant {created.Id} has no owner role after seeding.");
-        if (!await AddMemberAsync(created.Id, creatorSubjectId, [ownerRoleId], ct: ct))
+        if (!await _members.AddMemberAsync(
+                new NewTenantMember(created.Id, creatorSubjectId, [ownerRoleId]) { How = MembershipJoinHow.Setup, By = null }, ct))
             throw new InvalidOperationException($"Subject {creatorSubjectId} is already a member of the new tenant {created.Id}.");
 
         return created;
@@ -139,7 +140,8 @@ public partial class TenantService : ITenantService
                 ?? throw new InvalidOperationException($"Tenant {id} has no owner role after seeding.");
             await members.AddMemberAsync(
                 new NewTenantMember(
-                    id, ownerSubjectId, [ownerRoleId], Username: ownerUsername, MadeBy: MembershipMadeBy.Member),
+                    id, ownerSubjectId, [ownerRoleId], Username: ownerUsername, MadeBy: MembershipMadeBy.Member)
+                    { How = MembershipJoinHow.Setup, By = null },
                 token);
             await unit.Context.SaveChangesAsync(token);
 
@@ -324,7 +326,8 @@ public partial class TenantService : ITenantService
         Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null,
         string? label = null, bool limitTo24Hours = false, CancellationToken ct = default) =>
         _members.AddMemberAsync(
-            new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours), ct);
+            new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours)
+            { How = MembershipJoinHow.Direct, By = null }, ct);
 
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
@@ -344,7 +347,8 @@ public partial class TenantService : ITenantService
 
         var (outcome, grants) = await unit.CommitAsync(
             token => MembershipRemoval.StageAsync(
-                unit, members, _grantRevocation, tenantId, member, _time.GetUtcNow().UtcDateTime, token),
+                unit, members, _grantRevocation, tenantId, member, MembershipEndHow.Removed,
+                _time.GetUtcNow().UtcDateTime, token),
             ct: ct);
 
         if (outcome == OwnerGuardedChange.LastOwner)
@@ -529,7 +533,8 @@ public partial class TenantService : ITenantService
 
             var ownerRoleId = await members.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Owner, token)
                 ?? throw new InvalidOperationException($"Tenant {tenantId} has no owner role after seeding.");
-            await members.AddMemberAsync(new NewTenantMember(tenantId, ownerSubjectId, [ownerRoleId]), token);
+            await members.AddMemberAsync(
+                new NewTenantMember(tenantId, ownerSubjectId, [ownerRoleId]) { How = MembershipJoinHow.Setup, By = null }, token);
             await context.SaveChangesAsync(token);
 
             return new ProvisionResult(tenantId, ownerSubjectId, slug.ToLowerInvariant());
@@ -579,7 +584,7 @@ public partial class TenantService : ITenantService
             await members.AddMemberAsync(
                 new NewTenantMember(
                     tenantId, publicSubject.Id, [], Label: "Public Access", LimitTo24Hours: true,
-                    MadeBy: MembershipMadeBy.System),
+                    MadeBy: MembershipMadeBy.System) { How = MembershipJoinHow.System, By = null },
                 ct);
         }
         else

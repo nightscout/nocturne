@@ -5,6 +5,8 @@ import {
   MemberHistoryActorKind,
   MemberHistoryKind,
   MemberHistoryLimit,
+  MembershipEndHow,
+  MembershipJoinHow,
   type MemberHistoryEntry,
   type TenantRoleDto,
 } from "@nocturne/api-client";
@@ -200,5 +202,77 @@ describe("MemberHistoryEntryRow invites", () => {
     const row = await sentence({ role: "viewer" });
     await expect.element(row).toHaveTextContent("Alex gave Sam the role viewer.");
     expect(row.element().textContent).not.toContain("invite");
+  });
+});
+
+describe("MemberHistoryEntryRow joining and leaving", () => {
+  const self = { kind: MemberHistoryActorKind.Person, subjectId: "b1", name: "Sam" };
+  const maker = { subjectId: "c1", name: "Jo" };
+  const joinedBy = (joinedHow: MembershipJoinHow, overrides: Partial<MemberHistoryEntry> = {}) =>
+    sentence({ kind: MemberHistoryKind.Joined, joinedHow, ...overrides });
+  const removedBy = (removedHow: MembershipEndHow, overrides: Partial<MemberHistoryEntry> = {}) =>
+    sentence({ kind: MemberHistoryKind.Removed, removedHow, ...overrides });
+
+  it("names the invite and its maker, and adds no separate invite line", async () => {
+    const row = await joinedBy(MembershipJoinHow.Invite, {
+      actor: self, viaInvite: true, inviteLabel: "camp nurse", by: maker,
+    });
+    await expect.element(row).toHaveTextContent("Sam joined through the invite camp nurse, made by Jo.");
+    expect(row.element().textContent).not.toContain("Through the invite");
+  });
+
+  it("names the maker of an invite with no label", async () => {
+    const row = await joinedBy(MembershipJoinHow.Invite, { actor: self, viaInvite: true, by: maker });
+    await expect.element(row).toHaveTextContent("Sam joined through an invite made by Jo.");
+  });
+
+  it("says only that an invite was used when no maker is known", async () => {
+    const row = await joinedBy(MembershipJoinHow.Invite, { actor: self, viaInvite: true });
+    await expect.element(row).toHaveTextContent("Sam joined through an invite.");
+  });
+
+  it("names the approver of a request", async () => {
+    const row = await joinedBy(MembershipJoinHow.Request, { by: maker });
+    await expect.element(row).toHaveTextContent("Jo approved Sam's request to join.");
+  });
+
+  it.each([
+    [MembershipJoinHow.Direct, "Alex added Sam."],
+    [MembershipJoinHow.Setup, "Sam set up this site."],
+    [MembershipJoinHow.System, "The system added Sam."],
+  ])("states a join by %s", async (how, text) => {
+    const row = await joinedBy(how);
+    await expect.element(row).toHaveTextContent(text);
+  });
+
+  it.each([
+    [MembershipEndHow.Removed, "Alex removed Sam."],
+    [MembershipEndHow.Left, "Sam left."],
+    [MembershipEndHow.AccountDeleted, "Sam's account was deleted."],
+    [MembershipEndHow.Replaced, "Sam joined again. The earlier membership was replaced."],
+    [MembershipEndHow.System, "The system removed Sam."],
+  ])("states a removal by %s", async (how, text) => {
+    const row = await removedBy(how);
+    await expect.element(row).toHaveTextContent(text);
+  });
+
+  it("states a join whose detail was cleared", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Joined });
+    await expect.element(row).toHaveTextContent("Sam joined. The detail is no longer stored.");
+  });
+
+  it("states a removal whose detail was cleared, for a member who no longer exists", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Removed, member: { subjectId: "b1" } });
+    await expect
+      .element(row)
+      .toHaveTextContent("A deleted member's membership ended. The detail is no longer stored.");
+  });
+
+  it("does not repeat the invite under a role given at a recorded join", async () => {
+    const row = await sentence({
+      actor: self, viaInvite: true, inviteLabel: "camp nurse", role: "viewer", inRecordedJoin: true,
+    });
+    await expect.element(row).toHaveTextContent("Sam joined with the role viewer.");
+    expect(row.element().textContent).not.toContain("Through the invite");
   });
 });

@@ -107,8 +107,8 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
         var caretakerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
-        (await members.AddMemberAsync(new NewTenantMember(tenant, owner, [ownerRole]), CancellationToken.None)).Should().BeTrue();
-        (await members.AddMemberAsync(new NewTenantMember(tenant, orphan, [caretakerRole]), CancellationToken.None)).Should().BeTrue();
+        (await members.AddMemberAsync(new NewTenantMember(tenant, owner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
+        (await members.AddMemberAsync(new NewTenantMember(tenant, orphan, [caretakerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
 
         return new Seeded(tenant, owner, orphan);
     }
@@ -226,7 +226,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var caretakerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         var secondOwner = await new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject("f-second-owner"), CancellationToken.None);
         await GivePasskeyAsync(factory, secondOwner);
-        await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, secondOwner, [ownerRole]), CancellationToken.None);
+        await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, secondOwner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None);
         var removedId = (await members.FindMemberAsync(seeded.Tenant, seeded.Owner, CancellationToken.None))!.Id;
         var steppingDownId = (await members.FindMemberAsync(seeded.Tenant, secondOwner, CancellationToken.None))!.Id;
 
@@ -236,7 +236,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var removal = unit.CommitAsync(
             async ct =>
             {
-                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, ct);
+                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, ct);
                 staged.TrySetResult();
                 await commit.Task;
                 await unit.Context.SaveChangesAsync(ct);
@@ -272,7 +272,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var ownerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
         var secondOwner = await new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject($"{slug}-second-owner"), CancellationToken.None);
         await GivePasskeyAsync(factory, secondOwner);
-        await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, secondOwner, [ownerRole]), CancellationToken.None);
+        await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, secondOwner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None);
         var removedId = (await members.FindMemberAsync(seeded.Tenant, seeded.Owner, CancellationToken.None))!.Id;
 
         var staged = new TaskCompletionSource();
@@ -281,7 +281,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var removal = unit.CommitAsync(
             async ct =>
             {
-                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, ct);
+                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, ct);
                 staged.TrySetResult();
                 await commit.Task;
                 await unit.Context.SaveChangesAsync(ct);
@@ -359,7 +359,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         });
         await locked.Task;
 
-        var adding = Task.Run(() => members.AddMemberAsync(new NewTenantMember(seeded.Tenant, subject, [ownerRole]), CancellationToken.None));
+        var adding = Task.Run(() => members.AddMemberAsync(new NewTenantMember(seeded.Tenant, subject, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None));
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, adding);
         release.SetResult();
 
@@ -379,7 +379,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         foreach (var tenant in new[] { low, high })
         {
             var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
-            await members.AddMemberAsync(new NewTenantMember(tenant, subject, [caretaker]), CancellationToken.None);
+            await members.AddMemberAsync(new NewTenantMember(tenant, subject, [caretaker]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None);
         }
 
         var held = new TaskCompletionSource();
@@ -433,7 +433,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
 
         var caretaker = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         (await members.AddMemberAsync(
-            new NewTenantMember(seeded.Tenant, guest, [caretaker], AccessEndsAt: accessEndsAt), CancellationToken.None)).Should().BeTrue();
+            new NewTenantMember(seeded.Tenant, guest, [caretaker], AccessEndsAt: accessEndsAt) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         var memberId = (await members.FindMemberAsync(seeded.Tenant, guest, CancellationToken.None))!.Id;
         var tokenHash = Guid.NewGuid().ToString("N");
         await new OAuthGrantRepository(factory).CreateAsync(
@@ -630,7 +630,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
             CancellationToken.None);
         var adminRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Admin, CancellationToken.None))!.Value;
         (await members.AddMemberAsync(
-            new NewTenantMember(seeded.Tenant, administrator, [adminRole], AccessEndsAt: administratorAccessEndsAt),
+            new NewTenantMember(seeded.Tenant, administrator, [adminRole], AccessEndsAt: administratorAccessEndsAt) { How = MembershipJoinHow.Direct, By = null },
             CancellationToken.None)).Should().BeTrue();
         return (seeded.Tenant, (await members.FindMemberAsync(seeded.Tenant, administrator, CancellationToken.None))!.Id);
     }

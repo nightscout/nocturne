@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -24,8 +25,9 @@ namespace Nocturne.API.Services.Identity;
 /// would keep answering bot commands for the tenant; the same subject's links to tenants they still
 /// belong to survive. Grants carry no membership join either, so left live every one would work
 /// again the moment the subject joins again. A guest link's grant belongs to its data owner, so it is
-/// found by the member who made it, and each one revoked is audited. All of it goes in one save on
-/// the caller's unit, so the pieces cannot come apart.
+/// found by the member who made it, and each one revoked is audited, before the membership's own rows
+/// so its removed row follows them. All of it goes in one save on the caller's unit, so the
+/// pieces cannot come apart.
 /// </remarks>
 internal static class MembershipRemoval
 {
@@ -33,7 +35,8 @@ internal static class MembershipRemoval
     /// Stages and saves the removal on <paramref name="unit"/>, inside its commit, and returns the
     /// grants it revoked for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
     /// Nothing is staged when <see cref="ITenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
-    /// refuses. <paramref name="members"/> is a repository over <paramref name="unit"/>.
+    /// refuses. <paramref name="members"/> is a repository over <paramref name="unit"/>. The removed row
+    /// records <paramref name="how"/>.
     /// </summary>
     public static async Task<(OwnerGuardedChange Outcome, IReadOnlyList<OAuthGrantRecord> Grants)> StageAsync(
         DbUnitOfWork unit,
@@ -41,32 +44,45 @@ internal static class MembershipRemoval
         GrantRevocationService grantRevocation,
         Guid tenantId,
         TenantMemberRecord member,
+        MembershipEndHow how,
         DateTime now,
         CancellationToken ct)
     {
-        var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, ct);
-        if (removal != OwnerGuardedChange.Changed)
-            return (removal, []);
-
         var context = unit.Context;
+        var grants = new OAuthGrantRepository(unit);
+        var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(member.SubjectId, now, ct);
+        var before = AddedAuditRows(context);
+        grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
+        var linkRows = AddedAuditRows(context).Except(before).ToList();
+
+        var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, how, ct);
+        if (removal != OwnerGuardedChange.Changed)
+        {
+            foreach (var row in linkRows)
+                context.Entry(row).State = EntityState.Detached;
+            return (removal, []);
+        }
+
         var chatLinks = await context.ChatIdentityDirectory
             .Where(d => d.TenantId == tenantId && d.NocturneUserId == member.SubjectId)
             .ToListAsync(ct);
-        var grants = new OAuthGrantRepository(unit);
         var owned = await grants.GetActiveForSubjectAsync(member.SubjectId, ct);
-        var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(member.SubjectId, now, ct);
         var revoked = owned.Concat(handedOut.ExceptBy(owned.Select(g => g.Id), g => g.Id)).ToList();
 
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
         if (member.AccessEndsAt is not null)
             await AlertChannelStops.CapAsync(context, member.SubjectId, now, ct);
         await grantRevocation.StageAsync(unit, revoked, ct);
-        grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
         if (member.AccessEndsAt is not null)
             await grants.CapGrantsCreatedByAsync(member.SubjectId, now, now, ct);
         await context.SaveChangesAsync(ct);
         return (removal, revoked);
     }
+
+    /// <summary>The audit rows staged on <paramref name="context"/> and not yet saved.</summary>
+    private static List<AuthAuditLogEntity> AddedAuditRows(NocturneDbContext context) =>
+        context.ChangeTracker.Entries<AuthAuditLogEntity>()
+            .Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
 
     /// <summary>
     /// Removes <paramref name="subjectId"/>'s membership of <paramref name="tenantId"/> through
@@ -89,7 +105,8 @@ internal static class MembershipRemoval
         if (!MembershipLiveness.HasEnded(existing.AccessEndsAt, now))
             return null;
 
-        var (outcome, grants) = await StageAsync(unit, members, grantRevocation, tenantId, existing, now, ct);
+        var (outcome, grants) = await StageAsync(
+            unit, members, grantRevocation, tenantId, existing, MembershipEndHow.Replaced, now, ct);
         return outcome == OwnerGuardedChange.Changed ? grants : null;
     }
 }

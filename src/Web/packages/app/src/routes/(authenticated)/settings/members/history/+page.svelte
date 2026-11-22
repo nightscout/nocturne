@@ -3,6 +3,8 @@
   import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
   import {
     getMemberHistory,
@@ -10,7 +12,8 @@
   } from "#lib/api/generated/memberInvites.generated.remote.js";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import MemberHistoryEntryRow from "#lib/components/members/MemberHistoryEntryRow.svelte";
-  import { formatNumber } from "#lib/utils/formatting.js";
+  import { formatMediumDate, formatNumber } from "#lib/utils/formatting.js";
+  import CalendarX from "@lucide/svelte/icons/calendar-x";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import History from "@lucide/svelte/icons/history";
@@ -45,6 +48,7 @@
 
   const entries = $derived(historyQuery?.current?.data ?? []);
   const total = $derived(historyQuery?.current?.pagination?.total ?? 0);
+  const accessEndedAt = $derived(historyQuery?.current?.accessEndedAt);
   const hasPrevious = $derived(offset > 0);
   const hasNext = $derived(offset + entries.length < total);
   const listedName = $derived(
@@ -101,6 +105,14 @@
       </Button>
     </div>
   {:else if historyQuery?.current}
+    {#if accessEndedAt}
+      <Card.Root variant="muted" size="sm">
+        <p class="flex items-center gap-2 text-sm">
+          <CalendarX class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          Access ended on {formatMediumDate(accessEndDate(accessEndedAt))}.
+        </p>
+      </Card.Root>
+    {/if}
     {#if entries.length === 0}
       <p class="text-sm text-muted-foreground">No member changes are recorded.</p>
     {:else}

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Core.Models.Identity;
@@ -56,7 +57,60 @@ public sealed record NewTenantMember(
     bool LimitTo24Hours = false,
     Guid? CreatedFromInviteId = null,
     MembershipMadeBy MadeBy = MembershipMadeBy.Caller,
-    DateTime? AccessEndsAt = null);
+    DateTime? AccessEndsAt = null)
+{
+    /// <summary>
+    /// How the subject came to be a member, as its joined row records it. Required, so a caller cannot
+    /// record a join it did not make.
+    /// </summary>
+    public required MembershipJoinHow How { get; init; }
+
+    /// <summary>The subject who let them in: the invite's maker, or the approver of a request; null otherwise.</summary>
+    public required Guid? By { get; init; }
+}
+
+/// <summary>How a subject became a member of a tenant.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<MembershipJoinHow>))]
+public enum MembershipJoinHow
+{
+    /// <summary>They accepted an invite.</summary>
+    Invite,
+
+    /// <summary>Their membership request or access request was approved.</summary>
+    Request,
+
+    /// <summary>A manager or a platform administrator added them, with no invite or request.</summary>
+    Direct,
+
+    /// <summary>They are the owner the tenant was created or set up with.</summary>
+    Setup,
+
+    /// <summary>The platform added them: the Public and device subjects, the demo member, a dev restore.</summary>
+    System,
+}
+
+/// <summary>How a subject stopped being a member of a tenant.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<MembershipEndHow>))]
+public enum MembershipEndHow
+{
+    /// <summary>Someone else removed them.</summary>
+    Removed,
+
+    /// <summary>They removed themselves.</summary>
+    Left,
+
+    /// <summary>Their account was deleted.</summary>
+    AccountDeleted,
+
+    /// <summary>The membership had ended and was replaced when they joined again.</summary>
+    Replaced,
+
+    /// <summary>
+    /// The platform removed them: the demo reset, a dev snapshot import, or setup adoption passing their
+    /// membership to another subject.
+    /// </summary>
+    System,
+}
 
 /// <summary>Who made a membership, as its audit rows record it.</summary>
 public enum MembershipMadeBy

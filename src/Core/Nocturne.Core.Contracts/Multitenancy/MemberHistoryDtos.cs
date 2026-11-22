@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Multitenancy;
 
@@ -28,6 +30,12 @@ public enum MemberHistoryKind
 
     /// <summary>The date a member's access ends changed. The row no longer says to what.</summary>
     AccessEndChanged,
+
+    /// <summary>The member joined. <see cref="MemberHistoryEntry.JoinedHow"/> is null when the row no longer says how.</summary>
+    Joined,
+
+    /// <summary>The member stopped being a member. <see cref="MemberHistoryEntry.RemovedHow"/> is null when the row no longer says how.</summary>
+    Removed,
 }
 
 /// <summary>The history limit a member reads under after the change.</summary>
@@ -78,6 +86,12 @@ public record MemberHistoryActor(MemberHistoryActorKind Kind, Guid? SubjectId, s
 /// <param name="AccessEndsAt">The instant a member's access ends after an <see cref="MemberHistoryKind.AccessEndSet"/> change, in UTC.</param>
 /// <param name="ViaInvite">An invite caused the change.</param>
 /// <param name="InviteLabel">The label of that invite, null when the invite is gone or has none.</param>
+/// <param name="JoinedHow">How the member joined, for a <see cref="MemberHistoryKind.Joined"/> change.</param>
+/// <param name="RemovedHow">How the membership ended, for a <see cref="MemberHistoryKind.Removed"/> change.</param>
+/// <param name="By">The subject who let the member in, for a join by invite or by request, when the row names one.</param>
+/// <param name="InRecordedJoin">
+/// The change was made by an invite whose join has its own <see cref="MemberHistoryKind.Joined"/> change.
+/// </param>
 public record MemberHistoryEntry(
     Guid Id,
     DateTime At,
@@ -91,4 +105,20 @@ public record MemberHistoryEntry(
     IReadOnlyList<string>? Lost,
     DateTime? AccessEndsAt,
     bool ViaInvite,
-    string? InviteLabel);
+    string? InviteLabel,
+    MembershipJoinHow? JoinedHow,
+    MembershipEndHow? RemovedHow,
+    MemberHistoryPerson? By,
+    bool InRecordedJoin);
+
+/// <summary>A page of <see cref="MemberHistoryEntry"/> changes, with the state of the member it is narrowed to.</summary>
+public class MemberHistoryPage : PaginatedResponse<MemberHistoryEntry>
+{
+    /// <summary>
+    /// When the access of the member the page is narrowed to ended, in UTC, if it has ended by its end
+    /// date at the time of the read. Null when the page is not narrowed, the member's access has not
+    /// ended, or the subject is not a member. A state, not a recorded change: nothing is written when
+    /// the date passes.
+    /// </summary>
+    public DateTime? AccessEndedAt { get; set; }
+}

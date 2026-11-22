@@ -41,7 +41,7 @@ public class MembershipRequestDecisionRaceTests
 
         var approval = approvingUnit.CommitAsync(async token =>
         {
-            (await members.AddMemberAsync(new NewTenantMember(seed.Tenant, seed.Subject, [seed.Role]), token)).Should().BeTrue();
+            (await members.AddMemberAsync(new NewTenantMember(seed.Tenant, seed.Subject, [seed.Role]) { How = MembershipJoinHow.Direct, By = null }, token)).Should().BeTrue();
             (await members.DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Approved, seed.Role), token)).Should().BeTrue();
             await approving.SaveChangesAsync(token);
             locked.SetResult();
@@ -86,7 +86,7 @@ public class MembershipRequestDecisionRaceTests
         var members = new TenantMembershipRepository(approvingUnit, AccountLinkRoutes.Off);
         var approval = approvingUnit.CommitAsync(async token =>
         {
-            if (!await members.AddMemberAsync(new NewTenantMember(seed.Tenant, seed.Subject, [seed.Role]), token))
+            if (!await members.AddMemberAsync(new NewTenantMember(seed.Tenant, seed.Subject, [seed.Role]) { How = MembershipJoinHow.Direct, By = null }, token))
                 return false;
             if (!await members.DecideRequestAsync(seed.Tenant, seed.Request, Decision(MembershipRequestRecord.Approved, seed.Role), token))
                 return false;

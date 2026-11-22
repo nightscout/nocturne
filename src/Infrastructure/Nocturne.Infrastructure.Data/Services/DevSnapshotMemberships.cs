@@ -9,8 +9,9 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <see cref="MembershipReasons"/>, so a restored member has its direct reason.
 /// </summary>
 /// <remarks>
-/// It takes no owners lock, checks no last owner and writes no audit row, so only the dev snapshot
-/// import may call it; <c>MembershipWriteGuardTests</c> pins that.
+/// It takes no owners lock, checks no last owner and writes no audit row but the joined and removed
+/// rows <see cref="MembershipReasons"/> writes for every membership, so only the dev snapshot import
+/// may call it; <c>MembershipWriteGuardTests</c> pins that.
 /// </remarks>
 public static class DevSnapshotMemberships
 {
@@ -19,7 +20,7 @@ public static class DevSnapshotMemberships
     {
         var members = await db.TenantMembers.Where(m => m.TenantId == tenantId).ToListAsync(ct);
         foreach (var member in members)
-            await MembershipReasons.RemoveMemberAsync(db, member, ct);
+            await MembershipReasons.RemoveMemberAsync(db, member, MembershipEndHow.System, ct);
     }
 
     /// <summary>
@@ -28,5 +29,6 @@ public static class DevSnapshotMemberships
     /// </summary>
     public static void Restore(
         NocturneDbContext db, TenantMemberEntity member, MembershipGrant direct, Guid? createdFromInviteId) =>
-        MembershipReasons.AddMember(db, member, direct, createdFromInviteId);
+        MembershipReasons.AddMember(
+            db, member, direct, createdFromInviteId, MembershipJoinHow.System, by: null, source: null);
 }

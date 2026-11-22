@@ -32,7 +32,7 @@ internal static class AuthAuditRows
 
         db.AuthAuditLog.Add(new AuthAuditLogEntity
         {
-            Id = Guid.CreateVersion7(),
+            Id = AuditRowIds.Next(db),
             EventType = eventType,
             TargetSubjectId = targetSubjectId,
             ActorSubjectId = actor.SubjectId,
