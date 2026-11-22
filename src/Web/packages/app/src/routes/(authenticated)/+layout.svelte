@@ -35,6 +35,7 @@
   import InitialReadsPrefetch from "#lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "#lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "#lib/components/layout/BackupSignInPrompt.svelte";
+  import RecoveryEmailPrompt from "#lib/components/layout/RecoveryEmailPrompt.svelte";
   import ImportInBackgroundBanner from "#lib/components/migration/ImportInBackgroundBanner.svelte";
   import ImportInBackgroundNotice from "#lib/components/migration/ImportInBackgroundNotice.svelte";
   import { createImportWatcher } from "#lib/migration/background-import.svelte.js";
@@ -348,6 +349,10 @@
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
             <BackupSignInPrompt show={data.showBackupSignInPrompt} />
+            <RecoveryEmailPrompt
+              show={data.showRecoveryEmailPrompt}
+              hasAddress={data.recoveryEmailHasAddress}
+            />
           {/if}
           {#if watchesImport}
             <ImportInBackgroundBanner watcher={importWatcher} />

@@ -314,7 +314,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         return _controller.IssueRecoveryCode(
             _tenantId, _memberSubjectId, contexts, _loginCodeService,
             new MemberRecoveryEligibility(
-                new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute)), linkRoute),
+                new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute), TimeProvider.System), linkRoute),
             CancellationToken.None);
     }
 
@@ -323,7 +323,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         [
             new TenantMemberDto(
                 Guid.CreateVersion7(), _memberSubjectId, "Owner", false, [], null, null, false,
-                null, DateTime.UtcNow, false),
+                null, DateTime.UtcNow, false, null, false, null),
         ]);
 
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>

@@ -82,6 +82,7 @@ public class PasskeyController : ControllerBase
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
+    private readonly TimeProvider _time;
 
     /// <param name="passkeyService">Generates each ceremony's options, verifies its response, lists a subject's passkeys, and removes the passkey of a refused invite.</param>
     /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
@@ -100,6 +101,7 @@ public class PasskeyController : ControllerBase
     /// <param name="dbContextFactory">For the login codes the ceremonies read beside the subjects.</param>
     /// <param name="oidcOptions">For the cookie settings the session and recovery cookies are written with.</param>
     /// <param name="logger">Logs failed ceremonies and invite enrolments.</param>
+    /// <param name="timeProvider">The clock a member's end date is judged by.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
         ITotpService totpService,
@@ -117,8 +119,10 @@ public class PasskeyController : ControllerBase
         ITenantMembershipRepository members,
         INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
-        ILogger<PasskeyController> logger)
+        ILogger<PasskeyController> logger,
+        TimeProvider timeProvider)
     {
+        _time = timeProvider;
         _passkeyService = passkeyService;
         _totpService = totpService;
         _trustedDevices = trustedDevices;
@@ -369,7 +373,7 @@ public class PasskeyController : ControllerBase
             {
                 var admitted = code.Purpose == Nocturne.Infrastructure.Data.Entities.LoginCodePurpose.EmailRecovery
                     ? code.Email is { } email
-                        && (await _subjects.FindMembersByConfirmedEmailAsync(tenantId, email, ct)).Any(m => m.Id == code.SubjectId)
+                        && (await _subjects.FindMembersByConfirmedEmailAsync(tenantId, email, _time.GetUtcNow().UtcDateTime, ct)).Any(m => m.Id == code.SubjectId)
                     : MemberRecoveryEligibility.AllowsRedemption(
                         await eligibility.CheckAsync(db, tenantId, code.SubjectId, ct), code.Purpose);
                 subject = admitted ? await _subjects.GetAsync(code.SubjectId, ct) : null;
@@ -615,7 +619,7 @@ public class PasskeyController : ControllerBase
         // A deactivated member is looked up as no member, so it is refused as an unknown username
         // is and its code is not spent.
         var subject = await _subjects.FindMemberByUsernameAsync(
-            tenantId, request.Username, activeOnly: true, HttpContext.RequestAborted);
+            tenantId, request.Username, activeOnly: true, _time.GetUtcNow().UtcDateTime, HttpContext.RequestAborted);
 
         // Unknown usernames go through the same verification; see IRecoveryCodeService.VerifyAndConsumeAsync.
         var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subject?.Id, request.Code);
@@ -784,7 +788,7 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         // System-pinned read: this action is anonymous and reachable on a share host.
-        var gate = await _members.ReadSetupGateAsync(tenantId, HttpContext.RequestAborted);
+        var gate = await _members.ReadSetupGateAsync(tenantId, _time.GetUtcNow().UtcDateTime, HttpContext.RequestAborted);
 
         var tenant = await _tenants.GetAsync(tenantId, HttpContext.RequestAborted);
 

@@ -186,6 +186,7 @@ public partial class TenantService : ITenantService
         // (TenantController.IsCallerTenantOwnerAsync reads it), so the repository pins the read to
         // the tenant asked about rather than whatever tenant the caller's context carries.
         var members = await _members.ListMembersAsync(id, ct);
+        var now = _time.GetUtcNow().UtcDateTime;
 
         return new TenantDetailDto(
             tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt,
@@ -201,7 +202,10 @@ public partial class TenantService : ITenantService
                     m.LimitTo24Hours,
                     m.LastUsedAt,
                     m.SysCreatedAt,
-                    m.IsPlatformAdmin))
+                    m.IsPlatformAdmin,
+                    m.AccessEndsAt,
+                    MembershipLiveness.HasEnded(m.AccessEndsAt, now),
+                    _linkRoute.IsConfigured && !m.IsSystemSubject && !m.IsDemoSubject ? m.HasConfirmedEmail : null))
                 .ToList());
     }
 
@@ -326,7 +330,6 @@ public partial class TenantService : ITenantService
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
-        var context = unit.Context;
         var members = new TenantMembershipRepository(unit, _linkRoute);
         var member = await members.FindMemberAsync(tenantId, subjectId, ct);
 
@@ -339,31 +342,8 @@ public partial class TenantService : ITenantService
         if (member.IsSystemSubject)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        var (outcome, grants) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
-            async token =>
-            {
-                var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, token);
-                if (removal != OwnerGuardedChange.Changed)
-                    return (removal, []);
-
-                // Chat identity directory rows are global and carry no membership join, so a link left
-                // behind here would keep answering bot commands for this tenant. It goes in the same
-                // SaveChanges as the membership so the two cannot come apart, and is scoped to this
-                // tenant: the same subject's links to tenants they still belong to must survive.
-                var chatLinks = await context.ChatIdentityDirectory
-                    .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
-                    .ToListAsync(token);
-
-                // Grants carry no membership join either; left live, every one would work again the
-                // moment the subject is re-added. They are staged on the unit with the removal, so one
-                // commit lands both.
-                var active = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, token);
-
-                context.ChatIdentityDirectory.RemoveRange(chatLinks);
-                await _grantRevocation.StageAsync(unit, active, token);
-                await context.SaveChangesAsync(token);
-                return (removal, active);
-            },
+        var (outcome, grants) = await unit.CommitAsync(
+            token => MembershipRemoval.StageAsync(unit, members, _grantRevocation, tenantId, member, token),
             ct: ct);
 
         if (outcome == OwnerGuardedChange.LastOwner)
@@ -375,11 +355,11 @@ public partial class TenantService : ITenantService
 
     public async Task<List<TenantDto>> GetTenantsForSubjectAsync(
         Guid subjectId, CancellationToken ct = default) =>
-        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: false, ct)).Select(ToDto).ToList();
+        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: false, _time.GetUtcNow().UtcDateTime, ct)).Select(ToDto).ToList();
 
     public async Task<List<TenantDto>> GetReachableTenantsForSubjectAsync(
         Guid subjectId, CancellationToken ct = default) =>
-        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: true, ct)).Select(ToDto).ToList();
+        (await _members.ListTenantsOfSubjectAsync(subjectId, activeOnly: true, _time.GetUtcNow().UtcDateTime, ct)).Select(ToDto).ToList();
 
     public Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default) =>
         ValidateSlugAsync(slug, allowReserved: false, ct);

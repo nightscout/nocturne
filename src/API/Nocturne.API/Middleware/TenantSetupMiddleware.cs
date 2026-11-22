@@ -24,6 +24,7 @@ public class TenantSetupMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantSetupMiddleware> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Creates a new instance of <see cref="TenantSetupMiddleware"/>.
@@ -32,10 +33,12 @@ public class TenantSetupMiddleware
     /// <param name="logger">Logger for setup/recovery diagnostics.</param>
     public TenantSetupMiddleware(
         RequestDelegate next,
-        ILogger<TenantSetupMiddleware> logger)
+        ILogger<TenantSetupMiddleware> logger,
+        TimeProvider time)
     {
         _next = next;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -155,7 +158,7 @@ public class TenantSetupMiddleware
         string path,
         CancellationToken ct)
     {
-        var gate = await members.ReadSetupGateAsync(tenantId, ct);
+        var gate = await members.ReadSetupGateAsync(tenantId, _time.GetUtcNow().UtcDateTime, ct);
 
         if (gate is not { HasCredentials: true })
         {

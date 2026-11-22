@@ -20,8 +20,8 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <summary>
 /// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke
 /// invites, accept an invite, list members, change a member's roles or permissions, set a member's
-/// 24-hour history limit, remove a member from the tenant, and step themselves down to a more
-/// limited role.
+/// 24-hour history limit or the date their access ends, remove a member from the tenant, and step
+/// themselves down to a more limited role.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>
@@ -76,13 +76,18 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> CreateInvite([FromBody] CreateMemberInviteRequest request)
+    public async Task<IActionResult> CreateInvite(
+        [FromBody] CreateMemberInviteRequest request, [FromServices] TimeProvider time)
     {
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
             return Unauthorized();
 
         var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+
+        var accessEndsAt = HttpContext.InheritAccessEnd(AccessEndRequest.Instant(request.AccessEndsAt));
+        if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, time.GetUtcNow().UtcDateTime) is (var status, var detail))
+            return Problem(detail: detail, statusCode: status);
 
         if (limitTo24Hours)
         {
@@ -100,6 +105,7 @@ public class MemberInviteController : ControllerBase
                 subjectId.Value,
                 HttpContext.GetGrantedScopes(),
                 request.RoleIds,
+                accessEndsAt,
                 request.DirectPermissions,
                 request.Label,
                 request.ExpiresInDays,
@@ -261,7 +267,7 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
-    /// List all members of the current tenant.
+    /// List all members of the current tenant. Whether each has a confirmed recovery email is reported only to a caller who holds <c>members.manage</c>.
     /// </summary>
     [HttpGet("members")]
     [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
@@ -275,7 +281,10 @@ public class MemberInviteController : ControllerBase
         if (tenant == null)
             return NotFound();
 
-        return Ok(tenant.Members);
+        var managesMembers = Scope.Satisfies(HttpContext.GetGrantedScopes(), Scope.MembersManage);
+        return Ok(managesMembers
+            ? tenant.Members
+            : tenant.Members.Select(m => m with { HasConfirmedRecoveryEmail = null }).ToList());
     }
 
     /// <summary>
@@ -360,9 +369,13 @@ public class MemberInviteController : ControllerBase
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        if (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct)
-            == OwnerGuardedChange.LastOwner)
-            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
+        switch (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct))
+        {
+            case OwnerGuardedChange.LastOwner:
+                return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
+            case OwnerGuardedChange.OwnerAccessEnds:
+                return Problem(detail: AccessEndRequest.ClearBeforeOwnerDetail, statusCode: 400);
+        }
 
         if (member.IsPublicSubject())
             publicAccessCache.Evict(tenantId);
@@ -550,6 +563,53 @@ public class MemberInviteController : ControllerBase
     }
 
 
+    /// <summary>
+    /// Set when a member's access ends, or clear it with null. From that instant the membership
+    /// grants nothing, and nothing is revoked, so a later date restores the same access.
+    /// </summary>
+    /// <remarks>
+    /// To end access now, remove the member: an end at or before now is refused. A caller whose own
+    /// access ends cannot set a later end or clear one (<see cref="HttpContextExtensions.OutlastsCallerAccess"/>).
+    /// An owner cannot be given an end date.
+    /// </remarks>
+    [HttpPut("members/{id:guid}/access-end")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetMembers"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetMemberAccessEnd(
+        Guid id,
+        [FromBody] SetMemberAccessEndRequest request,
+        [FromServices] TimeProvider time,
+        CancellationToken ct)
+    {
+        var tenantId = _tenantAccessor.TenantId;
+        var member = await _members.GetMemberAsync(tenantId, id, ct);
+
+        if (member == null)
+            return NotFound();
+
+        if (IsCallersOwnMembership(member.SubjectId))
+            return Problem(detail: SelfEditDetail, statusCode: 400);
+
+        if (member.IsSystemSubject)
+            return Problem(detail: AccessEndRequest.SystemSubjectDetail, statusCode: 400);
+
+        var now = time.GetUtcNow().UtcDateTime;
+        var accessEndsAt = AccessEndRequest.Instant(request.AccessEndsAt);
+        if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, now) is (var status, var detail))
+            return Problem(detail: detail, statusCode: status);
+
+        return await _members.SetAccessEndUnlessOwnerAsync(tenantId, member.Id, accessEndsAt, now, ct) switch
+        {
+            OwnerGuardedChange.NotFound => NotFound(),
+            OwnerGuardedChange.OwnerAccessEnds => Problem(detail: AccessEndRequest.OwnerDetail, statusCode: 400),
+            _ => NoContent(),
+        };
+    }
+
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
 
@@ -622,8 +682,14 @@ public class CreateMemberInviteRequest
     public int ExpiresInDays { get; set; } = 7;
     public int? MaxUses { get; set; }
     public bool LimitTo24Hours { get; set; }
+
+    /// <summary>When the membership the invite creates ends; none when omitted, unless the inviter's own access ends.</summary>
+    public DateTimeOffset? AccessEndsAt { get; set; }
 }
 
 public record SetMemberRolesRequest(List<Guid> RoleIds);
 public record SetMemberPermissionsRequest(List<string>? DirectPermissions);
 public record SetMemberLimitTo24HoursRequest(bool LimitTo24Hours);
+
+/// <param name="AccessEndsAt">When the membership ends; null when it does not.</param>
+public record SetMemberAccessEndRequest(DateTimeOffset? AccessEndsAt);

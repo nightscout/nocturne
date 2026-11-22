@@ -122,3 +122,38 @@ describe("MemberCard history link", () => {
     expect(page.getByRole("link", { name: "View history for Alex" }).elements()).toHaveLength(0);
   });
 });
+
+describe("MemberCard recovery email badge", () => {
+  const props = {
+    roles: administratorRoles,
+    canEditRoles: false,
+    canManage: false,
+    isExpanded: false,
+    isSaving: false,
+    onToggleExpand: () => {},
+    onSave: () => {},
+    onRemove: () => {},
+  };
+
+  it("marks a member with no confirmed recovery email to a viewer who manages members", async () => {
+    render(MemberCard, {
+      ...props,
+      member: { ...ownerMember, hasConfirmedRecoveryEmail: false },
+      canSeeRecoveryEmail: true,
+    });
+
+    await expect.element(page.getByText("No recovery email")).toBeVisible();
+  });
+
+  it.each([
+    ["has one", { hasConfirmedRecoveryEmail: true }, true],
+    ["is a system or demo subject", { hasConfirmedRecoveryEmail: undefined }, true],
+    ["is not reported on", {}, true],
+    ["lacks one but the viewer cannot manage members", { hasConfirmedRecoveryEmail: false }, false],
+  ])("shows no badge when the member %s", async (_, extra, canSee) => {
+    render(MemberCard, { ...props, member: { ...ownerMember, ...extra }, canSeeRecoveryEmail: canSee });
+
+    await expect.element(page.getByText("Alex")).toBeVisible();
+    expect(page.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+});

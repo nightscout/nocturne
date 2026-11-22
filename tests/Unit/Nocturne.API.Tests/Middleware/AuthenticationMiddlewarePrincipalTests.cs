@@ -96,6 +96,7 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton(TimeProvider.System);
         var provider = services.BuildServiceProvider();
 
         if (isMember)
@@ -178,6 +179,7 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton(TimeProvider.System);
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
+using Nocturne.API.Extensions;
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -33,6 +37,8 @@ public class MembershipRequestServiceTests : IDisposable
     private readonly Guid _adminSubjectId = Guid.CreateVersion7();
     private readonly Guid _adminRoleId = Guid.CreateVersion7();
 
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero));
+
     public MembershipRequestServiceTests()
     {
         _db = TestDbContextFactory.CreateSqlite();
@@ -57,11 +63,12 @@ public class MembershipRequestServiceTests : IDisposable
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time),
             _notificationService.Object,
             _audit.Object,
-            TimeProvider.System,
-            NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off);
+            _time,
+            NullLogger<MembershipRequestService>.Instance, AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
         SeedData();
     }
@@ -278,7 +285,7 @@ public class MembershipRequestServiceTests : IDisposable
         var roleIds = new List<Guid> { _adminRoleId };
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess]);
+            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeNull();
@@ -299,6 +306,47 @@ public class MembershipRequestServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ApproveRequestAsync_forASubjectWhoseMembershipHasEnded_replacesItWithOneMembershipCarryingTheNewEnd()
+    {
+        var endedId = Guid.CreateVersion7();
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = endedId, TenantId = _tenantId, SubjectId = _subjectId, AccessEndsAt = _time.GetUtcNow().UtcDateTime.AddSeconds(-1),
+        });
+        await _dbContext.SaveChangesAsync();
+        (await _service.CreateRequestAsync(_tenantId, _subjectId, null)).Outcome
+            .Should().Be(CreateMembershipRequestOutcome.Created, "an ended membership is no membership");
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+        var end = _time.GetUtcNow().UtcDateTime.AddDays(14);
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], accessEndsAt: end);
+
+        result.Success.Should().BeTrue();
+        var rows = await _dbContext.TenantMembers.AsNoTracking().Where(m => m.SubjectId == _subjectId).ToListAsync();
+        rows.Should().ContainSingle().Which.Should().Match<TenantMemberEntity>(m => m.Id != endedId && m.AccessEndsAt == end);
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_refusesTheOwnerRoleWithAnEnd()
+    {
+        var ownerRole = Guid.CreateVersion7();
+        _dbContext.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = ownerRole, TenantId = _tenantId, Name = "Owner", Slug = RoleSeeds.Owner, Permissions = [Scope.FullAccess], IsSystem = true,
+        });
+        await _dbContext.SaveChangesAsync();
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [ownerRole], _adminSubjectId, [Scope.FullAccess], accessEndsAt: _time.GetUtcNow().UtcDateTime.AddDays(1));
+
+        result.Error.Should().Be(AccessEndRequest.OwnerDetail);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _subjectId)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ApproveRequestAsync_SubjectAlreadyAMember_FailsAndLeavesTheRequestPending()
     {
         await _service.CreateRequestAsync(_tenantId, _subjectId, null);
@@ -312,7 +360,7 @@ public class MembershipRequestServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeFalse();
         result.Error.Should().NotBeNullOrEmpty();
@@ -332,7 +380,7 @@ public class MembershipRequestServiceTests : IDisposable
         var request = await _dbContext.MembershipRequests.FirstAsync();
 
         await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null, limitTo24Hours: true);
 
         var rows = await _dbContext.AuthAuditLog.AsNoTracking().Where(a => a.TargetSubjectId == _subjectId).ToListAsync();
         rows.Should().OnlyContain(a => a.ActorSubjectId == _adminSubjectId && a.TenantId == _tenantId);
@@ -355,7 +403,7 @@ public class MembershipRequestServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null, limitTo24Hours: true);
 
         result.Success.Should().BeFalse();
         (await _dbContext.AuthAuditLog.AsNoTracking().CountAsync(a => a.TargetSubjectId == _subjectId)).Should().Be(0);
@@ -375,7 +423,7 @@ public class MembershipRequestServiceTests : IDisposable
         var roleIds = new List<Guid> { _adminRoleId };
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess], null, limitTo24Hours: true);
 
         result.Success.Should().BeTrue();
         (await _dbContext.TenantMembers.SingleAsync(m => m.TenantId == _tenantId && m.SubjectId == _subjectId))
@@ -401,7 +449,7 @@ public class MembershipRequestServiceTests : IDisposable
         var request = await _dbContext.MembershipRequests.FirstAsync();
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [settingsRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+            request.Id, _tenantId, [settingsRoleId], _adminSubjectId, [Scope.FullAccess], null, limitTo24Hours: true);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be(MemberScopeResolver.ExemptFromHistoryClampDetail);
@@ -414,7 +462,7 @@ public class MembershipRequestServiceTests : IDisposable
     public async Task ApproveRequestAsync_RequestNotFound_ReturnsFailure()
     {
         var result = await _service.ApproveRequestAsync(
-            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not found");
@@ -431,7 +479,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         // Try to approve the already-denied request
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("no longer pending");
@@ -569,7 +617,7 @@ public class MembershipRequestServiceTests : IDisposable
         var requester = await SeedRequesterAsync("Pending", isActive: false);
 
         var result = await _service.ApproveRequestAsync(
-            await RequestIdOf(requester), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            await RequestIdOf(requester), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeTrue();
         var subject = await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requester);
@@ -587,7 +635,7 @@ public class MembershipRequestServiceTests : IDisposable
         await _service.CreateRequestAsync(_tenantId, _subjectId, null);
 
         (await _service.ApproveRequestAsync(
-            await RequestIdOf(_subjectId), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]))
+            await RequestIdOf(_subjectId), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null))
             .Success.Should().BeTrue();
 
         AccessDecisionAudits(_subjectId).Should().BeEmpty();
@@ -602,7 +650,7 @@ public class MembershipRequestServiceTests : IDisposable
         var requestId = await RequestIdOf(requester);
 
         var result = await _service.ApproveRequestAsync(
-            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not active");
@@ -626,7 +674,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         (await _service.GetPendingRequestsAsync(_tenantId)).Should().BeEmpty();
         var result = await _service.ApproveRequestAsync(
-            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
+            requestId, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess], null);
         result.Success.Should().BeFalse();
         result.Error.Should().Be("Request not found.");
     }
@@ -673,7 +721,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         (await _service.GetPendingRequestsAsync(_tenantId)).Should().ContainSingle(r => r.Id == requestId);
         (await _service.GetPendingRequestsAsync(other)).Should().BeEmpty();
-        (await _service.ApproveRequestAsync(requestId, other, [], _adminSubjectId, [Scope.FullAccess]))
+        (await _service.ApproveRequestAsync(requestId, other, [], _adminSubjectId, [Scope.FullAccess], null))
             .Error.Should().Be("Request not found.");
         (await _service.DenyRequestAsync(requestId, other, _adminSubjectId))
             .Error.Should().Be("Request not found.");

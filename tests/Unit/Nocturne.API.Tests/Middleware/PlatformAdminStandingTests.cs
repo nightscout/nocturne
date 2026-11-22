@@ -116,6 +116,7 @@ public class PlatformAdminStandingTests
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddSingleton(AccountLinkRoutes.Off);
+        services.AddSingleton(TimeProvider.System);
         var provider = services.BuildServiceProvider();
 
         using (var seedScope = provider.CreateScope())

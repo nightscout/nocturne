@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -153,6 +154,26 @@ public class TenantOverviewServiceTests
         var full = await service.GetGlucoseReadTenantsAsync(
             subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
         full.Select(t => t.Tenant.Slug).Should().BeEquivalentTo(["member-tenant", "owner-tenant"]);
+    }
+
+    [Fact]
+    public async Task GetGlucoseReadTenants_leavesOutATenantWhoseMembershipHasEnded()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero));
+        var now = clock.GetUtcNow().UtcDateTime;
+        var ended = SeedMembership(options, subjectId, "ended", [Scope.GlucoseRead], accessEndsAt: now.AddSeconds(-1));
+        SeedMembership(options, subjectId, "ending-later", [Scope.GlucoseRead], accessEndsAt: now.AddSeconds(1));
+
+        var service = NewService(options, clock: clock);
+
+        (await service.GetGlucoseReadTenantsAsync(subjectId, new HashSet<string>(), AuthType.SessionCookie))
+            .Select(t => t.Tenant.Slug).Should().Equal("ending-later");
+        (await service.GetOverviewAsync(subjectId, new HashSet<string>(), AuthType.SessionCookie))
+            .Tenants.Select(i => i.Slug).Should().Equal("ending-later");
+        (await service.GetPersonAsync(subjectId, ended, new HashSet<string>(), AuthType.SessionCookie)).Should().BeNull();
     }
 
     [Fact]
@@ -1081,7 +1102,8 @@ public class TenantOverviewServiceTests
         DbContextOptions<NocturneDbContext> options,
         SensorGlucose? latest = null,
         Guid? failingTenantId = null,
-        Fakes? fakes = null)
+        Fakes? fakes = null,
+        TimeProvider? clock = null)
     {
         TenantContext? current = null;
 
@@ -1102,7 +1124,7 @@ public class TenantOverviewServiceTests
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
-            TimeProvider.System,
+            clock ?? TimeProvider.System,
             NullLogger<TenantOverviewService>.Instance);
     }
 }

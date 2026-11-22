@@ -172,12 +172,12 @@ public class LastOwnerWhoCanSignInTests : IDisposable
     {
         var route = RouteFor(b);
         var (a, aMember) = await ArrangeAsync(aSignsIn, b, route);
-        (await Members(route).ReadSetupGateAsync(_tenant, CancellationToken.None))!.RecoveryMode.Should().BeFalse("the site serves before");
+        (await Members(route).ReadSetupGateAsync(_tenant, Now, CancellationToken.None))!.RecoveryMode.Should().BeFalse("the site serves before");
 
         foreach (var path in new[] { Path.RemoveOwnerRole, Path.Remove, Path.Deactivate, Path.Delete })
         {
             await ActAsync(path, a, aMember, route);
-            (await Members(route).ReadSetupGateAsync(_tenant, CancellationToken.None))?.RecoveryMode
+            (await Members(route).ReadSetupGateAsync(_tenant, Now, CancellationToken.None))?.RecoveryMode
                 .Should().NotBe(true, $"after {path} the site still serves");
         }
     }

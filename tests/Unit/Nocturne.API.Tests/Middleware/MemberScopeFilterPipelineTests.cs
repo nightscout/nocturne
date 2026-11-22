@@ -380,7 +380,7 @@ public class MemberScopeFilterPipelineTests
         httpContext.Items["GrantedScopes"] = Scope.Normalize(credentialScopes);
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
         (await RequestMembership.ReadAsync(
-                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None))
+                new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId, TestDatabaseSeeder.TenantId, DateTime.UtcNow, CancellationToken.None))
             .Membership.StoreOn(httpContext);
 
         var middleware = new MemberScopeMiddleware(

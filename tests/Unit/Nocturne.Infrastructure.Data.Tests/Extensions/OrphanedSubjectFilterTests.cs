@@ -157,7 +157,7 @@ public class OrphanedSubjectFilterTests : IDisposable
         var lookup = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), AccountLinkRoutes.Off);
         foreach (var subject in _context.Subjects.AsNoTracking().Where(s => s.Email != null).ToList())
         {
-            var recipients = await lookup.FindMembersByConfirmedEmailAsync(_tenant, subject.Email!.ToUpperInvariant(), CancellationToken.None);
+            var recipients = await lookup.FindMembersByConfirmedEmailAsync(_tenant, subject.Email!.ToUpperInvariant(), DateTime.UtcNow, CancellationToken.None);
             sentTo.AddRange(recipients.Select(r => ids[r.Id]));
         }
 

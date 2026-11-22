@@ -7,7 +7,7 @@ import {
   MemberHistoryLimit,
   type MemberHistoryEntry,
   type TenantRoleDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import MemberHistoryEntryRow from "./MemberHistoryEntryRow.svelte";
 
 const person = { kind: MemberHistoryActorKind.Person, subjectId: "a1", name: "Alex" };
