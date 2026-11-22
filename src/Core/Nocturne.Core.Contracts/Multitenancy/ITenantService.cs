@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Multitenancy;
@@ -93,6 +94,17 @@ public interface ITenantService
     /// succeeds.
     /// </summary>
     Task<MemberRemovalResult> RemoveMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets when a member's access ends, or clears it with null, as
+    /// <see cref="ITenantMembershipRepository.SetAccessEndUnlessOwnerAsync"/> does. When a date is set,
+    /// every live guest link the member made in the tenant that would outlive it has its expiry
+    /// lowered to it, in the same transaction. A link's expiry only ever shrinks: a later date
+    /// lengthens none, and clearing the date changes none.
+    /// </summary>
+    /// <param name="now">The instant the change is made at, which decides which links are live.</param>
+    Task<OwnerGuardedChange> SetMemberAccessEndAsync(
+        Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct = default);
 
     /// <summary>
     /// Returns all tenants that the specified subject is a member of: tenants the subject owns

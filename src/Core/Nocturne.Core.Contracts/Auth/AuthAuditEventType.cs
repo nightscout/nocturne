@@ -69,6 +69,19 @@ public static class AuthAuditEventType
     public const string AccessEndChanged = "access_end_changed";
 
     /// <summary>
+    /// Event type when a member's access end date set or moved earlier lowers the expiry of a guest
+    /// link they made. The target is the member; the details name the link under <c>grant</c> and its
+    /// new expiry under <c>expires_at</c> as an ISO 8601 UTC instant.
+    /// </summary>
+    public const string GuestLinkCapped = "guest_link_capped";
+
+    /// <summary>
+    /// Event type when removing a member revokes a guest link they made. The target is the member;
+    /// the details name the link under <c>grant</c>.
+    /// </summary>
+    public const string GuestLinkRevoked = "guest_link_revoked";
+
+    /// <summary>
     /// Event type when a subject (user) is created.
     /// </summary>
     public const string SubjectCreated = "subject_created";

@@ -99,6 +99,32 @@ public interface IOAuthGrantRepository
     Task<IReadOnlyList<OAuthGrantRecord>> GetGuestLinksAsync(
         Guid dataOwnerSubjectId, bool includeDismissed, CancellationToken ct);
 
+    /// <summary>
+    /// The guest links <paramref name="createdBySubjectId"/> made that are unrevoked and unexpired at
+    /// <paramref name="now"/>, whoever the data owner is.
+    /// </summary>
+    Task<IReadOnlyList<OAuthGrantRecord>> GetLiveGuestLinksCreatedByAsync(
+        Guid createdBySubjectId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link <paramref name="createdBySubjectId"/>
+    /// made that is live at <paramref name="now"/> and expires later, and stages a
+    /// <c>guest_link_capped</c> audit row for each. A link that expires sooner is left alone. Stages on
+    /// the caller's unit of work and does not save.
+    /// </summary>
+    /// <returns>The links it lowered, for the caller to evict their sessions once the unit commits.</returns>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
+    Task<IReadOnlyList<OAuthGrantRecord>> CapGuestLinksCreatedByAsync(
+        Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Stages a <c>guest_link_revoked</c> audit row for each of <paramref name="links"/>, which the
+    /// caller revokes because <paramref name="memberSubjectId"/>, who made them, was removed. Stages on
+    /// the caller's unit of work and does not save.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
+    void StageMemberRemovalGuestLinkAudit(IEnumerable<OAuthGrantRecord> links, Guid memberSubjectId);
+
     /// <summary>How many guest links of <paramref name="dataOwnerSubjectId"/> are unrevoked and unexpired at <paramref name="now"/>.</summary>
     Task<int> CountLiveGuestLinksAsync(Guid dataOwnerSubjectId, DateTime now, CancellationToken ct);
 

@@ -343,7 +343,8 @@ public partial class TenantService : ITenantService
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
         var (outcome, grants) = await unit.CommitAsync(
-            token => MembershipRemoval.StageAsync(unit, members, _grantRevocation, tenantId, member, token),
+            token => MembershipRemoval.StageAsync(
+                unit, members, _grantRevocation, tenantId, member, _time.GetUtcNow().UtcDateTime, token),
             ct: ct);
 
         if (outcome == OwnerGuardedChange.LastOwner)
@@ -351,6 +352,35 @@ public partial class TenantService : ITenantService
 
         _grantRevocation.EvictSessions(grants);
         return new MemberRemovalResult(true);
+    }
+
+    public async Task<OwnerGuardedChange> SetMemberAccessEndAsync(
+        Guid tenantId, Guid memberId, DateTime? accessEndsAt, DateTime now, CancellationToken ct = default)
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
+        var (outcome, capped) = await unit.CommitAsync(
+            async token =>
+            {
+                var change = await members.SetAccessEndUnlessOwnerAsync(tenantId, memberId, accessEndsAt, now, token);
+                IReadOnlyList<OAuthGrantRecord> lowered = [];
+                if (change != OwnerGuardedChange.Changed)
+                    return (change, lowered);
+
+                if (accessEndsAt is { } end)
+                {
+                    var member = await members.GetMemberAsync(tenantId, memberId, token);
+                    lowered = await new OAuthGrantRepository(unit)
+                        .CapGuestLinksCreatedByAsync(member!.SubjectId, end, now, token);
+                }
+
+                await unit.Context.SaveChangesAsync(token);
+                return (change, lowered);
+            },
+            ct: ct);
+
+        _grantRevocation.EvictSessions(capped);
+        return outcome;
     }
 
     public async Task<List<TenantDto>> GetTenantsForSubjectAsync(

@@ -332,6 +332,41 @@ public class GuestLinkServiceTests : IDisposable
         session.Should().BeNull();
     }
 
+    private async Task CapAsync(DateTime notAfter)
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_dbContext.AsFactory(), _tenantId);
+        await new OAuthGrantRepository(unit).CapGuestLinksCreatedByAsync(_creatorId, notAfter, DateTime.UtcNow, CancellationToken.None);
+        await unit.Context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_CappedGrant_ValidUntilItsNewExpiryThenNull()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Cap Test", "https://example.com", Unbounded(), null);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        var newExpiry = DateTime.UtcNow.AddHours(1);
+
+        await CapAsync(newExpiry);
+
+        (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(newExpiry);
+
+        await CapAsync(DateTime.UtcNow.AddMinutes(-1));
+
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_CapDoesNotLengthenALinkThatEndsSooner()
+    {
+        var soon = DateTime.UtcNow.AddMinutes(10);
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Short Test", "https://example.com", Unbounded(), soon);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+
+        await CapAsync(DateTime.UtcNow.AddDays(5));
+
+        (await _service.ValidateSessionAsync(created.Info.Id))!.ExpiresAt.Should().Be(created.Info.ExpiresAt);
+    }
+
     [Fact]
     public async Task ValidateSessionAsync_CarriesGrantTenant()
     {

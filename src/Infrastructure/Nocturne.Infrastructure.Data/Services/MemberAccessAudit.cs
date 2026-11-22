@@ -32,8 +32,12 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// <see cref="AuthAuditEventType.HistoryLimitChanged"/> row naming the limit after it under
 /// <c>history_limit</c>. An end date that moved is one <see cref="AuthAuditEventType.AccessEndChanged"/>
 /// row naming the end after it under <c>access_ends_at</c>, as an ISO 8601 UTC instant or null when
-/// the membership no longer ends; the date passing writes nothing. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c>
-/// when an invite caused it. A change that leaves the set as it was stages nothing.
+/// the membership no longer ends; the date passing writes nothing. A guest link the member made that
+/// an end date lowered is one <see cref="AuthAuditEventType.GuestLinkCapped"/> row, and one that removing
+/// the member revoked is one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row, each naming the link
+/// under <c>grant</c> (a cap also its new expiry under <c>expires_at</c>), with the member as the
+/// target. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c> when an invite
+/// caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
 /// row with no target subject, naming the role under <c>role_id</c> and <c>role</c> and the permissions
 /// under <c>gained</c> and <c>lost</c>; a global role's row says <c>kind</c> = <c>global</c>.
@@ -56,6 +60,8 @@ internal static class MemberAccessAudit
     internal const string PermissionKey = "permission";
     internal const string HistoryLimitKey = "history_limit";
     internal const string AccessEndsAtKey = "access_ends_at";
+    internal const string GrantKey = "grant";
+    internal const string ExpiresAtKey = "expires_at";
     internal const string InviteKey = "invite";
     internal const string TwentyFourHours = "24_hours";
     internal const string FullHistory = "full";
@@ -108,6 +114,31 @@ internal static class MemberAccessAudit
 
         Add(db, AuthAuditEventType.AccessEndChanged, tenantId, subjectId, details, source);
     }
+
+    /// <summary>
+    /// Stages one <see cref="AuthAuditEventType.GuestLinkCapped"/> row for a guest link the member made
+    /// whose expiry their access end date lowered to <paramref name="expiresAt"/>.
+    /// </summary>
+    public static void StageGuestLinkCapped(
+        NocturneDbContext db, Guid tenantId, Guid memberSubjectId, Guid grantId, DateTime expiresAt) =>
+        Add(db, AuthAuditEventType.GuestLinkCapped, tenantId, memberSubjectId, new Dictionary<string, object?>
+        {
+            [GrantKey] = grantId.ToString(),
+            [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
+            [KindKey] = TenantKind,
+        }, source: null);
+
+    /// <summary>
+    /// Stages one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row for a guest link the member
+    /// made, revoked because the member was removed.
+    /// </summary>
+    public static void StageGuestLinkRevoked(
+        NocturneDbContext db, Guid tenantId, Guid memberSubjectId, Guid grantId) =>
+        Add(db, AuthAuditEventType.GuestLinkRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
+        {
+            [GrantKey] = grantId.ToString(),
+            [KindKey] = TenantKind,
+        }, source: null);
 
     /// <summary>
     /// Stages one <see cref="AuthAuditEventType.RolePermissionsChanged"/> row when the role's permission set
