@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -87,13 +88,11 @@ public static class DeviceSubjectFilter
             ApprovalStatus = "Approved",
         });
 
-        db.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            DirectPermissions = [Scope.FullAccess],
-        });
+        MembershipReasons.AddMember(
+            db,
+            new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId },
+            new MembershipGrant([], [Scope.FullAccess], LimitTo24Hours: false, AccessEndsAt: null),
+            createdFromInviteId: null);
         MemberAccessAudit.StagePermissions(db, tenantId, subjectId, null, [Scope.FullAccess]);
 
         await db.SaveChangesAsync(ct);

@@ -78,6 +78,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     {
         await using var lease = await OpenForTenantAsync(member.TenantId, ct);
         var db = lease.Context;
+        // A row exists exactly when a direct reason does only while direct is the only kind of reason.
         if (await db.TenantMembers.AnyAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, ct))
             return false;
 
@@ -86,24 +87,14 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             Id = Guid.CreateVersion7(),
             TenantId = member.TenantId,
             SubjectId = member.SubjectId,
-            DirectPermissions = member.DirectPermissions?.ToList(),
             Label = member.Label,
             Username = member.Username,
-            LimitTo24Hours = member.LimitTo24Hours,
-            AccessEndsAt = member.AccessEndsAt,
-            CreatedFromInviteId = member.CreatedFromInviteId,
         };
-        db.TenantMembers.Add(entity);
         var roleIds = member.RoleIds.Distinct().ToList();
-        foreach (var roleId in roleIds)
-        {
-            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = entity.Id,
-                TenantRoleId = roleId,
-            });
-        }
+        MembershipReasons.AddMember(
+            db, entity,
+            new MembershipGrant(roleIds, member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt),
+            member.CreatedFromInviteId);
 
         var source = member.MadeBy switch
         {
@@ -321,8 +312,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 return OwnerGuardedChange.NotFound;
 
             await StageRemovalAsync(db, member, token);
-            db.TenantMemberRoles.RemoveRange(member.MemberRoles);
-            db.TenantMembers.Remove(member);
+            await MembershipReasons.RemoveMemberAsync(db, member, token);
             return OwnerGuardedChange.Changed;
         }, ct);
 
@@ -354,8 +344,8 @@ public class TenantMembershipRepository : ITenantMembershipRepository
 
         foreach (var membership in memberships)
             await StageRemovalAsync(db, membership, ct);
-        db.TenantMemberRoles.RemoveRange(memberships.SelectMany(m => m.MemberRoles));
-        db.TenantMembers.RemoveRange(memberships);
+        foreach (var membership in memberships)
+            await MembershipReasons.RemoveMemberAsync(db, membership, ct);
         return new SubjectMembershipsRemoval(memberships.Count, leftWithoutOwner);
     }
 
@@ -381,7 +371,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return false;
 
         MemberAccessAudit.StagePermissions(lease.Context, tenantId, member.SubjectId, member.DirectPermissions, permissions);
-        member.DirectPermissions = permissions?.ToList();
+        await MembershipReasons.SetDirectPermissionsAsync(lease.Context, member, permissions, ct);
         member.SysUpdatedAt = now;
         await SaveAsync(lease.Context, ct);
         return true;
@@ -396,7 +386,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             return false;
 
         MemberAccessAudit.StageHistoryLimit(lease.Context, tenantId, member.SubjectId, member.LimitTo24Hours, limitTo24Hours);
-        member.LimitTo24Hours = limitTo24Hours;
+        await MembershipReasons.SetLimitTo24HoursAsync(lease.Context, member, limitTo24Hours, ct);
         member.SysUpdatedAt = now;
         await SaveAsync(lease.Context, ct);
         return true;
@@ -419,7 +409,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             MemberAccessAudit.StageAccessEnd(db, tenantId, member.SubjectId, member.AccessEndsAt, accessEndsAt);
             if (member.AccessEndsAt != accessEndsAt)
             {
-                member.AccessEndsAt = accessEndsAt;
+                await MembershipReasons.SetAccessEndAsync(db, member, accessEndsAt, token);
                 member.SysUpdatedAt = now;
             }
 
@@ -491,17 +481,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             await SlugsOfAsync(db, after.Except(before).ToList(), ct),
             await SlugsOfAsync(db, before.Except(after).ToList(), ct));
 
-        db.TenantMemberRoles.RemoveRange(member.MemberRoles.Where(mr => removedRoleIds.Contains(mr.TenantRoleId)));
-        foreach (var roleId in addedRoleIds)
-        {
-            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantMemberId = member.Id,
-                TenantRoleId = roleId,
-            });
-        }
-
+        await MembershipReasons.ReplaceRolesAsync(db, member, removedRoleIds, addedRoleIds, ct);
         member.SysUpdatedAt = now;
         return true;
     }
@@ -841,7 +821,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
 
         foreach (var holder in role.MemberRoles)
             MemberAccessAudit.StageRoles(db, tenantId, holder.TenantMember.SubjectId, [], [role.Slug]);
-        db.TenantMemberRoles.RemoveRange(role.MemberRoles);
+        await MembershipReasons.RemoveRoleAsync(db, role.Id, ct);
         db.TenantRoles.Remove(role);
         await SaveAsync(db, ct);
         return true;
