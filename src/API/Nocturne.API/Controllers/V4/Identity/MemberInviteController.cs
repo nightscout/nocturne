@@ -231,7 +231,8 @@ public class MemberInviteController : ControllerBase
         invite.ExpiresAt,
         invite.Permissions.Count > 0,
         Scope.IsViewOnlyForRecordsAndAccess(invite.Permissions),
-        viewer);
+        viewer,
+        invite.AccessEndsAt);
 
     /// <summary>
     /// Accept an invite and join the tenant. The caller must be signed in but need not already belong to the tenant.

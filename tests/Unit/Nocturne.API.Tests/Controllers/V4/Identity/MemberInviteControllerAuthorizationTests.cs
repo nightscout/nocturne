@@ -637,6 +637,20 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         info.IsViewOnlyForRecordsAndAccess.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task GetInviteInfo_carriesTheEndOfTheAccessTheInviteGives()
+    {
+        var end = DateTime.UtcNow.AddDays(30);
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite() with { AccessEndsAt = end });
+
+        var controller = BuildController();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<JoinInviteInfo>().Which.AccessEndsAt.Should().Be(end);
+    }
+
     /// <summary>
     /// Anyone holding the link reaches this anonymously. The invite's label is the inviter's own
     /// note, and the joiners are other people; the invitee needs neither.

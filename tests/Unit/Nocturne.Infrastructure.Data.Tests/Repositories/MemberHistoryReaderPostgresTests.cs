@@ -116,11 +116,12 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     }
 
     [Fact]
-    public async Task OnlyTheFourMemberChangeEventTypesOfTenantKindAreReturned()
+    public async Task OnlyTheMemberChangeEventTypesOfTenantKindAreReturned()
     {
         var s = await SeedAsync("hb2");
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, """{"role":"owner","kind":"global"}""", s.Member, s.Actor);
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, """{"role":"owner"}""", s.Member, s.Actor);
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, """{"access_ends_at":null,"kind":"global"}""", s.Member, s.Actor);
         await AddAsync(s.Tenant, AuthAuditEventType.RolePermissionsChanged,
             """{"role":"Admin","gained":["a"],"lost":[],"kind":"global"}""", actor: s.Actor);
         await AddAsync(s.Tenant, AuthAuditEventType.Login, Tenant("role", "viewer"), s.Member, s.Member);
@@ -129,13 +130,14 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var role = await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Tenant("role", "viewer"), s.Member, s.Actor, minute: 1);
         var removed = await AddAsync(s.Tenant, AuthAuditEventType.RoleRemoved, Tenant("permission", "glucose.read"), s.Member, s.Actor, minute: 2);
         var limit = await AddAsync(s.Tenant, AuthAuditEventType.HistoryLimitChanged, Tenant("history_limit", "24_hours"), s.Member, s.Actor, minute: 3);
+        var end = await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, Tenant("access_ends_at", "2026-04-02T13:00:00.0000000Z"), s.Member, s.Actor, minute: 4);
         var changed = await AddAsync(s.Tenant, AuthAuditEventType.RolePermissionsChanged,
-            """{"role_id":"x","role":"Caretaker","gained":["b","a"],"lost":["c"],"kind":"tenant"}""", actor: s.Actor, minute: 4);
+            """{"role_id":"x","role":"Caretaker","gained":["b","a"],"lost":["c"],"kind":"tenant"}""", actor: s.Actor, minute: 5);
 
         var page = await Read(s);
 
-        page.Data.Select(e => e.Id).Should().Equal(changed, limit, removed, role);
-        page.Pagination.Total.Should().Be(4);
+        page.Data.Select(e => e.Id).Should().Equal(changed, end, limit, removed, role);
+        page.Pagination.Total.Should().Be(5);
     }
 
     [Fact]
@@ -183,15 +185,16 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, null, s.Member, s.Actor, minute: 1);
         await AddAsync(s.Tenant, AuthAuditEventType.RoleRemoved, null, s.Member, s.Actor, minute: 2);
         await AddAsync(s.Tenant, AuthAuditEventType.HistoryLimitChanged, null, s.Member, s.Actor, minute: 3);
-        await AddAsync(s.Tenant, AuthAuditEventType.RolePermissionsChanged, null, actor: s.Actor, minute: 4);
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, null, s.Member, s.Actor, minute: 4);
+        await AddAsync(s.Tenant, AuthAuditEventType.RolePermissionsChanged, null, actor: s.Actor, minute: 5);
 
         var page = (await Read(s)).Data.ToList();
 
         page.Select(e => e.Kind).Should().Equal(
-            MemberHistoryKind.RolePermissionsChanged, MemberHistoryKind.HistoryLimitChanged,
+            MemberHistoryKind.RolePermissionsChanged, MemberHistoryKind.AccessEndChanged, MemberHistoryKind.HistoryLimitChanged,
             MemberHistoryKind.AccessTaken, MemberHistoryKind.AccessGiven);
         page.Should().OnlyContain(e => e.Role == null && e.Permission == null && e.HistoryLimit == null
-            && e.Gained == null && e.Lost == null && !e.ViaInvite && e.InviteLabel == null);
+            && e.Gained == null && e.Lost == null && e.AccessEndsAt == null && !e.ViaInvite && e.InviteLabel == null);
     }
 
     [Fact]
@@ -213,6 +216,52 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         page[1].HistoryLimit.Should().Be(MemberHistoryLimit.Full);
         page[2].Should().Match<MemberHistoryEntry>(e => e.Kind == MemberHistoryKind.PermissionGiven && e.Permission == "glucose.read");
         page[3].Should().Match<MemberHistoryEntry>(e => e.Kind == MemberHistoryKind.RoleTaken && e.Role == "viewer");
+    }
+
+    [Fact]
+    public async Task AnAccessEndRowReadsAsSetClearedOrUnknown()
+    {
+        var s = await SeedAsync("hk");
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, Tenant("access_ends_at", "2026-04-02T13:00:00.0000000Z"), s.Member, s.Actor, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, """{"access_ends_at":null,"kind":"tenant"}""", s.Member, s.Actor, minute: 2);
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, """{"kind":"tenant"}""", s.Member, s.Actor, minute: 3);
+        await AddAsync(s.Tenant, AuthAuditEventType.AccessEndChanged, Tenant("access_ends_at", "not a date"), s.Member, s.Actor, minute: 4);
+
+        var page = (await Read(s)).Data.ToList();
+
+        page.Select(e => (e.Kind, e.AccessEndsAt)).Should().Equal(
+            (MemberHistoryKind.AccessEndChanged, (DateTime?)null),
+            (MemberHistoryKind.AccessEndChanged, (DateTime?)null),
+            (MemberHistoryKind.AccessEndCleared, (DateTime?)null),
+            (MemberHistoryKind.AccessEndSet, (DateTime?)new DateTime(2026, 4, 2, 13, 0, 0, DateTimeKind.Utc)));
+        page[3].AccessEndsAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
+    public async Task TheRealWritersAccessEndRowsReadBackAsSetThenCleared()
+    {
+        var s = await SeedAsync("hl");
+        var factory = new Factory(Context, s.Tenant);
+        var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
+        await members.SeedRolesAsync(s.Tenant, CancellationToken.None);
+        var caretaker = (await members.FindRoleIdBySlugAsync(s.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
+        (await members.AddMemberAsync(new NewTenantMember(s.Tenant, s.Member, [caretaker]), CancellationToken.None)).Should().BeTrue();
+        var membership = (await members.FindMemberAsync(s.Tenant, s.Member, CancellationToken.None))!;
+        var end = new DateTime(2031, 6, 30, 14, 0, 0, DateTimeKind.Utc);
+
+        (await members.SetAccessEndUnlessOwnerAsync(s.Tenant, membership.Id, end, DateTime.UtcNow, CancellationToken.None))
+            .Should().Be(OwnerGuardedChange.Changed);
+        (await members.SetAccessEndUnlessOwnerAsync(s.Tenant, membership.Id, null, DateTime.UtcNow, CancellationToken.None))
+            .Should().Be(OwnerGuardedChange.Changed);
+
+        var entries = (await Read(s)).Data
+            .Where(e => e.Kind is MemberHistoryKind.AccessEndSet or MemberHistoryKind.AccessEndCleared)
+            .ToList();
+
+        entries.Select(e => (e.Kind, e.AccessEndsAt)).Should().Equal(
+            (MemberHistoryKind.AccessEndCleared, (DateTime?)null),
+            (MemberHistoryKind.AccessEndSet, (DateTime?)end));
+        entries.Should().OnlyContain(e => e.Member == new MemberHistoryPerson(s.Member, "hl-member"));
     }
 
     [Fact]

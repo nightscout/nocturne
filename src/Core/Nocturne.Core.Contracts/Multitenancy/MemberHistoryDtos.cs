@@ -19,6 +19,15 @@ public enum MemberHistoryKind
 
     HistoryLimitChanged,
     RolePermissionsChanged,
+
+    /// <summary>The date a member's access ends was set or moved. <see cref="MemberHistoryEntry.AccessEndsAt"/> is the new end.</summary>
+    AccessEndSet,
+
+    /// <summary>The date a member's access ends was removed.</summary>
+    AccessEndCleared,
+
+    /// <summary>The date a member's access ends changed. The row no longer says to what.</summary>
+    AccessEndChanged,
 }
 
 /// <summary>The history limit a member reads under after the change.</summary>
@@ -66,6 +75,7 @@ public record MemberHistoryActor(MemberHistoryActorKind Kind, Guid? SubjectId, s
 /// <param name="Role">The role as recorded: its slug, for a member's role and for a tenant role's permission change.</param>
 /// <param name="Gained">The permissions a role's change added.</param>
 /// <param name="Lost">The permissions a role's change removed.</param>
+/// <param name="AccessEndsAt">The instant a member's access ends after an <see cref="MemberHistoryKind.AccessEndSet"/> change, in UTC.</param>
 /// <param name="ViaInvite">An invite caused the change.</param>
 /// <param name="InviteLabel">The label of that invite, null when the invite is gone or has none.</param>
 public record MemberHistoryEntry(
@@ -79,5 +89,6 @@ public record MemberHistoryEntry(
     MemberHistoryLimit? HistoryLimit,
     IReadOnlyList<string>? Gained,
     IReadOnlyList<string>? Lost,
+    DateTime? AccessEndsAt,
     bool ViaInvite,
     string? InviteLabel);

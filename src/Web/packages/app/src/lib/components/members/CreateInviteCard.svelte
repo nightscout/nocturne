@@ -27,6 +27,9 @@
   import { createInvite } from "#lib/api/generated/memberInvites.generated.remote.js";
   import type { TenantRoleDto } from "@nocturne/api-client";
   import { describeSubmitError, FormError } from "#lib/forms/index.js";
+  import AccessEndField from "#lib/components/members/AccessEndField.svelte";
+  import { accessEndInstant, isAccessEndChoiceValid } from "#lib/components/members/access-end.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
 
   interface Props {
     roles: TenantRoleDto[];
@@ -39,6 +42,8 @@
     singleUseOnly?: boolean;
     /** Offers the 24-hour limit. Off for a role the server never clamps, which would refuse it. */
     offerHistoryLimit?: boolean;
+    /** When the inviter's own access ends. An invite cannot give access that lasts longer. */
+    callerAccessEndsAt?: string;
     onCreated?: (url: string) => void;
     onCancel: () => void;
   }
@@ -48,6 +53,7 @@
     roleChoices,
     singleUseOnly = false,
     offerHistoryLimit = true,
+    callerAccessEndsAt,
     onCreated,
     onCancel,
   }: Props = $props();
@@ -85,6 +91,15 @@
   let showInvitePermissions = $state(false);
   let allowMultipleUses = $state(false);
   let limitTo24Hours = $state(false);
+  let accessEndDay = $state("");
+  const givesOwner = $derived(
+    inviteRoleIds.some((id) => roles.find((r) => r.id === id)?.slug === "owner"),
+  );
+  const now = new Now(60_000);
+  const accessEndOffered = $derived(
+    givesOwner ||
+      isAccessEndChoiceValid(accessEndDay, { now: now.current, ceiling: callerAccessEndsAt }),
+  );
   let createdInviteUrl = $state<string | null>(null);
   let createdByName = $state<string | undefined>(undefined);
   let isCreatingInvite = $state(false);
@@ -112,6 +127,8 @@
         expiresInDays,
         maxUses: allowMultipleUses ? undefined : 1,
         limitTo24Hours,
+        accessEndsAt:
+          givesOwner || accessEndDay === "" ? undefined : accessEndInstant(accessEndDay),
       });
       if (result.inviteUrl) {
         createdByName = result.createdByName;
@@ -145,6 +162,7 @@
     showInvitePermissions = false;
     allowMultipleUses = false;
     limitTo24Hours = false;
+    accessEndDay = "";
     createdInviteUrl = null;
     createdByName = undefined;
     errorMessage = null;
@@ -268,6 +286,14 @@
           </p>
         </div>
 
+        <AccessEndField
+          id="invite-access-end"
+          bind:value={accessEndDay}
+          now={now.current}
+          isOwner={givesOwner}
+          ceiling={callerAccessEndsAt}
+        />
+
         {#if !grantableChoices.length}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
@@ -359,6 +385,7 @@
             type="button"
             class="flex-1"
             disabled={isCreatingInvite ||
+              !accessEndOffered ||
               (inviteRoleIds.length === 0 &&
                 inviteDirectPermissions.length === 0)}
             onclick={handleCreateInvite}

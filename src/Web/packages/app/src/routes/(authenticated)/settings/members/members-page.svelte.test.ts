@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
@@ -6,10 +6,12 @@ import { page } from "$app/state";
 import {
   RoleAccessLevel,
   type LockedOutMember,
+  type MembershipRequestDto,
   type TenantMemberDto,
   type TenantRoleDto,
 } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { accessEndInstant } from "#lib/components/members/access-end.js";
 
 const mocks = vi.hoisted(() => ({
   getMembers: vi.fn(),
@@ -18,11 +20,14 @@ const mocks = vi.hoisted(() => ({
   setMemberRoles: vi.fn(),
   setMemberPermissions: vi.fn(),
   setMemberLimitTo24Hours: vi.fn(),
+  setMemberAccessEnd: vi.fn(),
+  approveRequest: vi.fn(),
   getLockedOutMembers: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
 let lockedOut: LockedOutMember[] = [];
+let pendingRequests: MembershipRequestDto[] = [];
 
 const viewer: TenantRoleDto = {
   id: "22222222-2222-2222-2222-222222222222",
@@ -32,6 +37,16 @@ const viewer: TenantRoleDto = {
   accessLevel: RoleAccessLevel.ReadOnly,
   canGrant: true,
 };
+
+const owner: TenantRoleDto = {
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "Owner",
+  slug: "owner",
+  permissions: ["*"],
+  accessLevel: RoleAccessLevel.Manage,
+  canGrant: true,
+};
+let roles: TenantRoleDto[] = [viewer];
 
 vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   getMembers: () => {
@@ -45,11 +60,12 @@ vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   setMemberRoles: mocks.setMemberRoles,
   setMemberPermissions: mocks.setMemberPermissions,
   setMemberLimitTo24Hours: mocks.setMemberLimitTo24Hours,
+  setMemberAccessEnd: mocks.setMemberAccessEnd,
 }));
 vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => {
     mocks.getRoles();
-    return remoteQuery(() => [viewer]);
+    return remoteQuery(() => roles);
   },
 }));
 vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
@@ -58,9 +74,9 @@ vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
 vi.mock("#lib/api/generated/membershipRequests.generated.remote.js", () => ({
   getPendingRequests: () => {
     mocks.getPendingRequests();
-    return remoteQuery(() => []);
+    return remoteQuery(() => pendingRequests);
   },
-  approveRequest: () => Promise.resolve(),
+  approveRequest: mocks.approveRequest,
   denyRequest: () => Promise.resolve(),
 }));
 vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
@@ -102,6 +118,7 @@ describe("members page saving a member", () => {
     mocks.setMemberRoles.mockResolvedValue(undefined);
     mocks.setMemberPermissions.mockResolvedValue(undefined);
     mocks.setMemberLimitTo24Hours.mockResolvedValue(undefined);
+    mocks.setMemberAccessEnd.mockResolvedValue(undefined);
   });
 
   it("saves only the 24-hour limit when that is all that changed", async () => {
@@ -135,6 +152,49 @@ describe("members page saving a member", () => {
     expect(mocks.setMemberLimitTo24Hours).not.toHaveBeenCalled();
   });
 
+  it("sets the end through the access end command and nothing else when only the end changed", async () => {
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+    expect(mocks.setMemberRoles).not.toHaveBeenCalled();
+    expect(mocks.setMemberLimitTo24Hours).not.toHaveBeenCalled();
+  });
+
+  it("removes the end by sending null", async () => {
+    members = [{ ...member, accessEndsAt: accessEndInstant("2099-07-14") }];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("button", { name: "Remove the end date" }).click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: null },
+    });
+  });
+
+  it("reports an end the server refused on the card instead of claiming success", async () => {
+    mocks.setMemberAccessEnd.mockImplementation(async () =>
+      error(403, "Your access ends on a date, so you cannot give anyone access that lasts longer than yours."),
+    );
+
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByRole("alert")).toBeVisible();
+    expect(browserPage.getByText("Member updated successfully.").elements()).toHaveLength(0);
+  });
+
   it("reports a failed limit save on the card instead of claiming success", async () => {
     mocks.setMemberLimitTo24Hours.mockImplementation(async () =>
       error(400, "The limit could not be applied."),
@@ -165,6 +225,141 @@ describe("members page saving a member", () => {
 
     await expect.element(browserPage.getByRole("button", { name: "Save" })).toBeVisible();
     expect(browserPage.getByRole("alert").elements()).toHaveLength(0);
+  });
+});
+
+describe("members page ordering the commands of a save", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    roles = [viewer, owner];
+    mocks.setMemberRoles.mockResolvedValue(undefined);
+    mocks.setMemberPermissions.mockResolvedValue(undefined);
+    mocks.setMemberLimitTo24Hours.mockResolvedValue(undefined);
+    mocks.setMemberAccessEnd.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    roles = [viewer];
+  });
+
+  it("removes the end before it makes the member an owner", async () => {
+    members = [{ ...member, accessEndsAt: accessEndInstant("2099-07-14") }];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("button", { name: "Remove the end date" }).click();
+    await browserPage.getByRole("checkbox", { name: "Owner" }).click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({ id: member.id, request: { accessEndsAt: null } });
+    expect(mocks.setMemberAccessEnd.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setMemberRoles.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("changes the roles before it sets an end on a member who stops being an owner", async () => {
+    members = [
+      {
+        ...member,
+        roles: [{ roleId: owner.id, slug: owner.slug, name: owner.name }],
+      },
+    ];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("checkbox", { name: "Owner" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+    expect(mocks.setMemberRoles.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setMemberAccessEnd.mock.invocationCallOrder[0],
+    );
+  });
+});
+
+describe("members page approving a request", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    pendingRequests = [{ id: "77777777-7777-7777-7777-777777777777", subjectName: "Sam" }];
+    mocks.approveRequest.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    pendingRequests = [];
+  });
+
+  it("sends the instant the picked day ends with the approval", async () => {
+    render(MembersPage);
+    await browserPage.getByRole("checkbox", { name: "Viewer" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Approve" }).click();
+
+    await expect.element(browserPage.getByText("Membership request approved.")).toBeVisible();
+    expect(mocks.approveRequest).toHaveBeenCalledWith({
+      id: pendingRequests[0].id,
+      request: { roleIds: [viewer.id], accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+  });
+});
+
+describe("members page when the caller's own access ends", () => {
+  const ownSubjectId = "55555555-5555-5555-5555-555555555555";
+  const last = "2099-07-14";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage", "members.invite"];
+    page.data.user = { subjectId: ownSubjectId };
+    members = [
+      member,
+      {
+        ...member,
+        id: "66666666-6666-6666-6666-666666666666",
+        subjectId: ownSubjectId,
+        name: "Casey",
+        accessEndsAt: accessEndInstant(last),
+      },
+    ];
+  });
+
+  it("limits another member's end to the caller's own last day", async () => {
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Edit" }).first().click();
+
+    await expect.element(browserPage.getByLabelText("Access ends (optional)")).toHaveAttribute("max", last);
+  });
+
+  it("reads the ceiling from the caller's own row, not another member's", async () => {
+    members = [
+      { ...member, accessEndsAt: accessEndInstant("2098-01-01") },
+      { ...members[1], accessEndsAt: undefined },
+    ];
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Edit" }).first().click();
+
+    const field = browserPage.getByLabelText("Access ends (optional)");
+    await expect.element(field).toBeVisible();
+    await expect.element(field).not.toHaveAttribute("max");
+    await expect.element(browserPage.getByText("Your own access ends", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("limits a new invite to the caller's own last day", async () => {
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Create invite link" }).click();
+
+    await expect.element(browserPage.getByLabelText("Access ends (optional)")).toHaveAttribute("max", last);
   });
 });
 

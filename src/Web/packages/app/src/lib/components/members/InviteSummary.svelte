@@ -2,10 +2,13 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import Clock from "@lucide/svelte/icons/clock";
   import Eye from "@lucide/svelte/icons/eye";
   import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
   import type { JoinInviteInfo } from "@nocturne/api-client";
 
   interface Props {
@@ -17,6 +20,9 @@
 
   const siteName = $derived(invite.tenantName || "this site");
   const roleNames = $derived(invite.roleNames ?? []);
+  const accessEnd = $derived(
+    invite.accessEndsAt ? formatMediumDate(accessEndDate(invite.accessEndsAt)) : null,
+  );
   const acknowledgesForEveryone = $derived(
     satisfiesScope(invite.permissions ?? [], "alerts.readwrite")
   );
@@ -79,6 +85,12 @@
         <li class="flex items-start gap-2">
           <Clock class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <span>You will see only the last 24 hours of data.</span>
+        </li>
+      {/if}
+      {#if accessEnd}
+        <li class="flex items-start gap-2">
+          <CalendarClock class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>Your access ends on {accessEnd}.</span>
         </li>
       {/if}
       <li class="flex items-start gap-2">

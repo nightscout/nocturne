@@ -8,6 +8,8 @@ import {
   type MemberHistoryEntry,
   type TenantRoleDto,
 } from "@nocturne/api-client";
+import { formatMediumDate } from "#lib/utils/formatting.js";
+import { accessEndInstant } from "./access-end.js";
 import MemberHistoryEntryRow from "./MemberHistoryEntryRow.svelte";
 
 const person = { kind: MemberHistoryActorKind.Person, subjectId: "a1", name: "Alex" };
@@ -93,14 +95,66 @@ describe("MemberHistoryEntryRow sentences", () => {
     await expect.element(row).toHaveTextContent("Permissions removed: View treatments");
   });
 
+  it("states an end date set as the day the access still holds, without a time", async () => {
+    const row = await sentence({
+      kind: MemberHistoryKind.AccessEndSet,
+      accessEndsAt: accessEndInstant("2026-07-14"),
+    });
+    await expect
+      .element(row)
+      .toHaveTextContent(`Alex set Sam's access to end on ${formatMediumDate(new Date(2026, 6, 14))}.`);
+  });
+
+  it("states an end date removed", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.AccessEndCleared });
+    await expect.element(row).toHaveTextContent("Alex removed the end date of Sam's access.");
+  });
+
   it.each([
     [MemberHistoryKind.AccessGiven, "Alex gave Sam a role or a permission. The detail is no longer stored."],
     [MemberHistoryKind.AccessTaken, "Alex removed a role or a permission from Sam. The detail is no longer stored."],
     [MemberHistoryKind.HistoryLimitChanged, "Alex changed the history limit of Sam. The detail is no longer stored."],
+    [MemberHistoryKind.AccessEndChanged, "Alex changed the end date of Sam's access. The detail is no longer stored."],
     [MemberHistoryKind.RolePermissionsChanged, "Alex changed the permissions of a role. The detail is no longer stored."],
   ])("states a change whose detail was cleared: %s", async (kind, text) => {
     const row = await sentence({ kind });
     await expect.element(row).toHaveTextContent(text);
+  });
+});
+
+describe("MemberHistoryEntryRow joining by invite", () => {
+  const self = { kind: MemberHistoryActorKind.Person, subjectId: "b1", name: "Sam" };
+  const joining = { actor: self, viaInvite: true, inviteLabel: "camp nurse" };
+
+  it("says the person joined with the role, not that they gave it to themself", async () => {
+    const row = await sentence({ ...joining, role: "viewer" });
+    await expect.element(row).toHaveTextContent("Sam joined with the role viewer.");
+    await expect.element(row).toHaveTextContent("Through the invite camp nurse.");
+    await expect.element(row).not.toHaveTextContent("gave");
+  });
+
+  it("says the person joined with access that ends on the day", async () => {
+    const row = await sentence({
+      ...joining,
+      kind: MemberHistoryKind.AccessEndSet,
+      accessEndsAt: accessEndInstant("2026-11-28"),
+    });
+    const day = formatMediumDate(new Date(2026, 10, 28));
+    await expect.element(row).toHaveTextContent(`Sam joined with access that ends on ${day}.`);
+  });
+
+  it("says the person joined with the last 24 hours only", async () => {
+    const row = await sentence({
+      ...joining,
+      kind: MemberHistoryKind.HistoryLimitChanged,
+      historyLimit: MemberHistoryLimit.TwentyFourHours,
+    });
+    await expect.element(row).toHaveTextContent("Sam joined with access to the last 24 hours only.");
+  });
+
+  it("keeps the giver's sentence when someone else used an invite's id", async () => {
+    const row = await sentence({ viaInvite: true, role: "viewer" });
+    await expect.element(row).toHaveTextContent("Alex gave Sam the role viewer.");
   });
 });
 
