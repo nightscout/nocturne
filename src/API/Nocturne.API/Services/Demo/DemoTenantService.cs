@@ -436,7 +436,8 @@ public sealed class DemoTenantService
 
             await members.AddMemberAsync(
                 new NewTenantMember(
-                    tenantId, subjectId, [demoRoleId], Label: DemoMemberName, Username: DemoMemberUsername, LimitTo24Hours: false),
+                    tenantId, subjectId, [demoRoleId], Label: DemoMemberName, Username: DemoMemberUsername, LimitTo24Hours: false)
+                    { How = MembershipJoinHow.System, By = null },
                 ct);
             return;
         }

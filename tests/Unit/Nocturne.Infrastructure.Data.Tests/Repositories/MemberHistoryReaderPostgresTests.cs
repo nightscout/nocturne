@@ -96,9 +96,9 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
 
     private static string Tenant(string key, string value) => $$"""{"{{key}}":"{{value}}","kind":"tenant"}""";
 
-    private static Task<Nocturne.Core.Models.V4.PaginatedResponse<MemberHistoryEntry>> Read(
+    private static Task<MemberHistoryPage> Read(
         Seeded s, Guid? member = null, int limit = 25, int offset = 0) =>
-        s.Reader.GetAsync(s.Tenant, member, limit, offset, CancellationToken.None);
+        s.Reader.GetAsync(s.Tenant, member, limit, offset, DateTime.UtcNow, CancellationToken.None);
 
     [Fact]
     public async Task ARowOfAnotherTenantIsNeverReturned()
@@ -245,7 +245,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(s.Tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(s.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
-        (await members.AddMemberAsync(new NewTenantMember(s.Tenant, s.Member, [caretaker]), CancellationToken.None)).Should().BeTrue();
+        (await members.AddMemberAsync(new NewTenantMember(s.Tenant, s.Member, [caretaker]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         var membership = (await members.FindMemberAsync(s.Tenant, s.Member, CancellationToken.None))!;
         var end = new DateTime(2031, 6, 30, 14, 0, 0, DateTimeKind.Utc);
 
@@ -333,7 +333,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
 
         (await members.AddMemberAsync(
             new NewTenantMember(s.Tenant, s.Member, [caretaker], [Scope.GlucoseRead], LimitTo24Hours: true,
-                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member),
+                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Direct, By = null },
             CancellationToken.None)).Should().BeTrue();
         var membership = (await members.FindMemberAsync(s.Tenant, s.Member, CancellationToken.None))!;
         (await members.SetDirectPermissionsAsync(s.Tenant, membership.Id, [Scope.TreatmentsRead], DateTime.UtcNow, CancellationToken.None))
@@ -346,13 +346,14 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var self = new MemberHistoryActor(MemberHistoryActorKind.Person, s.Member, "hj-member");
         var system = new MemberHistoryActor(MemberHistoryActorKind.System, null, null);
         var person = new MemberHistoryPerson(s.Member, "hj-member");
-        entries.Should().HaveCount(6);
+        entries.Should().HaveCount(7);
         entries.Should().OnlyContain(e => e.Member == person);
 
         var byInvite = entries.Where(e => e.ViaInvite).ToList();
-        byInvite.Should().HaveCount(3).And.OnlyContain(e => e.Actor == self && e.InviteLabel == "Round trip invite");
+        byInvite.Should().HaveCount(4).And.OnlyContain(e => e.Actor == self && e.InviteLabel == "Round trip invite");
         byInvite.Select(e => (e.Kind, e.Role, e.Permission, e.HistoryLimit)).Should().BeEquivalentTo(new[]
         {
+            (MemberHistoryKind.Joined, (string?)null, (string?)null, (MemberHistoryLimit?)null),
             (MemberHistoryKind.RoleGiven, RoleSeeds.Caretaker, (string?)null, (MemberHistoryLimit?)null),
             (MemberHistoryKind.PermissionGiven, (string?)null, Scope.GlucoseRead, (MemberHistoryLimit?)null),
             (MemberHistoryKind.HistoryLimitChanged, (string?)null, (string?)null, (MemberHistoryLimit?)MemberHistoryLimit.TwentyFourHours),
@@ -392,5 +393,134 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var entry = (await Read(s)).Data.Single();
 
         entry.Actor.Should().Be(new MemberHistoryActor(expected, null, null));
+    }
+
+    private static string Joined(string how, Guid? invite = null, Guid? by = null)
+    {
+        var details = new Dictionary<string, string> { ["kind"] = "tenant", ["how"] = how };
+        if (invite is { } i)
+            details["invite"] = i.ToString();
+        if (by is { } b)
+            details["by"] = b.ToString();
+        return System.Text.Json.JsonSerializer.Serialize(details);
+    }
+
+    [Fact]
+    public async Task JoinedAndRemovedRowsReadWithHowTheResponsiblePersonAndTheInviteLabel()
+    {
+        var s = await SeedAsync("jr");
+        var other = await SeedAsync("jr-other");
+        var invite = Guid.NewGuid();
+        await using (var db = Context(s.Tenant))
+        {
+            db.MemberInvites.Add(Invite(s, invite, "Clinic", "jr"));
+            await db.SaveChangesAsync();
+        }
+
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("invite", invite, s.Actor), s.Member, s.Member, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("request", by: s.Actor), s.Member, s.Actor, minute: 2);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("direct"), s.Member, s.Actor, minute: 3);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("setup"), s.Member, s.Member, minute: 4);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("system"), s.Member, credential: "system", minute: 5);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("removed"), s.Member, s.Actor, minute: 6);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("left"), s.Member, s.Member, minute: 7);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("account_deleted"), s.Member, s.Actor, minute: 8);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("replaced"), s.Member, s.Member, minute: 9);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("system"), s.Member, credential: "system", minute: 10);
+        await AddAsync(other.Tenant, AuthAuditEventType.MemberJoined, Joined("direct"), s.Member, s.Actor, minute: 11);
+
+        var page = (await Read(s)).Data.Reverse().ToList();
+
+        page.Select(e => (e.Kind, e.JoinedHow, e.RemovedHow)).Should().Equal(
+            (MemberHistoryKind.Joined, MembershipJoinHow.Invite, (MembershipEndHow?)null),
+            (MemberHistoryKind.Joined, MembershipJoinHow.Request, (MembershipEndHow?)null),
+            (MemberHistoryKind.Joined, MembershipJoinHow.Direct, (MembershipEndHow?)null),
+            (MemberHistoryKind.Joined, MembershipJoinHow.Setup, (MembershipEndHow?)null),
+            (MemberHistoryKind.Joined, MembershipJoinHow.System, (MembershipEndHow?)null),
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, MembershipEndHow.Removed),
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, MembershipEndHow.Left),
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, MembershipEndHow.AccountDeleted),
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, MembershipEndHow.Replaced),
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, MembershipEndHow.System));
+        page[0].Should().Match<MemberHistoryEntry>(e => e.ViaInvite && e.InviteLabel == "Clinic"
+            && e.By == new MemberHistoryPerson(s.Actor, "jr-actor") && e.Member == new MemberHistoryPerson(s.Member, "jr-member")
+            && e.Actor == new MemberHistoryActor(MemberHistoryActorKind.Person, s.Member, "jr-member"));
+        page[1].By.Should().Be(new MemberHistoryPerson(s.Actor, "jr-actor"));
+        page.Skip(2).Should().OnlyContain(e => e.By == null && !e.ViaInvite);
+    }
+
+    [Fact]
+    public async Task AJoinedOrRemovedRowWithClearedDetailsReadsWithHowUnknown()
+    {
+        var s = await SeedAsync("jx");
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, null, s.Member, s.Actor, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, null, s.Member, s.Actor, minute: 2);
+
+        var page = (await Read(s)).Data.ToList();
+
+        page.Select(e => (e.Kind, e.JoinedHow, e.RemovedHow, e.By)).Should().Equal(
+            (MemberHistoryKind.Removed, (MembershipJoinHow?)null, (MembershipEndHow?)null, (MemberHistoryPerson?)null),
+            (MemberHistoryKind.Joined, (MembershipJoinHow?)null, (MembershipEndHow?)null, (MemberHistoryPerson?)null));
+    }
+
+    [Fact]
+    public async Task AChangeAnInviteMadeIsInARecordedJoinOnlyBesideAJoinedRowOfTheSameCommitForTheSameMemberAndInvite()
+    {
+        var s = await SeedAsync("jk");
+        var recorded = Guid.NewGuid();
+        var older = Guid.NewGuid();
+        string Via(Guid invite) => $$"""{"role":"viewer","kind":"tenant","invite":"{{invite}}"}""";
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("invite", older), s.Actor, s.Actor, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Via(older), s.Member, s.Member, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("invite", recorded), s.Member, s.Member, minute: 3);
+        await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Via(recorded), s.Member, s.Member, minute: 3);
+
+        var page = (await Read(s, s.Member)).Data.ToList();
+
+        page.Select(e => (e.Kind, e.InRecordedJoin)).Should().BeEquivalentTo(new[]
+        {
+            (MemberHistoryKind.RoleGiven, true),
+            (MemberHistoryKind.Joined, false),
+            (MemberHistoryKind.RoleGiven, false),
+        });
+        page.Single(e => e.Kind == MemberHistoryKind.RoleGiven && e.InRecordedJoin).At.Should().Be(Start.AddMinutes(3));
+    }
+
+    [Fact]
+    public async Task AnOldJoinByAMultiUseInviteKeepsItsWordingWhenTheSamePersonRejoinsThroughThatInvite()
+    {
+        var s = await SeedAsync("jm");
+        var invite = Guid.NewGuid();
+        string Via(Guid id) => $$"""{"role":"viewer","kind":"tenant","invite":"{{id}}"}""";
+        await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Via(invite), s.Member, s.Member, minute: 1);
+        await AddAsync(s.Tenant, AuthAuditEventType.RoleRemoved, Tenant("role", "viewer"), s.Member, s.Actor, minute: 2);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberRemoved, Joined("removed"), s.Member, s.Actor, minute: 2);
+        await AddAsync(s.Tenant, AuthAuditEventType.MemberJoined, Joined("invite", invite), s.Member, s.Member, minute: 3);
+        await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Via(invite), s.Member, s.Member, minute: 3);
+
+        var given = (await Read(s, s.Member)).Data.Where(e => e.Kind == MemberHistoryKind.RoleGiven).ToList();
+
+        given.Select(e => (e.At, e.InRecordedJoin)).Should().Equal(
+            (Start.AddMinutes(3), true),
+            (Start.AddMinutes(1), false));
+    }
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(1, false)]
+    [InlineData(null, false)]
+    public async Task ANarrowedPageSaysWhenTheMembersAccessEndedOnlyOnceTheDateHasPassed(int? daysFromNow, bool ended)
+    {
+        var s = await SeedAsync("je");
+        var now = new DateTime(2026, 11, 23, 8, 0, 0, DateTimeKind.Utc);
+        DateTime? end = daysFromNow is { } days ? now.AddDays(days) : null;
+        (await new TenantMembershipRepository(new Factory(Context, s.Tenant), AccountLinkRoutes.Off)
+            .AddMemberAsync(new NewTenantMember(s.Tenant, s.Member, [], AccessEndsAt: end) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
+
+        var narrowed = await s.Reader.GetAsync(s.Tenant, s.Member, 25, 0, now, CancellationToken.None);
+        var unnarrowed = await s.Reader.GetAsync(s.Tenant, null, 25, 0, now, CancellationToken.None);
+
+        narrowed.AccessEndedAt.Should().Be(ended ? end : null);
+        unnarrowed.AccessEndedAt.Should().BeNull();
     }
 }

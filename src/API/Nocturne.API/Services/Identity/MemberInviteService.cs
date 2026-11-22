@@ -251,7 +251,7 @@ public class MemberInviteService : IMemberInviteService
                                 LimitTo24Hours: invite.LimitTo24Hours,
                                 CreatedFromInviteId: invite.Id,
                                 MadeBy: MembershipMadeBy.Member,
-                                AccessEndsAt: invite.AccessEndsAt),
+                                AccessEndsAt: invite.AccessEndsAt) { How = MembershipJoinHow.Invite, By = invite.CreatedBySubjectId },
                             token))
                         throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
 

@@ -86,7 +86,7 @@ public class LastOwnerWhoCanSignInTests : IDisposable
     private async Task<Guid> JoinOwnerAsync(string name, IAccountLinkRoute route)
     {
         var subject = await Subjects(route).CreateAsync(new NewSubject(name), CancellationToken.None);
-        (await Members(route).AddMemberAsync(new NewTenantMember(_tenant, subject, [_ownerRole]), CancellationToken.None)).Should().BeTrue();
+        (await Members(route).AddMemberAsync(new NewTenantMember(_tenant, subject, [_ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
         return subject;
     }
 
@@ -107,7 +107,7 @@ public class LastOwnerWhoCanSignInTests : IDisposable
     private async Task<bool> ActAsync(Path path, Guid a, Guid aMember, IAccountLinkRoute route) => path switch
     {
         Path.Leave => (await Members(route).RemoveMembershipsOfSubjectAsync(a, CancellationToken.None)).TenantsLeftWithoutOwner.Count == 0,
-        Path.Remove => await Members(route).RemoveMemberUnlessLastOwnerAsync(_tenant, aMember, CancellationToken.None) == OwnerGuardedChange.Changed,
+        Path.Remove => await Members(route).RemoveMemberUnlessLastOwnerAsync(_tenant, aMember, MembershipEndHow.Removed, CancellationToken.None) == OwnerGuardedChange.Changed,
         Path.RemoveOwnerRole => await Members(route).ReplaceRolesUnlessLastOwnerAsync(
             _tenant, aMember, [_ownerRole], [_caretakerRole], Now, CancellationToken.None) == OwnerGuardedChange.Changed,
         Path.Deactivate => await Subjects(route).UpdateAsync(a, new SubjectEdit(IsActive: false), CancellationToken.None) is SubjectChange.Changed,

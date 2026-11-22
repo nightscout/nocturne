@@ -107,17 +107,20 @@ public interface ITenantMembershipRepository
 
     /// <summary>
     /// Removes the membership and its roles, refused with <see cref="OwnerGuardedChange.LastOwner"/>
-    /// when <c>TenantOwnerFilter.IsLastOwnerAsync</c> says it is the last owner.
+    /// when <c>TenantOwnerFilter.IsLastOwnerAsync</c> says it is the last owner. Its removed row records
+    /// <paramref name="how"/>.
     /// </summary>
     /// <remarks>
     /// The check and the removal hold the tenant's owner lock. Over a unit, call it inside the
     /// unit's commit, which then holds the lock until it commits the removal.
     /// </remarks>
-    Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(Guid tenantId, Guid memberId, CancellationToken ct);
+    Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(
+        Guid tenantId, Guid memberId, MembershipEndHow how, CancellationToken ct);
 
     /// <summary>
     /// Removes every membership <paramref name="subjectId"/> holds, in any tenant, and returns how
     /// many, with the tenants whose last owner it was by <c>TenantOwnerFilter.IsLastOwnerAsync</c>.
+    /// Each removed row records <see cref="MembershipEndHow.System"/>.
     /// </summary>
     /// <remarks>
     /// On a platform context: the demo reset retires its visitor from every tenant it joined. It does

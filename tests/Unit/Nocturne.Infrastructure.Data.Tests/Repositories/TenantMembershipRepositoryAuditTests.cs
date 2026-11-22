@@ -230,13 +230,14 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
 
         await Repository(new TestAuditActor { AuthType = "None" }).AddMemberAsync(
             new NewTenantMember(_tenant, _subject, [_viewer], [Scope.DevicesRead],
-                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member),
+                CreatedFromInviteId: invite, MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Direct, By = null },
             CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().HaveCount(2).And.OnlyContain(a =>
+        rows.Should().HaveCount(3).And.OnlyContain(a =>
             a.ActorSubjectId == _subject && a.ActorCredential == null && a.TargetSubjectId == _subject);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
+            $$"""{"kind":"tenant","how":"direct","invite":"{{invite}}"}""",
             $$"""{"role":"viewer","kind":"tenant","invite":"{{invite}}"}""",
             $$"""{"permission":"devices.read","kind":"tenant","invite":"{{invite}}"}""");
     }
@@ -336,13 +337,15 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
         await SeedMemberAsync();
 
         await Repository(new TestAuditActor { SubjectId = _actor })
-            .RemoveMemberUnlessLastOwnerAsync(_tenant, _member, CancellationToken.None);
+            .RemoveMemberUnlessLastOwnerAsync(_tenant, _member, MembershipEndHow.Removed, CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().OnlyContain(a => a.EventType == AuthAuditEventType.RoleRemoved && a.TargetSubjectId == _subject);
+        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
+            && a.TargetSubjectId == _subject);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
             """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"glucose.read","kind":"tenant"}""");
+            """{"permission":"glucose.read","kind":"tenant"}""",
+            """{"kind":"tenant","how":"removed"}""");
     }
 
     [Fact]
@@ -354,11 +357,12 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
             .RemoveMembershipsOfSubjectAsync(_subject, CancellationToken.None);
 
         var rows = await RowsAsync();
-        rows.Should().OnlyContain(a => a.EventType == AuthAuditEventType.RoleRemoved
+        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
             && a.TargetSubjectId == _subject && a.TenantId == _tenant);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
             """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"glucose.read","kind":"tenant"}""");
+            """{"permission":"glucose.read","kind":"tenant"}""",
+            """{"kind":"tenant","how":"system"}""");
     }
 
     [Fact]

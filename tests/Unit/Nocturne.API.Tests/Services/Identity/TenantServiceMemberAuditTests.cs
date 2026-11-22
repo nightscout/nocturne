@@ -86,6 +86,7 @@ public sealed class TenantServiceMemberAuditTests : IDisposable
         rows.Should().OnlyContain(a => a.ActorSubjectId == _adminSubjectId && a.TenantId == _tenantId);
         rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
         {
+            (AuthAuditEventType.MemberJoined, """{"kind":"tenant","how":"direct"}"""),
             (AuthAuditEventType.RoleAssigned, """{"role":"viewer","kind":"tenant"}"""),
             (AuthAuditEventType.RoleAssigned, """{"permission":"devices.read","kind":"tenant"}"""),
             (AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"24_hours","kind":"tenant"}"""),
@@ -101,11 +102,12 @@ public sealed class TenantServiceMemberAuditTests : IDisposable
         await Service().RemoveMemberAsync(_tenantId, _memberSubjectId);
 
         var rows = await _context.AuthAuditLog.AsNoTracking().Where(a => !before.Contains(a.Id)).ToListAsync();
-        rows.Should().OnlyContain(a => a.EventType == AuthAuditEventType.RoleRemoved
+        rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)
             && a.TargetSubjectId == _memberSubjectId && a.ActorSubjectId == _adminSubjectId);
         rows.Select(a => a.DetailsJson).Should().BeEquivalentTo(
             """{"role":"viewer","kind":"tenant"}""",
-            """{"permission":"devices.read","kind":"tenant"}""");
+            """{"permission":"devices.read","kind":"tenant"}""",
+            """{"kind":"tenant","how":"removed"}""");
     }
 
     [Fact]
@@ -122,13 +124,15 @@ public sealed class TenantServiceMemberAuditTests : IDisposable
         var created = await Service().CreateWithOwnerAsync("created", "Created", _memberSubjectId);
 
         var owner = await _context.AuthAuditLog.AsNoTracking()
-            .Where(a => a.TenantId == created.Id && a.TargetSubjectId == _memberSubjectId).ToListAsync();
+            .Where(a => a.TenantId == created.Id && a.TargetSubjectId == _memberSubjectId).OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
         owner.Select(a => (a.EventType, a.DetailsJson, a.ActorSubjectId, a.ActorCredential)).Should().Equal(
+            (AuthAuditEventType.MemberJoined, """{"kind":"tenant","how":"setup"}""", _memberSubjectId, (string?)null),
             (AuthAuditEventType.RoleAssigned, """{"role":"owner","kind":"tenant"}""", _memberSubjectId, (string?)null));
 
         var publicRows = await _context.AuthAuditLog.AsNoTracking()
-            .Where(a => a.TenantId == created.Id && a.TargetSubjectId == publicSubjectId).ToListAsync();
+            .Where(a => a.TenantId == created.Id && a.TargetSubjectId == publicSubjectId).OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
         publicRows.Select(a => (a.EventType, a.DetailsJson, a.ActorSubjectId, a.ActorCredential)).Should().Equal(
+            (AuthAuditEventType.MemberJoined, """{"kind":"tenant","how":"system"}""", (Guid?)null, "system"),
             (AuthAuditEventType.HistoryLimitChanged, """{"history_limit":"24_hours","kind":"tenant"}""", (Guid?)null, "system"));
     }
 

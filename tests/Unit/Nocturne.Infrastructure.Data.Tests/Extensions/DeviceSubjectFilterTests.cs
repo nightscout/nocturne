@@ -52,8 +52,16 @@ public class DeviceSubjectFilterTests : IDisposable
         var subjectId = await _context.DeviceSubjectOf(_tenant);
         await _context.DeviceSubjectOf(_tenant);
 
-        var row = (await _context.AuthAuditLog.AsNoTracking().ToListAsync()).Should().ContainSingle().Subject;
-        row.Should().BeEquivalentTo(new
+        var rows = await _context.AuthAuditLog.AsNoTracking().OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.MemberJoined,
+            TargetSubjectId = (Guid?)subjectId,
+            TenantId = (Guid?)_tenant,
+            DetailsJson = """{"kind":"tenant","how":"system"}""",
+        });
+        rows[1].Should().BeEquivalentTo(new
         {
             EventType = AuthAuditEventType.RoleAssigned,
             TargetSubjectId = (Guid?)subjectId,

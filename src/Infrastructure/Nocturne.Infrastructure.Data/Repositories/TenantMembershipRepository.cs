@@ -82,30 +82,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         if (await db.TenantMembers.AnyAsync(m => m.TenantId == member.TenantId && m.SubjectId == member.SubjectId, ct))
             return false;
 
-        var entity = new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = member.TenantId,
-            SubjectId = member.SubjectId,
-            Label = member.Label,
-            Username = member.Username,
-        };
-        var roleIds = member.RoleIds.Distinct().ToList();
-        MembershipReasons.AddMember(
-            db, entity,
-            new MembershipGrant(roleIds, member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt),
-            member.CreatedFromInviteId);
-
-        var source = member.MadeBy switch
-        {
-            MembershipMadeBy.Member => new MemberAccessSource(member.SubjectId, member.CreatedFromInviteId),
-            MembershipMadeBy.System => MemberAccessSource.System,
-            _ => null,
-        };
-        MemberAccessAudit.StageRoles(db, member.TenantId, member.SubjectId, await SlugsOfAsync(db, roleIds, ct), [], source);
-        MemberAccessAudit.StagePermissions(db, member.TenantId, member.SubjectId, null, entity.DirectPermissions, source);
-        MemberAccessAudit.StageHistoryLimit(db, member.TenantId, member.SubjectId, false, entity.LimitTo24Hours, source);
-        MemberAccessAudit.StageAccessEnd(db, member.TenantId, member.SubjectId, null, entity.AccessEndsAt, source);
+        await StageAddAsync(db, member, ct);
 
         if (_unit is not null)
             return true;
@@ -120,6 +97,39 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             // Another request made the subject a member between the check and the save.
             return false;
         }
+    }
+
+    /// <summary>
+    /// Stages <paramref name="member"/> on <paramref name="db"/> through <see cref="MembershipReasons"/>,
+    /// with the audit rows of what it is given, attributed as its <see cref="NewTenantMember.MadeBy"/> says.
+    /// </summary>
+    internal static async Task<TenantMemberEntity> StageAddAsync(NocturneDbContext db, NewTenantMember member, CancellationToken ct)
+    {
+        var entity = new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = member.TenantId,
+            SubjectId = member.SubjectId,
+            Label = member.Label,
+            Username = member.Username,
+        };
+        var roleIds = member.RoleIds.Distinct().ToList();
+        var source = member.MadeBy switch
+        {
+            MembershipMadeBy.Member => new MemberAccessSource(member.SubjectId, member.CreatedFromInviteId),
+            MembershipMadeBy.System => MemberAccessSource.System,
+            _ => null,
+        };
+        MembershipReasons.AddMember(
+            db, entity,
+            new MembershipGrant(roleIds, member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt),
+            member.CreatedFromInviteId, member.How, member.By, source);
+
+        MemberAccessAudit.StageRoles(db, member.TenantId, member.SubjectId, await SlugsOfAsync(db, roleIds, ct), [], source);
+        MemberAccessAudit.StagePermissions(db, member.TenantId, member.SubjectId, null, entity.DirectPermissions, source);
+        MemberAccessAudit.StageHistoryLimit(db, member.TenantId, member.SubjectId, false, entity.LimitTo24Hours, source);
+        MemberAccessAudit.StageAccessEnd(db, member.TenantId, member.SubjectId, null, entity.AccessEndsAt, source);
+        return entity;
     }
 
     /// <inheritdoc/>
@@ -299,7 +309,8 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(Guid tenantId, Guid memberId, CancellationToken ct) =>
+    public virtual Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(
+        Guid tenantId, Guid memberId, MembershipEndHow how, CancellationToken ct) =>
         UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
             if (await db.IsLastOwnerAsync(tenantId, memberId, _linkRoute, token))
@@ -311,8 +322,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
             if (member is null)
                 return OwnerGuardedChange.NotFound;
 
-            await StageRemovalAsync(db, member, token);
-            await MembershipReasons.RemoveMemberAsync(db, member, token);
+            await StageRemoveAsync(db, member, how, token);
             return OwnerGuardedChange.Changed;
         }, ct);
 
@@ -345,8 +355,19 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         foreach (var membership in memberships)
             await StageRemovalAsync(db, membership, ct);
         foreach (var membership in memberships)
-            await MembershipReasons.RemoveMemberAsync(db, membership, ct);
+            await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.System, ct);
         return new SubjectMembershipsRemoval(memberships.Count, leftWithoutOwner);
+    }
+
+    /// <summary>
+    /// Stages the removal of <paramref name="member"/>, whose role links are loaded, with its audit rows,
+    /// the removed row last.
+    /// </summary>
+    internal static async Task StageRemoveAsync(
+        NocturneDbContext db, TenantMemberEntity member, MembershipEndHow how, CancellationToken ct)
+    {
+        await StageRemovalAsync(db, member, ct);
+        await MembershipReasons.RemoveMemberAsync(db, member, how, ct);
     }
 
     /// <summary>

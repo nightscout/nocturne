@@ -121,7 +121,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         var maker = await new SubjectRepository(contexts, AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject($"{slug}-maker"), CancellationToken.None);
-        (await members.AddMemberAsync(new NewTenantMember(tenant, maker, [caretaker], AccessEndsAt: accessEndsAt), CancellationToken.None))
+        (await members.AddMemberAsync(new NewTenantMember(tenant, maker, [caretaker], AccessEndsAt: accessEndsAt) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
             .Should().BeTrue();
         return new Seeded(tenant, maker, contexts);
     }
@@ -459,7 +459,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
         var member = (await members.FindMemberAsync(seeded.Tenant, seeded.Maker, CancellationToken.None))!;
         var (outcome, _) = await unit.CommitAsync(ct =>
-            MembershipRemoval.StageAsync(unit, members, Revocation(Sessions()), seeded.Tenant, member, Now.UtcDateTime, ct));
+            MembershipRemoval.StageAsync(unit, members, Revocation(Sessions()), seeded.Tenant, member, MembershipEndHow.Removed, Now.UtcDateTime, ct));
         outcome.Should().Be(OwnerGuardedChange.Changed);
     }
 
@@ -554,7 +554,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var members = new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off);
         var caretaker = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         (await members.AddMemberAsync(
-                new NewTenantMember(seeded.Tenant, seeded.Maker, [caretaker], AccessEndsAt: Now.UtcDateTime.AddDays(3)),
+                new NewTenantMember(seeded.Tenant, seeded.Maker, [caretaker], AccessEndsAt: Now.UtcDateTime.AddDays(3)) { How = MembershipJoinHow.Direct, By = null },
                 CancellationToken.None))
             .Should().BeTrue();
         await SetEndAsync(seeded, Now.UtcDateTime.AddDays(2));

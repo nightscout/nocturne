@@ -349,6 +349,7 @@ public class MemberInviteServiceTests : IDisposable
             && a.TenantId == _tenantId);
         rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
         {
+            (AuthAuditEventType.MemberJoined, $$"""{"kind":"tenant","how":"invite","invite":"{{inviteId}}","by":"{{_creatorSubjectId}}"}"""),
             (AuthAuditEventType.RoleAssigned, $$"""{"role":"follower","kind":"tenant","invite":"{{inviteId}}"}"""),
             (AuthAuditEventType.RoleAssigned, $$"""{"permission":"devices.read","kind":"tenant","invite":"{{inviteId}}"}"""),
             (AuthAuditEventType.HistoryLimitChanged, $$"""{"history_limit":"24_hours","kind":"tenant","invite":"{{inviteId}}"}"""),

@@ -15,8 +15,11 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Audit rows are not staged here: <see cref="MemberAccessAudit"/> stages them from the change the
-/// caller asked for, before the call.
+/// A membership's start and end are audited here, so no way of adding or removing one goes
+/// unrecorded: <see cref="AddMember"/> stages its <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType.MemberJoined"/>
+/// row and <see cref="RemoveMemberAsync"/> its <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType.MemberRemoved"/>
+/// row. The rows of what changed within it are not staged here: <see cref="MemberAccessAudit"/> stages
+/// them from the change the caller asked for.
 /// </para>
 /// <para>
 /// Before a change, the row and its reasons are brought together by <see cref="AlignWithRow"/>: a row
@@ -38,11 +41,14 @@ internal static class MembershipReasons
 {
     /// <summary>
     /// Adds <paramref name="member"/>, which carries only its row-only state (ids, label, username,
-    /// last use), with a direct reason that gives <paramref name="direct"/>.
+    /// last use), with a direct reason that gives <paramref name="direct"/>, and stages its joined row
+    /// attributed to <paramref name="source"/>, or the scope's actor when it is null.
     /// </summary>
     public static void AddMember(
-        NocturneDbContext db, TenantMemberEntity member, MembershipGrant direct, Guid? createdFromInviteId)
+        NocturneDbContext db, TenantMemberEntity member, MembershipGrant direct, Guid? createdFromInviteId,
+        MembershipJoinHow how, Guid? by, MemberAccessSource? source)
     {
+        MemberAccessAudit.StageJoined(db, member.TenantId, member.SubjectId, how, createdFromInviteId, by, source);
         db.TenantMembers.Add(member);
         NewDirectReason(db, member.Id, direct.RoleIds, direct.DirectPermissions, direct.LimitTo24Hours,
             direct.AccessEndsAt, createdFromInviteId);
@@ -91,9 +97,14 @@ internal static class MembershipReasons
         Project(db, member);
     }
 
-    /// <summary>Removes the member with its reasons and its role links.</summary>
-    public static async Task RemoveMemberAsync(NocturneDbContext db, TenantMemberEntity member, CancellationToken ct)
+    /// <summary>
+    /// Removes the member with its reasons and its role links, and stages its removed row attributed to
+    /// the scope's actor.
+    /// </summary>
+    public static async Task RemoveMemberAsync(
+        NocturneDbContext db, TenantMemberEntity member, MembershipEndHow how, CancellationToken ct)
     {
+        MemberAccessAudit.StageRemoved(db, member.TenantId, member.SubjectId, how, source: null);
         await LoadAsync(db, member.Id, ct);
         foreach (var reason in ReasonsOf(db, member.Id))
         {

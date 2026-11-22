@@ -92,7 +92,7 @@ public static class DeviceSubjectFilter
             db,
             new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId },
             new MembershipGrant([], [Scope.FullAccess], LimitTo24Hours: false, AccessEndsAt: null),
-            createdFromInviteId: null);
+            createdFromInviteId: null, MembershipJoinHow.System, by: null, source: null);
         MemberAccessAudit.StagePermissions(db, tenantId, subjectId, null, [Scope.FullAccess]);
 
         await db.SaveChangesAsync(ct);

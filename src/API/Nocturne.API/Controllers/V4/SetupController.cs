@@ -517,7 +517,9 @@ public partial class SetupController : ControllerBase
             // Setup retries, so a subject that is already a member is the state it wants, and the
             // result of the add is not read.
             _ = await _members.AddMemberAsync(
-                new NewTenantMember(tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member), ct);
+                new NewTenantMember(
+                    tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Setup, By = null },
+                ct);
         }
 
         // Set per-tenant username on the membership

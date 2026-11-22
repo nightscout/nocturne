@@ -589,7 +589,17 @@ public class SetupControllerTests : IDisposable
 
         var context = FreshContext();
         var owner = await context.TenantMembers.SingleAsync(m => m.TenantId == tenantId);
-        var row = (await context.AuthAuditLog.ToListAsync()).Should().ContainSingle().Subject;
+        var rows = await context.AuthAuditLog.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.MemberJoined,
+            TargetSubjectId = (Guid?)owner.SubjectId,
+            ActorSubjectId = (Guid?)owner.SubjectId,
+            ActorCredential = (string?)null,
+            DetailsJson = """{"kind":"tenant","how":"setup"}""",
+        });
+        var row = rows[1];
         row.Should().BeEquivalentTo(new
         {
             EventType = AuthAuditEventType.RoleAssigned,

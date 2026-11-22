@@ -69,6 +69,18 @@ public static class AuthAuditEventType
     public const string AccessEndChanged = "access_end_changed";
 
     /// <summary>
+    /// Event type when a subject becomes a member of a tenant. The details name how under <c>how</c>
+    /// and, when known, the subject who let them in under <c>by</c>.
+    /// </summary>
+    public const string MemberJoined = "member_joined";
+
+    /// <summary>
+    /// Event type when a subject stops being a member of a tenant. The details name how under <c>how</c>.
+    /// Nothing is written when the membership's end date passes.
+    /// </summary>
+    public const string MemberRemoved = "member_removed";
+
+    /// <summary>
     /// Event type when a member's access end date set or moved earlier lowers the expiry of a guest
     /// link they made. The target is the member; the details name the link under <c>grant</c> and its
     /// new expiry under <c>expires_at</c> as an ISO 8601 UTC instant.

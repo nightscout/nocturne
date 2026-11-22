@@ -11,16 +11,16 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// context, a navigation or <c>Entry(...).State</c>; names their tables in SQL text; or assigns their
 /// columns. A member row is the stored sum of its reasons, so a write anywhere else would leave the
 /// two apart. Only the dev snapshot import names <c>DevSnapshotMemberships</c>, which skips the owners
-/// lock, the last-owner check and the audit.
+/// lock, the last-owner check and the audit of what a membership holds.
 /// </summary>
 /// <remarks>
 /// A syntax tree has no types, so an entity value is one created inline (explicitly, or target-typed
 /// beside a generic type argument), or a name the same member declares with an entity type, creates
 /// as one, or reads from one of the sets; and a column assignment is matched by name, through a
 /// navigation to the member or reason, or inside a member that names a set or an entity. Deletions by
-/// foreign-key cascade are not writes this guard sees: deleting a tenant (<c>TenantRepository</c>), a
-/// subject (<c>SubjectRepository</c>) or a role deletes the rows that hang off it in the database, and
-/// each member's reasons and their roles cascade with it, so nothing is left to disagree. Migrations
+/// foreign-key cascade are not writes this guard sees: deleting a tenant (<c>TenantRepository</c>) or a
+/// role deletes the rows that hang off it in the database, and each member's reasons and their roles
+/// cascade with it, so nothing is left to disagree. Migrations
 /// are not scanned: they run once, before any writer, and the backfill is the one that writes reasons.
 /// </remarks>
 [Trait("Category", "Unit")]
@@ -71,9 +71,14 @@ public partial class MembershipWriteGuardTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.SetUsernameAsync",
         // The last-used stamp outlives the request in one statement, and is not access.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.RecordUseAsync",
-        // Setup adoption re-points the membership to the subject that adopts it; its reasons hang off the member id and follow.
+        // Setup adoption gives the adopting subject the created subject's username: a subject column of the
+        // same name, matched by name. The membership itself passes through the writer, and
+        // NothingMovesAMembershipToAnotherSubjectOrTenant keeps it from being re-pointed here.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.AdoptForSetupAsync",
     ];
+
+    /// <summary>The columns that say whose membership a row is and of which tenant.</summary>
+    private static readonly string[] MembershipKeys = ["SubjectId", "TenantId"];
 
     private static readonly IReadOnlyList<(string Path, SyntaxTree Tree)> Sources = Load();
 
@@ -90,12 +95,46 @@ public partial class MembershipWriteGuardTests
         Allowed.Except(writers).Should().BeEmpty("a stale entry would silently cover a future write in that member");
     }
 
+    /// <summary>
+    /// A membership moved to another subject or tenant ends one membership and starts another, which
+    /// only the writer records, so no entry in <see cref="Allowed"/> may cover it.
+    /// </summary>
+    [Fact]
+    public void NothingMovesAMembershipToAnotherSubjectOrTenant() =>
+        Sources
+            .SelectMany(s => s.Tree.GetRoot().DescendantNodes().OfType<AssignmentExpressionSyntax>()
+                .Where(IsMembershipKeyAssignment)
+                .Select(a => $"{s.Path}: {EnclosingMember.Of(a)}"))
+            .Should().BeEmpty("a membership that changes hands is removed and added through MembershipReasons");
+
+    [Theory]
+    [InlineData("class C { async Task M(Db db) { var ms = await db.TenantMembers.ToListAsync(); ms[0].SubjectId = h; } }", true)]
+    [InlineData("class C { async Task M(Db db) { var m = await db.TenantMembers.FirstAsync(); m.TenantId = t; } }", true)]
+    [InlineData("class C { void M(TenantMemberEntity m) { m.SubjectId = h; } }", true)]
+    [InlineData("class C { void M(Holder h) { h.TenantMember.SubjectId = s; } }", true)]
+    [InlineData("class C { void M(Db db, SubjectRoleEntity r) { db.TenantMembers.Load(); r.SubjectId = h; } }", false)]
+    [InlineData("class C { object M() => new TenantMemberEntity { SubjectId = h }; }", false)]
+    [InlineData("class C { async Task M(Db db) { var m = await db.TenantMembers.FirstAsync(); m.Label = l; } }", false)]
+    public void DetectsAMembershipMoved(string source, bool expected) =>
+        CSharpSyntaxTree.ParseText(source).GetRoot().DescendantNodes().OfType<AssignmentExpressionSyntax>()
+            .Any(IsMembershipKeyAssignment).Should().Be(expected);
+
+    private static bool IsMembershipKeyAssignment(AssignmentExpressionSyntax assignment) =>
+        assignment.Parent is not InitializerExpressionSyntax
+        && assignment.Left is MemberAccessExpressionSyntax left
+        && MembershipKeys.Contains(left.Name.Identifier.ValueText)
+        && (NameOf(left.Expression) is { } navigation && ReferenceNavigations.Contains(navigation)
+            || IsEntityValue(Unindexed(left.Expression)));
+
+    private static ExpressionSyntax Unindexed(ExpressionSyntax expression) =>
+        expression is ElementAccessExpressionSyntax element ? Unindexed(element.Expression) : expression;
+
     [Fact]
     public void OnlyTheDevSnapshotImportNamesTheDevPassThrough() =>
         Sources
             .Where(s => s.Path != DevPassThrough && NamesDevPassThrough(s.Tree))
             .Select(s => s.Path)
-            .Should().Equal([DevImport], "it skips the owners lock, the last-owner check and the audit");
+            .Should().Equal([DevImport], "it skips the owners lock, the last-owner check and the audit of what a membership holds");
 
     [Fact]
     public void TheExemptFilesExist() =>

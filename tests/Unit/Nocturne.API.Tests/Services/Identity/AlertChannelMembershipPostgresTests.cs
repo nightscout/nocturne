@@ -133,7 +133,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
         var guest = await new SubjectRepository(contexts, AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject($"{slug}-guest"), CancellationToken.None);
-        (await members.AddMemberAsync(new NewTenantMember(tenant, guest, [caretaker], AccessEndsAt: accessEndsAt), CancellationToken.None))
+        (await members.AddMemberAsync(new NewTenantMember(tenant, guest, [caretaker], AccessEndsAt: accessEndsAt) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
             .Should().BeTrue();
         return new Site(tenant, fullSlug, guest, contexts, new FakeTimeProvider(Now), new BotService());
     }
@@ -260,7 +260,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         var member = (await members.FindMemberAsync(site.Tenant, site.Guest, CancellationToken.None))!;
         var (outcome, _) = await unit.CommitAsync(ct => MembershipRemoval.StageAsync(
             unit, members, new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            site.Tenant, member, site.UtcNow, ct));
+            site.Tenant, member, MembershipEndHow.Removed, site.UtcNow, ct));
         outcome.Should().Be(OwnerGuardedChange.Changed);
     }
 
@@ -396,7 +396,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             (await MembershipRemoval.ReplaceEndedAsync(
                 unit, members, new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
                 site.Tenant, site.Guest, site.UtcNow, ct)).Should().NotBeNull();
-            (await members.AddMemberAsync(new NewTenantMember(site.Tenant, site.Guest, [caretaker]), ct)).Should().BeTrue();
+            (await members.AddMemberAsync(new NewTenantMember(site.Tenant, site.Guest, [caretaker]) { How = MembershipJoinHow.Direct, By = null }, ct)).Should().BeTrue();
             await unit.Context.SaveChangesAsync(ct);
         });
     }

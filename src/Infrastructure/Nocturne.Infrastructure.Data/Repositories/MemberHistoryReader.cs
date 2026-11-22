@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -22,6 +24,11 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// carries a tenant id, and reads the same way. An <c>access_end_changed</c> row is told apart by its
 /// <c>access_ends_at</c> key: a string is the new end, a null is a cleared end, and no key is a row
 /// whose detail is unknown.
+/// <para>
+/// A change an invite made is <see cref="MemberHistoryEntry.InRecordedJoin"/> when a
+/// <see cref="AuthAuditEventType.MemberJoined"/> row of the same commit names the same member and
+/// invite; a join older than that row has none, and its changes keep reading as the join itself.
+/// </para>
 /// </remarks>
 public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHistoryReader
 {
@@ -32,13 +39,15 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         AuthAuditEventType.HistoryLimitChanged,
         AuthAuditEventType.AccessEndChanged,
         AuthAuditEventType.RolePermissionsChanged,
+        AuthAuditEventType.MemberJoined,
+        AuthAuditEventType.MemberRemoved,
     ];
 
     private const string MemberChangeRows =
         $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditRows.KindKey}' = '{MemberAccessAudit.TenantKind}'";
 
-    public async Task<PaginatedResponse<MemberHistoryEntry>> GetAsync(
-        Guid tenantId, Guid? memberSubjectId, int limit, int offset, CancellationToken ct = default)
+    public async Task<MemberHistoryPage> GetAsync(
+        Guid tenantId, Guid? memberSubjectId, int limit, int offset, DateTime now, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
 
@@ -59,8 +68,8 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
         var parsed = page.Select(row => (Row: row, Details: Details.Of(row.DetailsJson))).ToList();
 
-        var subjectIds = page
-            .SelectMany(a => new[] { a.TargetSubjectId, a.ActorSubjectId })
+        var subjectIds = parsed
+            .SelectMany(p => new[] { p.Row.TargetSubjectId, p.Row.ActorSubjectId, p.Details.By })
             .OfType<Guid>()
             .Distinct()
             .ToList();
@@ -77,21 +86,69 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 .Where(i => inviteIds.Contains(i.Id))
                 .ToDictionaryAsync(i => i.Id, i => i.Label, ct);
 
-        return new PaginatedResponse<MemberHistoryEntry>
+        var joins = await RecordedJoinsAsync(db, tenantId, parsed, ct);
+
+        DateTime? accessEndedAt = null;
+        if (memberSubjectId is { } narrowed
+            && await db.TenantMembers.AsNoTracking()
+                .Where(m => m.TenantId == tenantId && m.SubjectId == narrowed)
+                .Select(m => m.AccessEndsAt)
+                .FirstOrDefaultAsync(ct) is { } end
+            && MembershipLiveness.HasEnded(end, now))
+            accessEndedAt = DateTime.SpecifyKind(end, DateTimeKind.Utc);
+
+        return new MemberHistoryPage
         {
-            Data = parsed.Select(p => ToEntry(p.Row, p.Details, names, labels)).ToList(),
+            Data = parsed.Select(p => ToEntry(p.Row, p.Details, names, labels, joins)).ToList(),
             Pagination = new PaginationInfo(limit, offset, total),
+            AccessEndedAt = accessEndedAt,
         };
     }
 
+    /// <summary>
+    /// The (member, invite, commit time) of the joined rows that stand beside the page's invite changes:
+    /// rows of one commit share <c>created_at</c>, so a joined row of another commit, such as a later
+    /// rejoin through the same invite, does not count.
+    /// </summary>
+    private static async Task<HashSet<(Guid Member, Guid Invite, DateTime At)>> RecordedJoinsAsync(
+        NocturneDbContext db, Guid tenantId, List<(AuthAuditLogEntity Row, Details Details)> parsed, CancellationToken ct)
+    {
+        var changes = parsed
+            .Where(p => p.Details.InviteId is not null && p.Row.EventType != AuthAuditEventType.MemberJoined
+                && p.Row.TargetSubjectId is not null)
+            .Select(p => p.Row)
+            .ToList();
+        if (changes.Count == 0)
+            return [];
+
+        var members = changes.Select(r => r.TargetSubjectId!.Value).Distinct().ToList();
+        var times = changes.Select(r => r.CreatedAt).Distinct().ToList();
+        var joined = await db.AuthAuditLog.AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && a.EventType == AuthAuditEventType.MemberJoined
+                && a.TargetSubjectId != null
+                && members.Contains(a.TargetSubjectId.Value)
+                && times.Contains(a.CreatedAt))
+            .Select(a => new { Member = a.TargetSubjectId!.Value, a.DetailsJson, a.CreatedAt })
+            .ToListAsync(ct);
+        return joined
+            .Select(j => (j.Member, Invite: Details.Of(j.DetailsJson).InviteId, j.CreatedAt))
+            .Where(j => j.Invite is not null)
+            .Select(j => (j.Member, j.Invite!.Value, j.CreatedAt))
+            .ToHashSet();
+    }
+
     private static MemberHistoryEntry ToEntry(
-        AuthAuditLogEntity row, Details details, Dictionary<Guid, string> names, Dictionary<Guid, string?> labels)
+        AuthAuditLogEntity row, Details details, Dictionary<Guid, string> names, Dictionary<Guid, string?> labels,
+        HashSet<(Guid Member, Guid Invite, DateTime At)> joins)
     {
         var given = row.EventType == AuthAuditEventType.RoleAssigned;
         var kind = row.EventType switch
         {
             AuthAuditEventType.HistoryLimitChanged => MemberHistoryKind.HistoryLimitChanged,
             AuthAuditEventType.RolePermissionsChanged => MemberHistoryKind.RolePermissionsChanged,
+            AuthAuditEventType.MemberJoined => MemberHistoryKind.Joined,
+            AuthAuditEventType.MemberRemoved => MemberHistoryKind.Removed,
             AuthAuditEventType.AccessEndChanged => details switch
             {
                 { AccessEndRecorded: false } => MemberHistoryKind.AccessEndChanged,
@@ -116,7 +173,14 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             details.Lost,
             details.AccessEndsAt,
             details.InviteId is not null,
-            details.InviteId is { } invite ? labels.GetValueOrDefault(invite) : null);
+            details.InviteId is { } invite ? labels.GetValueOrDefault(invite) : null,
+            kind == MemberHistoryKind.Joined ? details.JoinedHow : null,
+            kind == MemberHistoryKind.Removed ? details.RemovedHow : null,
+            details.By is { } by ? new MemberHistoryPerson(by, names.GetValueOrDefault(by)) : null,
+            kind != MemberHistoryKind.Joined
+                && row.TargetSubjectId is { } member
+                && details.InviteId is { } via
+                && joins.Contains((member, via, row.CreatedAt)));
     }
 
     /// <summary>
@@ -147,9 +211,10 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
 
     private sealed record Details(
         string? Role, string? Permission, MemberHistoryLimit? HistoryLimit, Guid? InviteId,
-        IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost, bool AccessEndRecorded, DateTime? AccessEndsAt)
+        IReadOnlyList<string>? Gained, IReadOnlyList<string>? Lost, bool AccessEndRecorded, DateTime? AccessEndsAt,
+        MembershipJoinHow? JoinedHow, MembershipEndHow? RemovedHow, Guid? By)
     {
-        private static readonly Details Unknown = new(null, null, null, null, null, null, false, null);
+        private static readonly Details Unknown = new(null, null, null, null, null, null, false, null, null, null, null);
 
         public static Details Of(string? json)
         {
@@ -162,6 +227,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 return Unknown;
 
             var instant = Instant(root, MemberAccessAudit.AccessEndsAtKey);
+            var how = Text(root, MemberAccessAudit.HowKey);
             return new Details(
                 Text(root, MemberAccessAudit.RoleKey),
                 Text(root, MemberAccessAudit.PermissionKey),
@@ -176,7 +242,10 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
                 List(root, MemberAccessAudit.LostKey),
                 root.TryGetProperty(MemberAccessAudit.AccessEndsAtKey, out var end)
                     && (end.ValueKind == JsonValueKind.Null || instant is not null),
-                instant);
+                instant,
+                MemberAccessAudit.JoinedHow.Where(h => h.Value == how).Select(h => (MembershipJoinHow?)h.Key).FirstOrDefault(),
+                MemberAccessAudit.RemovedHow.Where(h => h.Value == how).Select(h => (MembershipEndHow?)h.Key).FirstOrDefault(),
+                Guid.TryParse(Text(root, MemberAccessAudit.ByKey), out var by) ? by : null);
         }
 
         private static string? Text(JsonElement root, string key) =>

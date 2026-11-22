@@ -226,6 +226,8 @@ public interface ISubjectRepository
     /// Makes <paramref name="holderId"/> the subject first-run setup completes, in place of the
     /// subject <paramref name="createdId"/> the owner step created: the created subject's membership,
     /// username, display name and global roles pass to the holder and the created subject is deleted.
+    /// The membership passes as a removal (system) and a new membership of the holder (setup) with
+    /// the same access, so the audit log names the holder as the owner who set up the site.
     /// False, with nothing written, unless both qualify, checked and written in one serializable
     /// transaction.
     /// </summary>
