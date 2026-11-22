@@ -91,12 +91,7 @@ public class OutboundSinkGuardTests
         services.AddSingleton<IHttpClientFactory>(factory);
 
         using var provider = services.BuildServiceProvider();
-        var migration = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            provider,
-            EmptyConfiguration(),
-            new Nocturne.API.Services.TenantRunGuard(),
-            TimeProvider.System);
+        var migration = Nocturne.API.Tests.Migration.MigrationJobHarness.CreateService(provider, EmptyConfiguration());
 
         await migration.TestConnectionAsync(new TestMigrationConnectionRequest
         {

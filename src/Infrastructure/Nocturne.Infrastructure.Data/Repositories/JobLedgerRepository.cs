@@ -247,11 +247,14 @@ public class JobLedgerRepository : IJobLedger
     /// <summary>
     /// An immediate <see cref="RequestAsync(string, Guid?, TimeSpan, CancellationToken)"/> of
     /// <paramref name="job"/> for <paramref name="db"/>'s tenant, written in its open transaction, so the
-    /// request commits or rolls back with the write that needs the job. PostgreSQL only.
+    /// request commits or rolls back with the write that needs the job. Another provider has no
+    /// ledger and requests nothing.
     /// </summary>
-    internal static Task RequestInTransactionAsync(NocturneDbContext db, string job, CancellationToken ct) =>
-        db.Database.ExecuteSqlRawAsync(
-            RequestSql, RequestParameters(job, db.TenantId, DateTimeOffset.UtcNow, TimeSpan.Zero), ct);
+    public static Task RequestInTransactionAsync(NocturneDbContext db, string job, CancellationToken ct) =>
+        db.Database.IsNpgsql()
+            ? db.Database.ExecuteSqlRawAsync(
+                RequestSql, RequestParameters(job, db.TenantId, DateTimeOffset.UtcNow, TimeSpan.Zero), ct)
+            : Task.CompletedTask;
 
     private static NpgsqlParameter[] RequestParameters(string job, Guid? tenantId, DateTimeOffset now, TimeSpan after) =>
     [

@@ -1321,12 +1321,11 @@ public static class ServiceRegistrationExtensions
     /// </summary>
     public static IServiceCollection AddMigrationServices(this IServiceCollection services)
     {
-        // Shared with the connector gate so both are the one instance the process holds.
-        services.TryAddSingleton<TenantRunGuard>();
         services.AddSingleton<
             Nocturne.API.Services.Migration.IMigrationJobService,
             Nocturne.API.Services.Migration.MigrationJobService
         >();
+        services.AddScheduledJob<Nocturne.API.Services.Migration.MigrationRunJob>();
         services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
 
         // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a

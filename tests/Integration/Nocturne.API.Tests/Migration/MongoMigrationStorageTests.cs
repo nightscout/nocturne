@@ -167,6 +167,7 @@ public class MongoMigrationStorageTests : ApiIntegrationTestBase, IClassFixture<
         });
         start.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var job = await start.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
+        await MigrationJobPump.RunAsync(Fixture);
 
         for (var i = 0; i < 120; i++)
         {

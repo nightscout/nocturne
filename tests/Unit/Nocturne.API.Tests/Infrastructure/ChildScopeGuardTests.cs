@@ -81,9 +81,6 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.ReadAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.WriteAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.PersistSnapshotAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
 
         // A share's zone and timezone timeline, which no category governs and every local-day report
         // needs. Each returns only the zone id or the timeline's entries.
