@@ -21,6 +21,7 @@
         <PackageReference Include="Moq"/>
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\..\src\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
         <ProjectReference Include="..\..\..\src\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="..\..\..\src\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj"/>
         <ProjectReference Include="..\..\..\src\Infrastructure\Nocturne.Infrastructure.Data.Migrations\Nocturne.Infrastructure.Data.Migrations.csproj"/>

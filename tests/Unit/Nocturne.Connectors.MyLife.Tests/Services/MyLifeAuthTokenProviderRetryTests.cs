@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyLife.Tests.Services;
 
@@ -105,9 +105,7 @@ public class MyLifeAuthTokenProviderRetryTests
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -116,7 +114,7 @@ public class MyLifeAuthTokenProviderRetryTests
             httpClient,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             new MyLifeSoapClient(httpClient, NullLogger<MyLifeSoapClient>.Instance),
             new MyLifeSessionCache(),
             NullLogger<MyLifeAuthTokenProvider>.Instance,

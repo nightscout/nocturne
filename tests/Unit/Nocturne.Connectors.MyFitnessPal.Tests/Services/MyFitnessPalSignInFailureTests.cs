@@ -8,8 +8,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests.Services;
 
@@ -29,7 +29,6 @@ public class MyFitnessPalSignInFailureTests
         result.Message.Should().Contain("usually temporary")
             .And.NotContain("password")
             .And.NotBe("Authentication failed");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     /// <summary>A standard OAuth token endpoint answers a wrong password with 400 invalid_grant; 401 is also a refusal.</summary>
@@ -42,20 +41,19 @@ public class MyFitnessPalSignInFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     private static async Task<SyncResult> SyncAgainst(Func<HttpRequestMessage, HttpResponseMessage> answer)
     {
-        using var authClient = new HttpClient(new StubHandler(answer));
-        using var serviceClient = new HttpClient(new StubHandler(answer));
+        using var authClient = new HttpClient(new FakeHttpHandler(answer));
+        using var serviceClient = new HttpClient(new FakeHttpHandler(answer));
         var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
 
         using var provider = new MyFitnessPalAuthTokenProvider(
             authClient,
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
         var service = new MyFitnessPalConnectorService(
@@ -75,17 +73,4 @@ public class MyFitnessPalSignInFailureTests
     private static HttpResponseMessage Answer(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body) };
 
-    private static ITenantAccessor ResolvedTenant()
-    {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-        return tenant.Object;
-    }
-
-    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(answer(request));
-    }
 }

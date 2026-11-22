@@ -11,10 +11,10 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests.Services;
 
@@ -82,16 +82,14 @@ public class MyFitnessPalClockTests
         internal Fixture(TimeProvider clock, IReadOnlyList<(string Id, string Date)> entries)
         {
             var http = new HttpClient(new DiaryHandler(entries));
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.Setup(t => t.IsResolved).Returns(true);
-            tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenant = ResolvedTenant.Accessor();
             var resolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null);
 
             TokenProvider = new MyFitnessPalAuthTokenProvider(
                 http,
                 new ConnectorTokenCache(clock),
                 resolver,
-                tenant.Object,
+                tenant,
                 NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 clock);

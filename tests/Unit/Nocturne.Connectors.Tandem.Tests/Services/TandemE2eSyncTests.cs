@@ -11,7 +11,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Connectors;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -347,6 +347,25 @@ public class TandemE2eSyncTests
         fixture.Publisher.SensorGlucoses.Should().HaveCount(2);
         fixture.Publisher.Boluses.Should().HaveCount(1);
         fixture.Publisher.TempBasals.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Second_sync_of_the_same_window_stores_no_new_row()
+    {
+        var store = new StoringConnectorPublisher();
+        var fixture = new Fixture(publisher: store);
+        var window = new SyncRequest { From = Utc(2026, 5, 14, 0, 0, 0), To = Utc(2026, 5, 18, 23, 59, 59) };
+
+        (await fixture.RunAsync(window)).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        (await fixture.RunAsync(window)).Success.Should().BeTrue();
+
+        stored.Select(k => k.Type).Distinct().Should().Contain(
+            [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal), nameof(DeviceEvent)]);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
     }
 
     /// <summary>
@@ -838,7 +857,7 @@ public class TandemE2eSyncTests
         new HttpClient(),
         new ConnectorTokenCache(),
         new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
-        new FakeTenantAccessor(),
+        ResolvedTenant.Accessor(),
         NullLogger<TandemAuthTokenProvider>.Instance,
         Mock.Of<IRetryDelayStrategy>())
     {
@@ -848,14 +867,6 @@ public class TandemE2eSyncTests
                 "fake-token",
                 DateTime.UtcNow.AddHours(1),
                 new Dictionary<string, string> { [PumperIdKey] = "pumper-1", [AccountIdKey] = "account-1" }));
-
-        private sealed class FakeTenantAccessor : ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public TenantContext? Context => null;
-            public void SetTenant(TenantContext context) { }
-        }
     }
 
     private sealed class InMemoryCursorStore(Action<CancellationToken>? onGet = null) : IConnectorSyncCursorStore
@@ -1039,7 +1050,8 @@ public class TandemE2eSyncTests
             CancellationTokenSource? cancellation = null,
             Action<CancellationToken>? cursorStoreOnGet = null,
             bool watermarksFollowPublishes = false,
-            bool glucoseWatermarkFails = false)
+            bool glucoseWatermarkFails = false,
+            IConnectorPublisher? publisher = null)
         {
             _cancellation = cancellation;
             // Default watermarks put the catch-up start just before the pump's available range so
@@ -1074,7 +1086,7 @@ public class TandemE2eSyncTests
                 NullLogger<TandemConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
-                Publisher,
+                publisher ?? Publisher,
                 new InMemoryCursorStore(cursorStoreOnGet),
                 clock);
         }

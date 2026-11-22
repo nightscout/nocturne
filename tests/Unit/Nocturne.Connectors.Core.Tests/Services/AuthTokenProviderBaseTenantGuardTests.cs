@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -46,16 +47,14 @@ public class AuthTokenProviderBaseTenantGuardTests
     [Fact]
     public async Task GetValidTokenAsync_Succeeds_WhenTenantResolved()
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         using var httpClient = new HttpClient();
         var provider = new TestTokenProvider(
             httpClient,
             new ConnectorTokenCache(),
             NoOpResolver,
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<TestTokenProvider>.Instance);
 
         var config = new TestConnectorConfig();

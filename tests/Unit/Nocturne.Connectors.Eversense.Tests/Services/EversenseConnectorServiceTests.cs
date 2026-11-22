@@ -14,6 +14,7 @@ using Nocturne.Connectors.Eversense.Models;
 using Nocturne.Connectors.Eversense.Services;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Eversense.Tests.Services;
 
@@ -614,6 +615,39 @@ public class EversenseConnectorServiceTests
         published.Should().ContainSingle().Which.CreatedAt.Should().Be(clock.GetUtcNow().UtcDateTime);
     }
 
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameHistory_StoresNoNewRow()
+    {
+        var store = new StoringConnectorPublisher();
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] =
+                    CreateJsonResponse(new List<EversensePatientDatum>
+                    {
+                        CreateFollowedPatient(userId: 42, glucose: 125, cgTime: "2026-10-16T10:10:00Z")
+                    }),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    CreateJsonResponse(new List<EversenseUserEvent>
+                    {
+                        new() { EventTypeId = 1, Value = 110, EventDate = "2026-10-16T10:00:00" },
+                        new() { EventTypeId = 1, Value = 118, EventDate = "2026-10-16T10:05:00" },
+                    })
+            },
+            publisher: store);
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        stored.Should().HaveCount(3);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
     #endregion
 
     #region Test Infrastructure
@@ -664,7 +698,7 @@ public class EversenseConnectorServiceTests
                 new HttpClient(),
                 new Nocturne.Connectors.Core.Services.ConnectorTokenCache(),
                 new Nocturne.Connectors.Core.Services.ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
-                new FakeTenantAccessor(),
+                ResolvedTenant.Accessor(),
                 NullLogger<EversenseAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>())
         {
@@ -680,45 +714,6 @@ public class EversenseConnectorServiceTests
 
             return Task.FromResult<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(
                 (null, DateTime.MinValue, null));
-        }
-
-        private class FakeTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
-            public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
-        }
-    }
-
-    /// <summary>
-    /// Routes HTTP requests to preconfigured responses based on URL path matching.
-    /// </summary>
-    private sealed class MockHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Dictionary<string, HttpResponseMessage> _responses;
-
-        public List<Uri> RequestedUris { get; } = [];
-
-        public MockHttpMessageHandler(Dictionary<string, HttpResponseMessage>? responses = null)
-        {
-            _responses = responses ?? new Dictionary<string, HttpResponseMessage>();
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            if (request.RequestUri != null)
-                RequestedUris.Add(request.RequestUri);
-            var path = request.RequestUri?.PathAndQuery ?? string.Empty;
-            foreach (var kvp in _responses)
-            {
-                if (path.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                    return Task.FromResult(kvp.Value);
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
     }
 
@@ -750,12 +745,12 @@ public class EversenseConnectorServiceTests
     /// </summary>
     private sealed class ServiceFixture
     {
-        private readonly MockHttpMessageHandler _handler;
+        private readonly FakeHttpHandler _handler;
 
         public EversenseConnectorService Service { get; }
         public FloorProbeService FloorProbe { get; }
         public EversenseConnectorConfiguration Config { get; }
-        public IReadOnlyList<Uri> RequestedUris => _handler.RequestedUris;
+        public IReadOnlyList<Uri> RequestedUris => [.. _handler.Requests.Select(r => r.Uri!)];
 
         public ServiceFixture(
             string? tokenToReturn = "valid-token",
@@ -774,7 +769,9 @@ public class EversenseConnectorServiceTests
                 Server = server,
             };
 
-            _handler = new MockHttpMessageHandler(httpResponses);
+            _handler = new FakeHttpHandler();
+            foreach (var (path, response) in httpResponses ?? [])
+                _handler.On(path, response);
             var httpClient = new HttpClient(_handler)
             {
                 BaseAddress = new Uri("https://test.eversensedms.com")
