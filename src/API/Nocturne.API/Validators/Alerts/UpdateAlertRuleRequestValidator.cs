@@ -34,7 +34,7 @@ public class UpdateAlertRuleRequestValidator : AbstractValidator<UpdateAlertRule
             .WithMessage("AutoResolveParams is required when AutoResolveEnabled is true");
         RuleFor(x => x.OnUnknown).Must(AlertRuleOnUnknown.IsKnown)
             .When(x => x.OnUnknown is not null)
-            .WithMessage("OnUnknown must be hold, met or not_met");
+            .WithMessage(AlertRuleOnUnknown.InvalidMessage);
         RuleFor(x => x.GlucoseFreshnessMinutes).Must(AlertRuleGlucoseFreshness.IsValid)
             .WithMessage(AlertRuleGlucoseFreshness.InvalidMessage);
         RuleFor(x => x.ClearGlucoseFreshness).Equal(false)

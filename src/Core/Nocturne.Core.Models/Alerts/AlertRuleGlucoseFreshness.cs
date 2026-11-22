@@ -10,6 +10,9 @@ public static class AlertRuleGlucoseFreshness
 
     public const int MaxMinutes = 1440;
 
+    /// <summary>The bound a rule with none of its own gets; the engine's <c>DEFAULT_GLUCOSE_FRESHNESS</c>.</summary>
+    public const int DefaultMinutes = 11;
+
     /// <summary>Whether <paramref name="minutes"/> is absent, the engine's default, or in range.</summary>
     public static bool IsValid(int? minutes) => minutes is null or (>= MinMinutes and <= MaxMinutes);
 

@@ -11,6 +11,7 @@
     createRule,
     getPresets,
     getRules,
+    getSettingOptions,
   } from "#lib/api/generated/alertRules.generated.remote.js";
   import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import type { ReplayRuleDefinition } from "@nocturne/api-client";
@@ -21,10 +22,13 @@
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import {
     buildBody,
+    buildCreateBody,
     ensureCompositeRoot,
+    freshnessIssue,
     nodeFromApi,
     parseRule,
     stripEditorFields,
+    toReplayRule,
     validateChannels,
     type ConditionNode,
     type RuleEditorState,
@@ -75,6 +79,8 @@
   let editor = $state<RuleEditorState>(parseRule(null));
   let draft = $state<AlertDraft | null>(null);
   let nameEdited = $state(false);
+
+  const settingOptionsQuery = getSettingOptions();
 
   const presetsQuery = getPresets();
   const templates = $derived(templatesFrom(presetsQuery.current ?? []));
@@ -214,11 +220,11 @@
   /** Why the current step cannot be left yet, or `null` when it can. */
   const blocked = $derived.by<string | null>(() => {
     if (!draft) return "Choose an alert type.";
-    if (step === SETTINGS) return draftIssue(draft);
+    if (step === SETTINGS) return draftIssue(draft) ?? freshnessIssue(editor, settingOptionsQuery.current);
     if (step === DELIVERY) return deliveryIssue();
     // The last step answers for the ones before it: nothing they refuse is created.
     if (step === CHECK) {
-      return draftIssue(draft) ?? deliveryIssue() ?? (name === "" ? "Enter a name." : null);
+      return draftIssue(draft) ?? freshnessIssue(editor, settingOptionsQuery.current) ?? deliveryIssue() ?? (name === "" ? "Enter a name." : null);
     }
     return null;
   });
@@ -234,7 +240,7 @@
     try {
       // An alert is not created without the closing condition its type has.
       const closing = await autoResolveAsked.catch(askAutoResolve);
-      await createRule(buildBody(rule(closing)));
+      await createRule(buildCreateBody(rule(closing)));
       created = true;
       toastSaved("The alert is on.");
       await goto(resolve("/(authenticated)/alerts"));
@@ -271,18 +277,11 @@
   }
 
   function replayRule(): ReplayRuleDefinition {
-    const body = buildBody(rule());
-    return {
-      id: draftId,
-      name: body.name,
-      conditionType: body.conditionType,
-      conditionParams:
-        body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
-      severity: body.severity,
-      allowThroughDnd: body.allowThroughDnd,
-      autoResolveEnabled: body.autoResolveEnabled,
-      autoResolveParams: body.autoResolveParams ? JSON.stringify(body.autoResolveParams) : undefined,
-    };
+    return toReplayRule(
+      rule(),
+      draftId,
+      settingOptionsQuery.current?.defaultGlucoseFreshnessMinutes,
+    );
   }
 
   /** The alert's tree as the replay's rule list reads it: with an id on each condition. */
@@ -382,7 +381,7 @@
           />
     {:else if step === SETTINGS}
       {#key draft.template}
-        <SettingsStep bind:draft {availableRules} {trackers} />
+        <SettingsStep bind:draft bind:editor {availableRules} {trackers} />
       {/key}
     {:else if step === DELIVERY}
       <DeliveryStep bind:editor />
