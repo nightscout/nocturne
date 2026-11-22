@@ -12,6 +12,7 @@ using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Tandem.Tests.Services;
 
@@ -130,9 +131,7 @@ public class TandemAuthTokenProviderRetryTests
     private static TandemAuthTokenProvider ProviderFor(
         TandemLoginHandler handler, HttpClient httpClient, TimeProvider clock)
     {
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -142,7 +141,7 @@ public class TandemAuthTokenProviderRetryTests
             httpClient,
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<TandemAuthTokenProvider>.Instance,
             retryDelay.Object,
             clock);

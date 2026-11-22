@@ -9,10 +9,10 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Dexcom.Tests.Services;
 
@@ -291,7 +291,7 @@ public class DexcomConnectorServiceSyncTests
             new HttpClient(),
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<DexcomAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>())
     {
@@ -300,12 +300,5 @@ public class DexcomConnectorServiceSyncTests
             Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 ("session-1", DateTime.UtcNow.AddHours(1), null));
 
-        private static ITenantAccessor ResolvedTenant()
-        {
-            var tenant = new Mock<ITenantAccessor>();
-            tenant.Setup(t => t.IsResolved).Returns(true);
-            tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-            return tenant.Object;
-        }
     }
 }

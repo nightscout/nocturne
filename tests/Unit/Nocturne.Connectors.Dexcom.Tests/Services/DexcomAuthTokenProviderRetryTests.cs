@@ -6,8 +6,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Dexcom.Tests.Services;
 
@@ -133,9 +133,7 @@ public class DexcomAuthTokenProviderRetryTests
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -147,7 +145,7 @@ public class DexcomAuthTokenProviderRetryTests
                 new Dictionary<string, string> { ["US"] = DexcomConstants.Servers.Us },
                 config => ((DexcomConnectorConfiguration)config).Server,
                 null),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<DexcomAuthTokenProvider>.Instance,
             retryDelay.Object);
 

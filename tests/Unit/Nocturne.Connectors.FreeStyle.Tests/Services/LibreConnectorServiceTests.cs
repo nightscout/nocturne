@@ -9,10 +9,10 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.FreeStyle.Tests.Services;
@@ -178,6 +178,32 @@ public class LibreConnectorServiceTests
             && e.Device!.Contains("0M0001ABCD"));
     }
 
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameGraph_StoresNoNewRow()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var store = new StoringConnectorPublisher();
+        var fixture = new ServiceFixture(
+            connectionsJson: Connections,
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:55:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3},"
+                       + "\"sensor\":{\"deviceId\":\"d1\",\"sn\":\"0M0001ABCD\",\"a\":1772359200,\"w\":60,\"pt\":4}},"
+                       + "\"graphData\":[{\"factoryTimestamp\":\"3/1/2026 11:50:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}",
+            publisher: store,
+            clock: clock);
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents] };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        stored.Select(k => k.Type).Should().Contain(nameof(SensorGlucose)).And.Contain(nameof(DeviceEvent));
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
     /// <summary>The readings and the sensor start are stamped with the service clock.</summary>
     [Fact]
     public async Task SyncDataAsync_StampsReadingsAndSensorStartWithTheClock()
@@ -271,16 +297,11 @@ public class LibreConnectorServiceTests
             It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json")
-    };
-
     private sealed class FakeLibreAuthTokenProvider(string? tokenToReturn) : LibreLinkAuthTokenProvider(
         new HttpClient(),
         new ConnectorTokenCache(),
         new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(null, null, null),
-        new FakeTenantAccessor(),
+        ResolvedTenant.Accessor(),
         NullLogger<LibreLinkAuthTokenProvider>.Instance,
         Mock.Of<IRetryDelayStrategy>())
     {
@@ -288,37 +309,6 @@ public class LibreConnectorServiceTests
             LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken) =>
             Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 tokenToReturn is null ? (null, DateTime.MinValue, null) : (tokenToReturn, DateTime.UtcNow.AddHours(1), null));
-
-        private sealed class FakeTenantAccessor : ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public TenantContext? Context => null;
-            public void SetTenant(TenantContext context) { }
-        }
-    }
-
-    private sealed class RoutingHandler(
-        string? connectionsJson, string? graphJson, Func<CancellationToken, Task>? onGraph)
-        : HttpMessageHandler
-    {
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var path = request.RequestUri?.PathAndQuery ?? string.Empty;
-
-            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && onGraph != null)
-                await onGraph(cancellationToken);
-
-            if (path.EndsWith("/graph", StringComparison.OrdinalIgnoreCase) && graphJson != null)
-                return Json(graphJson);
-
-            if (path.Contains(LibreLinkUpConstants.ApiPaths.Connections, StringComparison.OrdinalIgnoreCase)
-                && connectionsJson != null)
-                return Json(connectionsJson);
-
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        }
     }
 
     private sealed class ServiceFixture
@@ -333,7 +323,8 @@ public class LibreConnectorServiceTests
             string? connectionsJson = null,
             string? graphJson = null,
             Func<CancellationToken, Task>? onGraph = null,
-            TimeProvider? clock = null)
+            TimeProvider? clock = null,
+            IConnectorPublisher? publisher = null)
         {
             Config = new LibreLinkUpConnectorConfiguration
             {
@@ -341,7 +332,20 @@ public class LibreConnectorServiceTests
                 Password = "test-password",
             };
 
-            var httpClient = new HttpClient(new RoutingHandler(connectionsJson, graphJson, onGraph))
+            var handler = new FakeHttpHandler();
+            if (graphJson != null || onGraph != null)
+                handler.OnAsync("/graph", async (_, cancellationToken) =>
+                {
+                    if (onGraph != null)
+                        await onGraph(cancellationToken);
+                    return graphJson != null
+                        ? FakeHttpHandler.Json(graphJson)
+                        : new HttpResponseMessage(HttpStatusCode.NotFound);
+                });
+            if (connectionsJson != null)
+                handler.On(LibreLinkUpConstants.ApiPaths.Connections, FakeHttpHandler.Json(connectionsJson));
+
+            var httpClient = new HttpClient(handler)
             {
                 BaseAddress = new Uri("https://api-eu.libreview.io")
             };
@@ -358,7 +362,7 @@ public class LibreConnectorServiceTests
                 NullLogger<LibreConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 tokenProvider,
-                Publisher.Object,
+                publisher ?? Publisher.Object,
                 clock);
         }
     }

@@ -9,8 +9,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests;
 
@@ -78,9 +78,7 @@ public class MyFitnessPalConnectorServiceTests
 
         internal ServiceFixture(MfpStubHandler handler)
         {
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenantAccessor = ResolvedTenant.Accessor();
 
             var configService = new Mock<IConnectorConfigurationService>();
             configService
@@ -94,7 +92,7 @@ public class MyFitnessPalConnectorServiceTests
                 http,
                 new ConnectorTokenCache(),
                 resolver,
-                tenantAccessor.Object,
+                tenantAccessor,
                 NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>());
 

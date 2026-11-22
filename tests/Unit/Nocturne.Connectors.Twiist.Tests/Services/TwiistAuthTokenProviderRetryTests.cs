@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Twiist.Tests.Services;
 
@@ -87,9 +87,7 @@ public class TwiistAuthTokenProviderRetryTests
     {
         using var httpClient = new HttpClient(handler);
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -98,7 +96,7 @@ public class TwiistAuthTokenProviderRetryTests
             httpClient,
             new ConnectorTokenCache(),
             new ConnectorServerResolver<TwiistConnectorConfiguration>(null, null, null),
-            tenantAccessor.Object,
+            tenantAccessor,
             logger ?? NullLogger<TwiistAuthTokenProvider>.Instance,
             retryDelay.Object);
 

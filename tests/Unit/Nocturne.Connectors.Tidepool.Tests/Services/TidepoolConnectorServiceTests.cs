@@ -10,10 +10,10 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Tidepool.Tests.Services;
 
@@ -397,9 +397,7 @@ public class TidepoolConnectorServiceTests
                 Password = "secret",
             };
 
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenantAccessor = ResolvedTenant.Accessor();
 
             var serverResolver = new ConnectorServerResolver<TidepoolConnectorConfiguration>(
                 null, null, TidepoolFakeHandler.Host);
@@ -408,7 +406,7 @@ public class TidepoolConnectorServiceTests
                 new HttpClient(handler),
                 new ConnectorTokenCache(clock),
                 serverResolver,
-                tenantAccessor.Object,
+                tenantAccessor,
                 NullLogger<TidepoolAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 clock);

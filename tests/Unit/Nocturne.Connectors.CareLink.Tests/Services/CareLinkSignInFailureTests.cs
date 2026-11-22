@@ -12,6 +12,7 @@ using Nocturne.Connectors.CareLink.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
 
@@ -74,7 +75,7 @@ public class CareLinkSignInFailureTests
             authClient,
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<CareLinkAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             handler);
@@ -104,14 +105,6 @@ public class CareLinkSignInFailureTests
         {
             handler.Dispose();
         }
-    }
-
-    private static ITenantAccessor ResolvedTenant()
-    {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-        return tenant.Object;
     }
 
     /// <summary>Routes the provider's own auth-flow requests through the test handler.</summary>

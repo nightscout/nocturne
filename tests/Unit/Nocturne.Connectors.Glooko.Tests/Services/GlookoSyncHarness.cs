@@ -310,6 +310,10 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
 ///     switches on the V3 path's meal carbs and food entries.
 /// </param>
+/// <param name="withBolusAndGlucose">
+///     Whether each window carries one normal bolus with carbs and one CGM reading, on the V3 graph
+///     and on the V2 endpoints alike.
+/// </param>
 internal sealed class GlookoEndpointHandler(
     Func<int, int>? recordsPerWindow = null,
     IReadOnlyCollection<string>? failingPaths = null,
@@ -317,7 +321,8 @@ internal sealed class GlookoEndpointHandler(
     IReadOnlyCollection<string>? malformedPaths = null,
     bool recoversAfterForbidden = false,
     bool withHistoryMeals = false,
-    ExpiredSessionAnswer? expiredFirstSession = null) : HttpMessageHandler
+    ExpiredSessionAnswer? expiredFirstSession = null,
+    bool withBolusAndGlucose = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<(string Start, string End)> _windows = [];
@@ -409,7 +414,7 @@ internal sealed class GlookoEndpointHandler(
         var window = ResolveWindow(request.RequestUri?.Query ?? string.Empty);
 
         if (Matches(path, GlookoConstants.V3GraphDataPath))
-            return Json(GraphPayload(window));
+            return Json(GraphPayload(window, withBolusAndGlucose));
 
         if (Matches(path, GlookoConstants.SuspendBasalsPath))
             return Json(Records("suspendBasals", window,
@@ -423,10 +428,16 @@ internal sealed class GlookoEndpointHandler(
             return Json("{\"scheduledBasals\":[]}");
 
         if (Matches(path, GlookoConstants.NormalBolusesPath))
-            return Json("{\"normalBoluses\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("normalBoluses", window,
+                    at => $"{{\"timestamp\":\"{Iso(at)}\",\"insulinDelivered\":2.5,\"carbsInput\":30.0}}")
+                : "{\"normalBoluses\":[]}");
 
         if (Matches(path, GlookoConstants.CgmReadingsPath))
-            return Json("{\"readings\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("readings", window,
+                    at => $"{{\"display_time\":\"{Iso(at)}\",\"bg_value\":12000.0}}")
+                : "{\"readings\":[]}");
 
         if (Matches(path, GlookoConstants.FoodsPath))
             return Json(Records("foods", window with { Records = 1 },
@@ -469,12 +480,19 @@ internal sealed class GlookoEndpointHandler(
     /// One suspended basal per record (mapped to both a state span and a temp basal), one reservoir
     /// change (a device event) and one pump alarm (a system event).
     /// </summary>
-    private static string GraphPayload(Window window)
+    private static string GraphPayload(Window window, bool withBolusAndGlucose)
     {
         var series = string.Join(",",
             Property("suspendBasal", window, at => $"{{\"x\":{Unix(at)},\"duration\":1800,\"label\":\"Suspended\"}}"),
             Property("reservoirChange", window, at => $"{{\"x\":{Unix(at)},\"label\":\"Reservoir change\"}}"),
             Property("pumpAlarm", window, at => $"{{\"x\":{Unix(at)},\"alarmType\":\"OCCLUSION\",\"label\":\"Occlusion\"}}"));
+
+        if (withBolusAndGlucose)
+            series += "," + string.Join(",",
+                Property("deliveredBolus", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":2.5,\"label\":\"Normal\",\"data\":{{\"deliveredUnits\":2.5,\"carbsInput\":30.0}}}}"),
+                Property("cgmNormal", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":120.0,\"value\":12000}}"));
 
         return $"{{\"series\":{{{series}}}}}";
     }

@@ -4,8 +4,8 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -224,7 +224,7 @@ public class TokenConnectorServiceTests
             new HttpClient(),
             new ConnectorTokenCache(),
             new ConnectorServerResolver<TestConnectorConfig>(null, null, null),
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<ScriptedTokenProvider>.Instance,
             new RecordingRetryDelayStrategy())
     {
@@ -243,12 +243,5 @@ public class TokenConnectorServiceTests
                 (token, DateTime.UtcNow.AddHours(1), null));
         }
 
-        private static ITenantAccessor ResolvedTenant()
-        {
-            var accessor = new Mock<ITenantAccessor>();
-            accessor.Setup(a => a.IsResolved).Returns(true);
-            accessor.Setup(a => a.TenantId).Returns(Guid.NewGuid());
-            return accessor.Object;
-        }
     }
 }
