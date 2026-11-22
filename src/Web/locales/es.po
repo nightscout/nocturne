@@ -48128,3 +48128,45 @@ msgstr ""
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "<0/> Test alert sent. Make sure that it arrived. <1/>"
 msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Connection kept."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Failed to keep the connection. Try again."
+msgstr ""
+
+#. 0: stopDate; 1: maker
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Stopped on {0}. {1} set it up."
+msgstr ""
+
+#. 0: stopDate
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Stopped on {0}."
+msgstr ""
+
+#. 0: stopDate; 1: maker
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Stops on {0}. {1} set it up."
+msgstr ""
+
+#. 0: stopDate
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Stops on {0}."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "<0/> Keep this connection"
+msgstr ""
+
+#. 0: secretInUseStopsAt
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "This secret is already in use. It stops on {0}."
+msgstr ""
+
+#. 0: savedSecretStopsAt
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Your access ends on {0}. This credential stops then."
+msgstr ""
