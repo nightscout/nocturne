@@ -28,7 +28,9 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::{ActiveAlertSnapshot, SensorContext};
 use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
 use nocturne_alerts_core::enums::WireEnum;
-use nocturne_alerts_core::excursion::{CloseReason, TrackerRuleConfig, Transition, TransitionType};
+use nocturne_alerts_core::excursion::{
+    CloseReason, HOLD_BOUND, TrackerRuleConfig, Transition, TransitionType,
+};
 use nocturne_alerts_core::facts::{ContextFact, RuleConditions, rule_reads};
 use nocturne_alerts_core::model::ConditionKind;
 use nocturne_alerts_core::next_change::RESOLUTION;
@@ -335,7 +337,7 @@ impl<'a> Live<'a> {
         r.due = if r.wall_clock {
             e.next_change_at
         } else {
-            window_end(r, at)
+            sweep_due(r, at)
         };
         let id = r.rule.id;
         self.record(at, id, e.transition, e.auto_resolved);
@@ -351,7 +353,7 @@ impl<'a> Live<'a> {
             .tracker
             .close_elapsed_hysteresis(r.rule.id, config, at);
         if !r.wall_clock {
-            r.due = window_end(r, at);
+            r.due = sweep_due(r, at);
         }
         let id = r.rule.id;
         self.record(at, id, closed, false);
@@ -431,7 +433,10 @@ impl<'a> Live<'a> {
                 let swept = sweeps.contains(&at);
                 let wrote = writes.contains(&at);
                 self.instant(at, |r, _| {
-                    (swept, (swept && r.wall_clock) || (wrote && r.reads_insulin))
+                    (
+                        swept,
+                        (swept && (r.wall_clock || hold_due(r, at))) || (wrote && r.reads_insulin),
+                    )
                 });
             }
         }
@@ -440,7 +445,8 @@ impl<'a> Live<'a> {
     }
 
     /// Steps each rule due before `limit`, instant by instant: a due rule's
-    /// window closes, then a due wall-clock rule is evaluated.
+    /// window closes, then a due wall-clock rule, or one whose hold reached
+    /// its bound, is evaluated.
     fn step_until(&mut self, limit: DateTime<Utc>) {
         while let Some(at) = self
             .rules
@@ -451,18 +457,41 @@ impl<'a> Live<'a> {
         {
             self.instant(at, |r, _| {
                 let due = r.due.is_some_and(|d| d <= at);
-                (due, due && r.wall_clock)
+                (due, due && (r.wall_clock || hold_due(r, at)))
             });
         }
     }
 }
 
-/// When the sweep next has to close a rule's hysteresis window: its end, on a
-/// sweep after `now`.
-fn window_end(r: &LiveRule<'_>, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
-    let started = r.state.tracker.state(r.rule.id)?.hysteresis_started_at?;
-    let end = started + TimeDelta::minutes(i64::from(r.rule.hysteresis_minutes));
-    Some(end.max(now + RESOLUTION))
+/// When the sweep next has to act on a rule it does not evaluate for the
+/// clock: its hysteresis window's end, or where its hold reaches the bound,
+/// on a sweep after `now`.
+fn sweep_due(r: &LiveRule<'_>, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    let state = r.state.tracker.state(r.rule.id)?;
+    let window_end = state
+        .hysteresis_started_at
+        .map(|started| started + TimeDelta::minutes(i64::from(r.rule.hysteresis_minutes)));
+    let bound = state
+        .hold_pending()
+        .then_some(state.held_since)
+        .flatten()
+        .map(|since| since + HOLD_BOUND);
+    [window_end, bound]
+        .into_iter()
+        .flatten()
+        .min()
+        .map(|end| end.max(now + RESOLUTION))
+}
+
+/// Whether the backend's sweep evaluates the rule for its hold: held, with
+/// the bound reached and not yet reported.
+fn hold_due(r: &LiveRule<'_>, at: DateTime<Utc>) -> bool {
+    r.state
+        .tracker
+        .state(r.rule.id)
+        .filter(|s| s.hold_pending())
+        .and_then(|s| s.held_since)
+        .is_some_and(|since| since + HOLD_BOUND <= at)
 }
 
 fn live(case: &Case, sweep: Sweep) -> Vec<Event> {

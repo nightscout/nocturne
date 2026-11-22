@@ -15,7 +15,7 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
     public TrackerDecision Process(
         Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
         DateTime now) =>
-        errors.Track("tracker_process", () => ToDecision(RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
+        errors.Track("tracker_process", () => ToDecision(state, RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
@@ -26,7 +26,7 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
 
     public TrackerDecision ForceClose(
         Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now) =>
-        errors.Track("tracker_force_close", () => ToDecision(RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
+        errors.Track("tracker_force_close", () => ToDecision(state, RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
@@ -36,6 +36,7 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
     public TrackerDecision CloseElapsedHysteresis(
         Guid ruleId, AlertTrackerState? state, TrackerConfig config, DateTime now) =>
         errors.Track("tracker_close_elapsed_hysteresis", () => ToDecision(
+            state,
             RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
             {
                 Tracker = RustEnvelopeMapper.BuildTracker(state),
@@ -48,8 +49,9 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursio
         HysteresisMinutes = config.HysteresisMinutes,
     };
 
-    private static TrackerDecision ToDecision(RustTrackerResponse response) => new(
+    /// <summary>A decision made without an evaluation keeps the facts a hold that goes on waits for.</summary>
+    private static TrackerDecision ToDecision(AlertTrackerState? prior, RustTrackerResponse response) => new(
         RustEnvelopeMapper.TransitionFromWire(response.Transition!.Type),
         response.Transition.CloseReason is { } reason ? RustEnvelopeMapper.CloseReasonFromWire(reason) : null,
-        RustEnvelopeMapper.PostStateFromWire(response.Tracker!));
+        RustEnvelopeMapper.PostStateFromWire(response.Tracker!, prior?.HeldFacts));
 }

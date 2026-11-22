@@ -118,3 +118,10 @@ pub(crate) fn tzdb_version() -> String {
 pub(crate) fn clock_tolerance_ms() -> i64 {
     nocturne_alerts_core::clock_anomaly::CLOCK_TOLERANCE.num_milliseconds()
 }
+
+/// `nocturne_alerts_hold_bound_ms`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn hold_bound_ms() -> i64 {
+    nocturne_alerts_core::excursion::HOLD_BOUND.num_milliseconds()
+}

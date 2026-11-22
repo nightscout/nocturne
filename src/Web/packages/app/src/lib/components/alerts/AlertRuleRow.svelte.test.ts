@@ -97,3 +97,43 @@ describe("AlertRuleRow channel state", () => {
     expect(page.getByText("Needs review").elements()).toHaveLength(0);
   });
 });
+
+describe("AlertRuleRow hold", () => {
+  it("states that the rule waits, since when, and each fact it waits for", async () => {
+    await page.viewport(1280, 900);
+    render(AlertRuleRow, {
+      rule: {
+        ...rule([]),
+        hold: {
+          since: "2026-01-05T12:05:00Z",
+          facts: [
+            { fact: "glucose", reason: "stale" },
+            { fact: "warp_core", reason: "melted" },
+          ],
+        },
+      } as AlertRuleResponse,
+      canManage: true,
+      isToggling: false,
+      isDeleting: false,
+      isTesting: false,
+      onToggleEnabled: () => {},
+      onEdit: () => {},
+      onDelete: () => {},
+      onTestFire: () => {},
+    });
+
+    await expect.element(page.getByText("Waiting", { exact: true })).toBeVisible();
+    await expect.element(page.getByText(/^Waiting for data since /)).toBeVisible();
+    await expect.element(page.getByText("Glucose readings: too old")).toBeVisible();
+    await expect.element(page.getByText("warp_core: melted")).toBeVisible();
+  });
+
+  it("states no hold for a rule that is not held", async () => {
+    await page.viewport(1280, 900);
+    show([]);
+
+    await expect.element(page.getByRole("button", { name: "Low", exact: true })).toBeVisible();
+    expect(page.getByTestId("rule-hold").elements()).toHaveLength(0);
+    expect(page.getByText("Waiting", { exact: true }).elements()).toHaveLength(0);
+  });
+});

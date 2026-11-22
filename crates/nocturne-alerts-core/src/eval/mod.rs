@@ -17,10 +17,12 @@ use uuid::Uuid;
 use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
 use crate::enums::CompositeOp;
+use crate::facts::ContextFact;
 use crate::model::{Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
+use crate::unknown::{UnknownFacts, UnknownReason};
 use elapsed::Elapsed;
 
 pub use glucose::{DEFAULT_GLUCOSE_FRESHNESS, MAX_GLUCOSE_FRESHNESS_MINUTES};
@@ -103,13 +105,14 @@ impl<'a> Env<'a> {
     }
 }
 
-/// A node's truth and, when it is true, the instant it has held since where
-/// the node knows one (engine-semantics.md §3): where a `sustained`
-/// ancestor's run begins.
+/// A node's truth; when it is true, the instant it has held since where the
+/// node knows one (engine-semantics.md §3), where a `sustained` ancestor's run
+/// begins; when it is unknown, the facts whose unknown reached it (§2.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Held {
     pub(crate) truth: Truth,
     pub(crate) since: Option<DateTime<Utc>>,
+    pub(crate) unknown: UnknownFacts,
 }
 
 impl Held {
@@ -118,14 +121,37 @@ impl Held {
         Held {
             truth,
             since: since.filter(|_| truth.is_true()),
+            unknown: UnknownFacts::default(),
         }
+    }
+
+    /// `unknown` is kept only on an unknown node.
+    #[must_use]
+    pub(crate) fn because(self, unknown: UnknownFacts) -> Self {
+        Held {
+            unknown: if self.truth.is_unknown() {
+                unknown
+            } else {
+                UnknownFacts::default()
+            },
+            ..self
+        }
+    }
+
+    pub(crate) fn unknown(fact: ContextFact, reason: UnknownReason) -> Self {
+        Held::from(Truth::Unknown).because(UnknownFacts::of(fact, reason))
     }
 }
 
 impl From<Truth> for Held {
     fn from(truth: Truth) -> Self {
-        Held { truth, since: None }
+        Held::since(truth, None)
     }
+}
+
+/// A truth that is unknown only by `fact` being `reason`.
+pub(crate) fn unknown_by(truth: Truth, fact: ContextFact, reason: UnknownReason) -> Held {
+    Held::from(truth).because(UnknownFacts::of(fact, reason))
 }
 
 /// Evaluates a condition node at `path`.
@@ -138,29 +164,36 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> Truth {
     eval_payload_held(payload, path, env).truth
 }
 
+/// Evaluates a payload as the node at `path`, with the facts that leave it
+/// unknown.
+pub fn eval_payload_unknown(payload: &Payload, path: &str, env: &mut Env) -> (Truth, UnknownFacts) {
+    let held = eval_payload_held(payload, path, env);
+    (held.truth, held.unknown)
+}
+
 pub(crate) fn eval_held(node: &Node, path: &str, env: &mut Env) -> Held {
     eval_payload_held(node.payload(), path, env)
 }
 
 fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
     match payload {
-        Payload::Threshold(p) => glucose::reading(glucose::threshold(p, env), env.ctx),
-        Payload::RateOfChange(p) => glucose::reading(glucose::rate_of_change(p, env), env.ctx),
+        Payload::Threshold(p) => glucose::threshold(p, env),
+        Payload::RateOfChange(p) => glucose::rate_of_change(p, env),
         Payload::Composite(p) => composite(p, path, env),
         Payload::Not(p) => not(p, path, env),
         Payload::Sustained(p) => eval_sustained(p, path, env),
-        Payload::Predicted(p) => glucose::reading(glucose::predicted(p, env), env.ctx),
-        Payload::Trend(p) => glucose::reading(glucose::trend(p, env), env.ctx),
+        Payload::Predicted(p) => glucose::predicted(p, env),
+        Payload::Trend(p) => glucose::trend(p, env),
         Payload::TimeOfDay(p) => clock::time_of_day(p, env).into(),
-        Payload::Iob(p) => insulin::iob(p, env).into(),
-        Payload::Cob(p) => insulin::cob(p, env).into(),
-        Payload::Reservoir(p) => insulin::reservoir(p, env).into(),
-        Payload::PumpBattery(p) => device::pump_battery(p, env).into(),
+        Payload::Iob(p) => insulin::iob(p, env),
+        Payload::Cob(p) => insulin::cob(p, env),
+        Payload::Reservoir(p) => insulin::reservoir(p, env),
+        Payload::PumpBattery(p) => device::pump_battery(p, env),
         Payload::TempBasal(p) => insulin::temp_basal(p, env),
-        Payload::UploaderBattery(p) => device::uploader_battery(p, env).into(),
-        Payload::TransmitterBattery(p) => device::transmitter_battery(p, env).into(),
-        Payload::SensitivityRatio(p) => device::sensitivity_ratio(p, env).into(),
-        Payload::GlucoseBucket(p) => glucose::reading(glucose::glucose_bucket(p, env), env.ctx),
+        Payload::UploaderBattery(p) => device::uploader_battery(p, env),
+        Payload::TransmitterBattery(p) => device::transmitter_battery(p, env),
+        Payload::SensitivityRatio(p) => device::sensitivity_ratio(p, env),
+        Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
         Payload::DayOfWeek(p) => clock::day_of_week(p, env).into(),
         Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env).into(),
         Payload::SignalLoss(_)
@@ -187,7 +220,10 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
                 match payload {
                     // Another rule's trigger and acknowledgement are its
                     // excursion's, not a run of the facts this rule reads.
-                    Payload::AlertState(_) => held.truth.into(),
+                    Payload::AlertState(_) => Held {
+                        since: None,
+                        ..held
+                    },
                     _ => held,
                 }
             },
@@ -200,7 +236,8 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
 /// sits. They combine in Kleene's logic. A true `and` has held since the
 /// latest of its children's instants when every child knows one; a true `or`
 /// since the earliest instant a true child knows, since that child alone has
-/// held it true from then.
+/// held it true from then. An unknown result is unknown by every unknown
+/// child: none is false (`and`) or true (`or`), so each reaches it.
 fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> Held {
     let results: Vec<Held> = p
         .conditions
@@ -209,7 +246,7 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> H
         .map(|(i, child)| eval_held(child, &node_child_path(path, i, child), env))
         .collect();
     let truths = results.iter().map(|h| h.truth);
-    match p.operator {
+    let held = match p.operator {
         CompositeOp::And => Held::since(
             Truth::all(truths),
             results
@@ -222,11 +259,18 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> H
             Truth::any(truths),
             results.iter().filter_map(|h| h.since).min(),
         ),
-    }
+    };
+    held.because(
+        results
+            .iter()
+            .fold(UnknownFacts::default(), |all, h| all.union(h.unknown)),
+    )
 }
 
-/// The child inverted; unknown stays unknown. The child's instant is when it
-/// began to hold, not when it stopped, so `not` knows none.
+/// The child inverted; unknown stays unknown, by the child's facts. The
+/// child's instant is when it began to hold, not when it stopped, so `not`
+/// knows none.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> Held {
-    (!eval_held(&p.child, &node_child_path(path, 0, &p.child), env).truth).into()
+    let child = eval_held(&p.child, &node_child_path(path, 0, &p.child), env);
+    Held::from(!child.truth).because(child.unknown)
 }

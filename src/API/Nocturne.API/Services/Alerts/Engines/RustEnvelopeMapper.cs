@@ -84,6 +84,7 @@ internal static class RustEnvelopeMapper
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
                 HysteresisStartedAt = Utc(state.HysteresisStartedAt),
                 AwaitingRearm = state.AwaitingRearm,
+                HeldSince = Utc(state.HeldSince),
             };
 
     public static JsonElement ParseJson(string json)
@@ -253,6 +254,7 @@ internal static class RustEnvelopeMapper
         RustCloseReason.Auto => ExcursionCloseReason.AutoResolve,
         RustCloseReason.Manual => ExcursionCloseReason.Manual,
         RustCloseReason.RuleDisabled => ExcursionCloseReason.RuleDisabled,
+        RustCloseReason.HoldBound => ExcursionCloseReason.HoldBound,
         _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
@@ -262,14 +264,15 @@ internal static class RustEnvelopeMapper
         ExcursionCloseReason.AutoResolve => RustCloseReason.Auto,
         ExcursionCloseReason.Manual => RustCloseReason.Manual,
         ExcursionCloseReason.RuleDisabled => RustCloseReason.RuleDisabled,
+        ExcursionCloseReason.HoldBound => RustCloseReason.HoldBound,
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
     };
 
     /// <summary>
     /// The engine's post-state as a <see cref="TrackerPostState"/>, or <see langword="null"/> when
-    /// it holds no per-rule state.
+    /// it holds no per-rule state. <paramref name="heldFacts"/> are kept only while it is held.
     /// </summary>
-    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker) =>
+    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker, string? heldFacts) =>
         tracker.State is null
             ? null
             : new TrackerPostState(
@@ -277,7 +280,9 @@ internal static class RustEnvelopeMapper
                 tracker.ActiveExcursionOrdinal is not null,
                 tracker.UpdatedAt!.Value,
                 tracker.HysteresisStartedAt,
-                tracker.AwaitingRearm);
+                tracker.AwaitingRearm,
+                Utc(tracker.HeldSince),
+                tracker.HeldSince is null ? null : heldFacts);
 
     private static DateTime? Utc(DateTime? value) =>
         value is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;

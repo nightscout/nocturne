@@ -71,6 +71,9 @@ pub enum CloseReason {
     AutoResolve,
     Manual,
     RuleDisabled,
+    /// A hysteresis that the hold bound began closed (engine-semantics.md
+    /// §6.4): the root had been unknown for [`HOLD_BOUND`].
+    HoldBound,
 }
 
 impl CloseReason {
@@ -81,6 +84,7 @@ impl CloseReason {
             CloseReason::AutoResolve => "auto",
             CloseReason::Manual => "manual",
             CloseReason::RuleDisabled => "rule-disabled",
+            CloseReason::HoldBound => "hold-bound",
         }
     }
 
@@ -91,10 +95,15 @@ impl CloseReason {
             "auto" => Some(CloseReason::AutoResolve),
             "manual" => Some(CloseReason::Manual),
             "rule-disabled" => Some(CloseReason::RuleDisabled),
+            "hold-bound" => Some(CloseReason::HoldBound),
             _ => None,
         }
     }
 }
+
+/// How long a rule may hold (engine-semantics.md §6.4) before its hold is
+/// reported, and an excursion it holds open reads its root as not met.
+pub const HOLD_BOUND: TimeDelta = TimeDelta::hours(24);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
@@ -134,9 +143,95 @@ pub struct TrackerState {
     /// held: the rule opens nothing until an evaluation finds its condition or
     /// its auto-resolve tree false (engine-semantics.md §6.3).
     pub awaiting_rearm: bool,
+    /// When the current hold began (engine-semantics.md §6.4): the first of
+    /// an unbroken run of held evaluations. Cleared by any evaluation whose
+    /// root is known or read as known.
+    pub held_since: Option<DateTime<Utc>>,
 }
 
 impl TrackerState {
+    /// What a rule never evaluated before holds after its first held
+    /// evaluation, at `now`.
+    fn held_from(now: DateTime<Utc>) -> Self {
+        TrackerState {
+            held_since: Some(now),
+            ..Self::fresh(now)
+        }
+    }
+
+    fn fresh(now: DateTime<Utc>) -> Self {
+        TrackerState {
+            state: TrackerStateKind::Idle,
+            active_excursion: None,
+            last_excursion: 0,
+            updated_at: now,
+            hysteresis_started_at: None,
+            awaiting_rearm: false,
+            held_since: None,
+        }
+    }
+
+    /// Whether the state records nothing but a hold, so every evaluation of
+    /// the rule may have been held: idle, no excursion, not awaiting re-arm.
+    #[must_use]
+    pub fn holds_only_a_hold(&self) -> bool {
+        self.held_since.is_some()
+            && self.state == TrackerStateKind::Idle
+            && self.active_excursion.is_none()
+            && self.last_excursion == 0
+            && !self.awaiting_rearm
+    }
+
+    /// The hold's bound as an elapsed time since it began; `None` when the
+    /// rule is not held.
+    pub(crate) fn hold_bound(&self) -> Option<Elapsed> {
+        self.held_since.map(|since| Elapsed {
+            anchor: since,
+            source: Some(ClockAnchor::HeldSince),
+            measure: Measure::AtLeast(HOLD_BOUND),
+        })
+    }
+
+    /// A stored hold this engine cannot have written (engine-semantics.md
+    /// §6.4): while held, `updated_at` stays at or before `held_since` until
+    /// the evaluation that reaches the bound sets it past the bound, and from
+    /// then on the state is never active, since only a known root, which ends
+    /// the hold, makes it active again. A later `updated_at` before the bound,
+    /// or an active state past it, was written by an engine that does not
+    /// record holds, after the hold began, so the hold is not continuous.
+    fn hold_is_stale(&self) -> bool {
+        let Some(since) = self.held_since else {
+            return false;
+        };
+        let Some(bound) = since.checked_add_signed(HOLD_BOUND) else {
+            return false;
+        };
+        (self.updated_at > since && self.updated_at < bound)
+            || (self.updated_at >= bound && self.state == TrackerStateKind::Active)
+    }
+
+    /// Held, and the evaluation that reaches the bound is still to come.
+    #[must_use]
+    pub fn hold_pending(&self) -> bool {
+        self.held_since.is_some() && !self.hold_bound_reported()
+    }
+
+    /// Where a pending hold reaches its bound.
+    #[must_use]
+    pub fn hold_bound_at(&self) -> Option<DateTime<Utc>> {
+        self.held_since
+            .filter(|_| self.hold_pending())
+            .and_then(|since| since.checked_add_signed(HOLD_BOUND))
+    }
+
+    /// Whether the evaluation that reached the hold's bound was made: it sets
+    /// `updated_at`, which no held evaluation before the bound moves.
+    pub(crate) fn hold_bound_reported(&self) -> bool {
+        self.held_since
+            .and_then(|since| since.checked_add_signed(HOLD_BOUND))
+            .is_some_and(|bound| self.updated_at >= bound)
+    }
+
     /// What a stored tracker whose state string names no state is read as
     /// (engine-semantics.md §6): active while it holds an excursion, so that
     /// excursion goes on to close, otherwise idle, so the rule can fire.
@@ -158,8 +253,26 @@ impl TrackerState {
             updated_at,
             hysteresis_started_at: None,
             awaiting_rearm: false,
+            held_since: None,
         }
     }
+
+    /// `updated_at = now`, except while held: then only the evaluation that
+    /// reaches the bound moves it ([`TrackerState::hold_bound_reported`]).
+    fn touch(&mut self, now: DateTime<Utc>) {
+        if self.held_since.is_none() {
+            self.updated_at = now;
+        }
+    }
+}
+
+/// What a held evaluation did (engine-semantics.md §6.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub struct HeldOutcome {
+    pub transition: Transition,
+    /// This evaluation reached the hold's bound: once per hold.
+    pub held_too_long: bool,
 }
 
 /// Rule inputs consumed by the tracker.
@@ -223,6 +336,7 @@ impl ExcursionTracker {
     /// `now` whatever the transition. `auto_resolve_met` is the rule's
     /// auto-resolve tree this evaluation, read only while the rule awaits
     /// re-arm (§6.3); a rule without one passes false.
+    /// The root is known, or read as known: the hold, if any, is over.
     pub fn process_evaluation(
         &mut self,
         rule_id: Uuid,
@@ -231,26 +345,57 @@ impl ExcursionTracker {
         auto_resolve_met: bool,
         now: DateTime<Utc>,
     ) -> Transition {
-        let mut state = *self.states.entry(rule_id).or_insert(TrackerState {
-            state: TrackerStateKind::Idle,
-            active_excursion: None,
-            last_excursion: 0,
-            updated_at: now,
-            hysteresis_started_at: None,
-            awaiting_rearm: false,
-        });
+        let state = self
+            .states
+            .entry(rule_id)
+            .or_insert_with(|| TrackerState::fresh(now));
+        state.held_since = None;
+        advance(state, config, condition_met, auto_resolve_met, now)
+    }
 
-        let transition = match state.state {
-            TrackerStateKind::Idle => handle_idle(&mut state, condition_met, auto_resolve_met),
-            TrackerStateKind::Active => handle_active(&mut state, condition_met, now),
-            TrackerStateKind::Hysteresis => {
-                handle_hysteresis(&mut state, config, condition_met, now)
+    /// An evaluation the rule holds (§6.4). The first of a hold records its
+    /// start, creating the rule's state if it has none. Before the bound only
+    /// an elapsed hysteresis window closes. The evaluation that reaches it is
+    /// reported, once per hold, and from it an open excursion reads its root as
+    /// not met, so it goes through hysteresis and closes; a rule with none is
+    /// left as it is. The bound's start beyond the tolerance ahead of `now`
+    /// is not reached on that evaluation (§5.4).
+    pub fn process_held(
+        &mut self,
+        rule_id: Uuid,
+        config: TrackerRuleConfig,
+        now: DateTime<Utc>,
+    ) -> HeldOutcome {
+        let state = self
+            .states
+            .entry(rule_id)
+            .or_insert_with(|| TrackerState::held_from(now));
+        if state.hold_is_stale() {
+            state.held_since = None;
+        }
+        state.held_since.get_or_insert(now);
+        let reached = state
+            .hold_bound()
+            .is_some_and(|bound| bound.truth(now).is_true());
+        if !reached {
+            return HeldOutcome {
+                transition: self.close_elapsed_hysteresis(rule_id, config, now),
+                held_too_long: false,
+            };
+        }
+        let held_too_long = !state.hold_bound_reported();
+        let transition = if state.active_excursion.is_some() {
+            advance(state, config, false, false, now)
+        } else {
+            if held_too_long {
+                state.updated_at = now;
             }
+            Transition::none()
         };
-
-        state.updated_at = now;
-        self.states.insert(rule_id, state);
-        transition
+        HeldOutcome {
+            transition,
+            held_too_long,
+        }
     }
 
     /// Closes the rule's excursion when it is in hysteresis and the window has
@@ -271,7 +416,7 @@ impl ExcursionTracker {
         {
             return Transition::none();
         }
-        state.updated_at = now;
+        state.touch(now);
         close_from_hysteresis(state)
     }
 
@@ -295,13 +440,31 @@ impl ExcursionTracker {
         state.state = TrackerStateKind::Idle;
         state.active_excursion = None;
         state.hysteresis_started_at = None;
-        state.updated_at = now;
+        state.touch(now);
         Transition {
             kind: TransitionType::ExcursionClosed,
             excursion: Some(excursion),
             close_reason: Some(reason),
         }
     }
+}
+
+/// One evaluation's step of the state machine; `updated_at` becomes `now`
+/// whatever the transition.
+fn advance(
+    state: &mut TrackerState,
+    config: TrackerRuleConfig,
+    condition_met: bool,
+    auto_resolve_met: bool,
+    now: DateTime<Utc>,
+) -> Transition {
+    let transition = match state.state {
+        TrackerStateKind::Idle => handle_idle(state, condition_met, auto_resolve_met),
+        TrackerStateKind::Active => handle_active(state, condition_met, now),
+        TrackerStateKind::Hysteresis => handle_hysteresis(state, config, condition_met, now),
+    };
+    state.updated_at = now;
+    transition
 }
 
 fn handle_idle(
@@ -372,8 +535,21 @@ fn handle_hysteresis(
     Transition::none()
 }
 
+/// A hysteresis that began once the hold had lasted its bound was begun by
+/// the bound, since a known root ends the hold.
 fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     let excursion = state.active_excursion;
+    let bound_began = state
+        .held_since
+        .filter(|_| !state.hold_is_stale())
+        .and_then(|held| held.checked_add_signed(HOLD_BOUND))
+        .zip(state.hysteresis_started_at)
+        .is_some_and(|(bound, started)| started >= bound);
+    let reason = if bound_began {
+        CloseReason::HoldBound
+    } else {
+        CloseReason::Hysteresis
+    };
     state.state = TrackerStateKind::Idle;
     state.active_excursion = None;
     state.hysteresis_started_at = None;
@@ -381,7 +557,7 @@ fn close_from_hysteresis(state: &mut TrackerState) -> Transition {
     Transition {
         kind: TransitionType::ExcursionClosed,
         excursion,
-        close_reason: Some(CloseReason::Hysteresis),
+        close_reason: Some(reason),
     }
 }
 

@@ -30,5 +30,6 @@ pub mod paths;
 pub mod replay;
 pub mod sustained;
 pub mod truth;
+pub mod unknown;
 pub mod validate;
 pub mod wall_clock;

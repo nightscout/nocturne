@@ -3,6 +3,8 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Check from "@lucide/svelte/icons/check";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
+  import { heldOpenText, holdFactLines, holdSinceText } from "./holdText.svelte";
   import { formatDateTimeCompact, relativeAge, time, toDate } from "#lib/utils/formatting.js";
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
@@ -63,6 +65,17 @@
               <span class="ml-2 text-xs text-muted-foreground">
                 {seenBy(alert.receipts)}
               </span>
+            {/if}
+            {#if alert.hold}
+              <div class="mt-1 flex items-start gap-1 text-xs text-muted-foreground" data-testid="alert-hold">
+                <Hourglass class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                <div>
+                  <p>{holdSinceText(alert.hold)} {heldOpenText()}</p>
+                  {#each holdFactLines(alert.hold) as line (line)}
+                    <p>{line}</p>
+                  {/each}
+                </div>
+              </div>
             {/if}
           </div>
         </div>

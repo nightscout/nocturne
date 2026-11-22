@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, WireRule};
-use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind};
+use nocturne_alerts_core::excursion::{HOLD_BOUND, TrackerState, TrackerStateKind};
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::sustained::TimerState;
 
@@ -95,6 +95,7 @@ fn tracker(kind: TrackerStateKind, hysteresis_started_at: Option<DateTime<Utc>>)
         updated_at: now() - min(1),
         hysteresis_started_at,
         awaiting_rearm: false,
+        held_since: None,
     }
 }
 
@@ -132,6 +133,14 @@ impl Case {
     fn next_change(&self) -> Option<DateTime<Utc>> {
         self.evaluate(&mut self.seed.state(), self.now)
             .next_change_at
+    }
+
+    /// No node contributes: a known root has no next change, and a held one
+    /// only its hold's bound, which this evaluation began.
+    fn assert_contributes_nothing(&self, label: &str) {
+        let e = self.evaluate(&mut self.seed.state(), self.now);
+        let bound = e.root.is_unknown().then(|| self.now + HOLD_BOUND);
+        assert_eq!(e.next_change_at, bound, "{label}");
     }
 }
 
@@ -196,7 +205,7 @@ fn signal_loss_already_lost_or_cold_has_none() {
         rule("signal_loss", json!({ "timeout_minutes": 15 })),
         ctx(json!({})),
     );
-    assert_eq!(cold.next_change(), None);
+    cold.assert_contributes_nothing("cold");
 }
 
 #[test]
@@ -396,8 +405,7 @@ fn a_guard_that_holds_the_leaf_constant_contributes_nothing() {
         ),
     ];
     for (kind, params, context) in cases {
-        let case = Case::new(rule(kind, params), ctx(context));
-        assert_eq!(case.next_change(), None, "{kind}");
+        Case::new(rule(kind, params), ctx(context)).assert_contributes_nothing(kind);
     }
 }
 
@@ -709,9 +717,9 @@ fn a_reading_exactly_the_bound_old_changes_at_the_next_tick() {
 #[test]
 fn a_stale_or_absent_glucose_fact_contributes_nothing() {
     for (kind, params, fact) in reading_driven_leaves() {
-        let stale = Case::new(rule(kind, params.clone()), with_reading(fact, min(12)));
-        assert_eq!(stale.next_change(), None, "{kind} stale");
-        let absent = Case::new(rule(kind, params), with_reading(json!({}), min(5)));
-        assert_eq!(absent.next_change(), None, "{kind} absent");
+        Case::new(rule(kind, params.clone()), with_reading(fact, min(12)))
+            .assert_contributes_nothing(&format!("{kind} stale"));
+        Case::new(rule(kind, params), with_reading(json!({}), min(5)))
+            .assert_contributes_nothing(&format!("{kind} absent"));
     }
 }

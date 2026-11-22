@@ -204,7 +204,7 @@ public interface IAlertRepository
     /// opening owes no work, and it has a delivery row or Do Not Disturb suppressed it); null when
     /// the rule is not enabled, or its stored condition is no longer the one in <paramref name="rule"/>.
     /// </returns>
-    Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
+    Task<NoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct);
 
     /// <summary>
@@ -212,7 +212,7 @@ public interface IAlertRepository
     /// severity no member has: null when the rule is not enabled, or any of its stored columns
     /// named in <paramref name="rule"/> has changed.
     /// </summary>
-    Task<UnevaluableNoticeRecorded?> RecordUnreadableRuleNoticeAsync(
+    Task<NoticeRecorded?> RecordUnreadableRuleNoticeAsync(
         UnreadableAlertRule rule, string conditionVersion, DateTime at, CancellationToken ct);
 
     /// <summary>
@@ -221,8 +221,33 @@ public interface IAlertRepository
     /// </summary>
     Task<IReadOnlyList<StandingUnevaluableNotice>> GetStandingUnevaluableNoticesAsync(Guid? ruleId, CancellationToken ct);
 
-    /// <summary>Ends a notice that a rule cannot be evaluated at <paramref name="at"/>, as it is resolved.</summary>
-    Task EndUnevaluableNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
+    /// <summary>Ends a standing notice of either kind at <paramref name="at"/>, as it is resolved.</summary>
+    Task EndNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct);
+
+    /// <summary>
+    /// Records a notice that <paramref name="ruleId"/>'s hold that began at
+    /// <paramref name="heldSince"/> reached the engine's bound, unless one already stands for that
+    /// hold: an excursion row carrying the instant, with no end until it is resolved, and one
+    /// instance. Serialised per rule across processes with the notice that a rule cannot be
+    /// evaluated, so one hold records one notice however many callers find it at once.
+    /// </summary>
+    /// <returns>
+    /// The notice standing for the hold, new or not, and whether it was dispatched; null when the
+    /// rule is not enabled or its tracker state no longer holds since <paramref name="heldSince"/>.
+    /// </returns>
+    Task<NoticeRecorded?> RecordHeldNoticeAsync(Guid ruleId, DateTime heldSince, DateTime at, CancellationToken ct);
+
+    /// <summary>
+    /// The notices that a rule's hold reached the bound that still stand, of
+    /// <paramref name="ruleId"/>, or of every rule of the tenant when null.
+    /// </summary>
+    Task<IReadOnlyList<StandingHeldNotice>> GetStandingHeldNoticesAsync(Guid? ruleId, CancellationToken ct);
+
+    /// <summary>The tenant's rules whose stored tracker state records a hold.</summary>
+    Task<IReadOnlyList<HeldRuleState>> GetHeldRuleStatesAsync(CancellationToken ct);
+
+    /// <summary>Whether an excursion of the rule's condition was open at <paramref name="at"/>.</summary>
+    Task<bool> HadExcursionOpenAtAsync(Guid ruleId, DateTime at, CancellationToken ct);
 
     /// <summary>
     /// The Home Assistant instances (OAuth client ids) that an excursion's instances were

@@ -582,9 +582,12 @@ public class AlertRulesController : ControllerBase
         var states = await AlertChannelStates.LoadAsync(
             allRules.Concat(rules).SelectMany(r => r.Channels), tenantId, now, _members, _contextFactory, ct);
         var covering = LowCoverage.CoveringRuleIds(allRules.Select(r => (r, issues[r.Rule.Id])), states);
+        var holds = (await _alerts.GetHeldRuleStatesAsync(ct)).ToDictionary(h => h.AlertRuleId, AlertHold.Of);
         var responses = rules
             .Select(r => MapToResponse(r, issues.TryGetValue(r.Rule.Id, out var found) ? found : StoredIssues(r.Rule), covering))
             .ToList();
+        foreach (var response in responses.Where(r => r.IsEnabled))
+            response.Hold = holds.GetValueOrDefault(response.Id);
         if (HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
         {
             return responses;
@@ -879,6 +882,9 @@ public class AlertRuleResponse
     /// <summary>True when this is the only rule that covers low glucose, so turning it off or
     /// deleting it leaves the tenant with no low alert.</summary>
     public bool IsLastLowCover { get; set; }
+    /// <summary>Set while the rule is on and waiting for missing data, so it can neither fire nor
+    /// clear: since when, and the facts it waits for (docs/alerts/engine-semantics.md §6.4).</summary>
+    public AlertHold? Hold { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
     /// <summary>What an unknown condition means to the rule's alert: <c>hold</c> keeps it as it

@@ -59,6 +59,30 @@ internal static class AlertPayloads
         Severity = severity,
     };
 
+    /// <summary>
+    /// The notice that a rule's hold reached the engine's bound: as <see cref="Unevaluable"/>, with
+    /// the facts it waits for, of kind <see cref="AlertPayloadKind.HeldClosed"/> when an alert was
+    /// open at the bound and so is closed by it.
+    /// </summary>
+    public static AlertPayload Held(
+        string ruleName,
+        AlertConditionType conditionType,
+        AlertRuleSeverity severity,
+        bool closedAlert,
+        IReadOnlyList<HeldFact> facts,
+        Guid tenantId,
+        Guid excursionId,
+        Guid instanceId,
+        TenantAlertContext? tenant,
+        int activeExcursionCount,
+        DateTime now) =>
+        Unevaluable(ruleName, conditionType, severity, tenantId, excursionId, instanceId, tenant, activeExcursionCount, now)
+            with
+            {
+                Kind = closedAlert ? AlertPayloadKind.HeldClosed : AlertPayloadKind.Held,
+                HeldFacts = facts,
+            };
+
     private static string SubjectNameOf(TenantAlertContext? tenant) => tenant?.AlertSubjectName ?? "Unknown";
 
     public static AlertPayload Test(

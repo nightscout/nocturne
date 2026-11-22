@@ -97,6 +97,47 @@ describe("AlertCard for a rule that cannot run", () => {
   });
 });
 
+describe("AlertCard for a rule held for 24 hours", () => {
+  const held = {
+    ...payload,
+    kind: "held",
+    glucoseValue: null,
+    trend: null,
+    trendRate: null,
+    severity: "warning",
+    heldFacts: [
+      { fact: "glucose", reason: "stale" },
+      { fact: "pump", reason: "absent" },
+    ],
+  } as AlertPayload;
+
+  it("names the rule, says it waits for data, lists each fact, and offers no action", () => {
+    const card = AlertCard({ payload: held });
+
+    expect(cardTitle(card)).toBe("Warning: Urgent low");
+    expect(cardTexts(card)).toEqual([
+      "This rule has waited 24 hours for data, so it cannot send alerts until the data comes back.",
+    ]);
+    expect(cardFields(card)).toEqual(["Glucose readings: Too old", "Pump data: Missing"]);
+    expect(cardButtons(card)).toHaveLength(0);
+  });
+
+  it("says the alert is closed when the hold closed one", () => {
+    const card = AlertCard({ payload: { ...held, kind: "held_closed" } });
+
+    expect(cardTexts(card)).toEqual([
+      "The data for this alert has been missing for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until the data comes back.",
+    ]);
+    expect(cardButtons(card)).toHaveLength(0);
+  });
+
+  it("shows a fact or reason this build does not know as it was sent", () => {
+    const card = AlertCard({ payload: { ...held, heldFacts: [{ fact: "warp_core", reason: "melted" }] } });
+
+    expect(cardFields(card)).toEqual(["warp_core: melted"]);
+  });
+});
+
 describe("AlertCard with no glucose reading", () => {
   const signalLoss = {
     ...payload,

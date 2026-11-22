@@ -135,6 +135,11 @@ pub(crate) struct WireTracker {
     hysteresis_started_at: Option<DateTime<Utc>>,
     #[serde(default)]
     awaiting_rearm: bool,
+    /// When the current hold began; absent when the rule is not held, or for
+    /// state stored before it was recorded, whose hold then counts from the
+    /// next held evaluation.
+    #[serde(default)]
+    held_since: Option<DateTime<Utc>>,
 }
 
 impl WireTracker {
@@ -153,6 +158,9 @@ impl WireTracker {
         if let Some(at) = self.hysteresis_started_at {
             check_timestamp(at, "tracker.hysteresis_started_at")?;
         }
+        if let Some(at) = self.held_since {
+            check_timestamp(at, "tracker.held_since")?;
+        }
         let restored = match TrackerStateKind::from_wire(s) {
             Some(state) => TrackerState {
                 state,
@@ -161,12 +169,16 @@ impl WireTracker {
                 updated_at,
                 hysteresis_started_at: self.hysteresis_started_at,
                 awaiting_rearm: self.awaiting_rearm,
+                held_since: self.held_since,
             },
-            None => TrackerState::recovered(
-                self.active_excursion_ordinal,
-                self.last_excursion_ordinal,
-                updated_at,
-            ),
+            None => TrackerState {
+                held_since: self.held_since,
+                ..TrackerState::recovered(
+                    self.active_excursion_ordinal,
+                    self.last_excursion_ordinal,
+                    updated_at,
+                )
+            },
         };
         tracker.restore_state(rule_id, restored);
         Ok(())
@@ -226,6 +238,9 @@ pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
         }
         if s.awaiting_rearm {
             t.insert("awaiting_rearm".into(), true.into());
+        }
+        if let Some(at) = s.held_since {
+            t.insert("held_since".into(), format_instant(at).into());
         }
     }
     Value::Object(t)

@@ -70,6 +70,15 @@ pub(crate) fn next_change_at(
             }
             TrackerStateKind::Idle | TrackerStateKind::Active => {}
         }
+        if !tracker.hold_bound_reported()
+            && let Some(bound) = tracker.hold_bound()
+        {
+            if bound.truth(now).is_true() {
+                scan.candidate(due_now);
+            } else {
+                scan.elapsed(bound);
+            }
+        }
     }
     scan.earliest
         .and_then(|at| on_tick(at, now))

@@ -42,6 +42,22 @@ describe("parseAlertDispatchEvent", () => {
     expect(parse({ kind: "digest" })?.payload.kind).toBe("digest");
   });
 
+  it("reads a held notice's facts, keeping only the pairs that are objects", () => {
+    const parsed = parse({
+      kind: "held",
+      heldFacts: [{ fact: "glucose", reason: "stale" }, "pump", { fact: 3, reason: "absent" }],
+    });
+
+    expect(parsed?.payload.heldFacts).toEqual([
+      { fact: "glucose", reason: "stale" },
+      { fact: undefined, reason: "absent" },
+    ]);
+  });
+
+  it("reads held facts that are not a list as none", () => {
+    expect(parse({ heldFacts: "glucose" })?.payload.heldFacts).toBeUndefined();
+  });
+
   it("delivers a payload with a field this build does not know", () => {
     expect(parse({ batteryLevel: 40 })).toBeDefined();
   });

@@ -128,15 +128,43 @@ public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRule
 
 /// <summary>
 /// The <see cref="AlertRule"/> an <see cref="AlertExcursion"/> belongs to, and whether the
-/// excursion is the row of a notice that the rule cannot be evaluated rather than of its condition.
+/// excursion is the row of a notice rather than of its condition: that the rule cannot be
+/// evaluated, or that its hold reached the engine's bound.
 /// </summary>
-public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name, bool IsUnevaluableNotice = false);
+public record ExcursionRuleSnapshot(
+    Guid AlertRuleId, string Name, bool IsUnevaluableNotice = false, bool IsHeldNotice = false)
+{
+    public bool IsNotice => IsUnevaluableNotice || IsHeldNotice;
+}
 
 /// <summary>
-/// The notice standing for a version of a rule's condition that cannot be evaluated, and whether
-/// it was dispatched.
+/// A standing notice about a rule (that it cannot be evaluated, or that its hold reached the
+/// bound) and whether it was dispatched.
 /// </summary>
-public record UnevaluableNoticeRecorded(Guid ExcursionId, Guid InstanceId, bool Dispatched);
+public record NoticeRecorded(Guid ExcursionId, Guid InstanceId, bool Dispatched);
+
+/// <summary>
+/// A notice that a rule's hold reached the bound that still stands: the rule, the instant the hold
+/// it is for began, and whether it was dispatched.
+/// </summary>
+public record StandingHeldNotice(
+    Guid ExcursionId, Guid InstanceId, Guid AlertRuleId, DateTime HeldSince, bool Dispatched);
+
+/// <summary>
+/// A rule's hold as its stored tracker state records it: when it began, when the state was last
+/// decided, the facts it waits for, and the state string.
+/// </summary>
+public record HeldRuleState(Guid AlertRuleId, DateTime HeldSince, DateTime UpdatedAt, string? HeldFacts, string State)
+{
+    /// <summary>
+    /// Whether an engine that does not record holds wrote the state after the hold began, so the
+    /// engine restarts the hold at its next held evaluation (docs/alerts/engine-semantics.md §6.4):
+    /// decided after the hold began and before its <paramref name="bound"/>, or active past it.
+    /// </summary>
+    public bool WrittenOver(TimeSpan bound) =>
+        (UpdatedAt > HeldSince && UpdatedAt < HeldSince + bound)
+        || (UpdatedAt >= HeldSince + bound && State == "active");
+}
 
 /// <summary>
 /// A notice that a rule cannot be evaluated that still stands: the rule, the version of its

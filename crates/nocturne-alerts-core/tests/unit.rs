@@ -938,6 +938,7 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
             updated_at: at(5),
             hysteresis_started_at: None,
             awaiting_rearm: false,
+            held_since: None,
         },
     );
     assert_eq!(
@@ -1583,6 +1584,7 @@ fn a_restored_last_ordinal_below_the_active_one_is_raised_to_it() {
             updated_at: at(0),
             hysteresis_started_at: None,
             awaiting_rearm: false,
+            held_since: None,
         },
     );
     let _ = tracker.force_close(rule_id(), CloseReason::Manual, at(1));
@@ -1602,6 +1604,7 @@ fn tracker_excursion_ordinal_saturates() {
             updated_at: at(0),
             hysteresis_started_at: None,
             awaiting_rearm: false,
+            held_since: None,
         },
     );
     let t = tracker.process_evaluation(rule_id(), cfg(0), true, false, at(1));
@@ -1673,6 +1676,7 @@ fn a_hysteresis_close_leaves_the_rule_armed() {
         updated_at: at(0),
         hysteresis_started_at: Some(at(0)),
         awaiting_rearm: true,
+        held_since: None,
     };
     let mut by_evaluation = ExcursionTracker::new();
     by_evaluation.restore_state(rule_id(), restored());
@@ -1699,6 +1703,7 @@ fn hysteresis_expiry_past_the_calendar_does_not_panic() {
             updated_at: DateTime::<Utc>::MAX_UTC,
             hysteresis_started_at: None,
             awaiting_rearm: false,
+            held_since: None,
         },
     );
     let t = tracker.process_evaluation(

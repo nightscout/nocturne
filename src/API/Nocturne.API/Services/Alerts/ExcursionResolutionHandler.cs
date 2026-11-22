@@ -81,7 +81,7 @@ internal sealed class ExcursionResolutionHandler(
                 };
                 // A notice reached only its rule's channels, so only a Home Assistant instance it
                 // was delivered to hears that it is resolved.
-                if (rule.IsUnevaluableNotice)
+                if (rule.IsNotice)
                     await broadcastService.BroadcastAlertResolvedToHomeAssistantAsync(
                         resolved, await repository.GetHomeAssistantInstancesSentExcursionAsync(excursionId, ct));
                 else
@@ -96,8 +96,8 @@ internal sealed class ExcursionResolutionHandler(
         // A rule that could not be read leaves the kind of excursion unknown, so both kinds of
         // notification it may have made are archived.
         IReadOnlyList<string> notificationTypes = rule is null
-            ? [InAppProvider.NotificationType, InAppProvider.UnevaluableNotificationType]
-            : [InAppProvider.NotificationTypeFor(rule.IsUnevaluableNotice)];
+            ? InAppProvider.AllNotificationTypes
+            : [InAppProvider.NotificationTypeFor(rule)];
         await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
         await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, ct);

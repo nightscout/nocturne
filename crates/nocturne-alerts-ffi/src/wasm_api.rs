@@ -37,3 +37,11 @@ pub fn clock_tolerance_ms() -> f64 {
     i32::try_from(nocturne_alerts_core::clock_anomaly::CLOCK_TOLERANCE.num_milliseconds())
         .map_or(f64::MAX, f64::from)
 }
+
+/// `nocturne_alerts_hold_bound_ms`, as a JavaScript number.
+#[wasm_bindgen]
+#[must_use]
+pub fn hold_bound_ms() -> f64 {
+    i32::try_from(nocturne_alerts_core::excursion::HOLD_BOUND.num_milliseconds())
+        .map_or(f64::MAX, f64::from)
+}

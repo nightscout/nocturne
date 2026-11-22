@@ -78,6 +78,14 @@ public static partial class RustAlertEngine
     /// </summary>
     public static TimeSpan ClockTolerance() => Tolerance.Value;
 
+    private static readonly Lazy<TimeSpan> Bound = new(AlertsInterop.GetHoldBound);
+
+    /// <summary>
+    /// How long a rule may hold before its hold is reported (docs/alerts/engine-semantics.md
+    /// §6.4); a held rule is evaluated on the sweep once its hold has lasted this long.
+    /// </summary>
+    public static TimeSpan HoldBound() => Bound.Value;
+
     private static readonly Lazy<bool> NextChangeReported = new(() => ReportsNextChange(AlertsInterop.Evaluate));
 
     /// <summary>

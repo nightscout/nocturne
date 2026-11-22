@@ -656,6 +656,18 @@ public class AlertTrackerState
     /// only while a context carries the same ones.
     /// </summary>
     public string? NextChangeGlucose { get; set; }
+
+    /// <summary>
+    /// When the rule's current hold began: the first of an unbroken run of evaluations whose
+    /// unknown root it holds (docs/alerts/engine-semantics.md §6.4). Null while it is not held.
+    /// </summary>
+    public DateTime? HeldSince { get; set; }
+
+    /// <summary>
+    /// The facts the hold is waiting for, as <see cref="Alerts.HeldFacts.Format"/> writes them; set
+    /// only with <see cref="HeldSince"/>.
+    /// </summary>
+    public string? HeldFacts { get; set; }
 }
 
 /// <summary>
@@ -764,6 +776,13 @@ public record AlertPayload
     /// in the portal's alert rule docs (docs/alerts/building-rules).
     /// </summary>
     public Alerts.AlertPayloadKind Kind { get; init; } = Alerts.AlertPayloadKind.Excursion;
+
+    /// <summary>
+    /// On a <see cref="Alerts.AlertPayloadKind.Held"/> or <see cref="Alerts.AlertPayloadKind.HeldClosed"/>
+    /// notice, the facts the rule is waiting for; absent on every other kind.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Alerts.HeldFact>? HeldFacts { get; init; }
 
     /// <summary>
     /// The rule's condition type; null in the notice for a rule whose stored condition type is not

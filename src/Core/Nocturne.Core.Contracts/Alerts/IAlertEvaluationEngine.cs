@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
 
@@ -41,6 +42,15 @@ public sealed record AlertEngineEvaluation
     /// §2.4). The rule's <c>on_unknown</c> decided what the tracker made of it.
     /// </summary>
     public bool ConditionUnknown { get; init; }
+
+    /// <summary>
+    /// When <see cref="ConditionUnknown"/>, the facts whose unknown reached the root, each with
+    /// its reason (docs/alerts/engine-semantics.md §2.4); empty otherwise.
+    /// </summary>
+    public IReadOnlyList<HeldFact> UnknownFacts { get; init; } = [];
+
+    /// <summary>The evaluation's hold reached the engine's bound, once per hold (§6.4).</summary>
+    public bool HeldTooLong { get; init; }
 
     /// <summary>The excursion tracker transition produced by this evaluation.</summary>
     public ExcursionTransition Transition { get; init; } = new(ExcursionTransitionType.None);

@@ -16,7 +16,17 @@
             }
           ],
           "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "trackers",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "clock_anomaly": [
             {
               "fact": "active_trackers",
@@ -35,7 +45,17 @@
             }
           ],
           "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "trackers",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "clock_anomaly": [
             {
               "fact": "active_trackers",
@@ -59,7 +79,17 @@
             }
           ],
           "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "trackers",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "clock_anomaly": [
             {
               "fact": "active_trackers",
@@ -78,7 +108,17 @@
             }
           ],
           "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "trackers",
+              "reason": "ahead_of_clock"
+            }
+          ],
           "clock_anomaly": [
             {
               "fact": "active_trackers",

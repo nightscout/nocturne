@@ -4,6 +4,7 @@ import type { AlertPayload } from "../types.js";
 import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
 import { isKnownSeverity } from "../lib/severity.js";
+import { describeHeldFacts } from "../lib/held-facts.js";
 
 /**
  * Card titles per severity. Every platform gets this, including the ones with
@@ -34,6 +35,9 @@ export function AlertCard(props: {
 }) {
   const { payload, unit = "mg/dL" } = props;
   if (payload.kind === AlertPayloadKind.Unevaluable) return UnevaluableCard({ payload });
+  if (payload.kind === AlertPayloadKind.Held || payload.kind === AlertPayloadKind.HeldClosed) {
+    return HeldCard({ payload, closed: payload.kind === AlertPayloadKind.HeldClosed });
+  }
   const noReading = payload.glucoseValue == null && payload.alertType != null && NO_READING_KINDS.has(payload.alertType);
   const value =
     payload.glucoseValue != null
@@ -89,6 +93,26 @@ function UnevaluableCard(props: { payload: AlertPayload }) {
       <CardText>
         This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.
       </CardText>
+    </Card>
+  );
+}
+
+function HeldCard(props: { payload: AlertPayload; closed: boolean }) {
+  const { payload, closed } = props;
+  const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
+  const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
+  const text = closed
+    ? "The data for this alert has been missing for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until the data comes back."
+    : "This rule has waited 24 hours for data, so it cannot send alerts until the data comes back.";
+
+  return (
+    <Card title={`${titlePrefix}: ${payload.ruleName}`}>
+      <CardText>{text}</CardText>
+      <Fields>
+        {describeHeldFacts(payload.heldFacts).map((fact) => (
+          <Field key={fact.label} label={fact.label} value={fact.value} />
+        ))}
+      </Fields>
     </Card>
   );
 }

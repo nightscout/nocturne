@@ -143,6 +143,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 .AddSingleton<IExcursionOpenedHandler, ExcursionOpenedHandler>()
                 .AddSingleton<IExcursionResolutionHandler, ExcursionResolutionHandler>()
                 .AddSingleton(Mock.Of<IUnevaluableRuleNotice>())
+                .AddSingleton(NoHeldRules.Notice())
                 .AddSingleton(Mock.Of<IClockAnomalyNotice>())
                 .AddSingleton(Mock.Of<IAlertChannelNotice>())
                 .AddSingleton(canonical.Object)
@@ -528,7 +529,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         (await tenant.Repository().GetOwedTransitionsAsync(AfterLease.UtcDateTime, CancellationToken.None))
             .Should().BeEmpty("a notice owes its dispatch to IUnevaluableRuleNotice, which builds its own payload");
 
-        await tenant.Repository().EndUnevaluableNoticeAsync(notice.ExcursionId, Opened.AddMinutes(1), CancellationToken.None);
+        await tenant.Repository().EndNoticeAsync(notice.ExcursionId, Opened.AddMinutes(1), CancellationToken.None);
         (await tenant.OwedAsync(notice.ExcursionId)).Opened.Should().BeNull("a resolved notice owes no dispatch");
     }
 

@@ -108,7 +108,7 @@ internal sealed class AlertDeliveryService(
                 .ToListAsync(ct)
             : [];
 
-        var notice = payload.Kind == AlertPayloadKind.Unevaluable;
+        var notice = payload.Kind.IsNotice();
         var configured = channels.Count;
         if (notice)
             channels = [.. channels.Where(c => c.ChannelType != ChannelType.DeviceAction)];
@@ -150,7 +150,9 @@ internal sealed class AlertDeliveryService(
             var anchor = NoChannelAnchor(
                 tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false);
             if (configured > 0)
-                anchor.LastError = "No channel of the rule carries a notice that it cannot be evaluated";
+                anchor.LastError = payload.Kind.IsHeld()
+                    ? "No channel of the rule carries a notice that it has waited for missing data"
+                    : "No channel of the rule carries a notice that it cannot be evaluated";
             db.AlertDeliveries.Add(anchor);
             await db.SaveChangesAsync(ct);
             return;
@@ -402,7 +404,7 @@ internal sealed class AlertDeliveryService(
     /// The delivery row a fire of a rule with no channels leaves behind. Without it History cannot
     /// tell "every provider is broken" from "no channels were chosen", and the <c>alert_dispatch</c>
     /// broadcast would be the fire's only trace. It reached no one, so it is recorded failed. A
-    /// notice that a rule cannot be evaluated is not carried by a <c>device_action</c> channel (an
+    /// notice about a rule is not carried by a <c>device_action</c> channel (an
     /// actuation is a glucose alarm on the device), so a rule with only those leaves this row too.
     /// </summary>
     private static AlertDeliveryEntity NoChannelAnchor(

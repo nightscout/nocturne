@@ -81,6 +81,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 NextChangeAt = state.NextChangeAt,
                 NextChangeKnown = state.NextChangeKnown,
                 NextChangeGlucose = state.NextChangeGlucose,
+                HeldSince = state.HeldSince,
+                HeldFacts = state.HeldFacts,
             });
         }
         else
@@ -93,6 +95,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.NextChangeAt = state.NextChangeAt;
             existing.NextChangeKnown = state.NextChangeKnown;
             existing.NextChangeGlucose = state.NextChangeGlucose;
+            existing.HeldSince = state.HeldSince;
+            existing.HeldFacts = state.HeldFacts;
         }
 
         await db.SaveChangesAsync(ct);
@@ -263,6 +267,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         NextChangeAt = entity.NextChangeAt,
         NextChangeKnown = entity.NextChangeKnown,
         NextChangeGlucose = entity.NextChangeGlucose,
+        HeldSince = entity.HeldSince,
+        HeldFacts = entity.HeldFacts,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "name": "hold-none-for-met-or-not-met",
+  "description": "on_unknown met and not_met read an unknown root as known, so they never hold: no held_since, no report at 24 hours",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "met"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "not_met"
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-06T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-06T12:05:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

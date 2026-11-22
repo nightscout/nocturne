@@ -27,6 +27,13 @@ public enum ExcursionCloseReason
     /// <summary>Closed because the owning rule was disabled or deleted.</summary>
     [EnumMember(Value = "rule-disabled"), JsonStringEnumMemberName("rule-disabled")]
     RuleDisabled,
+
+    /// <summary>
+    /// The rule's data had been missing for the engine's hold bound (24 hours), so the open
+    /// excursion was read as no longer met (docs/alerts/engine-semantics.md §6.4).
+    /// </summary>
+    [EnumMember(Value = "hold-bound"), JsonStringEnumMemberName("hold-bound")]
+    HoldBound,
 }
 
 /// <summary>
@@ -43,6 +50,7 @@ public static class ExcursionCloseReasonExtensions
         ExcursionCloseReason.AutoResolve => "auto",
         ExcursionCloseReason.Manual => "manual",
         ExcursionCloseReason.RuleDisabled => "rule-disabled",
+        ExcursionCloseReason.HoldBound => "hold-bound",
         _ => reason.ToString().ToLowerInvariant(),
     };
 }

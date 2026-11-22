@@ -15,6 +15,8 @@
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
+  import { holdFactLines, holdSinceText } from "#lib/components/alerts/holdText.svelte.js";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { z } from "zod";
   import { AlertRuleSeverity } from "@nocturne/api-client";
@@ -345,6 +347,22 @@
       role="alert"
     >
       {error}
+    </div>
+  {/if}
+
+  {#if ruleQuery.current?.hold}
+    {@const hold = ruleQuery.current.hold}
+    <div
+      class="mb-4 flex items-start gap-2 rounded-md border p-3 text-sm text-status-warning"
+      data-testid="rule-hold"
+    >
+      <Hourglass class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div>
+        <p>{holdSinceText(hold)} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert.</p>
+        {#each holdFactLines(hold) as line (line)}
+          <p>{line}</p>
+        {/each}
+      </div>
     </div>
   {/if}
 

@@ -324,7 +324,8 @@ public class AlertRepository : IAlertRepository
             .AsNoTracking()
             .Where(e => e.Id == excursionId)
             .Join(context.AlertRules, e => e.AlertRuleId, r => r.Id,
-                (e, r) => new ExcursionRuleSnapshot(r.Id, r.Name, e.UnevaluableConditionVersion != null))
+                (e, r) => new ExcursionRuleSnapshot(
+                    r.Id, r.Name, e.UnevaluableConditionVersion != null && e.HeldSince == null, e.HeldSince != null))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -533,7 +534,7 @@ public class AlertRepository : IAlertRepository
         await context.SaveChangesAsync(ct);
     }
 
-    private const int UnevaluableNoticeLockClass = 0x4E55_4E56;
+    private const int NoticeLockClass = 0x4E55_4E56;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -542,11 +543,14 @@ public class AlertRepository : IAlertRepository
     /// sees the notice this records. An edit made since the caller read the rule likewise records
     /// nothing for the condition it replaced. See <see cref="AdvisoryLockExtensions"/>.
     /// </remarks>
-    public virtual Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
+    public virtual Task<NoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct) =>
         RecordNoticeAsync(
             rule.Id,
-            conditionVersion,
+            e => e.UnevaluableConditionVersion = conditionVersion,
+            async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                : null,
             at,
             (context, token) => context.AlertRules.AnyAsync(r => r.Id == rule.Id
                                                                  && r.IsEnabled
@@ -558,11 +562,14 @@ public class AlertRepository : IAlertRepository
     /// <remarks>
     /// The rule is read by raw SQL, since no entity can hold its condition type or severity.
     /// </remarks>
-    public virtual Task<UnevaluableNoticeRecorded?> RecordUnreadableRuleNoticeAsync(
+    public virtual Task<NoticeRecorded?> RecordUnreadableRuleNoticeAsync(
         UnreadableAlertRule rule, string conditionVersion, DateTime at, CancellationToken ct) =>
         RecordNoticeAsync(
             rule.Id,
-            conditionVersion,
+            e => e.UnevaluableConditionVersion = conditionVersion,
+            async (context, token) => await Standing(context, rule.Id, conditionVersion).FirstOrDefaultAsync(token) is { } n
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                : null,
             at,
             async (context, token) => (await context.Database
                 .SqlQuery<Guid>(
@@ -570,24 +577,51 @@ public class AlertRepository : IAlertRepository
                 .ToListAsync(token)).Count > 0,
             ct);
 
-    private async Task<UnevaluableNoticeRecorded?> RecordNoticeAsync(
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The rule and its tracker state are read again under the lock, which a disable takes before
+    /// its retirement resolves the rule's notices, as for <see cref="RecordUnevaluableNoticeAsync"/>.
+    /// </remarks>
+    public virtual Task<NoticeRecorded?> RecordHeldNoticeAsync(
+        Guid ruleId, DateTime heldSince, DateTime at, CancellationToken ct) =>
+        RecordNoticeAsync(
+            ruleId,
+            e =>
+            {
+                e.HeldSince = heldSince;
+                e.UnevaluableConditionVersion = $"held:{heldSince:O}";
+            },
+            async (context, token) => await StandingHeld(context, ruleId, heldSince).FirstOrDefaultAsync(token) is { } n
+                ? new NoticeRecorded(n.ExcursionId, n.InstanceId, n.Dispatched)
+                : null,
+            at,
+            async (context, token) =>
+                await context.AlertRules.AnyAsync(r => r.Id == ruleId && r.IsEnabled, token)
+                && await context.AlertTrackerState.AnyAsync(s => s.AlertRuleId == ruleId && s.HeldSince == heldSince, token),
+            ct);
+
+    /// <summary>
+    /// Records the notice <paramref name="mark"/> marks under the rule's notice lock, unless
+    /// <paramref name="standing"/> finds it standing or the rule no longer holds what the caller read.
+    /// </summary>
+    private async Task<NoticeRecorded?> RecordNoticeAsync(
         Guid ruleId,
-        string conditionVersion,
+        Action<AlertExcursionEntity> mark,
+        Func<NocturneDbContext, CancellationToken, Task<NoticeRecorded?>> standing,
         DateTime at,
         Func<NocturneDbContext, CancellationToken, Task<bool>> ruleStillHoldsWhatTheRunRead,
         CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
-        return await context.ExecuteInTransactionAsync<UnevaluableNoticeRecorded?>(async token =>
+        return await context.ExecuteInTransactionAsync<NoticeRecorded?>(async token =>
         {
-            await context.LockForTransactionAsync(UnevaluableNoticeLockClass, ruleId, token);
+            await context.LockForTransactionAsync(NoticeLockClass, ruleId, token);
 
             if (!await ruleStillHoldsWhatTheRunRead(context, token))
                 return null;
 
-            var current = await Standing(context, ruleId, conditionVersion).FirstOrDefaultAsync(token);
-            if (current is not null)
-                return new UnevaluableNoticeRecorded(current.ExcursionId, current.InstanceId, current.Dispatched);
+            if (await standing(context, token) is { } current)
+                return current;
 
             var excursion = new AlertExcursionEntity
             {
@@ -596,9 +630,9 @@ public class AlertRepository : IAlertRepository
                 AlertRuleId = ruleId,
                 StartedAt = at,
                 EndedAt = AlertExcursionEntity.NoticeStandingEnd,
-                UnevaluableConditionVersion = conditionVersion,
                 OpenedOwedAt = at,
             };
+            mark(excursion);
             var instance = new AlertInstanceEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -611,7 +645,7 @@ public class AlertRepository : IAlertRepository
             context.AlertInstances.Add(instance);
             await context.SaveChangesAsync(token);
 
-            return new UnevaluableNoticeRecorded(excursion.Id, instance.Id, Dispatched: false);
+            return new NoticeRecorded(excursion.Id, instance.Id, Dispatched: false);
         },
         verifySucceeded: async (recorded, token) =>
             recorded is not null
@@ -620,7 +654,7 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task EndUnevaluableNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct)
+    public virtual async Task EndNoticeAsync(Guid excursionId, DateTime at, CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
 
@@ -648,6 +682,7 @@ public class AlertRepository : IAlertRepository
         context.AlertInstances
             .AsNoTracking()
             .OfStandingNotices()
+            .Where(i => i.AlertExcursion!.HeldSince == null)
             .Where(i => ruleId == null || i.AlertExcursion!.AlertRuleId == ruleId)
             .Where(i => conditionVersion == null || i.AlertExcursion!.UnevaluableConditionVersion == conditionVersion)
             .Select(i => new StandingUnevaluableNotice(
@@ -657,6 +692,54 @@ public class AlertRepository : IAlertRepository
                 i.AlertExcursion.UnevaluableConditionVersion!,
                 i.AlertExcursion.OpenedOwedAt == null
                 && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<StandingHeldNotice>> GetStandingHeldNoticesAsync(
+        Guid? ruleId, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        return await StandingHeld(context, ruleId).ToListAsync(ct);
+    }
+
+    private static IQueryable<StandingHeldNotice> StandingHeld(
+        NocturneDbContext context, Guid? ruleId, DateTime? heldSince = null) =>
+        context.AlertInstances
+            .AsNoTracking()
+            .OfStandingNotices()
+            .Where(i => i.AlertExcursion!.HeldSince != null)
+            .Where(i => ruleId == null || i.AlertExcursion!.AlertRuleId == ruleId)
+            .Where(i => heldSince == null || i.AlertExcursion!.HeldSince == heldSince)
+            .Select(i => new StandingHeldNotice(
+                i.AlertExcursionId,
+                i.Id,
+                i.AlertExcursion!.AlertRuleId,
+                i.AlertExcursion.HeldSince!.Value,
+                i.AlertExcursion.OpenedOwedAt == null
+                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<HeldRuleState>> GetHeldRuleStatesAsync(CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        return await context.AlertTrackerState
+            .AsNoTracking()
+            .Where(s => s.HeldSince != null)
+            .Select(s => new HeldRuleState(s.AlertRuleId, s.HeldSince!.Value, s.UpdatedAt, s.HeldFacts, s.State))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> HadExcursionOpenAtAsync(Guid ruleId, DateTime at, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .OfCondition()
+            .AnyAsync(e => e.AlertRuleId == ruleId && e.StartedAt <= at && (e.EndedAt == null || e.EndedAt >= at), ct);
+    }
 
     /// <summary>
     /// Gets alert instances whose snooze period has expired.

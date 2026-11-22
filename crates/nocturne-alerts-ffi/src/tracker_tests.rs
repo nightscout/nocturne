@@ -2,6 +2,8 @@
 //! errors, and equivalence with the tracker `evaluate` drives, across the
 //! golden corpus.
 
+use chrono::DateTime;
+use nocturne_alerts_core::excursion::HOLD_BOUND;
 use serde_json::{Map, Value, json};
 
 use crate::tests::{
@@ -386,7 +388,12 @@ fn auto_resolve_not_false(
 /// rule follows the same ticks through the tracker entry points: `process`
 /// with the tick's root truth as `on_unknown` reads it (and, awaiting re-arm,
 /// its auto-resolve truth), or `close_elapsed_hysteresis` for a root the rule
-/// holds, then `force_close` when auto-resolve closed the excursion. The two trackers and transitions must agree at every step.
+/// holds, then `force_close` when auto-resolve closed the excursion. The two
+/// trackers and transitions must agree at every step. A held evaluation's
+/// `held_since` is its own record, which no entry point makes, so the second
+/// tracker takes it from `evaluate` before its close of an elapsed window, as
+/// the engine records it first; from the hold's bound only `evaluate` decides
+/// (§6.4), and the second tracker follows it.
 #[test]
 fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
     let paths = scenario_paths();
@@ -427,6 +434,19 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                     .get(&rule_id)
                     .cloned()
                     .unwrap_or_else(|| json!({}));
+                let held_since = response["tracker"].get("held_since").cloned();
+                let past_bound = held_since
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                    .zip(DateTime::parse_from_rfc3339(&tick.at).ok())
+                    .is_some_and(|(since, now)| now - since >= HOLD_BOUND);
+                if result.get("unknown").is_some() && past_bound {
+                    timers.insert(rule_id.clone(), response["timers"].clone());
+                    via_evaluate.insert(rule_id.clone(), response["tracker"].clone());
+                    via_entry_points.insert(rule_id, response["tracker"].clone());
+                    continue;
+                }
                 let auto_resolve_met = shadow["awaiting_rearm"] == json!(true)
                     && auto_resolve_not_false(rule, tick, timers.get(&rule_id));
                 let condition_met = match (result.get("unknown"), rule.get("on_unknown")) {
@@ -435,6 +455,20 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                     (Some(_), Some(word)) if word == "not_met" => Some(json!(false)),
                     (Some(_), _) => None,
                 };
+                let mut shadow = shadow;
+                let held_since_now = held_since.clone().filter(|_| condition_met.is_none());
+                if condition_met.is_none()
+                    && let (Some(since), Some(t)) = (held_since, shadow.as_object_mut())
+                {
+                    if t.is_empty() {
+                        t.insert("state".into(), json!("idle"));
+                        t.insert(
+                            "updated_at".into(),
+                            response["tracker"]["updated_at"].clone(),
+                        );
+                    }
+                    t.insert("held_since".into(), since);
+                }
                 let processed = match condition_met {
                     Some(condition_met) => process(&json!({
                         "schema_version": 1,
@@ -463,6 +497,11 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                 );
 
                 let mut after = processed["tracker"].clone();
+                // Restoring drops a hold the clock going back left stale; the
+                // engine records the hold after it restores the state.
+                if let (Some(since), Some(t)) = (held_since_now, after.as_object_mut()) {
+                    t.insert("held_since".into(), since);
+                }
                 if result["auto_resolved"] == json!(true) {
                     let closed = force_close(&json!({
                         "schema_version": 1,

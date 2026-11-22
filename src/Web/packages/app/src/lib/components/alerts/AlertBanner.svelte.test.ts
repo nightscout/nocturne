@@ -57,6 +57,34 @@ describe("AlertBanner", () => {
 		await expect.element(page.getByRole("button", { name: "Acknowledge" })).toBeVisible();
 	});
 
+	it("says an alert is held open while its data is missing, and why", async () => {
+		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
+		const since = new Date(Date.now() - 2 * 60 * 60_000);
+		activeAlerts = [{
+			...firing,
+			hold: { since: since.toISOString(), facts: [{ fact: "glucose", reason: "absent" }] },
+		}];
+
+		render(AlertBanner);
+
+		await expect
+			.element(page.getByText(
+				`Waiting for data since ${formatDateTimeCompact(since)}. This alert stays open while its data is missing. It closes after 24 hours of missing data.`,
+			))
+			.toBeVisible();
+		await expect.element(page.getByText("Glucose readings: missing")).toBeVisible();
+	});
+
+	it("says nothing of a hold on an alert that is not held", async () => {
+		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
+		activeAlerts = [firing];
+
+		render(AlertBanner);
+
+		await expect.element(page.getByText("Low")).toBeVisible();
+		expect(page.getByTestId("alert-hold").elements()).toHaveLength(0);
+	});
+
 	it("shows the age in one unit and the start time as its title", async () => {
 		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
 		const startedAt = new Date(Date.now() - (3 * 60 + 5) * 60_000);

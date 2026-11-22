@@ -36,8 +36,8 @@ use nocturne_alerts_core::enums::{
 };
 use nocturne_alerts_core::eval::{Env, eval_payload};
 use nocturne_alerts_core::excursion::{
-    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
-    TransitionType,
+    CloseReason, ExcursionTracker, HOLD_BOUND, TrackerRuleConfig, TrackerState, TrackerStateKind,
+    Transition, TransitionType,
 };
 use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
@@ -1036,9 +1036,11 @@ fn model_met(on_unknown: &str, root: Truth) -> Option<bool> {
 }
 
 proptest! {
-    /// §6.4: an evaluation whose unknown root the rule holds leaves the
-    /// tracker as it was, `updated_at` included, except that a hysteresis
-    /// window that has elapsed closes the excursion.
+    /// §6.4: an evaluation whose unknown root the rule holds, before its
+    /// hold's bound, leaves the tracker as it was, `updated_at` included,
+    /// except that the first of a hold records its start (a rule with no state
+    /// then holds only that) and a hysteresis window that has elapsed closes
+    /// the excursion.
     #[test]
     fn a_held_evaluation_changes_nothing_but_an_elapsed_hysteresis_window(
         spec in rule_spec(),
@@ -1055,6 +1057,30 @@ proptest! {
             if !(evaluation.root.is_unknown() && holds) {
                 continue;
             }
+            // §6.4: a stored hold this engine cannot have written restarts.
+            let trusted = before.and_then(|s| {
+                s.held_since.filter(|&since| {
+                    let bound = since + HOLD_BOUND;
+                    !((s.updated_at > since && s.updated_at < bound)
+                        || (s.updated_at >= bound && s.state == TrackerStateKind::Active))
+                })
+            });
+            let held_since = trusted.unwrap_or(tick.now);
+            if model_since(tick.now, held_since).is_none_or(|held| held >= HOLD_BOUND) {
+                continue;
+            }
+            let before = Some(match before {
+                Some(s) => TrackerState { held_since: Some(held_since), ..s },
+                None => TrackerState {
+                    state: TrackerStateKind::Idle,
+                    active_excursion: None,
+                    last_excursion: 0,
+                    updated_at: tick.now,
+                    hysteresis_started_at: None,
+                    awaiting_rearm: false,
+                    held_since: Some(tick.now),
+                },
+            });
             let window_elapsed = before.is_some_and(|s| {
                 s.state == TrackerStateKind::Hysteresis
                     && s.hysteresis_started_at
@@ -1089,8 +1115,11 @@ proptest! {
     /// it evaluates (§6.1). Only instants where nothing else is due count:
     /// another clock change there is a reason to evaluate of its own. A held
     /// evaluation that records a false child's not-true instant there moves
-    /// that path's lease (§3, §5.1), which is the one thing it can change, so
-    /// only one that records nothing must leave the ticks after it as they are.
+    /// that path's lease (§3, §5.1), so only one that records nothing must
+    /// leave the ticks after it as they are. A held evaluation there also
+    /// begins the hold earlier than the next would (§6.4), so the ticks after
+    /// it are compared without the hold's start and next change, which the
+    /// missed run never has earlier, and only while no tick reaches the bound.
     #[test]
     fn under_hold_a_missed_evaluation_at_the_staleness_instant_changes_nothing_later(
         spec in rule_spec(),
@@ -1146,11 +1175,37 @@ proptest! {
             let (stale, evaluated) = run(true, stale_at);
             let (stale_root, recorded_nothing) = stale.expect("evaluated");
             if stale_root.is_unknown() {
-                if !recorded_nothing {
+                if !recorded_nothing
+                    || ticks.last().is_some_and(|t| t.now >= stale_at + HOLD_BOUND)
+                {
                     continue;
                 }
                 let (_, missed) = run(false, stale_at);
-                prop_assert_eq!(evaluated, missed);
+                for (e, m) in evaluated.iter().zip(&missed) {
+                    let since = |v: &Value| {
+                        v["tracker"]["held_since"]
+                            .as_str()
+                            .map(|s| DateTime::parse_from_rfc3339(s).expect("an instant"))
+                    };
+                    if let (Some(e), Some(m)) = (since(e), since(m)) {
+                        prop_assert!(e <= m, "the missed run began its hold earlier");
+                    }
+                }
+                let without_hold = |outcomes: Vec<Value>| -> Vec<Value> {
+                    outcomes
+                        .into_iter()
+                        .map(|mut v| {
+                            if let Some(o) = v.as_object_mut() {
+                                o.remove("next_change_at");
+                            }
+                            if let Some(t) = v["tracker"].as_object_mut() {
+                                t.remove("held_since");
+                            }
+                            v
+                        })
+                        .collect()
+                };
+                prop_assert_eq!(without_hold(evaluated), without_hold(missed));
             } else {
                 let (fresh, _) = run(true, stale_at - RESOLUTION);
                 prop_assert_eq!(Some(stale_root), fresh.map(|(root, _)| root));
@@ -1855,6 +1910,7 @@ fn seeded_tracker(now: DateTime<Utc>) -> BoxedStrategy<Option<TrackerState>> {
                 updated_at: since,
                 hysteresis_started_at: (state == TrackerStateKind::Hysteresis).then_some(since),
                 awaiting_rearm,
+                held_since: None,
             }
         }),
     )

@@ -135,12 +135,48 @@ fn signal_loss_with_no_reading_ever_measures_from_the_rule_enablement() {
 
     let unrecorded = evaluate(&request(None, "2026-01-05T12:20:00Z"));
     assert_eq!(unrecorded["result"]["unknown"], json!(true), "{unrecorded}");
-    assert!(unrecorded["result"].get("next_change_at").is_none());
+    assert_eq!(
+        unrecorded["result"]["next_change_at"],
+        json!("2026-01-06T12:20:00Z"),
+        "only the hold's bound"
+    );
 
     assert_error(
         &evaluate(&request(Some("12:00"), "2026-01-05T12:20:00Z")),
         "invalid request envelope",
     );
+}
+
+/// A stored hold that an engine which does not record holds wrote over (an
+/// active alert updated after `held_since`) restarts at the held evaluation
+/// instead of reaching its stale bound (engine-semantics.md §6.4).
+#[test]
+fn evaluate_restarts_a_stored_hold_an_older_engine_wrote_over() {
+    let response = evaluate(&json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 },
+            "hysteresis_minutes": 15
+        },
+        "context": {},
+        "now": "2026-01-08T12:00:00Z",
+        "tracker": {
+            "state": "active",
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-07T12:00:00Z",
+            "held_since": "2026-01-05T12:00:00Z"
+        }
+    }));
+    assert_eq!(response["ok"], json!(true), "{response}");
+    assert_eq!(response["result"]["transition"], json!("none"));
+    assert!(response["result"].get("held_too_long").is_none());
+    assert_eq!(
+        response["tracker"]["held_since"],
+        json!("2026-01-08T12:00:00Z")
+    );
+    assert_eq!(response["tracker"]["state"], json!("active"));
 }
 
 #[test]
@@ -156,7 +192,8 @@ fn evaluate_reports_the_next_change_and_omits_none() {
             "context": {
                 "latest_value": 120,
                 "latest_timestamp": "2026-01-05T11:55:00Z",
-                "last_reading_at": "2026-01-05T11:55:00Z"
+                "last_reading_at": "2026-01-05T11:55:00Z",
+                "iob_units": 1
             },
             "now": "2026-01-05T12:00:00Z"
         })

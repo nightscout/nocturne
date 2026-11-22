@@ -262,6 +262,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ended_at");
 
+                    b.Property<DateTime?>("HeldSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("held_since");
+
                     b.Property<DateTime?>("HysteresisStartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("hysteresis_started_at");
@@ -736,6 +740,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("confirmation_count");
+
+                    b.Property<string>("HeldFacts")
+                        .HasColumnType("text")
+                        .HasColumnName("held_facts");
+
+                    b.Property<DateTime?>("HeldSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("held_since");
 
                     b.Property<DateTime?>("HysteresisStartedAt")
                         .HasColumnType("timestamp with time zone")

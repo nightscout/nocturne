@@ -9,6 +9,12 @@
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -16,12 +22,22 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
           "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
@@ -29,7 +45,11 @@
               "unknown": true
             }
           ],
-          "transition": "none"
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          }
         }
       ]
     }

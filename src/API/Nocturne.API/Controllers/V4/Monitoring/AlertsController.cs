@@ -109,12 +109,20 @@ public class AlertsController : ControllerBase
                 .ToHashSetAsync(ct)
             : new HashSet<Guid>();
 
+        var ruleIds = excursions.Select(e => e.AlertRuleId).ToList();
+        var holds = await db.AlertTrackerState
+            .AsNoTracking()
+            .Where(s => ruleIds.Contains(s.AlertRuleId) && s.HeldSince != null)
+            .Select(s => new Core.Models.HeldRuleState(s.AlertRuleId, s.HeldSince!.Value, s.UpdatedAt, s.HeldFacts, s.State))
+            .ToDictionaryAsync(s => s.AlertRuleId, AlertHold.Of, ct);
+
         var namesAcknowledger = NamesMembers();
         var receipts = await AlertReceiptService.ReadAsync(
             db, excursions.Select(e => e.Id).ToList(), ReceiptsVisibleOnlyFor(), ct);
         var now = DateTime.UtcNow;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
+            Hold = holds.GetValueOrDefault(e.AlertRuleId),
             Id = e.Id,
             AlertRuleId = e.AlertRuleId,
             RuleName = e.AlertRule?.Name ?? string.Empty,
@@ -206,6 +214,11 @@ public class AlertsController : ControllerBase
                 e.AcknowledgedAt,
                 e.AcknowledgedBy,
                 IsTest = e.Instances.Any(i => i.IsTest) && !e.Instances.Any(i => !i.IsTest),
+                ResolutionReason = e.Instances
+                    .Where(i => i.ResolutionReason != null)
+                    .OrderBy(i => i.TriggeredAt)
+                    .Select(i => i.ResolutionReason)
+                    .FirstOrDefault(),
             })
             .ToListAsync(ct);
 
@@ -230,6 +243,7 @@ public class AlertsController : ControllerBase
                 AcknowledgedAt = e.AcknowledgedAt,
                 AcknowledgedBy = namesAcknowledger ? e.AcknowledgedBy : null,
                 IsTest = e.IsTest,
+                ResolutionReason = e.ResolutionReason,
                 Receipts = AlertReceiptResponse.From(receipts[e.Id]),
             }).ToList(),
         };
@@ -496,6 +510,12 @@ public class ActiveExcursionResponse
     public DateTime? HysteresisStartedAt { get; set; }
 
     /// <summary>
+    /// Set while the rule waits for missing data, so this alert is held open: since when, and the
+    /// facts it waits for. After 24 hours of it the alert closes (docs/alerts/engine-semantics.md §6.4).
+    /// </summary>
+    public AlertHold? Hold { get; set; }
+
+    /// <summary>
     /// Latest <see cref="ActiveInstanceResponse.SnoozedUntil"/> among the active instances; null
     /// when none is snoozed.
     /// </summary>
@@ -577,6 +597,13 @@ public class HistoryExcursionResponse
 
     /// <summary>True when every instance of this excursion was a test fire.</summary>
     public bool IsTest { get; set; }
+
+    /// <summary>
+    /// Why it closed, as <see cref="ExcursionCloseReasonExtensions.ToWireString"/> writes it:
+    /// <c>hysteresis</c>, <c>auto</c>, <c>manual</c>, <c>rule-disabled</c> or <c>hold-bound</c> (its
+    /// data had been missing for 24 hours); null when none was recorded.
+    /// </summary>
+    public string? ResolutionReason { get; set; }
 
     /// <inheritdoc cref="ActiveExcursionResponse.Receipts"/>
     public List<AlertReceiptResponse> Receipts { get; set; } = [];

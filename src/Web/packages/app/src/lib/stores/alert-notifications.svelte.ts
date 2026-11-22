@@ -6,9 +6,10 @@ import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
 
 /**
  * The in-app notification types an alert rule delivers to this person's own account: an alert,
- * and the notice that the rule cannot run until its conditions are edited.
+ * the notice that the rule cannot run until its conditions are edited, and the notice that it has
+ * waited 24 hours for missing data.
  */
-const ALERT_TYPES = new Set(["alert.firing", "alert.unevaluable"]);
+const ALERT_TYPES = new Set(["alert.firing", "alert.unevaluable", "alert.held"]);
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders from it
 const shown = new Map<string, Notification>();

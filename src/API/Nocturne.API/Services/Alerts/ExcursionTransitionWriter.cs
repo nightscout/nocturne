@@ -78,6 +78,12 @@ internal static class ExcursionTransitionWriter
     /// whenever it differs from the stored one. Any other write leaves the rule's next change
     /// unknown, since it moved state the recorded value was read from.
     /// </para>
+    /// <para>
+    /// <paramref name="heldTooLong"/> means the evaluation's hold reached the engine's bound
+    /// (docs/alerts/engine-semantics.md §6.4), a decision whose only stored change can be
+    /// <see cref="TrackerPostState.UpdatedAt"/>, which is what keeps the bound from being reported
+    /// again, so it is written.
+    /// </para>
     /// </remarks>
     /// <returns>
     /// The decision's transition with the host's excursion id, and the auto-resolve close when
@@ -94,16 +100,18 @@ internal static class ExcursionTransitionWriter
         CancellationToken ct,
         bool autoResolved = false,
         IReadOnlyList<RustTimerOp>? timerOps = null,
-        NextChange? nextChange = null)
+        NextChange? nextChange = null,
+        bool heldTooLong = false)
     {
-        if (!Changes(prior, decision, autoResolved)
+        if (!Changes(prior, decision, autoResolved || heldTooLong)
             && timerOps is not { Count: > 0 }
             && !(nextChange is not null && NextChangeMoved(prior, nextChange)))
             return (Unwritten(prior, decision), null);
 
         var written = await repository.ExecuteInTransactionAsync(
             (tx, token) => WriteAsync(
-                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, timerOps, nextChange, token),
+                tx, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, timerOps, nextChange,
+                heldTooLong, token),
             LandedAsync,
             ct);
         return (written.Transition, written.AutoResolve);
@@ -111,13 +119,14 @@ internal static class ExcursionTransitionWriter
 
     /// <summary>
     /// Whether <paramref name="decision"/> changes a stored row. A post-state differing from the
-    /// prior one only in <see cref="TrackerPostState.UpdatedAt"/> does not. The only reader of
-    /// <c>UpdatedAt</c> is a hysteresis state with no start, which adopts it as the start, and the
-    /// decision that adopts it writes the start.
+    /// prior one only in <see cref="TrackerPostState.UpdatedAt"/> does not, unless
+    /// <paramref name="forced"/>: the readers of <c>UpdatedAt</c> are a hysteresis state with no
+    /// start, which adopts it as the start, and the decision that adopts it writes the start, and
+    /// the hold bound, whose reaching decision is forced.
     /// </summary>
-    private static bool Changes(AlertTrackerState? prior, TrackerDecision decision, bool autoResolved) =>
+    private static bool Changes(AlertTrackerState? prior, TrackerDecision decision, bool forced) =>
         decision.Type is not (ExcursionTransitionType.None or ExcursionTransitionType.ExcursionContinues)
-        || autoResolved
+        || forced
         || StateChanged(prior, decision.Post);
 
     /// <summary>
@@ -130,7 +139,9 @@ internal static class ExcursionTransitionWriter
             || post.State != prior.State
             || post.HasExcursion != prior.ActiveExcursionId.HasValue
             || post.HysteresisStartedAt != prior.HysteresisStartedAt
-            || post.AwaitingRearm != prior.AwaitingRearm);
+            || post.AwaitingRearm != prior.AwaitingRearm
+            || !SameInstant(post.HeldSince, prior.HeldSince)
+            || post.HeldFacts != prior.HeldFacts);
 
     /// <summary>
     /// Whether recording <paramref name="nextChange"/>, or none for a write that is not a full
@@ -188,7 +199,9 @@ internal static class ExcursionTransitionWriter
                && SameInstant(stored.HysteresisStartedAt, wrote.HysteresisStartedAt)
                && stored.NextChangeKnown == wrote.NextChangeKnown
                && SameInstant(stored.NextChangeAt, wrote.NextChangeAt)
-               && stored.NextChangeGlucose == wrote.NextChangeGlucose;
+               && stored.NextChangeGlucose == wrote.NextChangeGlucose
+               && SameInstant(stored.HeldSince, wrote.HeldSince)
+               && stored.HeldFacts == wrote.HeldFacts;
     }
 
     private static bool Same(AlertTrackerState? stored, AlertTrackerState? prior) =>
@@ -201,7 +214,9 @@ internal static class ExcursionTransitionWriter
               && SameInstant(stored.HysteresisStartedAt, prior.HysteresisStartedAt)
               && stored.NextChangeKnown == prior.NextChangeKnown
               && SameInstant(stored.NextChangeAt, prior.NextChangeAt)
-              && stored.NextChangeGlucose == prior.NextChangeGlucose;
+              && stored.NextChangeGlucose == prior.NextChangeGlucose
+              && SameInstant(stored.HeldSince, prior.HeldSince)
+              && stored.HeldFacts == prior.HeldFacts;
 
     /// <summary>Equal to the microsecond, the precision the store keeps.</summary>
     private static bool SameInstant(DateTime? stored, DateTime? wrote) =>
@@ -220,6 +235,7 @@ internal static class ExcursionTransitionWriter
         bool autoResolved,
         IReadOnlyList<RustTimerOp>? timerOps,
         NextChange? nextChange,
+        bool heldTooLong,
         CancellationToken ct)
     {
         await repository.LockRuleAsync(ruleId, ct);
@@ -293,7 +309,8 @@ internal static class ExcursionTransitionWriter
         AlertTrackerState? state = null;
         var nextChangeMoved = NextChangeMoved(prior, nextChange);
         if (decision.Post is { } post
-            && (StateChanged(prior, post) || (post.HasExcursion ? activeId : null) != priorId || nextChangeMoved))
+            && (StateChanged(prior, post) || (post.HasExcursion ? activeId : null) != priorId || nextChangeMoved
+                || heldTooLong))
         {
             state = new AlertTrackerState
             {
@@ -306,6 +323,8 @@ internal static class ExcursionTransitionWriter
                 NextChangeAt = nextChange?.At,
                 NextChangeKnown = nextChange is not null,
                 NextChangeGlucose = nextChange?.Glucose,
+                HeldSince = post.HeldSince,
+                HeldFacts = post.HeldFacts,
             };
         }
         else if (prior is not null && nextChange is null && nextChangeMoved)
@@ -318,6 +337,8 @@ internal static class ExcursionTransitionWriter
                 UpdatedAt = prior.UpdatedAt,
                 HysteresisStartedAt = prior.HysteresisStartedAt,
                 AwaitingRearm = prior.AwaitingRearm,
+                HeldSince = prior.HeldSince,
+                HeldFacts = prior.HeldFacts,
             };
         }
         if (state is not null)
