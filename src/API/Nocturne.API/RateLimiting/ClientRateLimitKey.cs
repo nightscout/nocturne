@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using Nocturne.API.Authorization;
@@ -27,10 +28,28 @@ namespace Nocturne.API.RateLimiting;
 /// must present for it to name a caller. The ceilings that bound abuse are on the policies
 /// themselves in <see cref="Extensions.ServiceRegistrationExtensions"/>.
 /// </para>
+/// <para>
+/// The partition is the client, not the address: an IPv6 address counts as its network (see
+/// <see cref="IPv6ClientPrefixLength"/>), and an IPv4-mapped address as the IPv4 address it carries,
+/// since a dual-stack socket reports an IPv4 peer in that form. The signature covers the string as
+/// presented, so the address is reduced only after it verifies. Only the partition is reduced; what
+/// audit rows and session lists record is the full address, read from the connection.
+/// </para>
 /// </remarks>
 public sealed class ClientRateLimitKey
 {
     private const string Unknown = "unknown";
+
+    /// <summary>
+    /// The IPv6 prefix length one client is counted as.
+    /// </summary>
+    /// <remarks>
+    /// A subscriber is assigned at least a /64 (RFC 6177; SLAAC needs one per link), and any address
+    /// in it is theirs to use, so a limit on the whole address would hand one client 2^64 windows.
+    /// Counting the /64 puts the people on one IPv6 network in one bucket, as an IPv4 household
+    /// behind one NAT already is.
+    /// </remarks>
+    internal const int IPv6ClientPrefixLength = 64;
 
     private readonly byte[] _signingKey;
 
@@ -40,15 +59,28 @@ public sealed class ClientRateLimitKey
     }
 
     /// <summary>
-    /// The partition key for this request: the signed end-user address when one is presented,
-    /// otherwise the address the connection came from.
+    /// The partition key for this request: the client of the signed end-user address when one is
+    /// presented, otherwise of the address the connection came from.
     /// </summary>
     public string Resolve(HttpContext context) =>
-        SignedClientAddress(context.Request)
-        ?? context.Connection.RemoteIpAddress?.ToString()
-        ?? Unknown;
+        (SignedClientAddress(context.Request) ?? context.Connection.RemoteIpAddress) is { } address
+            ? Client(address)
+            : Unknown;
 
-    private string? SignedClientAddress(HttpRequest request)
+    private static string Client(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+            return address.ToString();
+
+        var bytes = address.GetAddressBytes();
+        bytes.AsSpan(IPv6ClientPrefixLength / 8).Clear();
+        return new IPNetwork(new IPAddress(bytes), IPv6ClientPrefixLength).ToString();
+    }
+
+    private IPAddress? SignedClientAddress(HttpRequest request)
     {
         if (_signingKey.Length == 0)
             return null;
@@ -70,7 +102,7 @@ public sealed class ClientRateLimitKey
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(signature.ToLowerInvariant()),
             Encoding.UTF8.GetBytes(expected))
-            ? address.ToString()
+            ? address
             : null;
     }
 }
