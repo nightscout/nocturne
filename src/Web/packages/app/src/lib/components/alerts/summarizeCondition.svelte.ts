@@ -1,6 +1,13 @@
 import type { ConditionNode } from "./types";
 import { AlertWeekday, PumpModeState, StateSpanCategory } from "@nocturne/api-client";
-import { bg, bgLabel, formatList, weekdayLabel } from "#lib/utils/formatting.js";
+import {
+	bg,
+	bgLabel,
+	convertRateToDisplayUnits,
+	formatList,
+	weekdayLabel,
+} from "#lib/utils/formatting.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { plural } from "#lib/utils/plural.js";
 import { glucoseBucketLabel } from "./alert-labels.svelte";
 
@@ -49,22 +56,23 @@ export function summarizeCondition(
 		case "threshold": {
 			const p = node.threshold;
 			if (!p) return "";
-			return p.direction === "below"
-				? `Glucose below ${bg(p.value ?? 0)} ${bgLabel()}`
-				: `Glucose above ${bg(p.value ?? 0)} ${bgLabel()}`;
+			return withMargin(
+				p.direction === "below"
+					? `Glucose below ${bg(p.value ?? 0)} ${bgLabel()}`
+					: `Glucose above ${bg(p.value ?? 0)} ${bgLabel()}`,
+				p.clear_margin,
+				(m) => `${bg(m)} ${bgLabel()}`,
+			);
 		}
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
 			const rate = `${bg(p.rate ?? 0)} ${bgLabel()} per minute`;
-			switch (p.direction) {
-				case "falling":
-					return `Glucose falling at least ${rate}`;
-				case "rising":
-					return `Glucose rising at least ${rate}`;
-				default:
-					return `Glucose changing at least ${rate}`;
-			}
+			return withMargin(
+				rateChip(p.direction, rate),
+				p.clear_margin,
+				(m) => `${convertRateToDisplayUnits(m, glucoseUnits.current)} ${bgLabel()} per minute`,
+			);
 		}
 		case "staleness": {
 			const p = node.staleness;
@@ -74,7 +82,11 @@ export function summarizeCondition(
 		case "predicted": {
 			const p = node.predicted;
 			if (!p) return "";
-			return `Predicted glucose ${opSymbol(p.operator)} ${bg(p.value ?? 0)} ${bgLabel()} in ${formatMinutes(p.within_minutes ?? 0)}`;
+			return withMargin(
+				`Predicted glucose ${opSymbol(p.operator)} ${bg(p.value ?? 0)} ${bgLabel()} in ${formatMinutes(p.within_minutes ?? 0)}`,
+				p.clear_margin,
+				(m) => `${bg(m)} ${bgLabel()}`,
+			);
 		}
 		case "trend": {
 			const p = node.trend;
@@ -89,17 +101,29 @@ export function summarizeCondition(
 		case "iob": {
 			const p = node.iob;
 			if (!p) return "";
-			return `Insulin on board ${opSymbol(p.operator)} ${p.value} U`;
+			return withMargin(
+				`Insulin on board ${opSymbol(p.operator)} ${p.value} U`,
+				p.clear_margin,
+				(m) => `${m} U`,
+			);
 		}
 		case "cob": {
 			const p = node.cob;
 			if (!p) return "";
-			return `Carbs on board ${opSymbol(p.operator)} ${p.value} g`;
+			return withMargin(
+				`Carbs on board ${opSymbol(p.operator)} ${p.value} g`,
+				p.clear_margin,
+				(m) => `${m} g`,
+			);
 		}
 		case "reservoir": {
 			const p = node.reservoir;
 			if (!p) return "";
-			return `Reservoir ${opSymbol(p.operator)} ${p.value} U`;
+			return withMargin(
+				`Reservoir ${opSymbol(p.operator)} ${p.value} U`,
+				p.clear_margin,
+				(m) => `${m} U`,
+			);
 		}
 		case "site_age": {
 			const p = node.site_age;
@@ -136,35 +160,42 @@ export function summarizeCondition(
 		case "pump_battery": {
 			const p = node.pump_battery;
 			if (!p) return "";
-			return `Pump battery ${opSymbol(p.operator)} ${p.value}%`;
+			return withMargin(
+				`Pump battery ${opSymbol(p.operator)} ${p.value}%`,
+				p.clear_margin,
+				(m) => `${m}%`,
+			);
 		}
 		case "temp_basal": {
 			const p = node.temp_basal;
 			if (!p) return "";
 			return p.metric === "rate"
-				? `Temp basal rate ${opSymbol(p.operator)} ${p.value} U/h`
-				: `Temp basal ${opSymbol(p.operator)} ${p.value}% of scheduled`;
+				? withMargin(
+						`Temp basal rate ${opSymbol(p.operator)} ${p.value} U/h`,
+						p.clear_margin,
+						(m) => `${m} U/h`,
+					)
+				: withMargin(
+						`Temp basal ${opSymbol(p.operator)} ${p.value}% of scheduled`,
+						p.clear_margin,
+						(m) => `${m}%`,
+					);
 		}
 		case "uploader_battery": {
 			const p = node.uploader_battery;
 			if (!p) return "";
-			return `Uploader battery ${opSymbol(p.operator)} ${p.value}%`;
+			return withMargin(
+				`Uploader battery ${opSymbol(p.operator)} ${p.value}%`,
+				p.clear_margin,
+				(m) => `${m}%`,
+			);
 		}
 		case "transmitter_battery": {
 			const p = node.transmitter_battery;
 			if (!p) return "";
-			switch (p.metric) {
-				case "voltage_a":
-					return `Transmitter voltage A ${opSymbol(p.operator)} ${p.value}`;
-				case "voltage_b":
-					return `Transmitter voltage B ${opSymbol(p.operator)} ${p.value}`;
-				case "resistance":
-					return `Transmitter resistance ${opSymbol(p.operator)} ${p.value}`;
-				case "days":
-					return `Transmitter age ${opSymbol(p.operator)} ${formatDays(p.value ?? 0)}`;
-				default:
-					return "";
-			}
+			return withMargin(transmitterChip(p.metric, p.operator, p.value), p.clear_margin, (m) =>
+				p.metric === "days" ? formatDays(m) : `${m}`,
+			);
 		}
 		case "override_active": {
 			const p = node.override_active;
@@ -174,7 +205,11 @@ export function summarizeCondition(
 		case "sensitivity_ratio": {
 			const p = node.sensitivity_ratio;
 			if (!p) return "";
-			return `Sensitivity ${opSymbol(p.operator)} ${p.value}`;
+			return withMargin(
+				`Sensitivity ${opSymbol(p.operator)} ${p.value}`,
+				p.clear_margin,
+				(m) => `${m}`,
+			);
 		}
 		case "do_not_disturb": {
 			const p = node.do_not_disturb;
@@ -232,6 +267,45 @@ export function summarizeCondition(
 
 function withDuration(chip: string, minutes: number | undefined): string {
 	return minutes ? `${chip} for ${formatMinutes(minutes)}` : chip;
+}
+
+/** A margin of 0 is the same as none, so it is not said. */
+function withMargin(
+	chip: string,
+	margin: number | null | undefined,
+	amount: (margin: number) => string,
+): string {
+	return margin ? `${chip}, clear margin ${amount(margin)}` : chip;
+}
+
+function rateChip(direction: string | undefined, rate: string): string {
+	switch (direction) {
+		case "falling":
+			return `Glucose falling at least ${rate}`;
+		case "rising":
+			return `Glucose rising at least ${rate}`;
+		default:
+			return `Glucose changing at least ${rate}`;
+	}
+}
+
+function transmitterChip(
+	metric: string | undefined,
+	operator: string | undefined,
+	value: number | undefined,
+): string {
+	switch (metric) {
+		case "voltage_a":
+			return `Transmitter voltage A ${opSymbol(operator)} ${value}`;
+		case "voltage_b":
+			return `Transmitter voltage B ${opSymbol(operator)} ${value}`;
+		case "resistance":
+			return `Transmitter resistance ${opSymbol(operator)} ${value}`;
+		case "days":
+			return `Transmitter age ${opSymbol(operator)} ${formatDays(value ?? 0)}`;
+		default:
+			return "";
+	}
 }
 
 export function alertWeekdayLabel(day: AlertWeekday): string {

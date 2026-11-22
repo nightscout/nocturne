@@ -406,4 +406,57 @@ public class AlertRulesControllerConditionValidationTests
             });
         (await db.AlertRules.CountAsync()).Should().Be(0);
     }
+
+    [NativeTheory]
+    [InlineData("Threshold", """{"direction": "below", "value": 70, "clear_margin": -5}""", "threshold", "margin_negative:clear_margin")]
+    [InlineData("Iob", """{"operator": "==", "value": 2, "clear_margin": 1}""", "iob", "margin_on_equality:clear_margin")]
+    [InlineData("Cob", """{"operator": ">", "value": 2, "clear_margin": "1"}""", "cob", "invalid_field:clear_margin")]
+    [InlineData("SiteAge", """{"operator": ">=", "value": 72, "clear_margin": 5}""", "site_age", "unknown_field")]
+    [InlineData("Not",
+        """{"child": {"type": "reservoir", "reservoir": {"operator": "<", "value": 20, "clear_margin": -1}}}""",
+        "not[0].reservoir", "margin_negative:clear_margin")]
+    [InlineData("Sustained",
+        """{"minutes": 15, "child": {"type": "composite", "composite": {"operator": "and", "conditions": [{"type": "iob", "iob": {"operator": ">", "value": 1}}, {"type": "threshold", "threshold": {"direction": "below", "value": 70, "clear_margin": 5}}]}}}""",
+        "sustained[0].composite[1].threshold", "margin_under_sustained:clear_margin")]
+    [InlineData("RateOfChange", """{"direction": "falling", "rate": 1, "clear_margin": 1.5}""", "rate_of_change", "margin_past_zero:clear_margin")]
+    public async Task CreateRule_rejects_an_invalid_clear_margin(
+        string type, string conditionParams, string path, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeFact]
+    public async Task CreateRule_saves_a_valid_clear_margin_as_written()
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 70, "clear_margin": 5}"""),
+        }, CancellationToken.None);
+
+        result.Result.Should().NotBeOfType<BadRequestObjectResult>();
+        var stored = await db.AlertRules.SingleAsync();
+        JsonDocument.Parse(stored.ConditionParams).RootElement.GetProperty("clear_margin").GetDecimal()
+            .Should().Be(5m);
+    }
 }

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "scenario": "clear-margin-auto-resolve-plain-limit",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-01-05T12:11:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-01-05T12:16:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "idle",
+            "awaiting_rearm": true
+          },
+          "auto_resolved": true,
+          "next_change_at": "2026-01-05T12:21:00Z"
+        }
+      ]
+    }
+  ]
+}

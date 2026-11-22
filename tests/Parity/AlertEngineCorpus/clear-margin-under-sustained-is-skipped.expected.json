@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "scenario": "clear-margin-under-sustained-is-skipped",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "timer_ops": [
+            {
+              "op": "set",
+              "path": "sustained",
+              "at": "2026-01-05T12:00:00Z"
+            }
+          ],
+          "next_change_at": "2026-01-05T12:10:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "next_change_at": "2026-01-05T12:10:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-01-05T12:21:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "excursion": 1,
+            "hysteresis_started_at": "2026-01-05T12:15:00Z"
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-01-05T12:15:00Z"
+            }
+          ],
+          "next_change_at": "2026-01-05T12:15:00.000000100Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import Brackets from "@lucide/svelte/icons/brackets";
-  import type { ConditionNode } from "./types";
+  import type { ConditionNode, RulePurpose } from "./types";
   import OperatorToggle from "./OperatorToggle.svelte";
   import RuleBuilderRow from "./RuleBuilderRow.svelte";
   import RuleBuilderAddPicker from "./RuleBuilderAddPicker.svelte";
@@ -24,8 +24,7 @@
     /** When true, suppress the lead-in (used by recursive nested groups so
      *  only the outermost shows it). */
     nested?: boolean;
-    /** What the conditions do when they are true: start the alert, close it, or extend its snooze. */
-    purpose?: "notify" | "resolve" | "snooze";
+    purpose?: RulePurpose;
   }
 
   let {
@@ -100,7 +99,7 @@
           out:sendRow={{ key: child._uid }}
           animate:flip={{ duration: 220 }}
         >
-          <RuleBuilderRow parent={node} index={i} {availableRules} {shiftHeld} />
+          <RuleBuilderRow parent={node} index={i} {availableRules} {shiftHeld} {purpose} />
         </div>
       {/each}
     {/if}

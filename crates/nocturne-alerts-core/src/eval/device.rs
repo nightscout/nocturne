@@ -12,14 +12,14 @@ use crate::context::{SensorContext, TrackerReference};
 use crate::enums::{CmpOp, TransmitterBatteryMetric, holds};
 use crate::facts::{ContextFact, ContextFact as F};
 use crate::model::{
-    ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
+    ActiveForPayload, AgeComparePayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
     TransmitterBatteryPayload,
 };
 use crate::truth::Truth;
 use crate::unknown::UnknownReason as R;
 
 /// Site age in hours; no site change is unknown.
-pub(super) fn site_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
+pub(super) fn site_age(p: &AgeComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_site_change_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
             decimal(
@@ -33,7 +33,7 @@ pub(super) fn site_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
 }
 
 /// Sensor age in days; no sensor start is unknown.
-pub(super) fn sensor_age(p: &ComparePayload, ctx: &SensorContext) -> ClockLeaf {
+pub(super) fn sensor_age(p: &AgeComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_sensor_start_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
             decimal(
@@ -142,7 +142,7 @@ pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> Held {
         env.ctx.has_ever_pump_snapshot,
         p.operator,
         env.ctx.pump_battery_percent,
-        p.value,
+        env.limit(p),
     )
 }
 
@@ -152,7 +152,7 @@ pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> Held {
         env.ctx.has_ever_uploader_snapshot,
         p.operator,
         env.ctx.uploader_battery_percent,
-        p.value,
+        env.limit(p),
     )
 }
 
@@ -166,7 +166,7 @@ pub(super) fn transmitter_battery(p: &TransmitterBatteryPayload, env: &Env) -> H
         TransmitterBatteryMetric::Days => env.ctx.transmitter_days,
     };
     unknown_by(
-        holds(p.operator, actual, p.value),
+        holds(p.operator, actual, env.limit(p)),
         F::Transmitter,
         R::Absent,
     )
@@ -178,6 +178,6 @@ pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> Held {
         env.ctx.has_ever_aps_sensitivity,
         p.operator,
         env.ctx.sensitivity_ratio,
-        p.value,
+        env.limit(p),
     )
 }

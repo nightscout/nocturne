@@ -255,6 +255,48 @@ the default that the setting shows. **Use the default** clears the bound you set
 This section explains what each setting does. It does not say which setting is
 right for you.
 
+### Clear margin
+
+A clear margin changes the value at which an open alert ends. It does not change
+the value at which the alert starts. You set it on one condition: open the
+condition's actions menu and select **Add a clear margin**. A condition can have
+a margin when it compares a value with a number. These are glucose, rate of
+change, predicted glucose, insulin on board, carbs on board and reservoir. Pump
+battery, uploader battery, transmitter, temp basal and sensitivity can also have
+one. Conditions about time, such as signal loss or site age, cannot have one.
+
+For example, a condition "glucose below 70 mg/dL" with a clear margin of 5 mg/dL:
+
+- The alert starts when glucose goes below 70 mg/dL, as without a margin.
+- While the alert is open, the condition stays true until glucose is 75 mg/dL or
+  more. A glucose value that goes from 69 to 72 and back to 69 stays one alert.
+  Without the margin, each crossing of 70 can end the alert and start a new one.
+- After the alert ends, the condition is true again only below 70 mg/dL.
+
+Inside "not", the margin moves the other way. It also keeps the open alert true
+for longer. For example, "not glucose below 70 mg/dL" with a clear margin of 5
+stays true until glucose goes below 65 mg/dL.
+
+A "for at least" setting is different. With it, the condition must be true for
+that time before the alert starts. A clear margin has no effect until the alert is
+open, and it does not delay the start.
+
+A condition cannot have both. "For at least" also stops a value that crosses the
+line back and forth from starting many alerts. It measures one time for each
+condition, and that time cannot be correct for two lines at once. When you add "for
+at least" to a condition, the editor removes its clear margin. A rule that has a
+margin inside "for at least" cannot run until you remove the margin.
+
+The margin has no effect in auto-resolve and Smart snooze conditions, so the
+editor does not show it there. A margin of 0 is the same as no margin. A margin
+cannot be less than 0, and a condition that checks for an exact value cannot have
+one. On a rate of change, the margin cannot be more than the rate. With a margin
+equal to the rate, a "falling" alert stays open until glucose starts to rise. The rule summary shows the margin, for example "Glucose below 70 mg/dL, clear
+margin 5 mg/dL".
+
+This section explains what the clear margin does. It does not say if a margin is
+right for you, or which margin to use.
+
 ## Testing a rule
 
 The panel on the right has two ways to check a rule before you rely on it:

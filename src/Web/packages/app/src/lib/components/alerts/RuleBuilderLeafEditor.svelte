@@ -6,7 +6,14 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
   import X from "@lucide/svelte/icons/x";
-  import { bg, bgLabel, convertFromDisplayUnits } from "#lib/utils/formatting.js";
+  import {
+    bg,
+    bgLabel,
+    convertFromDisplayUnits,
+    convertRateFromDisplayUnits,
+    convertRateToDisplayUnits,
+  } from "#lib/utils/formatting.js";
+  import { conditionIssueSentence } from "./conditionIssues.svelte";
   import { alertWeekdayLabel } from "./summarizeCondition.svelte";
   import {
     ALERT_STATES,
@@ -26,8 +33,11 @@
   import {
     type ConditionNode,
     type ComparisonOperator,
+    type RulePurpose,
     type StalenessOperator,
     isStringEnumMember,
+    marginedPayload,
+    marginPayload,
     TREND_BUCKETS,
     TempBasalMetric,
     TransmitterBatteryMetric,
@@ -54,9 +64,59 @@
      */
     node: ConditionNode;
     availableRules?: AvailableRule[];
+    purpose?: RulePurpose;
+    /** The leaf is inside "for at least", which refuses a clear margin. */
+    underSustained?: boolean;
   }
 
-  let { node, availableRules = [] }: Props = $props();
+  let { node, availableRules = [], purpose = "notify", underSustained = false }: Props = $props();
+
+  let margined = $derived(marginedPayload(node, purpose, underSustained));
+  let storedUnderSustained = $derived(
+    underSustained ? (marginPayload(node)?.clear_margin ?? 0) > 0 : false,
+  );
+
+  /** A margin as the input shows it: glucose in the display unit, a rate to its fraction. */
+  function marginShown(mgdl: number): number {
+    switch (node.type) {
+      case "threshold":
+      case "predicted":
+        return bg(mgdl);
+      case "rate_of_change":
+        return convertRateToDisplayUnits(mgdl, glucoseUnits.current);
+      default:
+        return mgdl;
+    }
+  }
+
+  /** A margin as typed, stored in mg/dL for glucose. */
+  function marginStored(entered: number): number {
+    switch (node.type) {
+      case "threshold":
+      case "predicted":
+        return convertFromDisplayUnits(entered, glucoseUnits.current);
+      case "rate_of_change":
+        return convertRateFromDisplayUnits(entered, glucoseUnits.current);
+      default:
+        return entered;
+    }
+  }
+
+  function marginStep(kind: string): string {
+    switch (kind) {
+      case "threshold":
+      case "predicted":
+        return glucoseUnits.current === "mmol" ? "0.1" : "1";
+      case "rate_of_change":
+        return glucoseUnits.current === "mmol" ? "0.01" : "0.1";
+      case "sensitivity_ratio":
+        return "0.01";
+      case "transmitter_battery":
+        return "1";
+      default:
+        return "0.1";
+    }
+  }
 
   // A mounted leaf editor's kind never changes (the picker adds new leaves
   // rather than retyping existing ones), so the query can be created
@@ -243,11 +303,14 @@
       step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
       size="sm"
       class="w-20 text-right tabular-nums"
-      value={bg(node.rate_of_change.rate ?? 0)}
+      value={convertRateToDisplayUnits(node.rate_of_change.rate ?? 0, glucoseUnits.current)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.rate_of_change)
-          node.rate_of_change.rate = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0)),
+          node.rate_of_change.rate = convertRateFromDisplayUnits(
+            parseNumber(
+              e.currentTarget.value,
+              convertRateToDisplayUnits(node.rate_of_change.rate ?? 0, glucoseUnits.current),
+            ),
             glucoseUnits.current,
           );
       }}
@@ -839,6 +902,49 @@
     <span class="text-xs text-muted-foreground">
       hours. Use a negative number for the time before a scheduled event.
     </span>
+  {/if}
+  {#if margined && margined.clear_margin != null}
+    {@const payload = margined}
+    <span class="text-xs text-muted-foreground">clear margin</span>
+    <Input
+      type="number"
+      aria-label="Clear margin"
+      min="0"
+      step={marginStep(node.type)}
+      size="sm"
+      class="w-20 text-right tabular-nums"
+      value={marginShown(payload.clear_margin ?? 0)}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        const entered = Math.max(
+          0,
+          parseNumber(e.currentTarget.value, marginShown(payload.clear_margin ?? 0)),
+        );
+        payload.clear_margin = marginStored(entered);
+      }}
+    />
+    <span class="text-xs text-muted-foreground">
+      {node.type === "rate_of_change"
+        ? `${bgLabel()}/min`
+        : node.type === "threshold" || node.type === "predicted"
+          ? bgLabel()
+          : leafSuffix(node.type)}
+    </span>
+  {/if}
+  {#if storedUnderSustained}
+    <span class="text-xs text-destructive">
+      {conditionIssueSentence("margin_under_sustained", "clear_margin")}
+    </span>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onclick={() => {
+        const payload = marginPayload(node);
+        if (payload) payload.clear_margin = undefined;
+      }}
+    >
+      Remove the clear margin
+    </Button>
   {/if}
 </div>
 

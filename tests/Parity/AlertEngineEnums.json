@@ -108,6 +108,7 @@
       "state"
     ],
     "cob": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -126,6 +127,7 @@
       "buckets"
     ],
     "iob": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -145,11 +147,13 @@
       "is_active"
     ],
     "predicted": [
+      "clear_margin",
       "operator",
       "value",
       "within_minutes"
     ],
     "pump_battery": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -163,14 +167,17 @@
       "is_active"
     ],
     "rate_of_change": [
+      "clear_margin",
       "direction",
       "rate"
     ],
     "reservoir": [
+      "clear_margin",
       "operator",
       "value"
     ],
     "sensitivity_ratio": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -203,11 +210,13 @@
       "minutes"
     ],
     "temp_basal": [
+      "clear_margin",
       "metric",
       "operator",
       "value"
     ],
     "threshold": [
+      "clear_margin",
       "direction",
       "value"
     ],
@@ -230,6 +239,7 @@
       "tracker_definition_id"
     ],
     "transmitter_battery": [
+      "clear_margin",
       "metric",
       "operator",
       "value"
@@ -238,6 +248,7 @@
       "bucket"
     ],
     "uploader_battery": [
+      "clear_margin",
       "operator",
       "value"
     ]

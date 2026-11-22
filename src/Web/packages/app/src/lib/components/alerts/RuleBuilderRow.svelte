@@ -31,8 +31,15 @@
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Moon from "@lucide/svelte/icons/moon";
-  import type { ConditionNode } from "./types";
-  import { isTrendBucket, toAlertConditionType, type TrendBucket } from "./types";
+  import type { ConditionNode, RulePurpose } from "./types";
+  import {
+    isTrendBucket,
+    marginedPayload,
+    marginPayload,
+    toAlertConditionType,
+    type TrendBucket,
+  } from "./types";
+  import Ruler from "@lucide/svelte/icons/ruler";
   import { Direction } from "#lib/api/index.js";
   import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import RuleBuilder from "./RuleBuilder.svelte";
@@ -63,9 +70,10 @@
     availableRules?: AvailableRule[];
     /** Tracked at RuleBuilder scope; passed in so every row in a group reacts to the same shift state. */
     shiftHeld: boolean;
+    purpose: RulePurpose;
   }
 
-  let { parent, index, availableRules = [], shiftHeld }: Props = $props();
+  let { parent, index, availableRules = [], shiftHeld, purpose }: Props = $props();
 
   let child = $derived(parent.composite!.conditions[index]);
   let operator = $derived(parent.composite!.operator);
@@ -126,6 +134,8 @@
     child.type === "sustained" ||
       (isNot && child.not?.child.type === "sustained"),
   );
+  let margined = $derived(marginedPayload(leafTarget, purpose, isSustained));
+  let stored = $derived(marginPayload(leafTarget));
   let sustainedNode = $derived(
     child.type === "sustained"
       ? child
@@ -246,7 +256,7 @@
         {label}
       </span>
       <div class="min-w-0 flex-1">
-        <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} nested />
+        <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} {purpose} nested />
       </div>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
@@ -331,7 +341,7 @@
         ? factLabel(leafKind)
         : conditionLabel(toAlertConditionType(child.type))}
     </span>
-    <RuleBuilderLeafEditor node={leafTarget} {availableRules} />
+    <RuleBuilderLeafEditor node={leafTarget} {availableRules} {purpose} underSustained={isSustained} />
     {#if isSustained && sustainedNode?.sustained}
       <span class="text-xs text-muted-foreground shrink-0">for at least</span>
       <Input
@@ -383,8 +393,22 @@
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" data-testid="alert-row-actions-menu">
         {#if !isSustained}
-          <DropdownMenu.Item onclick={() => wrapChild(parent, index, "sustained")}>
+          <DropdownMenu.Item
+            onclick={() => {
+              if (stored) stored.clear_margin = undefined;
+              wrapChild(parent, index, "sustained");
+            }}
+          >
             <Timer class="h-4 w-4 mr-2" /> Add “for at least”
+          </DropdownMenu.Item>
+        {/if}
+        {#if margined && margined.clear_margin == null}
+          <DropdownMenu.Item
+            onclick={() => {
+              if (margined) margined.clear_margin = 0;
+            }}
+          >
+            <Ruler class="h-4 w-4 mr-2" /> Add a clear margin
           </DropdownMenu.Item>
         {/if}
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
@@ -396,10 +420,21 @@
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "or")}>
           <Brackets class="h-4 w-4 mr-2" /> Put in an “any of” group
         </DropdownMenu.Item>
-        {#if isNot || isSustained}
+        {#if isNot || isSustained || stored?.clear_margin != null}
           <DropdownMenu.Separator />
+        {/if}
+        {#if isNot || isSustained}
           <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
             {isNot ? "Remove NOT" : "Remove “for at least”"}
+          </DropdownMenu.Item>
+        {/if}
+        {#if stored?.clear_margin != null}
+          <DropdownMenu.Item
+            onclick={() => {
+              if (stored) stored.clear_margin = undefined;
+            }}
+          >
+            Remove the clear margin
           </DropdownMenu.Item>
         {/if}
         {#if !isFirst || !isLast}

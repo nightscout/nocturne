@@ -16,7 +16,7 @@ use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
     TransitionType, hysteresis_window,
 };
-use crate::leaf_identity::collect_leaves;
+use crate::leaf_identity::collect_leaves_with_polarity;
 use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
 use crate::next_change::next_change_at;
 use crate::paths::AUTO_RESOLVE_ROOT;
@@ -338,6 +338,7 @@ pub fn evaluate_parsed_rule(
             .tracker
             .state(rule.id)
             .is_none_or(TrackerState::holds_only_a_hold);
+    let excursion_open = state.tracker.excursion_open(rule.id);
     let outcome = evaluate_body(
         rule,
         body,
@@ -345,6 +346,7 @@ pub fn evaluate_parsed_rule(
         now,
         &mut state.timers,
         first_evaluation.then_some(rule.enabled_at).flatten(),
+        excursion_open,
         log_leaves,
     );
     let mut clock_anomaly = outcome.clock_anomaly;
@@ -400,7 +402,7 @@ pub fn evaluate_parsed_rule(
     let auto_resolved = !awaiting
         && rule.auto_resolve_enabled
         && try_auto_resolve(rule, ctx, now, state, &mut clock_anomaly);
-    let next_change_at = next_change_at(rule, body, ctx, now, state);
+    let next_change_at = next_change_at(rule, body, ctx, now, state, excursion_open);
 
     RuleOutcome {
         rule_id: rule.id,
@@ -430,7 +432,12 @@ pub(crate) struct BodyOutcome {
 
 /// The root truth of a body read by [`Rule::parse_body`] and, when
 /// `log_leaves`, each leaf alone. `first_evaluation_bound` is
-/// [`Env::first_evaluation_bound`].
+/// [`Env::first_evaluation_bound`] and `excursion_open`
+/// [`Env::excursion_open`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is one input of the evaluation the driver composes"
+)]
 pub(crate) fn evaluate_body(
     rule: &Rule,
     body: &Node,
@@ -438,19 +445,25 @@ pub(crate) fn evaluate_body(
     now: DateTime<Utc>,
     timers: &mut TimerStore,
     first_evaluation_bound: Option<DateTime<Utc>>,
+    excursion_open: bool,
     log_leaves: bool,
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
-    let mut env =
-        rule_env(rule, ctx, now, timers).with_first_evaluation_bound(first_evaluation_bound);
+    let mut env = rule_env(rule, ctx, now, timers)
+        .with_first_evaluation_bound(first_evaluation_bound)
+        .with_excursion_open(excursion_open);
     let (root, unknown) = eval_payload_unknown(body.payload(), wire, &mut env);
 
-    // Leaves evaluate alone, at the rule's root path;
+    // Leaves evaluate alone, at the rule's root path, each with its polarity
+    // in the tree so a margined leaf logs the limit the root read;
     // a leaf touches no timers.
     let leaves = log_leaves.then(|| {
-        collect_leaves(body)
+        collect_leaves_with_polarity(body)
             .into_iter()
-            .map(|leaf| eval_node(leaf, wire, &mut env))
+            .map(|(leaf, negated)| {
+                env.negated = negated;
+                eval_node(leaf, wire, &mut env)
+            })
             .collect()
     });
     BodyOutcome {

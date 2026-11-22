@@ -560,8 +560,15 @@ fn threshold(direction: &str, value: i64) -> Value {
 fn body() -> impl Strategy<Value = Value> {
     let level = select(vec![70i64, 80, 180]);
     let leaf = (select(vec!["below", "above"]), level.clone()).prop_map(|(d, v)| threshold(d, v));
+    let margined =
+        (select(vec!["below", "above"]), level.clone(), 1i64..=20).prop_map(|(d, v, m)| {
+            json!({ "type": "threshold",
+                "threshold": { "direction": d, "value": v, "clear_margin": m } })
+        });
     prop_oneof![
         3 => leaf.clone(),
+        2 => margined.clone(),
+        1 => margined.prop_map(|child| json!({ "type": "not", "not": { "child": child } })),
         2 => (1i64..=20, leaf.clone()).prop_map(|(m, child)| json!({
             "type": "sustained", "sustained": { "minutes": m, "child": child } })),
         2 => (5i64..=40).prop_map(|m| json!({

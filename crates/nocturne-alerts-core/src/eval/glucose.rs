@@ -2,6 +2,7 @@
 //! glucose_bucket, staleness.
 
 use chrono::{DateTime, TimeDelta, Utc};
+use rust_decimal::Decimal;
 
 use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
 use super::signal::{DataStopped, data_stopped};
@@ -9,10 +10,10 @@ use super::{Env, Held};
 use crate::clock_anomaly::ClockAnchor;
 use crate::compare::Unit;
 use crate::context::SensorContext;
-use crate::enums::{CmpOp, RateDirection, ThresholdDirection, holds};
+use crate::enums::{CmpOp, holds};
 use crate::facts::ContextFact;
 use crate::model::{
-    ConditionKind, GlucoseBucketPayload, Payload, PredictedPayload, RateOfChangePayload,
+    ConditionKind, GlucoseBucketPayload, Margined, Payload, PredictedPayload, RateOfChangePayload,
     StalenessPayload, ThresholdPayload, TrendPayload,
 };
 use crate::truth::Truth;
@@ -106,18 +107,19 @@ fn reading(truth: Truth, ctx: &SensorContext) -> Held {
 /// Strict comparison: below `v < value`, above `v > value`; no fresh reading
 /// is unknown.
 pub(super) fn threshold(p: &ThresholdPayload, env: &mut Env) -> Held {
-    judged(env.ctx.latest_value, env, |latest| match p.direction {
-        ThresholdDirection::Below => latest < p.value,
-        ThresholdDirection::Above => latest > p.value,
-    })
+    compared(p, env.ctx.latest_value, env)
 }
 
 /// Inclusive comparison: falling `rate' <= -rate`, rising `rate' >= rate`.
 pub(super) fn rate_of_change(p: &RateOfChangePayload, env: &mut Env) -> Held {
-    judged(env.ctx.trend_rate, env, |rate| match p.direction {
-        RateDirection::Falling => rate <= -p.rate,
-        RateDirection::Rising => rate >= p.rate,
-    })
+    compared(p, env.ctx.trend_rate, env)
+}
+
+/// A judged glucose leaf's comparison of `fact` with its limit.
+fn compared(p: &impl Margined, fact: Option<Decimal>, env: &mut Env) -> Held {
+    let (op, _) = p.comparison();
+    let limit = env.limit(p);
+    judged(fact, env, |actual| op.apply(actual, limit))
 }
 
 /// A bucket name the crate cannot name reads as an absent bucket (§4).
@@ -132,13 +134,14 @@ pub(super) fn predicted(p: &PredictedPayload, env: &Env) -> Held {
     if env.ctx.predictions.is_empty() {
         return Held::unknown(ContextFact::Predictions, UnknownReason::Absent);
     }
+    let limit = env.limit(p);
     reading(
         Truth::any(
             env.ctx
                 .predictions
                 .iter()
                 .filter(|point| point.offset_minutes <= p.within_minutes.get())
-                .map(|point| holds(p.operator, Some(point.mgdl), p.value)),
+                .map(|point| holds(p.operator, Some(point.mgdl), limit)),
         ),
         env.ctx,
     )

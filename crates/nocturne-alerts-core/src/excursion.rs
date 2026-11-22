@@ -323,6 +323,13 @@ impl ExcursionTracker {
         }
     }
 
+    /// Whether the rule's excursion is open (engine-semantics.md §3, clear
+    /// margin): it has one that is active or in hysteresis.
+    #[must_use]
+    pub fn excursion_open(&self, rule_id: Uuid) -> bool {
+        self.active_excursion_id(rule_id).is_some()
+    }
+
     /// Whether the rule is idle awaiting re-arm (§6.3), so its evaluation
     /// reads the auto-resolve tree before the tracker.
     #[must_use]

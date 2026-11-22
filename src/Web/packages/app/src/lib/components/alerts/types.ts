@@ -99,6 +99,70 @@ export type ConditionKind = `${AlertConditionType}`;
 
 export type ComparisonOperator = ">=" | ">" | "<=" | "<";
 
+/** What a rule builder's conditions do when they are true: start the alert, close it, or extend its snooze. */
+export type RulePurpose = "notify" | "resolve" | "snooze";
+
+/** The payload of a leaf that takes a clear margin. */
+export type MarginedPayload =
+	| ThresholdCondition
+	| RateOfChangeCondition
+	| PredictedCondition
+	| IobCondition
+	| CobCondition
+	| ReservoirCondition
+	| PumpBatteryCondition
+	| UploaderBatteryCondition
+	| SensitivityRatioCondition
+	| TempBasalCondition
+	| TransmitterBatteryCondition;
+
+/**
+ * The leaf's payload when the editor offers it a clear margin: a leaf of a kind
+ * that takes one, in conditions that start the alert (the engine reads a margin
+ * only there, docs/alerts/engine-semantics.md §3), not on an `==` comparison,
+ * and not under "for at least", which refuses one.
+ */
+export function marginedPayload(
+	node: ConditionNode,
+	purpose: RulePurpose,
+	underSustained: boolean,
+): MarginedPayload | undefined {
+	if (purpose !== "notify" || underSustained) return undefined;
+	const payload = marginPayload(node);
+	if (payload && "operator" in payload && payload.operator === "==") return undefined;
+	return payload;
+}
+
+/** The payload of a leaf of a kind that takes a clear margin, wherever it is. */
+export function marginPayload(node: ConditionNode): MarginedPayload | undefined {
+	switch (node.type) {
+		case "threshold":
+			return node.threshold;
+		case "rate_of_change":
+			return node.rate_of_change;
+		case "predicted":
+			return node.predicted;
+		case "iob":
+			return node.iob;
+		case "cob":
+			return node.cob;
+		case "reservoir":
+			return node.reservoir;
+		case "pump_battery":
+			return node.pump_battery;
+		case "uploader_battery":
+			return node.uploader_battery;
+		case "sensitivity_ratio":
+			return node.sensitivity_ratio;
+		case "temp_basal":
+			return node.temp_basal;
+		case "transmitter_battery":
+			return node.transmitter_battery;
+		default:
+			return undefined;
+	}
+}
+
 /** Narrows an arbitrary value to a member of a string-valued enum. */
 export function isStringEnumMember<E extends Record<string, string>>(
 	enumObject: E,

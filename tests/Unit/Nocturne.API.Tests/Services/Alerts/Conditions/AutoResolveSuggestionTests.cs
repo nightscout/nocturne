@@ -34,6 +34,22 @@ public class AutoResolveSuggestionTests
             $$$"""{"type":"threshold","threshold":{"direction":"{{{direction}}}","value":70.0}}""",
             $$$"""{"type":"threshold","threshold":{"direction":"{{{opposite}}}","value":70.0}}""");
 
+    [Fact]
+    public void AnOppositeCarriesNoClearMarginSinceAResolveTreeReadsNone() =>
+        Opposite(
+            """
+            {"type":"composite","composite":{"operator":"and","conditions":[
+                {"type":"threshold","threshold":{"direction":"below","value":70,"clear_margin":5}},
+                {"type":"iob","iob":{"operator":">","value":2,"clear_margin":1}},
+                {"type":"rate_of_change","rate_of_change":{"direction":"falling","rate":2,"clear_margin":1}}]}}
+            """,
+            """
+            {"type":"composite","composite":{"operator":"or","conditions":[
+                {"type":"threshold","threshold":{"direction":"above","value":70}},
+                {"type":"iob","iob":{"operator":"<=","value":2}},
+                {"type":"not","not":{"child":{"type":"rate_of_change","rate_of_change":{"direction":"falling","rate":2}}}}]}}
+            """);
+
     [Theory]
     [InlineData("<", ">=")]
     [InlineData("<=", ">")]

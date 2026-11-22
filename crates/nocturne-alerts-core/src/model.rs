@@ -21,7 +21,7 @@ use crate::enums::{
     StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
     WireEnum,
 };
-use crate::paths::child_path;
+use crate::paths::{child_path, node_child_path};
 
 /// Why a condition tree cannot be evaluated (engine-semantics.md §1.4).
 /// [`Reason::code`] is the stable wire code; no reason carries a value read
@@ -68,6 +68,16 @@ pub enum Reason {
     /// A `state_span_active` on the pump-mode category, which only
     /// `pump_state` reads.
     PumpModeCategory,
+    /// A negative `clear_margin`.
+    MarginNegative,
+    /// A `clear_margin` above zero on an `==` comparison, which has no side
+    /// to widen.
+    MarginOnEquality,
+    /// A `rate_of_change` `clear_margin` above its `rate`, which would carry
+    /// the limit past zero.
+    MarginPastZero,
+    /// A `clear_margin` above zero on a leaf under a `sustained`.
+    MarginUnderSustained,
 }
 
 impl Reason {
@@ -90,6 +100,10 @@ impl Reason {
             Reason::EmptyWindow => "empty_window",
             Reason::ListEmpty(_) => "list_empty",
             Reason::PumpModeCategory => "pump_mode_category",
+            Reason::MarginNegative => "margin_negative",
+            Reason::MarginOnEquality => "margin_on_equality",
+            Reason::MarginPastZero => "margin_past_zero",
+            Reason::MarginUnderSustained => "margin_under_sustained",
         }
     }
 
@@ -105,6 +119,10 @@ impl Reason {
             | Reason::MinutesNotPositive(f)
             | Reason::MinutesNegative(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
+            Reason::MarginNegative
+            | Reason::MarginOnEquality
+            | Reason::MarginPastZero
+            | Reason::MarginUnderSustained => Some(CLEAR_MARGIN),
             Reason::TypeMissing | Reason::UnknownKind => Some("type"),
             Reason::NotAnObject
             | Reason::TooDeep
@@ -226,8 +244,8 @@ condition_kinds! {
     Iob = "iob" => ComparePayload,
     Cob = "cob" => ComparePayload,
     Reservoir = "reservoir" => ComparePayload,
-    SiteAge = "site_age" => ComparePayload,
-    SensorAge = "sensor_age" => ComparePayload,
+    SiteAge = "site_age" => AgeComparePayload,
+    SensorAge = "sensor_age" => AgeComparePayload,
     AlertState = "alert_state" => AlertStatePayload,
     LoopStale = "loop_stale" => MinutesComparePayload,
     LoopEnactionStale = "loop_enaction_stale" => MinutesComparePayload,
@@ -247,6 +265,27 @@ condition_kinds! {
     SleepSessionActive = "sleep_session_active" => SleepSessionPayload,
     TrackerAge = "tracker_age" => TrackerAgePayload,
     TransmitterBattery = "transmitter_battery" => TransmitterBatteryPayload,
+}
+
+impl Payload {
+    /// The payload as a leaf that takes a [`ClearMargin`], when it is one.
+    #[must_use]
+    pub fn margined(&self) -> Option<&dyn Margined> {
+        match self {
+            Payload::Threshold(p) => Some(p),
+            Payload::RateOfChange(p) => Some(p),
+            Payload::Predicted(p) => Some(p),
+            Payload::Iob(p)
+            | Payload::Cob(p)
+            | Payload::Reservoir(p)
+            | Payload::PumpBattery(p)
+            | Payload::UploaderBattery(p)
+            | Payload::SensitivityRatio(p) => Some(p),
+            Payload::TempBasal(p) => Some(p),
+            Payload::TransmitterBattery(p) => Some(p),
+            _ => None,
+        }
+    }
 }
 
 impl ConditionKind {
@@ -606,6 +645,89 @@ impl Operand for NonNegativeMinutes {
     }
 }
 
+/// The payload property a [`ClearMargin`] is read from.
+pub const CLEAR_MARGIN: &str = "clear_margin";
+
+/// How far past its limit a comparison leaf stays true while its rule's
+/// excursion is open (engine-semantics.md §3, clear margin), in the unit of
+/// the leaf's value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClearMargin(Decimal);
+
+impl ClearMargin {
+    #[must_use]
+    pub fn get(self) -> Decimal {
+        self.0
+    }
+}
+
+impl Serialize for ClearMargin {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        exact_decimal(&self.0, s)
+    }
+}
+
+impl Operand for ClearMargin {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        let margin = <Decimal as Operand>::parse(v, name)?;
+        if margin.is_sign_negative() && !margin.is_zero() {
+            return Err(Reason::MarginNegative);
+        }
+        Ok(Self(margin))
+    }
+}
+
+/// A leaf that compares a reading with a limit, and takes a [`ClearMargin`].
+pub trait Margined {
+    /// The comparison as `reading <operator> limit`.
+    fn comparison(&self) -> (CmpOp, Decimal);
+
+    fn clear_margin(&self) -> Option<ClearMargin>;
+
+    /// Whether the margin moves the limit: it is present and above zero.
+    fn widens(&self) -> bool {
+        self.clear_margin().is_some_and(|m| !m.get().is_zero())
+    }
+
+    /// The limit the leaf compares against: while the rule's excursion is
+    /// `open`, moved by its margin toward the side that keeps the rule true,
+    /// which is the leaf's false side under an odd number of `not`s
+    /// (`negated`); else its plain limit.
+    fn limit(&self, open: bool, negated: bool) -> Decimal {
+        let (op, limit) = self.comparison();
+        match self.clear_margin() {
+            Some(margin) if open => {
+                let margin = margin.get();
+                op.widened(limit, if negated { -margin } else { margin })
+            }
+            _ => limit,
+        }
+    }
+
+    /// The largest margin the leaf takes, where one larger would carry its
+    /// limit past zero; `None` for no bound.
+    fn largest_margin(&self) -> Option<Decimal> {
+        None
+    }
+
+    /// What is wrong with the margin as written, if anything.
+    fn margin_issue(&self) -> Option<Reason> {
+        let margin = self.clear_margin().map(ClearMargin::get)?;
+        if !self.widens() {
+            None
+        } else if self.comparison().0 == CmpOp::Eq {
+            Some(Reason::MarginOnEquality)
+        } else if self
+            .largest_margin()
+            .is_some_and(|largest| margin > largest)
+        {
+            Some(Reason::MarginPastZero)
+        } else {
+            None
+        }
+    }
+}
+
 /// A string that is exactly a member's wire name.
 fn word<E: WireEnum>(v: &Value, name: &'static str) -> Result<E, Reason> {
     let text = v.as_str().ok_or(Reason::InvalidField(name))?;
@@ -645,6 +767,7 @@ operand_fields!(
     NaiveTime,
     PositiveMinutes,
     NonNegativeMinutes,
+    ClearMargin,
     ThresholdDirection,
     RateDirection,
     CompositeOp,
@@ -736,19 +859,66 @@ macro_rules! payload {
             }
         }
     };
+    (
+        $(#[$meta:meta])* margined $name:ident {
+            $($(#[$field_meta:meta])* $field:ident: $ty:ty),* $(,)?
+        }
+        comparison |$s:ident| $comparison:expr
+        $(, largest_margin |$b:ident| $largest:expr)?
+    ) => {
+        payload!(
+            $(#[$meta])* $name {
+                $($(#[$field_meta])* $field: $ty,)*
+                #[serde(skip_serializing_if = "Option::is_none")]
+                clear_margin: Option<ClearMargin>,
+            }
+            check |p, r| p.margin_issue().is_none_or(|reason| r.report(reason))
+        );
+
+        impl Margined for $name {
+            fn comparison(&self) -> (CmpOp, Decimal) {
+                let $s = self;
+                $comparison
+            }
+
+            fn clear_margin(&self) -> Option<ClearMargin> {
+                self.clear_margin
+            }
+
+            $(
+                fn largest_margin(&self) -> Option<Decimal> {
+                    let $b = self;
+                    $largest
+                }
+            )?
+        }
+    };
 }
 
-payload!(ThresholdPayload {
-    direction: ThresholdDirection,
-    #[serde(serialize_with = "exact_decimal")]
-    value: Decimal,
-});
+payload!(
+    margined ThresholdPayload {
+        direction: ThresholdDirection,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+    }
+    comparison |p| match p.direction {
+        ThresholdDirection::Below => (CmpOp::Lt, p.value),
+        ThresholdDirection::Above => (CmpOp::Gt, p.value),
+    }
+);
 
-payload!(RateOfChangePayload {
-    direction: RateDirection,
-    #[serde(serialize_with = "exact_decimal")]
-    rate: Decimal,
-});
+payload!(
+    margined RateOfChangePayload {
+        direction: RateDirection,
+        #[serde(serialize_with = "exact_decimal")]
+        rate: Decimal,
+    }
+    comparison |p| match p.direction {
+        RateDirection::Falling => (CmpOp::Le, -p.rate),
+        RateDirection::Rising => (CmpOp::Ge, p.rate),
+    },
+    largest_margin |p| Some(p.rate)
+);
 
 payload!(SignalLossPayload {
     timeout_minutes: PositiveMinutes
@@ -765,23 +935,53 @@ payload!(NotPayload {
     child: Box<Node>,
 });
 
-payload!(SustainedPayload {
-    minutes: PositiveMinutes,
-    #[serde(skip)]
-    child: Box<Node>,
-});
+payload!(
+    /// A margin above zero on a leaf under it is refused: the node keeps one
+    /// run start (engine-semantics.md §3), which cannot serve both the plain
+    /// and the widened limit.
+    SustainedPayload {
+        minutes: PositiveMinutes,
+        #[serde(skip)]
+        child: Box<Node>,
+    }
+    check |p, r| report_margins_under(&p.child, &node_child_path(r.path, 0, &p.child), r.issues)
+);
+
+/// Reports each leaf in `node` with a margin above zero that no nearer
+/// `sustained` reports; `true` when there is none.
+fn report_margins_under(node: &Node, path: &str, issues: &Issues) -> bool {
+    if let Payload::Sustained(_) = node.payload() {
+        return true;
+    }
+    if let Some(container) = node.container() {
+        // Every child is visited, so every margin is reported, not only the first.
+        let reported = container
+            .children()
+            .enumerate()
+            .filter(|&(i, child)| {
+                !report_margins_under(child, &node_child_path(path, i, child), issues)
+            })
+            .count();
+        return reported == 0;
+    }
+    !node.payload().margined().is_some_and(|m| m.widens())
+        || issues.report(path, Reason::MarginUnderSustained)
+}
 
 payload!(StalenessPayload {
     operator: CmpOp,
     value: NonNegativeMinutes,
 });
 
-payload!(PredictedPayload {
-    operator: CmpOp,
-    #[serde(serialize_with = "exact_decimal")]
-    value: Decimal,
-    within_minutes: PositiveMinutes,
-});
+payload!(
+    margined PredictedPayload {
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+        within_minutes: PositiveMinutes,
+    }
+    comparison |p| (p.operator, p.value)
+);
 
 payload!(TrendPayload {
     bucket: TrendBucket
@@ -800,9 +1000,20 @@ payload!(
 );
 
 payload!(
-    /// `{operator, value}`: iob, cob, reservoir, site_age, sensor_age,
-    /// pump_battery, uploader_battery, sensitivity_ratio.
-    ComparePayload {
+    /// `{operator, value, clear_margin?}`: iob, cob, reservoir, pump_battery,
+    /// uploader_battery, sensitivity_ratio.
+    margined ComparePayload {
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+    }
+    comparison |p| (p.operator, p.value)
+);
+
+payload!(
+    /// `{operator, value}`: site_age, sensor_age. An age only grows, so it
+    /// takes no margin.
+    AgeComparePayload {
         operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
         value: Decimal,
@@ -832,19 +1043,25 @@ payload!(
     }
 );
 
-payload!(TempBasalPayload {
-    metric: TempBasalMetric,
-    operator: CmpOp,
-    #[serde(serialize_with = "exact_decimal")]
-    value: Decimal,
-});
+payload!(
+    margined TempBasalPayload {
+        metric: TempBasalMetric,
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+    }
+    comparison |p| (p.operator, p.value)
+);
 
-payload!(TransmitterBatteryPayload {
-    metric: TransmitterBatteryMetric,
-    operator: CmpOp,
-    #[serde(serialize_with = "exact_decimal")]
-    value: Decimal,
-});
+payload!(
+    margined TransmitterBatteryPayload {
+        metric: TransmitterBatteryMetric,
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+    }
+    comparison |p| (p.operator, p.value)
+);
 
 payload!(GlucoseBucketPayload {
     buckets: Vec<GlucoseBucket>,

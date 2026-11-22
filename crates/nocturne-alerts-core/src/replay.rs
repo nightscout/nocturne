@@ -401,7 +401,7 @@ impl Run<'_> {
             (Some(body), Some(s)) => sweep_due(
                 Some(s),
                 (s.state == TrackerStateKind::Hysteresis)
-                    .then(|| next_change_at(rule, body, &self.ctx, at, &self.state))
+                    .then(|| next_change_at(rule, body, &self.ctx, at, &self.state, true))
                     .flatten(),
                 at,
             ),

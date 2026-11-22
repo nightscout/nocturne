@@ -100,6 +100,15 @@ this tick):
 | `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
 | `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
 | `pump_mode_category` | a `state_span_active` on the `PumpMode` category; pump modes are `pump_state`'s |
+| `margin_negative` | a `clear_margin` below `0` (§3, clear margin) |
+| `margin_on_equality` | a `clear_margin` above `0` on an `==` comparison, which has no side to widen (§3, clear margin) |
+| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, which would carry the limit past zero (§3, clear margin) |
+| `margin_under_sustained` | a `clear_margin` above `0` on a leaf anywhere under a `sustained` (§3, clear margin) |
+
+`clear_margin` is an optional member added after the first release. An engine older than it
+declares the property on no kind, so it reads a tree that carries one as having an `unknown_field`
+and does not evaluate it: a rule with a margin is skipped, with its unevaluable notice, by a host
+still running such an engine, never evaluated without its margin.
 
 A tree that cannot be evaluated:
 
@@ -418,6 +427,77 @@ the reservoir holds at least `b`.
     changed under it, a crash before the write) leaves a bound that can be earlier than that
     evaluation. An image that does not know not-true instants evaluates without recording
     them at all; the host's raise of §7 covers its evaluations.
+
+**Clear margin.** `threshold`, `rate_of_change` (on `rate`), `predicted`, `iob`, `cob`, `reservoir`,
+`pump_battery`, `uploader_battery`, `transmitter_battery`, `temp_basal` and `sensitivity_ratio`
+take an optional `clear_margin`: a decimal in the unit of the leaf's value (mg/dL for glucose,
+mg/dL per minute for a rate). It stops an alert chattering at its limit: open below 70, clear only
+at 75. The elapsed-time leaves (`staleness`, `site_age`, `sensor_age`, `loop_stale`,
+`loop_enaction_stale`, `tracker_age`, `time_since_last_*`, `signal_loss`, any `for_minutes`) take
+none: an elapsed time only grows, so a margin there would be a second threshold, not a margin, and
+the property is an unknown field on them (§1.4). Absent or `0` is no margin, and the leaf
+evaluates exactly as without the member. A margin is read as `value` is: a JSON number in the
+decimal range (else `invalid_field`), never negative (`margin_negative`), never above `0` on an
+`==` comparison, which has no side to widen (`margin_on_equality`), never above a `rate_of_change`
+leaf's `rate` (`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
+(`margin_under_sustained`, below).
+
+- **Open.** A rule's excursion is **open** when its tracker state (§6) is `active` or `hysteresis`
+  with an excursion: firing, or open and in its wait. Idle, idle awaiting re-arm (§6.3), a rule
+  never evaluated (no state), and a state with no excursion are closed. The engine reads it from
+  the tracker state the evaluation starts from, before the tree is walked, and it is the same for
+  every leaf of the body and the leaf log of that evaluation. It is no new input: a host already
+  sends the tracker state. A hold (§6.4) changes nothing about it: held with an open excursion is
+  open, held with none is closed. A state is read as it is restored: a hold an older engine wrote
+  over (§6.4) is open by its state, and a state string the engine does not know is recovered as
+  `active` while it holds an excursion (§6), so it is open. So the evaluation that opens an
+  excursion reads closed, the next reads open; the evaluation that closes one reads open, the next
+  reads closed.
+- **Polarity.** Each leaf occurrence has one path from the root, so it is under an even or an odd
+  number of `not`s; no occurrence is under both. `and` and `or` pass their polarity to their
+  children unchanged, and `not` turns it. (No margined leaf is under a `sustained`, below.)
+- **Widened limit.** While the excursion is open, a leaf with a margin compares against its limit
+  moved by the margin toward the side that keeps the **rule** true: the leaf's own true side under
+  an even number of `not`s, its false side under an odd number. With the leaf's comparison written
+  `reading <op> limit` (`threshold` below `<`, above `>`; `rate_of_change` falling
+  `rate' <= -rate`, rising `rate' >= rate`), the true side of `>`/`>=` is down and of `<`/`<=` is
+  up. So `threshold below 70, clear_margin 5` is true below 70 while closed and below 75 while open,
+  and `not(threshold below 70, clear_margin 5)` is true at or above 70 while closed and at or above
+  65 while open. A rate's limit moves toward zero and at most to it: a margin equal to the `rate`
+  makes the open limit `0`, so a "falling" alert holds while glucose is not rising, and a larger one
+  is refused (`margin_past_zero`), since it would hold a "falling" alert open while glucose rises.
+  The comparison keeps its strictness at the moved limit. A move that would leave the
+  decimal range keeps the plain limit. While closed, every leaf compares against its plain limit.
+  One helper (`CmpOp::widened`) moves every limit.
+- **So every margined rule is monotone in the open flag**: a root true while closed is true while
+  open, through `and`, `or` and `not` alike, in Kleene's order (false, unknown, true). The evaluation after an opening reads
+  the root at least as true, so it does not leave at once, and the evaluation after a close reads
+  it at most as true, so it does not open again at once. A margin that narrowed under `not` would
+  make `not(threshold below 70, clear_margin 5)` sitting at 72 open, leave and open again on every
+  third reading; this rule exists so that it does not.
+- **Per leaf.** `predicted` moves the limit for every point. `reservoir` with a lower-bound reading
+  decides against the moved limit by the table above. `temp_basal` moves it for its metric, and
+  `transmitter_battery` for its reading.
+- **Unknown** is unchanged: a leaf without its fact, or with a stale reading, is unknown open or
+  closed, by the same fact and reason (§2.4).
+- **No margin under `sustained`.** A leaf with a margin above `0` anywhere under a `sustained`
+  node, at any depth, makes the tree unevaluable (`margin_under_sustained`, on the leaf, reported
+  once by its nearest `sustained`), in the body, the auto-resolve tree and the snooze alike. A
+  `sustained` node keeps one run start (§3 above). A run the margin started or kept alive while the
+  excursion was open would carry, after the close, into an evaluation read against the plain limit,
+  so the rule would open again before its child had held for `minutes` under the plain limit: one
+  start cannot serve two limits, and serving both needs a second stored start this engine does not
+  keep. `sustained` is itself the guard against a value that crosses its limit back and forth: use
+  it, or a margin on a leaf that is not under one, not both.
+- **Auto-resolve** reads every leaf against its plain limit. Its tree is evaluated only while an
+  excursion is open (or awaiting re-arm, closed), so a margin there would always apply and be only
+  another limit. A margin in it, except one under a `sustained` (above), is read and ignored
+  rather than refused, so a stored rule does not
+  become unevaluable for a member with no effect. `evaluate_node`, the snooze and the backend's
+  separate auto-resolve pass have no tracker and read every leaf closed.
+- **`alert_state`** reads another rule's excursion (§3 table) and is unaffected.
+- **Leaf log.** Each leaf evaluated alone (§2.4) reads the open flag and its own polarity in the
+  tree, so it logs the truth the root read. No outcome reports a limit.
 
 **Since when a node has held.** Evaluating a node gives its truth and, when it is true,
 optionally the instant it has held since. Only a true node reports one. A start ahead of
@@ -760,6 +840,7 @@ even when the root does not. Containers contribute only through their children, 
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
 | Tracker in `hysteresis` | The instant its window closes (§6.1), or, once that has passed, at once. This holds for an evaluation the rule held (§6.4) as well. |
+| A body with a clear margin above `0` (§3) whose evaluation closed the excursion | At once. The next evaluation reads the plain limit, and can answer false where this one read true: an auto-resolve that closes an excursion the body held by its margin leaves a rule whose next evaluation, read closed, finds the body false and re-arms. An opening adds nothing: the next evaluation reads the root at least as true (§3), so it continues. A margin changes nothing else: a value leaf contributes no instant with or without one, and the open flag moves only on a tracker transition. |
 | Tracker held, its bound not yet reported | `HeldSince + HOLD_BOUND` (§6.4), measured as §5.4 measures an anchor, or, once that has passed, at once. With every fact frozen the root stays unknown, so the hold goes on to its bound. |
 | Every other kind | Nothing: with the facts frozen it cannot move. `predicted` offsets are relative to the forecast's start, not to `now` (§3). |
 
@@ -1116,7 +1197,8 @@ so a rule that reads nothing on the wall clock reaches the bound with no reading
 For each enabled rule on each reading (after `RuleReferenceResolver.FilterEvaluable`
 drops `alert_state` chains whose parents are disabled/deleted — host-side):
 
-1. Root context: `CurrentRuleId = rule.Id`, `CurrentPath = wire(rule.ConditionType)`.
+1. Root context: `CurrentRuleId = rule.Id`, `CurrentPath = wire(rule.ConditionType)`, and
+   whether the excursion is open (§3, clear margin), read from the tracker state before step 3.
 2. `conditionMet` = evaluate the rule tree, then read an unknown root through `OnUnknown`
    (§6.4).
 3. `transition` = tracker.ProcessEvaluation(rule, conditionMet, autoResolveMet). Only when
@@ -1319,7 +1401,8 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
   `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", instant, null)` when an
   excursion opens and leaves it when the excursion closes, by hysteresis or auto-resolve, so a
   parent's change is visible to rules later in the order at the same instant.
-- **Each evaluation** is §7 steps 1 to 6. A rule whose body cannot be evaluated (§1.4), or whose
+- **Each evaluation** is §7 steps 1 to 6, so a clear margin (§3) is read open or closed from the
+  replayed tracker, as live reads it from the stored one. A rule whose body cannot be evaluated (§1.4), or whose
   `condition_params` is not a payload, is **skipped**: no leaf log, no tracker call. Its
   `alert_state` children never see it fire. The leaf log force-evaluates every leaf alone at the
   root path and records each leaf's first observation and every flip, unknown included

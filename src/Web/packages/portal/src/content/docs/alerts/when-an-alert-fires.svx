@@ -43,7 +43,9 @@ Once it has ended, the rule can fire again, and the next time is a new alert,
 sent again to every channel. A glucose level that hovers on the line can
 therefore alert, end and alert again a few readings apart. If that happens, a
 "for at least" setting on the rule (see
-[Conditions that must last](/docs/alerts/sustained)) is the usual fix.
+[Conditions that must last](/docs/alerts/sustained)) is the usual fix. A
+[clear margin](/docs/alerts/building-rules#clear-margin) on the condition is
+another: the open alert then ends only some distance past the line.
 
 ## Auto-resolve
 
