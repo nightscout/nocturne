@@ -1,4 +1,5 @@
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Alerts;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -93,6 +94,7 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
             TestDatabaseSeeder.Seed(db, ApiSecretHash);
 
             RemoveHostedServices(services);
+            RemoveBackgroundAlertEvaluation(services);
         });
 
         builder.UseEnvironment("Testing");
@@ -132,6 +134,20 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
     private static void RemoveHostedServices(IServiceCollection services)
     {
         foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService)).ToList())
+        {
+            services.Remove(descriptor);
+        }
+    }
+
+    /// <summary>
+    /// A write hands its alert evaluation to a background run, which would read the one shared
+    /// connection while the next request, or the next test, is using it.
+    /// </summary>
+    private static void RemoveBackgroundAlertEvaluation(IServiceCollection services)
+    {
+        foreach (var descriptor in services
+            .Where(d => d.ImplementationType == typeof(AlertFactsChangedSubscriber))
+            .ToList())
         {
             services.Remove(descriptor);
         }
