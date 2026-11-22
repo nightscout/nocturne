@@ -89,6 +89,7 @@ public class AlertReplayServiceLeafLogTests
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             new Mock<Nocturne.API.Services.Devices.IReservoirEstimationService>().Object,
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.IDeviceStatusExtrasRepository>(r => r.GetReportedAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusExtras>>(Array.Empty<Nocturne.Core.Models.V4.DeviceStatusExtras>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,

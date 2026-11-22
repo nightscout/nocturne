@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
@@ -17,8 +18,9 @@ namespace Nocturne.API.Services.Alerts;
 /// A reading not yet evaluated selects every enabled rule (docs/alerts/engine-semantics.md §5.2); any
 /// other moved fact selects the rules that read it (<see cref="RuleTrees.Reads"/>), glucose included
 /// when it moved without a reading (<see cref="MovedFacts.GlucoseWithoutReading"/>), and a rule whose
-/// facts the engine cannot read is selected by every write. With no usable reading selected nothing is
-/// evaluated, the per-reading behaviour; the sweep then evaluates every wall-clock rule.
+/// facts the engine cannot read is selected by every write. With no reading selected nothing is
+/// evaluated; the sweep then evaluates every wall-clock rule. A selected reading with no glucose value
+/// is evaluated with <see cref="ContextForValueless"/>.
 /// <para>
 /// A reading dated beyond the clock tolerance is not selected, so its arrival evaluates nothing new:
 /// the selected reading is the one evaluated before it, and the watermark skips it as such. The
@@ -82,6 +84,26 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         TrendRate = trend.Rate,
         TrendBucket = trend.Bucket,
         LastReadingAt = latest.Timestamp,
+        LatestSource = new ReadingSource(latest.DataSource, latest.Device),
+    };
+
+    /// <summary>
+    /// The base context for <paramref name="newest"/>, a reading with no glucose value
+    /// (docs/alerts/engine-semantics.md §4, sensor state). Its time and arrival are the newest
+    /// reading's, so the context is that reading's; <see cref="SensorContext.LastReadingAt"/> is the
+    /// last reading with a value (<paramref name="back"/>), since <c>signal_loss</c> and
+    /// <c>staleness</c> mean no reading with a value; and the sensor's state says why the glucose
+    /// leaves cannot read it.
+    /// </summary>
+    internal static SensorContext ContextForValueless(SensorGlucose newest, UsableLookBack back) => new()
+    {
+        LatestValue = null,
+        LatestTimestamp = newest.Timestamp,
+        LatestReceivedAt = newest.CreatedAt,
+        TrendRate = null,
+        LastReadingAt = back.At,
+        SensorState = new SensorStateSnapshot(SensorState.NoValue, back.ValuelessSince),
+        LatestSource = new ReadingSource(newest.DataSource, newest.Device),
     };
 
     /// <inheritdoc />
@@ -113,7 +135,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
 
     private async Task EvaluateSelectedAsync(SensorGlucose? latest, long readAt, MovedFacts moved, CancellationToken ct)
     {
-        if (latest is null || latest.Mgdl <= 0 || moved.Facts.Count == 0) return;
+        if (latest is null || moved.Facts.Count == 0) return;
 
         var tenantId = _tenantAccessor.TenantId;
         if (tenantId == Guid.Empty) return;
@@ -141,9 +163,11 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
                     : enabled.Where(rule => ReadsAny(rule, selecting)).ToList();
                 if (selected.Count > 0)
                 {
-                    var trend = await ReadingTrend.ForAsync(latest, _canonicalGlucose, ct);
+                    var context = AlertReadings.HasValue(latest)
+                        ? ContextFor(latest, await ReadingTrend.ForAsync(latest, _canonicalGlucose, ct))
+                        : ContextForValueless(latest, await AlertReadings.LookBackAsync(_canonicalGlucose, latest, ct));
                     await _alertOrchestrator.EvaluateRulesAsync(
-                        selected, enabled.Select(r => r.Id).ToHashSet(), ContextFor(latest, trend), readAt, ct);
+                        selected, enabled.Select(r => r.Id).ToHashSet(), context, readAt, ct);
                 }
             }
             // The claim stands even when the orchestrator skipped rules: it skips only a rule a

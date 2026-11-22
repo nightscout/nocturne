@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
 using Xunit;
 
@@ -322,6 +323,26 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
             "a v3 history client learns of the delete through the stamp");
         (await db.MutationAuditLog.CountAsync(a => a.EntityType == nameof(DeviceStatusExtras) && a.Action == "bulk_delete"))
             .Should().Be(1);
+    }
+
+    /// <summary>
+    /// A purge that deletes a status's extras announces <see cref="DeviceStatusExtras"/>, whose rows
+    /// can state the sensor's state; one that deletes none does not.
+    /// </summary>
+    [Fact]
+    public async Task APurgeThatDeletesDeviceStatusExtrasAnnouncesThem()
+    {
+        var tenant = await InsertTenantAsync();
+        await SeedStatusAsync(tenant, Source, Source, Source);
+        var changes = new RecordingRecordChanges();
+        var repository = new SourceOwnedDataRepository(new Factory(Context, tenant), new UserAuditContext(), changes);
+
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(OtherSource), CancellationToken.None);
+        var untouched = changes.Changes.Select(c => c.RecordType).ToList();
+        await repository.SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
+
+        untouched.Should().NotContain(typeof(DeviceStatusExtras));
+        changes.Changes.Select(c => c.RecordType).Should().Contain(typeof(DeviceStatusExtras));
     }
 
     [Fact]

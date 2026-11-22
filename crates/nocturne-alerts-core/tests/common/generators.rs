@@ -13,8 +13,8 @@ use uuid::Uuid;
 use nocturne_alerts_core::engine::OnUnknown;
 use nocturne_alerts_core::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
-    StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
-    WireEnum,
+    SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric,
+    TrendBucket, WireEnum,
 };
 use nocturne_alerts_core::model::{ConditionKind, Payload};
 
@@ -456,6 +456,11 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
         K::TrackerAge => (uuid_text(), word_value::<CmpOp>(), minutes(-1500..=1500))
             .prop_map(|(id, operator, m)| {
                 json!({ "tracker_definition_id": id, "operator": operator, "minutes": m })
+            })
+            .boxed(),
+        K::SensorState => (words::<SensorState>(), for_minutes())
+            .prop_map(|(states, for_minutes)| {
+                object(vec![("states", Some(states)), ("for_minutes", for_minutes)])
             })
             .boxed(),
         K::TransmitterBattery => (

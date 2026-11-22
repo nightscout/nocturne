@@ -17,9 +17,9 @@ const LABEL_MAP: Record<string, string> = {
   alert_unevaluable_subtitle:
     "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
   alert_held_subtitle:
-    "This rule has waited 24 hours for data, so it cannot send alerts until the data comes back. Open the rule to see the missing data.",
+    "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back. Open the rule to see the cause.",
   alert_held_closed_subtitle:
-    "The data for this alert has been missing for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until the data comes back.",
+    "This alert had no usable data for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until usable data comes back.",
   alert_channel_stopped: "An alert channel stopped",
   alert_channel_stopped_subtitle: "An alert channel stopped.",
   alert_channel_no_recipient: "An alert channel has no recipient",

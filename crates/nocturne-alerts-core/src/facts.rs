@@ -29,6 +29,7 @@ wire_enum! {
         ActiveAlerts = "active_alerts",
         DoNotDisturb = "do_not_disturb",
         TimeZone = "time_zone",
+        SensorState = "sensor_state",
     }
 }
 
@@ -38,12 +39,12 @@ wire_enum! {
 pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
     use ContextFact as F;
     match kind {
-        ConditionKind::Threshold
-        | ConditionKind::RateOfChange
-        | ConditionKind::SignalLoss
-        | ConditionKind::Staleness
-        | ConditionKind::Trend => &[F::Glucose],
-        ConditionKind::GlucoseBucket => &[F::Glucose, F::TimeZone],
+        ConditionKind::Threshold | ConditionKind::RateOfChange | ConditionKind::Trend => {
+            &[F::Glucose, F::SensorState]
+        }
+        ConditionKind::SignalLoss | ConditionKind::Staleness => &[F::Glucose],
+        ConditionKind::GlucoseBucket => &[F::Glucose, F::TimeZone, F::SensorState],
+        ConditionKind::SensorState => &[F::Glucose, F::SensorState],
         ConditionKind::Predicted => &[F::Predictions],
         ConditionKind::Iob | ConditionKind::TempBasal | ConditionKind::TimeSinceLastBolus => {
             &[F::Insulin]
@@ -186,11 +187,12 @@ mod tests {
 
     use super::*;
     use crate::context::{
-        ActiveAlertSnapshot, PredictedPoint, PumpModeSnapshot, SensorContext, StartedSpan,
-        StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
+        ActiveAlertSnapshot, PredictedPoint, PumpModeSnapshot, SensorContext, SensorStateSnapshot,
+        StartedSpan, StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
-    use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket};
+    use crate::enums::{GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket};
     use crate::eval::elapsed::clock_leaf;
+    use crate::eval::glucose::judges_freshness;
     use crate::eval::{Env, eval_payload};
     use crate::model::Payload;
     use crate::sustained::TimerStore;
@@ -229,7 +231,10 @@ mod tests {
 
     #[test]
     fn reads_names_the_facts_each_evaluator_reads() {
-        assert_eq!(reads(ConditionKind::Threshold), &[F::Glucose]);
+        assert_eq!(
+            reads(ConditionKind::Threshold),
+            &[F::Glucose, F::SensorState]
+        );
         assert_eq!(reads(ConditionKind::SignalLoss), &[F::Glucose]);
         assert_eq!(reads(ConditionKind::Predicted), &[F::Predictions]);
         assert_eq!(reads(ConditionKind::TempBasal), &[F::Insulin]);
@@ -242,7 +247,11 @@ mod tests {
         assert_eq!(reads(ConditionKind::TimeOfDay), &[F::TimeZone]);
         assert_eq!(
             reads(ConditionKind::GlucoseBucket),
-            &[F::Glucose, F::TimeZone]
+            &[F::Glucose, F::TimeZone, F::SensorState]
+        );
+        assert_eq!(
+            reads(ConditionKind::SensorState),
+            &[F::Glucose, F::SensorState]
         );
         assert!(reads(ConditionKind::Sustained).is_empty());
     }
@@ -286,7 +295,7 @@ mod tests {
     #[test]
     fn a_leaf_root_is_selected_by_its_own_facts_whatever_its_body() {
         let threshold = json!({"direction": "below", "value": 70});
-        assert_eq!(body("threshold", &threshold), [F::Glucose]);
+        assert_eq!(body("threshold", &threshold), [F::Glucose, F::SensorState]);
         assert_eq!(body("THRESHOLD", &threshold), []);
         assert_eq!(body("tracker_age", &json!("not an object")), [F::Trackers]);
         let rule = RuleConditions::body("threshold", &threshold);
@@ -312,7 +321,10 @@ mod tests {
             {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
             {"type": "glucose_bucket", "glucose_bucket": {"buckets": ["low"]}}
         ]});
-        assert_eq!(body("composite", &tree), [F::Glucose, F::TimeZone]);
+        assert_eq!(
+            body("composite", &tree),
+            [F::Glucose, F::TimeZone, F::SensorState]
+        );
         assert!(references_any(
             &RuleConditions::body("composite", &tree),
             &[F::TimeZone]
@@ -329,7 +341,10 @@ mod tests {
                     { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }
             ]
         });
-        assert_eq!(body("composite", &tree), [F::Glucose, F::Insulin]);
+        assert_eq!(
+            body("composite", &tree),
+            [F::Glucose, F::Insulin, F::SensorState]
+        );
     }
 
     #[test]
@@ -406,7 +421,7 @@ mod tests {
         let threshold = json!({"direction": "above", "value": 180});
         let cob_zero = json!({ "type": "cob", "cob": { "operator": "==", "value": 0 } });
         let rule = with_auto_resolve("threshold", &threshold, true, Some(&cob_zero));
-        assert_eq!(rule_reads(&rule), [F::Glucose, F::Carbs]);
+        assert_eq!(rule_reads(&rule), [F::Glucose, F::Carbs, F::SensorState]);
         assert!(references_any(&rule, &[F::Carbs]));
         assert!(!references_wall_clock(&rule));
     }
@@ -432,7 +447,7 @@ mod tests {
             with_auto_resolve("threshold", &threshold, true, Some(&null)),
             with_auto_resolve("threshold", &threshold, true, Some(&broken)),
         ] {
-            assert_eq!(rule_reads(&rule), [F::Glucose], "{rule:?}");
+            assert_eq!(rule_reads(&rule), [F::Glucose, F::SensorState], "{rule:?}");
             assert!(!references_wall_clock(&rule), "{rule:?}");
         }
     }
@@ -449,7 +464,7 @@ mod tests {
         .expect("wire rule");
         assert_eq!(
             rule_reads(&RuleConditions::from(&rule)),
-            [F::Glucose, F::Insulin]
+            [F::Glucose, F::Insulin, F::SensorState]
         );
     }
 
@@ -570,6 +585,11 @@ mod tests {
             },
             active_do_not_disturb: span(F::DoNotDisturb),
             tenant_time_zone_id: has(F::TimeZone).then(|| "Australia/Sydney".to_owned()),
+            sensor_state: has(F::SensorState).then_some(SensorStateSnapshot {
+                state: Some(SensorState::Ok),
+                since: Some(ago(30)),
+                until: None,
+            }),
         }
     }
 
@@ -620,6 +640,7 @@ mod tests {
             ConditionKind::TrackerAge => {
                 json!({"tracker_definition_id": TRACKER_ID, "operator": ">", "minutes": 15})
             }
+            ConditionKind::SensorState => json!({"states": ["ok"], "for_minutes": 15}),
         };
         parse_payload(kind, &params).expect("sample payload parses")
     }
@@ -637,7 +658,7 @@ mod tests {
     fn the_clock_leaves_are_the_wall_clock_kinds() {
         for &kind in ConditionKind::ALL {
             assert_eq!(
-                clock_leaf(&sample(kind), &context(&[]), None).is_some(),
+                clock_leaf(&sample(kind), &context(&[]), None, now()).is_some(),
                 is_wall_clock(kind),
                 "{kind:?}"
             );
@@ -655,10 +676,23 @@ mod tests {
         }
     }
 
+    /// The facts a kind reads that do not turn it on: a judged glucose leaf
+    /// reads the sensor's state, absent or ok, as it reads no state; a
+    /// `sensor_state` leaf reads the reading only to say it is not `no_value`.
+    fn gates(kind: ConditionKind) -> &'static [ContextFact] {
+        if judges_freshness(kind) {
+            &[F::SensorState]
+        } else if kind == ConditionKind::SensorState {
+            &[F::Glucose]
+        } else {
+            &[]
+        }
+    }
+
     #[test]
     fn every_fact_a_leaf_kind_reads_is_needed() {
         for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
-            for &fact in reads(kind) {
+            for &fact in reads(kind).iter().filter(|f| !gates(kind).contains(f)) {
                 let without: Vec<ContextFact> = ContextFact::ALL
                     .iter()
                     .copied()
@@ -700,6 +734,43 @@ mod tests {
                         "{kind:?} moved with {fact:?}"
                     );
                 }
+            }
+        }
+    }
+
+    /// Every state but ok, and a name the crate cannot name, leaves each judged
+    /// glucose leaf unknown by the sensor's state alone, whatever the reading.
+    #[test]
+    fn a_sensor_that_is_not_ok_leaves_every_judged_leaf_unknown() {
+        for &kind in ConditionKind::ALL.iter().filter(|&&k| judges_freshness(k)) {
+            for state in SensorState::ALL
+                .iter()
+                .copied()
+                .filter(|&s| s != SensorState::Ok)
+                .map(Some)
+                .chain([None])
+            {
+                let mut ctx = context(ContextFact::ALL);
+                ctx.sensor_state = Some(SensorStateSnapshot {
+                    state,
+                    since: None,
+                    until: None,
+                });
+                let mut timers = TimerStore::default();
+                let mut env = Env::new(now(), Uuid::nil(), &ctx, &mut timers);
+                let (truth, unknown) =
+                    crate::eval::eval_payload_unknown(&sample(kind), kind.name(), &mut env);
+                let reason = if state.is_some() {
+                    crate::unknown::UnknownReason::SensorNotOk
+                } else {
+                    crate::unknown::UnknownReason::Unrecognised
+                };
+                assert!(truth.is_unknown(), "{kind:?} under {state:?}");
+                assert_eq!(
+                    unknown.iter().collect::<Vec<_>>(),
+                    [(F::SensorState, reason)],
+                    "{kind:?} under {state:?}"
+                );
             }
         }
     }

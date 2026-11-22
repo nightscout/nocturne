@@ -15,11 +15,9 @@ settings, and when you would reach for it.
 
 Two things apply to all of them.
 
-**No data means "not true".** If a condition needs something Nocturne has
-never received, such as insulin on board from a site with no pump connected, it
-is simply never true. It does not raise an error and it does not alert. A rule
-built on data you do not have stays silent, so check the data is there before
-relying on the rule. The few exceptions are called out below.
+**No data means the rule cannot know.** If a condition needs data that Nocturne
+does not have, the rule does what you set in **When data is missing** (see
+[Building a rule](/docs/alerts/building-rules#when-data-is-missing)).
 
 **Values are compared exactly as written.** "Below 70" means 69 counts and 70
 does not. "At least 2" means 2 counts.
@@ -253,6 +251,21 @@ No CGM reading for a number of minutes.
   arrives. A site that has never had a reading does not raise it.
 
 <AlertSimulator scenario="sensor-gap" rules={["signal-loss"]} />
+
+### Sensor state
+
+The state that the CGM sensor reports: warm-up, OK, calibration necessary, error,
+expired, or no value (the newest reading has no glucose value).
+
+- **Settings:** one or more states. Minutes are only for No value.
+- **Use it for:** an alert when readings arrive with no value, for example "No
+  value for 30 minutes". Also an alert when a Guardian sensor has an error or has
+  expired.
+- **Good to know:** only CareLink sends a state, for Medtronic Guardian sensors.
+  No value applies to all sources: when the newest reading has a glucose value,
+  "No value" is not true. When Nocturne has no state for the sensor, the other
+  states cannot know if they are true, and the rule waits. The minutes count from
+  the first reading with no value. Checked every 30 seconds.
 
 ## Behaviour
 

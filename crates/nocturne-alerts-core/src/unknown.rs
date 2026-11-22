@@ -9,7 +9,8 @@ use crate::facts::ContextFact;
 
 wire_enum! {
     /// Why a leaf could not read a fact. `inexact` is a lower-bound reading
-    /// that does not decide the comparison.
+    /// that does not decide the comparison; `sensor_not_ok` is a glucose leaf
+    /// whose sensor reports a state other than ok.
     #[derive(PartialOrd, Ord)]
     pub enum UnknownReason {
         Absent = "absent",
@@ -17,6 +18,7 @@ wire_enum! {
         AheadOfClock = "ahead_of_clock",
         Unrecognised = "unrecognised",
         Inexact = "inexact",
+        SensorNotOk = "sensor_not_ok",
     }
 }
 

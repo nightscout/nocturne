@@ -25,9 +25,9 @@ use rust_decimal::Decimal;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use nocturne_alerts_core::context::{ActiveAlertSnapshot, SensorContext};
+use nocturne_alerts_core::context::{ActiveAlertSnapshot, SensorContext, SensorStateSnapshot};
 use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
-use nocturne_alerts_core::enums::WireEnum;
+use nocturne_alerts_core::enums::{SensorState, WireEnum};
 use nocturne_alerts_core::excursion::{
     CloseReason, HOLD_BOUND, TrackerRuleConfig, Transition, TransitionType,
 };
@@ -95,6 +95,23 @@ fn as_replay(r: &Reading, all: &[Reading]) -> (DateTime<Utc>, Option<DateTime<Ut
     } else {
         (r.arrival.max(r.at), Some(r.arrival))
     }
+}
+
+/// The sensor's state a reading carries, read off its value so that both sides
+/// see the same state with the same reading: some values come with a state that
+/// is not ok, one with ok, and the rest with none.
+fn sensor_state_of(mgdl: i64) -> Option<SensorStateSnapshot> {
+    let state = match mgdl {
+        50 => SensorState::Error,
+        75 => SensorState::WarmingUp,
+        120 => SensorState::Ok,
+        _ => return None,
+    };
+    Some(SensorStateSnapshot {
+        state: Some(state),
+        since: None,
+        until: None,
+    })
 }
 
 /// The reading an alert context is built from at `now`: the newest by
@@ -178,6 +195,7 @@ impl Case {
     fn context(&self, now: DateTime<Utc>, iob: i64, evaluates: Evaluates) -> SensorContext {
         let reading = newest(&self.readings, now, evaluates);
         SensorContext {
+            sensor_state: reading.and_then(|r| sensor_state_of(r.mgdl)),
             latest_value: reading.map(|r| Decimal::from(r.mgdl)),
             latest_timestamp: reading.map(|r| r.at),
             latest_received_at: reading.and_then(|r| evaluates(r, &self.readings).1),
@@ -582,6 +600,8 @@ fn body() -> impl Strategy<Value = Value> {
                     "from": format!("{from:02}:00"),
                     "to": format!("{:02}:30", (from + len) % 24) } }
             ] } })),
+        1 => select(vec!["error", "warming_up", "ok"]).prop_map(|state| json!({
+            "type": "sensor_state", "sensor_state": { "states": [state] } })),
         2 => (leaf, 5i64..=40).prop_map(|(child, m)| json!({
             "type": "composite", "composite": { "operator": "or", "conditions": [
                 child,

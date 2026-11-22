@@ -35,6 +35,7 @@ public sealed record DataNeedsSet(
     bool NeedsTenantTimeZone,
     bool NeedsSleepSession,
     bool NeedsPumpModes,
+    bool NeedsSensorState,
     IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans,
     IReadOnlySet<Guid> ReferencedTrackerDefinitions)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
@@ -47,7 +48,7 @@ public sealed record DataNeedsSet(
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false,
             false, false, false, false, false, false, false, false,
-            false, false, false, false, false,
+            false, false, false, false, false, false,
             new HashSet<(StateSpanCategory, string?)>(),
             new HashSet<Guid>());
 }
@@ -152,9 +153,21 @@ public static class RuleDataNeeds
             case AlertConditionType.PumpState: b.PumpModes = true; break;
             case AlertConditionType.StateSpanActive: /* selection read in VisitLeaf */ break;
             case AlertConditionType.TrackerAge: /* selection read in VisitLeaf */ break;
+            case AlertConditionType.SensorState: b.SensorState = true; break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
-            // Threshold, RateOfChange, Trend, SignalLoss, Staleness, Composite, Not, Sustained
-            // require no extra context: the base SensorContext carries what they read.
+            // SignalLoss, Staleness, Composite, Not, Sustained require no extra context: the base
+            // SensorContext carries what they read.
+        }
+
+        // A judged glucose leaf is unknown while the sensor reports a state other than ok.
+        switch (type)
+        {
+            case AlertConditionType.Threshold:
+            case AlertConditionType.RateOfChange:
+            case AlertConditionType.Trend:
+            case AlertConditionType.GlucoseBucket:
+                b.SensorState = true;
+                break;
         }
     }
 
@@ -184,6 +197,7 @@ public static class RuleDataNeeds
         public bool TenantTimeZone;
         public bool SleepSession;
         public bool PumpModes;
+        public bool SensorState;
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
         public readonly HashSet<Guid> TrackerDefinitionIds = new();
 
@@ -191,6 +205,7 @@ public static class RuleDataNeeds
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, ActiveAlerts,
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
                 SensitivityRatio,
-                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpModes, StateSpans, TrackerDefinitionIds);
+                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpModes, SensorState, StateSpans,
+                TrackerDefinitionIds);
     }
 }

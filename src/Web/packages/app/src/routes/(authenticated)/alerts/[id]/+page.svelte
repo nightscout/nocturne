@@ -358,7 +358,7 @@
     >
       <Hourglass class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <div>
-        <p>{holdSinceText(hold)} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert.</p>
+        <p>{holdSinceText(hold)} This rule cannot open an alert until usable data comes back. After 24 hours with no usable data, Nocturne closes an open alert.</p>
         {#each holdFactLines(hold) as line (line)}
           <p>{line}</p>
         {/each}

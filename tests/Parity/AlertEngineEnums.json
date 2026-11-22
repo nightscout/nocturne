@@ -40,7 +40,8 @@
     "state_span_active",
     "sleep_session_active",
     "tracker_age",
-    "transmitter_battery"
+    "transmitter_battery",
+    "sensor_state"
   ],
   "AlertWeekday": [
     "sunday",
@@ -100,6 +101,14 @@
     "flat",
     "falling",
     "falling_fast"
+  ],
+  "SensorState": [
+    "warming_up",
+    "ok",
+    "calibration_needed",
+    "error",
+    "expired",
+    "no_value"
   ],
   "PayloadFields": {
     "alert_state": [
@@ -184,6 +193,10 @@
     "sensor_age": [
       "operator",
       "value"
+    ],
+    "sensor_state": [
+      "for_minutes",
+      "states"
     ],
     "signal_loss": [
       "timeout_minutes"

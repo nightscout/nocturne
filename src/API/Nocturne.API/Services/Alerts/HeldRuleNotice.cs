@@ -10,7 +10,7 @@ using NoticeRule = Nocturne.API.Services.Alerts.RuleNoticeDispatch.NoticeRule;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Tells a rule's recipients, once per hold, that the rule has been waiting for missing data for
+/// Tells a rule's recipients, once per hold, that the rule has been waiting for usable data for
 /// the engine's hold bound (docs/alerts/engine-semantics.md §6.4), and takes the notice back once
 /// the hold is over. A sibling of <see cref="IUnevaluableRuleNotice"/> on the same storage,
 /// dispatch and once-only record.
@@ -128,7 +128,7 @@ internal sealed class HeldRuleNotice(
 
     private void Failed(Exception ex, Guid ruleId, string what) =>
         logger.LogError(ex,
-            "{What} the notice that alert rule {AlertRuleId} has waited for missing data failed; the next run tries again",
+            "{What} the notice that alert rule {AlertRuleId} has waited for usable data failed; the next run tries again",
             what, ruleId);
 
     private async Task NotifyAsync(
@@ -148,7 +148,7 @@ internal sealed class HeldRuleNotice(
             tenantId, repository, ruleRepository, deliveryService, contextEnricher, logger, ct);
 
         logger.LogInformation(
-            "Notice {InstanceId} sent that alert rule {AlertRuleId} has waited for missing data since {HeldSince}",
+            "Notice {InstanceId} sent that alert rule {AlertRuleId} has waited for usable data since {HeldSince}",
             notice.InstanceId, rule.Id, hold.HeldSince);
 
         // A retirement or the hold's end during the dispatch resolved the notice before a provider

@@ -17,9 +17,10 @@ type KnownFact =
   | "sleep"
   | "active_alerts"
   | "do_not_disturb"
-  | "time_zone";
+  | "time_zone"
+  | "sensor_state";
 
-type KnownReason = "absent" | "stale" | "ahead_of_clock" | "unrecognised" | "inexact";
+type KnownReason = "absent" | "stale" | "ahead_of_clock" | "unrecognised" | "inexact" | "sensor_not_ok";
 
 function factName(fact: KnownFact): string {
   switch (fact) {
@@ -53,6 +54,8 @@ function factName(fact: KnownFact): string {
       return "Do Not Disturb data";
     case "time_zone":
       return "Time zone";
+    case "sensor_state":
+      return "Sensor state";
     default: {
       const unhandled: never = fact;
       return unhandled;
@@ -72,6 +75,8 @@ function reasonText(reason: KnownReason): string {
       return "has a value that Nocturne does not know";
     case "inexact":
       return "not exact";
+    case "sensor_not_ok":
+      return "not OK, so Nocturne does not use the glucose value";
     default: {
       const unhandled: never = reason;
       return unhandled;
@@ -95,6 +100,7 @@ const KNOWN_FACTS: ReadonlySet<string> = new Set<KnownFact>([
   "active_alerts",
   "do_not_disturb",
   "time_zone",
+  "sensor_state",
 ]);
 
 const KNOWN_REASONS: ReadonlySet<string> = new Set<KnownReason>([
@@ -103,6 +109,7 @@ const KNOWN_REASONS: ReadonlySet<string> = new Set<KnownReason>([
   "ahead_of_clock",
   "unrecognised",
   "inexact",
+  "sensor_not_ok",
 ]);
 
 const isKnownFact = (fact: string): fact is KnownFact => KNOWN_FACTS.has(fact);
@@ -125,18 +132,18 @@ export function holdFactLines(hold: AlertHold): string[] {
   return (hold.facts ?? []).map((f) => `${heldFactName(f.fact)}: ${heldReason(f.reason)}`);
 }
 
-/** "Waiting for data since …". */
+/** "Waiting for usable data since …". */
 export function holdSinceText(hold: AlertHold): string {
   return hold.since
-    ? `Waiting for data since ${formatDateTimeCompact(hold.since)}.`
-    : "Waiting for data.";
+    ? `Waiting for usable data since ${formatDateTimeCompact(hold.since)}.`
+    : "Waiting for usable data.";
 }
 
 export function heldOpenText(): string {
-  return "This alert stays open while its data is missing. It closes after 24 hours of missing data.";
+  return "This alert stays open while it has no usable data. It closes after 24 hours with no usable data.";
 }
 
 /** The words for why a closed alert closed, where the reason needs them; null otherwise. */
 export function resolutionReasonText(reason: string | undefined): string | null {
-  return reason === "hold-bound" ? "Closed because its data was missing for 24 hours." : null;
+  return reason === "hold-bound" ? "Closed because it had no usable data for 24 hours." : null;
 }

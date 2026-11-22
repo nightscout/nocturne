@@ -180,7 +180,14 @@ public sealed record ScenarioContext
     [JsonPropertyName("active_state_spans")] public List<ScenarioStateSpan>? ActiveStateSpans { get; init; }
     [JsonPropertyName("active_trackers")] public List<ScenarioTrackerReference>? ActiveTrackers { get; init; }
     [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
+    [JsonPropertyName("sensor_state")] public ScenarioSensorState? SensorState { get; init; }
 }
+
+/// <summary>State uses the snake_case wire form of SensorState (<c>"warming_up"</c>, <c>"no_value"</c>, …).</summary>
+public sealed record ScenarioSensorState(
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("since")] DateTime? Since,
+    [property: JsonPropertyName("until")] DateTime? Until = null);
 
 public sealed record ScenarioPrediction(
     [property: JsonPropertyName("offset_minutes")] int OffsetMinutes,

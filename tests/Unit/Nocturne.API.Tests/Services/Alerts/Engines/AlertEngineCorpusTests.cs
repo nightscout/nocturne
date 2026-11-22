@@ -22,7 +22,7 @@ namespace Nocturne.API.Tests.Services.Alerts.Engines;
 public class AlertEngineCorpusTests
 {
     // The host derives these names from its own enums (the bucket of a rate, a referenced
-    // span category), so it never sends one its enums lack and the seam has no context to
+    // span category, a sensor state read through an allowlist), so it never sends one its enums lack and the seam has no context to
     // build. Only the FFI corpus suite runs these scenarios. A pump mode is stored as free
     // text and does reach the engine, so its scenario runs here.
     private static readonly (string Scenario, Type Enum, string Name)[] NamesThisHostCannotSend =
@@ -30,6 +30,7 @@ public class AlertEngineCorpusTests
         ("state-span-unknown-enum-name", typeof(StateSpanCategory), "Hibernation"),
         ("trend-unknown-enum-name", typeof(TrendBucket), "sideways"),
         ("glucose-bucket-unknown-enum-name", typeof(GlucoseBucket), "off_the_chart"),
+        ("sensor-state-unknown-enum-name", typeof(SensorState), "rebooting"),
     ];
 
     public static TheoryData<string> ScenarioNames()

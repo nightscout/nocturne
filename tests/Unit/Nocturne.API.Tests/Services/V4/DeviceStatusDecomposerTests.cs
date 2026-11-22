@@ -2896,6 +2896,31 @@ public class DeviceStatusDecomposerTests : IDisposable
         extrasEntities[0].ExtrasJson.Should().Contain("xdripjs");
     }
 
+    /// <summary>
+    /// The extras row keeps the status's device and the source it was written under, which a reported
+    /// sensor state must match to describe a reading; a status with no device keeps none.
+    /// </summary>
+    [Theory]
+    [InlineData("CareLink MiniMed 780G", "carelink-connector", "CareLink MiniMed 780G")]
+    [InlineData("", null, null)]
+    public async Task DecomposeAsync_StoresTheStatusDeviceAndSourceOnItsExtras(string device, string? source, string? stored)
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "carelink-1",
+            Mills = 1700000000000,
+            Device = device,
+            Cgm = new CgmStatus { Manufacturer = "Medtronic", SensorState = "WARM_UP" },
+            Uploader = new UploaderStatus { Battery = 80 },
+        };
+
+        await _decomposer.DecomposeBatchAsync([ds], source, WriteOrigin.Live);
+
+        var extras = _context.DeviceStatusExtras.Single();
+        extras.Device.Should().Be(stored);
+        extras.DataSource.Should().Be(source);
+    }
+
     [Fact]
     public async Task DecomposeAsync_WithNoExtras_SkipsExtrasCreation()
     {

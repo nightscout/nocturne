@@ -253,14 +253,38 @@ public class CanonicalAlertEvaluatorTests
         _watermark.AlreadyEvaluated(Guid.Empty, Latest(Reading)).Should().BeFalse();
     }
 
+    /// <summary>
+    /// A newest reading with no value is evaluated: it is the reading, the sensor's state says it
+    /// has no value, and signal loss reads from the last reading with one
+    /// (docs/alerts/engine-semantics.md §4, sensor state).
+    /// </summary>
     [Fact]
-    public async Task EvaluateAsync_DoesNotEvaluateWithoutAPositiveReading()
+    public async Task EvaluateAsync_EvaluatesAReadingWithNoValueAsTheNoValueState()
     {
         LatestIs(Latest(Reading, mgdl: 0));
+        _canonical
+            .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                Latest(Reading.AddMinutes(-15), mgdl: 90),
+                Latest(Reading.AddMinutes(-10), mgdl: 0),
+                Latest(Reading.AddMinutes(-5), mgdl: 0),
+                Latest(Reading, mgdl: 0),
+            ]);
+        SensorContext? seen = null;
+        _orchestrator
+            .Setup(o => o.EvaluateRulesAsync(It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(), It.IsAny<SensorContext>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<AlertRuleSnapshot>, IReadOnlySet<Guid>, SensorContext, long?, CancellationToken>((_, _, c, _, _) => seen = c)
+            .Returns(Task.CompletedTask);
 
         await Evaluator(Tenant).EvaluateAsync(GlucoseMoved);
 
-        VerifyPasses(0);
+        VerifyPasses(1);
+        seen!.LatestValue.Should().BeNull();
+        seen.TrendRate.Should().BeNull();
+        seen.LatestTimestamp.Should().Be(Reading);
+        seen.LatestReceivedAt.Should().Be(Reading);
+        seen.LastReadingAt.Should().Be(Reading.AddMinutes(-15), "signal loss means no reading with a value");
+        seen.SensorState.Should().Be(new SensorStateSnapshot(SensorState.NoValue, Reading.AddMinutes(-10)));
     }
 
     [Fact]
@@ -506,14 +530,17 @@ public class CanonicalAlertEvaluatorTests
     }
 
     [NativeFact]
-    public async Task EvaluateAsync_WithoutAUsableReadingAPumpWriteEvaluatesNothing()
+    public async Task EvaluateAsync_BehindAReadingWithNoValueAPumpWriteEvaluatesItsRules()
     {
         LatestIs(Latest(Reading, mgdl: 0));
+        _canonical
+            .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Latest(Reading, mgdl: 0)]);
         RulesAre(ReservoirRule);
 
         await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump));
 
-        VerifyPasses(0);
+        VerifyPasses(1);
     }
 
     [NativeFact]

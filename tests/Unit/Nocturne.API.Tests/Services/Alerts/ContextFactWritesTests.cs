@@ -39,9 +39,12 @@ public class ContextFactWritesTests
     [Fact]
     public void EveryV4RecordTypeHasADecisionOnTheFactsItMoves()
     {
+        // A device status's extras row is no V4 record, but its write announces itself because it can
+        // state the sensor's state.
         var recordTypes = typeof(IV4Record).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false }
-                        && typeof(IV4Record).IsAssignableFrom(t));
+                        && typeof(IV4Record).IsAssignableFrom(t))
+            .Append(typeof(DeviceStatusExtras));
 
         ContextFactWrites.MovedBy.Keys.Should().Contain(recordTypes,
             "a record type with no entry would move facts and evaluate nothing");
@@ -61,10 +64,16 @@ public class ContextFactWritesTests
     }
 
     [Fact]
-    public void TheSweepMayWaitOnlyForGlucoseApsUploaderAndTransmitter() =>
+    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterAndTheSensorState() =>
         ContextFactWrites.Facts.Keys.Where(ContextFactWrites.SweepMayWaitFor)
             .Should().BeEquivalentTo(
-                [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter]);
+                [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter,
+                 ContextFactWrites.SensorState]);
+
+    [Fact]
+    public void AnExtrasWriteMovesOnlyTheSensorState() =>
+        ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(DeviceStatusExtras)])).Facts
+            .Should().BeEquivalentTo([ContextFactWrites.SensorState]);
 
     [Theory]
     [InlineData(ContextFactWrites.Insulin)]
@@ -106,7 +115,7 @@ public class ContextFactWritesTests
         ]);
 
         ContextFactWrites.MovedIn(batch).Facts.Should().BeEquivalentTo(
-            [ContextFactWrites.Glucose, ContextFactWrites.Insulin, ContextFactWrites.Pump, ContextFactWrites.Predictions]);
+            [ContextFactWrites.Glucose, ContextFactWrites.SensorState, ContextFactWrites.Insulin, ContextFactWrites.Pump, ContextFactWrites.Predictions]);
     }
 
     [Fact]

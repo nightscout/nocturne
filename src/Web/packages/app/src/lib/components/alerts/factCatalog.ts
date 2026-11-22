@@ -90,6 +90,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "loop_stale", group: "device", icon: "wifi-off" },
 	{ kind: "loop_enaction_stale", group: "device", icon: "rotate-ccw" },
 	{ kind: "signal_loss", group: "device", icon: "wifi-off" },
+	{ kind: "sensor_state", group: "device", icon: "activity" },
 
 	// Behaviour
 	{ kind: "pump_suspended", group: "behaviour", icon: "pause-circle" },

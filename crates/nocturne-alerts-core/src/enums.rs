@@ -190,6 +190,20 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// `SensorState`: what the sensor's own reports say of its readings
+    /// (engine-semantics.md §4). `no_value` is the host's word for a newest
+    /// reading that carries no glucose value.
+    pub enum SensorState {
+        WarmingUp = "warming_up",
+        Ok = "ok",
+        CalibrationNeeded = "calibration_needed",
+        Error = "error",
+        Expired = "expired",
+        NoValue = "no_value",
+    }
+}
+
+wire_enum! {
     /// `threshold.direction`.
     pub enum ThresholdDirection {
         Above = "above",
@@ -263,6 +277,7 @@ mod tests {
                 names::<TransmitterBatteryMetric>(),
             ),
             ("TrendBucket", names::<TrendBucket>()),
+            ("SensorState", names::<SensorState>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];
         for (enum_name, ours) in tables {

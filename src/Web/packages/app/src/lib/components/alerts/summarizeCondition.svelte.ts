@@ -9,7 +9,7 @@ import {
 } from "#lib/utils/formatting.js";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { plural } from "#lib/utils/plural.js";
-import { glucoseBucketLabel } from "./alert-labels.svelte";
+import { glucoseBucketLabel, sensorStateLabel } from "./alert-labels.svelte";
 
 /**
  * Optional context for summarisation. The <c>resolveAlertName</c> hook lets the
@@ -235,6 +235,11 @@ export function summarizeCondition(
 			const p = node.time_since_last_bolus;
 			if (!p) return "";
 			return `Time since last bolus ${opSymbol(p.operator)} ${formatMinutes(p.minutes ?? 0)}`;
+		}
+		case "sensor_state": {
+			const p = node.sensor_state;
+			if (!p || !p.states || p.states.length === 0) return "";
+			return withDuration(`Sensor state: ${formatList(p.states.map(sensorStateLabel), "disjunction")}`, p.for_minutes);
 		}
 		case "day_of_week": {
 			const p = node.day_of_week;

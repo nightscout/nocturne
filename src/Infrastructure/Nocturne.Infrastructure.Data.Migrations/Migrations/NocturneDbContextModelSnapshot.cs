@@ -8506,6 +8506,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("correlation_id");
 
+                    b.Property<string>("DataSource")
+                        .HasColumnType("text")
+                        .HasColumnName("data_source");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -8515,6 +8519,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("deleted_by_user");
+
+                    b.Property<string>("Device")
+                        .HasColumnType("text")
+                        .HasColumnName("device");
 
                     b.Property<string>("ExtrasJson")
                         .HasColumnType("jsonb")

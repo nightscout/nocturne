@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode } from "./types";
+import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -371,6 +371,16 @@ describe("summarizeCondition", () => {
 		);
 	});
 
+	it("names every sensor state in a sensor state condition, with its minutes", () => {
+		const node: ConditionNode = {
+			type: "sensor_state",
+			sensor_state: { states: Object.values(SensorState), for_minutes: 30 },
+		};
+		expect(summarizeCondition(node)).toBe(
+			"Sensor state: Warm-up, OK, Calibration necessary, Error, Expired, or No value for 30 minutes",
+		);
+	});
+
 	it("gives wuchale a chip it can extract for every state of every leaf", () => {
 		const both = [true, false];
 		const stateSpans = Object.values(StateSpanCategory).flatMap((category) =>
@@ -391,8 +401,11 @@ describe("summarizeCondition", () => {
 		const buckets = Object.values(GlucoseBucket).map(
 			(bucket): ConditionNode => ({ type: "glucose_bucket", glucose_bucket: { buckets: [bucket] } }),
 		);
+		const sensorStates = Object.values(SensorState).map(
+			(state): ConditionNode => ({ type: "sensor_state", sensor_state: { states: [state] } }),
+		);
 		const defaults = LEAF_FACTS.map((fact) => defaultPayload(fact.kind));
-		const nodes = [...defaults, ...stateSpans, ...pumpModes, ...alertStates, ...trends, ...sleep, ...buckets];
+		const nodes = [...defaults, ...stateSpans, ...pumpModes, ...alertStates, ...trends, ...sleep, ...buckets, ...sensorStates];
 		for (const node of nodes) {
 			const chip = summarizeCondition(node);
 			expect(chip, JSON.stringify(node)).toMatch(/^\p{Lu}/u);

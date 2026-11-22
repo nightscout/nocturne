@@ -73,9 +73,36 @@ interchange shapes (`ScenarioRule`, `ScenarioContext`, `ExpectedRuleResult` in
 `tests/Parity/Nocturne.Alerts.Corpus/ScenarioModels.cs`)
 — the corpus in `tests/Parity/AlertEngineCorpus/` is the machine-checkable
 spec for all of them. An enum value in the context (a state span's
-`category`, `trend_bucket`, `glucose_bucket`, an active pump mode's `mode`)
-is exactly its wire name, as in condition JSON; any other spelling reads as
-absent. `active_pump_modes` is the list of every active pump-mode span,
+`category`, `trend_bucket`, `glucose_bucket`, an active pump mode's `mode`,
+`sensor_state.state`) is exactly its wire name, as in condition JSON; any other
+spelling reads as absent, except a sensor state, which reads as a state that is
+not ok (engine-semantics.md §4). `sensor_state` is
+`{ "state": ..., "since": ..., "until": ... }` or absent: `state` is one of
+`warming_up`, `ok`, `calibration_needed`, `error`, `expired`, `no_value`, `since`
+(optional) is when it began, and `until` (optional) is when the host stops counting
+the report. The engine reads a state whose `until` is at or before `now` as no
+state, and reports `until` as a next change of every leaf that reads the fact. An
+engine older than the member ignores it, as it ignores any context field it does
+not know, so it evaluates such a context as one with no sensor state; a context
+without it reads as no sensor state on every engine.
+
+What a host sends (engine-semantics.md §4):
+
+1. A reported state only from a report of the newest reading's own source: the
+   report's device and data source are both present, the reading's are both
+   present, and each equals the other. Anything else is no state.
+2. A report counts while its timestamp is within the clock tolerance of `now` and
+   it arrived at most 11 minutes before `now`, its arrival being the earlier of its
+   timestamp and when the host stored it. `until` is that arrival plus 11 minutes.
+3. For a newest reading with no glucose value: `latest_value`, `trend_rate`,
+   `trend_bucket` and `glucose_bucket` absent.
+4. `latest_timestamp` and `latest_received_at` that reading's own.
+5. `last_reading_at` the last reading with a value (looked for up to 24 hours
+   back, else the oldest reading looked at), since `signal_loss` and `staleness`
+   mean no reading with a value.
+6. `sensor_state` `no_value`, with `since` the first reading with no value after
+   the last one with a value and no `until`.
+7. A reported state that is not ok replaces `no_value`; a reported ok does not. `active_pump_modes` is the list of every active pump-mode span,
 `[{ "mode": ..., "started_at": ... }]`: spans of different modes overlap, so a
 host sends all of them, never the one it prefers, and a `pump_state` leaf reads
 the entry for the mode it names (engine-semantics.md §3, §4). Timestamps are RFC 3339 UTC; the engine emits
@@ -161,8 +188,10 @@ A root or leaf that is unknown (`docs/alerts/engine-semantics.md` §2.4) reads
 reader that ignores it sees a two-valued result. An unknown root also carries
 `unknown_facts`, `[{"fact": "glucose", "reason": "stale"}]`: the context facts
 (§5.2) whose unknown reached the root through the connectives, each with its
-reason (`absent`, `stale`, `ahead_of_clock`, `unrecognised`, `inexact`), in fact
-then reason order. It can be empty: a `sustained` run whose start is beyond the
+reason (`absent`, `stale`, `ahead_of_clock`, `unrecognised`, `inexact`,
+`sensor_not_ok`), in fact then reason order. A glucose leaf left unknown by the
+sensor's state is named by `sensor_state`, with `sensor_not_ok`, or
+`unrecognised` for a state the engine has no name for. It can be empty: a `sustained` run whose start is beyond the
 clock tolerance ahead names no fact.
 
 The rule's `on_unknown` decides what an unknown root does to the tracker (§6.4).
@@ -235,7 +264,7 @@ more than 5 minutes ahead of `now`, which the engine reads as not known
 `last_site_change_at`, `last_sensor_start_at`, `last_carb_at`, `last_bolus_at`,
 `active_alerts`, `active_pump_suspension`, `active_override`,
 `active_do_not_disturb`, `active_pump_modes`, `active_state_spans`,
-`active_trackers`), the rule's `enabled_at`, or the evaluation state that held
+`active_trackers`, `sensor_state`), the rule's `enabled_at`, or the evaluation state that held
 it (`sustained` for a timer, `hysteresis_started_at` for the tracker).
 `ahead_ms` is how far ahead of `now` it was, in whole milliseconds, the furthest
 when two instants share a name. Under `hold` such a rule is held, so a host

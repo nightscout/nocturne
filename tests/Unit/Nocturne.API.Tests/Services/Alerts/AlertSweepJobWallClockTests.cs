@@ -671,8 +671,8 @@ public class AlertSweepJobWallClockTests
     }
 
     /// <summary>
-    /// A write evaluates nothing while the newest reading is unusable, so a rule beyond glucose
-    /// cannot wait then, even with a usable reading found by looking back.
+    /// Behind a newest reading with no value the context rests on a reading found by looking back,
+    /// which a write behind it can change without moving the newest reading, so no rule waits then.
     /// </summary>
     [NativeFact]
     public async Task Behind_an_unusable_newest_reading_a_loop_rule_is_evaluated_every_sweep()
@@ -685,6 +685,95 @@ public class AlertSweepJobWallClockTests
         await fixture.SweepAt(T0.AddMinutes(1.5));
 
         fixture.Evaluations.Should().Be(2);
+    }
+
+    /// <summary>
+    /// A newest reading with no value is read as that reading, with the sensor's no_value state
+    /// from the first reading without one, and signal loss measured from the last reading with a
+    /// value (docs/alerts/engine-semantics.md §4, sensor state).
+    /// </summary>
+    [NativeFact]
+    public async Task Behind_a_newest_reading_with_no_value_the_sweep_reads_the_no_value_state()
+    {
+        const string lowOrLost = """
+            {"operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
+            ]}
+            """;
+        var fixture = new Fixture(AlertConditionType.Composite, lowOrLost);
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, CreatedAt = T0, Mgdl = 60 });
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(5), CreatedAt = T0.AddMinutes(5), Mgdl = 0 });
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(10), CreatedAt = T0.AddMinutes(10), Mgdl = 0 });
+
+        await fixture.SweepAt(T0.AddMinutes(10.5));
+
+        var context = fixture.LastContext!;
+        context.LatestValue.Should().BeNull("the newest reading has no value, and an older value is not read in its place");
+        context.LatestTimestamp.Should().Be(T0.AddMinutes(10));
+        context.LastReadingAt.Should().Be(T0, "signal loss means no reading with a value");
+        context.SensorState.Should().Be(new SensorStateSnapshot(SensorState.NoValue, T0.AddMinutes(5)));
+        fixture.InstancesCreated.Should().Be(0, "the low leaf waits for a value, and the signal is lost for less than 15 minutes");
+
+        await fixture.SweepAt(T0.AddMinutes(15));
+        fixture.InstancesCreated.Should().Be(1, "readings with no value are not signal");
+    }
+
+    /// <summary>
+    /// A device status that says the sensor is ok again is a write that evaluates the glucose rules:
+    /// a low held while the sensor reported an error fires on that write, not on the next reading
+    /// (docs/alerts/engine-semantics.md §5.2).
+    /// </summary>
+    [NativeFact]
+    public async Task A_low_held_by_a_sensor_error_fires_on_the_status_write_that_says_ok()
+    {
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        {
+            LatestMgdl = 55,
+            ReportedSensorState = new SensorStateSnapshot(SensorState.Error, null, T0.AddMinutes(11)),
+        };
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, CreatedAt = T0, Mgdl = 55 });
+
+        await fixture.WriteAt(T0, ContextFactWrites.Glucose);
+        fixture.InstancesCreated.Should().Be(0, "the sensor reported an error, so the low waits");
+
+        fixture.ReportedSensorState = new SensorStateSnapshot(SensorState.Ok, null, T0.AddMinutes(12));
+        await fixture.WriteAt(T0.AddMinutes(1), ContextFactWrites.SensorState);
+
+        fixture.InstancesCreated.Should().Be(1, "the status write evaluated the low on the reading it already had");
+    }
+
+    /// <summary>
+    /// A wall-clock glucose rule held by a reported state waits for the instant the report lapses,
+    /// which the engine gives as its next change, and is evaluated there with no reading.
+    /// </summary>
+    [NativeFact]
+    public async Task A_rule_held_by_a_reported_state_waits_until_the_report_lapses()
+    {
+        const string lowOrLost = """
+            {"operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+              {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
+            ]}
+            """;
+        var fixture = new Fixture(AlertConditionType.Composite, lowOrLost)
+        {
+            LatestMgdl = 55,
+            ReportedSensorState = new SensorStateSnapshot(SensorState.Error, null, T0.AddMinutes(7)),
+        };
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, CreatedAt = T0, Mgdl = 55 });
+
+        await fixture.WriteAt(T0, ContextFactWrites.Glucose);
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId)).Should().BeEquivalentTo(
+            new { NextChangeKnown = true, NextChangeAt = (DateTime?)T0.AddMinutes(7) });
+        var evaluated = fixture.Evaluations;
+
+        await fixture.SweepAt(T0.AddMinutes(5));
+        fixture.Evaluations.Should().Be(evaluated, "nothing the rule reads moves before the report lapses");
+
+        await fixture.SweepAt(T0.AddMinutes(7.5));
+        fixture.Evaluations.Should().Be(evaluated + 1);
+        fixture.InstancesCreated.Should().Be(1, "the lapsed report is no state, so the low reads its value");
     }
 
     [NativeFact]
@@ -767,6 +856,9 @@ public class AlertSweepJobWallClockTests
         public DateTime? LastApsCycleAt { get; set; }
         public DateTime? LastSiteChangeAt { get; set; }
         public DateTime? LastBolusAt { get; set; }
+
+        /// <summary>The state a device status reports, as the enricher adds it.</summary>
+        public SensorStateSnapshot? ReportedSensorState { get; set; }
         public int InstancesCreated { get; private set; }
         public int Dispatches { get; private set; }
         public AlertPayload? LastPayload { get; private set; }
@@ -782,6 +874,9 @@ public class AlertSweepJobWallClockTests
         public Mock<ICanonicalGlucoseService> Canonical { get; } = new();
 
         public Mock<IClockAnomalyNotice> ClockNotice { get; } = new();
+
+        /// <summary>The context the last evaluation of <see cref="RuleId"/> read.</summary>
+        public SensorContext? LastContext => _engine.LastContext;
 
         public Task SweepAt(DateTime at)
         {
@@ -947,6 +1042,7 @@ public class AlertSweepJobWallClockTests
                         HasEverApsCycled = LastApsCycleAt is not null,
                         LastSiteChangeAt = LastSiteChangeAt,
                         LastBolusAt = LastBolusAt,
+                        SensorState = ReportedSensorState ?? c.SensorState,
                     });
             services.AddSingleton(enricher.Object);
 
@@ -986,6 +1082,8 @@ public class AlertSweepJobWallClockTests
     {
         public int Evaluations { get; private set; }
 
+        public SensorContext? LastContext { get; private set; }
+
         public LostEvaluation? LoseNext { get; set; }
 
         public Task<AlertEngineEvaluation> EvaluateRuleAsync(
@@ -995,6 +1093,7 @@ public class AlertSweepJobWallClockTests
                 return inner.EvaluateRuleAsync(rule, context, options, ct);
 
             Evaluations++;
+            LastContext = context;
             var lost = LoseNext;
             LoseNext = null;
             return lost switch

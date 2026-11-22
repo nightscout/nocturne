@@ -13,8 +13,10 @@ namespace Nocturne.API.Services.Glucose;
 internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
 {
     /// <summary>
-    /// Row cap for <see cref="GetRecentAsync"/>: callers ask for windows of minutes, so this only
-    /// bounds a pathological burst of readings, never a normal window.
+    /// Row cap for <see cref="GetRecentAsync"/>, newest first. Most callers ask for minutes. The alert
+    /// look-back behind a reading with no value (<c>AlertReadings.LookBackAsync</c>) asks for 24 hours:
+    /// past 500 readings with no value (over 8 hours of a 1-minute source) it finds no reading with a
+    /// value, so the outage reads from the oldest reading it got, which errs toward signal loss.
     /// </summary>
     private const int RecentFetchLimit = 500;
 

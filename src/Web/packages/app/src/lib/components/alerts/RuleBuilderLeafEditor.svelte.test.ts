@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
-import { buildBody, defaultPayload, parseRule, type ConditionNode } from "./types";
+import { buildBody, defaultPayload, parseRule, SensorState, type ConditionNode } from "./types";
 import { AlertConditionType } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
@@ -160,5 +160,42 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		await expect
 			.element(page.getByText("A condition inside “for at least” cannot have a clear margin."))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe("RuleBuilderLeafEditor sensor state minutes", () => {
+	it("offers minutes only when No value is the only state, and says why otherwise", async () => {
+		const leaf: ConditionNode = { type: "sensor_state", sensor_state: { states: [SensorState.Error] } };
+
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByRole("spinbutton", { name: "Minutes, optional" })).toBeDisabled();
+		await expect.element(page.getByText("Only for No value. The other states have no start time.")).toBeVisible();
+	});
+
+	it("lets No value alone take minutes", async () => {
+		const leaf: ConditionNode = {
+			type: "sensor_state",
+			sensor_state: { states: [SensorState.NoValue], for_minutes: 30 },
+		};
+
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByRole("spinbutton", { name: "Minutes, optional" })).toBeEnabled();
+		await expect.element(page.getByRole("spinbutton", { name: "Minutes, optional" })).toHaveValue(30);
+		await expect.element(page.getByText("Only for No value. The other states have no start time.")).not.toBeInTheDocument();
+	});
+
+	it("drops the minutes when another state joins No value", async () => {
+		const leaf: ConditionNode = {
+			type: "sensor_state",
+			sensor_state: { states: [SensorState.NoValue], for_minutes: 30 },
+		};
+
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+		await page.getByRole("button", { name: "Error" }).click();
+
+		expect(leaf.sensor_state?.states).toEqual([SensorState.NoValue, SensorState.Error]);
+		expect(leaf.sensor_state?.for_minutes).toBeUndefined();
 	});
 });

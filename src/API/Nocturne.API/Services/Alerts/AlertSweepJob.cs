@@ -73,13 +73,13 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// <summary>
     /// Per tenant whose newest canonical reading has no glucose value, what
     /// <see cref="LastUsableReadingAsync"/> found looking back from it. The look back reads up to
-    /// <see cref="UsableReadingLookback"/> of readings, and each run would repeat it every
-    /// <see cref="Interval"/> for as long as the outage lasts; it is repeated only once a newer
+    /// <see cref="AlertReadings.UsableReadingLookback"/> of readings, and each run would repeat it
+    /// every <see cref="Interval"/> for as long as the outage lasts; it is repeated only once a newer
     /// reading arrives.
     /// </summary>
-    private readonly ConcurrentDictionary<Guid, UsableLookback> _usableLookbacks = new();
+    private readonly ConcurrentDictionary<Guid, KeptLookBack> _usableLookbacks = new();
 
-    private sealed record UsableLookback(Guid NewestId, DateTime NewestAt, UsableReading Found);
+    private sealed record KeptLookBack(Guid NewestId, DateTime NewestAt, UsableReading Found);
 
     public string Name => JobName;
 
@@ -647,8 +647,9 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// escalation's parent is usually reading-driven and so not in the swept set.
     /// </summary>
     /// <remarks>
-    /// The context is the one the per-reading path builds for <see cref="LastUsableReadingAsync"/>
-    /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>), so reading-driven leaves in the same
+    /// The context is the one the per-reading path builds for the selected reading
+    /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>, or
+    /// <see cref="CanonicalAlertEvaluator.ContextForValueless"/> for one with no value), so reading-driven leaves in the same
     /// tree judge what its last pass judged until the engine finds that reading stale
     /// (docs/alerts/engine-semantics.md §3). A context without the glucose facts would read them
     /// unknown before then, and a rule whose <c>on_unknown</c> is <c>not_met</c> would close an
@@ -660,7 +661,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// a fact such a rule reads evaluates it (<see cref="ContextFactWrites"/>), so between them only
     /// the clock moves it. That holds only while the newest canonical reading is usable, the one a
     /// write's evaluation measures (<see cref="CanonicalAlertEvaluator"/>); with none, or with one
-    /// found only by looking back, a write evaluates nothing, so every rule is evaluated.
+    /// that has no value, every rule is evaluated: the context then rests on a reading found by
+    /// looking back, which a write behind it can change without moving the newest reading.
     /// </para>
     /// <para>
     /// Every enabled rule whose hold has reached the engine's bound unreported is evaluated as well
@@ -679,15 +681,18 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         if (wallClockRules.Count == 0 && heldDue.Count == 0) return;
 
         var last = await LastUsableReadingAsync(sweep, ct);
-        var context = last.Reading is { } usable
-            ? CanonicalAlertEvaluator.ContextFor(usable, await sweep.TrendOfAsync(usable, ct))
-            : new SensorContext
+        var context = last switch
+        {
+            { Valueless: var (newest, back) } => CanonicalAlertEvaluator.ContextForValueless(newest, back),
+            { Reading: { } usable } => CanonicalAlertEvaluator.ContextFor(usable, await sweep.TrendOfAsync(usable, ct)),
+            _ => new SensorContext
             {
                 LatestValue = null,
                 LatestTimestamp = last.At,
                 TrendRate = null,
                 LastReadingAt = last.At,
-            };
+            },
+        };
         if (last.Newest)
             wallClockRules = await NotYetDueAsync(sweep, wallClockRules, verdicts, NextChange.GlucoseOf(context), ct);
         wallClockRules.AddRange(heldDue.Where(rule => wallClockRules.All(r => r.Id != rule.Id)));
@@ -724,21 +729,17 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         return due;
     }
 
-    /// <summary>How far before an unusable newest reading the sweep looks for a usable one.</summary>
-    internal static readonly TimeSpan UsableReadingLookback = TimeSpan.FromHours(24);
-
     /// <summary>
     /// The reading every swept context measures <see cref="SensorContext.LastReadingAt"/> from:
     /// the newest canonical reading with a glucose value that <see cref="AlertReadings"/> selects,
-    /// the only kind the per-reading path evaluates, so <c>signal_loss</c> counts sensor-error and
-    /// warm-up readings as no signal.
+    /// so <c>signal_loss</c> counts readings with no value as no signal. When the selected reading
+    /// has none it is <see cref="UsableReading.Valueless"/>, and the reading with a value is looked
+    /// for behind it (<see cref="AlertReadings.LookBackAsync"/>).
     /// </summary>
     /// <remarks>
-    /// It is looked for at most <see cref="UsableReadingLookback"/> before the newest canonical
-    /// reading. With none there, <see cref="UsableReading.At"/> is the oldest reading looked at:
-    /// the outage is at least that old. With no canonical reading at all it is the tenant's
-    /// newest reading of any source, null for a tenant that has never had one, which
-    /// <c>signal_loss</c> and <c>staleness</c> treat as cold start.
+    /// With no canonical reading at all <see cref="UsableReading.At"/> is the tenant's newest
+    /// reading of any source, null for a tenant that has never had one, which <c>signal_loss</c>
+    /// and <c>staleness</c> treat as cold start.
     /// <para>
     /// The look back is kept per tenant (<see cref="_usableLookbacks"/>) until the newest
     /// canonical reading changes, so a usable reading backfilled behind an unchanged newest one
@@ -752,7 +753,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         await sweep.Services.GetRequiredService<IClockAnomalyNotice>()
             .ReportReadingIsolatedAsync(selection, sweep.Now, logger, ct);
         var latest = selection.Selected;
-        if (latest is null || latest.Mgdl > 0)
+        if (latest is null || AlertReadings.HasValue(latest))
         {
             _usableLookbacks.TryRemove(sweep.TenantId, out _);
             return latest is null
@@ -766,20 +767,21 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             return kept.Found;
         }
 
-        var recent = (await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct))
-            .Where(r => r.Timestamp <= latest.Timestamp)
-            .ToList();
-        var found = recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable
-            ? new UsableReading(usable, usable.Timestamp)
-            : new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);
-        _usableLookbacks[sweep.TenantId] = new UsableLookback(latest.Id, latest.Timestamp, found);
+        var back = await AlertReadings.LookBackAsync(canonical, latest, ct);
+        var found = new UsableReading(back.Usable, back.At, Valueless: (latest, back));
+        _usableLookbacks[sweep.TenantId] = new KeptLookBack(latest.Id, latest.Timestamp, found);
         return found;
     }
 
     /// <param name="Reading">The last usable reading, or null when none was found.</param>
     /// <param name="At">What <see cref="SensorContext.LastReadingAt"/> is.</param>
     /// <param name="Newest">Whether <paramref name="Reading"/> is the newest canonical reading selected, not one looked back for.</param>
-    private sealed record UsableReading(SensorGlucose? Reading, DateTime? At, bool Newest = false);
+    /// <param name="Valueless">The selected reading when it has no glucose value, with what was found behind it.</param>
+    private sealed record UsableReading(
+        SensorGlucose? Reading,
+        DateTime? At,
+        bool Newest = false,
+        (SensorGlucose Newest, UsableLookBack Back)? Valueless = null);
 
     /// <summary>
     /// Whether <paramref name="rule"/> references the wall clock, reusing its verdict in

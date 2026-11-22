@@ -2,8 +2,9 @@
 //! context wire format (engine-semantics.md §4). An enum name this crate does
 //! not know (a host newer than it) degrades only that fact: an unknown bucket
 //! reads as an absent one, an active pump mode this crate cannot name keeps
-//! its entry with no mode, and a state span of an unknown category is dropped,
-//! so every other leaf still evaluates.
+//! its entry with no mode, a state span of an unknown category is dropped, and
+//! a sensor state this crate cannot name is kept as one that is not ok, so
+//! every other leaf still evaluates.
 
 use std::collections::HashMap;
 
@@ -13,7 +14,9 @@ use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use uuid::Uuid;
 
-use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum};
+use crate::enums::{
+    GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket, WireEnum,
+};
 use crate::model::decimal_from_number;
 
 #[derive(Debug, Clone)]
@@ -114,6 +117,41 @@ pub struct SensorContext {
     /// Pre-computed by the enricher: a sleep session (from the sleep_sessions
     /// tables) has `StartTime <= now <= EndTime` for the tenant.
     pub sleep_session_active: bool,
+    /// The sensor's state; `None` when nothing is known of it, which glucose
+    /// leaves read as they would without the fact.
+    pub sensor_state: Option<SensorStateSnapshot>,
+}
+
+/// The sensor's state and, where the source gives one, the instant it began.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SensorStateSnapshot {
+    /// `None` for a name this crate does not know, read as a state that is
+    /// not ok (engine-semantics.md §4).
+    pub state: Option<SensorState>,
+    pub since: Option<DateTime<Utc>>,
+    /// The instant the host stops counting the report. A state whose `until`
+    /// is at or before `now` is no state (engine-semantics.md §4). `None`
+    /// counts for as long as the host sends it, as `no_value` does.
+    pub until: Option<DateTime<Utc>>,
+}
+
+impl SensorContext {
+    /// The sensor's state at `now`: none when it is absent or its report has
+    /// lapsed. The engine owns the lapse, so a host that evaluates late
+    /// cannot keep a state its own bound has ended.
+    #[must_use]
+    pub fn sensor_state_at(&self, now: DateTime<Utc>) -> Option<SensorStateSnapshot> {
+        self.sensor_state
+            .filter(|s| s.until.is_none_or(|until| until > now))
+    }
+
+    /// When the sensor's state lapses, if that is after `now`.
+    #[must_use]
+    pub fn sensor_state_lapses(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        self.sensor_state
+            .and_then(|s| s.until)
+            .filter(|&until| until > now)
+    }
 }
 
 /// A tracker definition's active instance, as `tracker_age` reads it.
@@ -225,6 +263,17 @@ struct WireContext {
     active_trackers: Option<Vec<WireTrackerReference>>,
     #[serde(default)]
     sleep_session_active: bool,
+    #[serde(default)]
+    sensor_state: Option<WireSensorState>,
+}
+
+#[derive(Deserialize)]
+struct WireSensorState {
+    state: String,
+    #[serde(default)]
+    since: Option<DateTime<Utc>>,
+    #[serde(default)]
+    until: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -470,6 +519,65 @@ impl SensorContext {
             active_state_spans,
             active_trackers,
             sleep_session_active: w.sleep_session_active,
+            sensor_state: w
+                .sensor_state
+                .map(|s| {
+                    Ok::<_, String>(SensorStateSnapshot {
+                        state: SensorState::from_name(&s.state),
+                        since: opt_ts(s.since, "sensor_state.since")?,
+                        until: opt_ts(s.until, "sensor_state.until")?,
+                    })
+                })
+                .transpose()?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use serde_json::json;
+
+    use super::*;
+
+    fn read(value: serde_json::Value) -> SensorContext {
+        serde_json::from_value(value).expect("a context")
+    }
+
+    /// An engine reads a context member it does not know as absent, so an engine older than
+    /// `sensor_state` evaluates a context that carries one as a context with no sensor state.
+    #[test]
+    fn a_member_the_engine_does_not_know_is_ignored() {
+        let with = read(json!({ "latest_value": 60, "sensor_state_v2": { "state": "error" } }));
+        let without = read(json!({ "latest_value": 60 }));
+        assert_eq!(format!("{with:?}"), format!("{without:?}"));
+    }
+
+    #[test]
+    fn a_context_without_the_member_has_no_sensor_state() {
+        assert_eq!(read(json!({})).sensor_state, None);
+        assert_eq!(read(json!({ "sensor_state": null })).sensor_state, None);
+    }
+
+    #[test]
+    fn a_state_reads_with_its_start_and_an_unknown_name_keeps_the_entry() {
+        let at = "2026-01-05T12:00:00Z";
+        assert_eq!(
+            read(json!({ "sensor_state": { "state": "warming_up", "since": at } })).sensor_state,
+            Some(SensorStateSnapshot {
+                state: Some(SensorState::WarmingUp),
+                since: Some(at.parse().expect("an instant")),
+                until: None,
+            })
+        );
+        assert_eq!(
+            read(json!({ "sensor_state": { "state": "rebooting" } })).sensor_state,
+            Some(SensorStateSnapshot {
+                state: None,
+                since: None,
+                until: None,
+            })
+        );
     }
 }

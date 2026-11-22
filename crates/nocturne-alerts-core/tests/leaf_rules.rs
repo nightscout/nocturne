@@ -40,8 +40,9 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::enums::{
-    AlertStateKind, CmpOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection, StateSpanCategory,
-    TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket, WireEnum,
+    AlertStateKind, CmpOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection, SensorState,
+    StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
+    WireEnum,
 };
 use nocturne_alerts_core::eval::{Env, eval_payload};
 use nocturne_alerts_core::model::{ConditionKind, parse_payload};
@@ -293,8 +294,22 @@ fn glucose_age(c: &Case) -> Truth {
     })
 }
 
-/// `decide` over a fact the reading's age allows.
+/// §3, sensor state: a state other than ok, or a name the crate has no member for, leaves the
+/// leaf unknown whatever the reading; absent and ok read as no state.
+fn sensor_not_ok(ctx: &Value) -> bool {
+    sensor_state_now(ctx).is_some_and(|s| s["state"] != "ok")
+}
+
+/// §4: the sensor's state, unless its `until` is at or before now.
+fn sensor_state_now(ctx: &Value) -> Option<&Value> {
+    field(ctx, "sensor_state").filter(|s| field(s, "until").is_none_or(|u| ago_of_instant(u) < 0))
+}
+
+/// `decide` over a fact the reading's age and the sensor's state allow.
 fn judged(c: &Case, fact: Option<Value>, decide: impl FnOnce(Value) -> Verdict) -> Verdict {
+    if sensor_not_ok(&c.ctx) {
+        return unknown("sensor");
+    }
     let Some(fact) = fact else {
         return unknown("absent");
     };
@@ -331,7 +346,8 @@ family!(
         "true:below",
         "false:below",
         "unknown:absent",
-        "unknown:stale"
+        "unknown:stale",
+        "unknown:sensor"
     ]
 );
 
@@ -361,7 +377,8 @@ family!(
         "true:rising",
         "false:rising",
         "unknown:absent",
-        "unknown:stale"
+        "unknown:stale",
+        "unknown:sensor"
     ]
 );
 
@@ -393,7 +410,8 @@ family!(
         "true:bucket",
         "false:bucket",
         "unknown:absent",
-        "unknown:stale"
+        "unknown:stale",
+        "unknown:sensor"
     ]
 );
 
@@ -420,7 +438,8 @@ family!(
         "true:membership",
         "false:membership",
         "unknown:absent",
-        "unknown:stale"
+        "unknown:stale",
+        "unknown:sensor"
     ]
 );
 
@@ -1292,6 +1311,74 @@ family!(
     ]
 );
 
+fn sensor_state_model(c: &Case) -> Verdict {
+    let Some(snapshot) = sensor_state_now(&c.ctx) else {
+        let listed = c.payload["states"].as_array().unwrap();
+        return if field(&c.ctx, "latest_value").is_some() && listed.iter().all(|s| s == "no_value")
+        {
+            verdict(false, "a value, so not no_value")
+        } else {
+            unknown("absent")
+        };
+    };
+    let state = snapshot["state"].as_str().unwrap();
+    if SensorState::from_name(state).is_none() {
+        return unknown("unrecognised");
+    }
+    if !c.payload["states"]
+        .as_array()
+        .unwrap()
+        .contains(&snapshot["state"])
+    {
+        return verdict(false, "other state");
+    }
+    match (field(snapshot, "since").map(ago_of_instant), for_minutes(c)) {
+        (_, None) => verdict(true, "listed"),
+        (None, Some(_)) => unknown("no start"),
+        (Some(at), Some(m)) => match held(passed(at), m) {
+            Truth::Unknown => unknown("ahead"),
+            t => verdict(t, "lasting"),
+        },
+    }
+}
+
+fn sensor_state_case() -> BoxedStrategy<Case> {
+    (
+        full_context(),
+        prop_oneof![5 => words::<SensorState>(), 1 => Just(json!(["no_value"]))],
+        option::weighted(0.75, -1..=5i32),
+        option::weighted(0.5, full_context::sensor_state()),
+    )
+        .prop_map(|(mut ctx, states, for_minutes, sensor)| {
+            if let Some(sensor) = sensor {
+                ctx["sensor_state"] = sensor;
+            }
+            let payload = object(vec![
+                ("states", Some(states)),
+                ("for_minutes", for_minutes.map(Value::from)),
+            ]);
+            case(ctx, payload)
+        })
+        .boxed()
+}
+
+family!(
+    sensor_state_is_set_membership_held_from_its_start_and_unknown_without_a_known_state,
+    ConditionKind::SensorState,
+    sensor_state_case(),
+    sensor_state_model,
+    [
+        "true:listed",
+        "true:lasting",
+        "false:lasting",
+        "false:other state",
+        "unknown:absent",
+        "unknown:unrecognised",
+        "unknown:no start",
+        "false:a value, so not no_value"
+    ]
+);
+
 fn tracker_model(c: &Case) -> Verdict {
     let id = c.payload["tracker_definition_id"].as_str().unwrap();
     let instance = field(&c.ctx, "active_trackers")
@@ -1575,6 +1662,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         active_state_spans,
         active_trackers,
         sleep_session_active,
+        sensor_state,
     } = ctx;
     vec![
         ("latest_value", latest_value.is_some()),
@@ -1619,6 +1707,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         ("active_state_spans", !active_state_spans.is_empty()),
         ("active_trackers", !active_trackers.is_empty()),
         ("sleep_session_active", *sleep_session_active),
+        ("sensor_state", sensor_state.is_some()),
     ]
 }
 

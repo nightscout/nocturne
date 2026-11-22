@@ -248,7 +248,23 @@ public record SensorContext
     /// </summary>
     public IReadOnlyDictionary<Guid, ActiveTrackerReference> ActiveTrackers { get; init; }
         = new Dictionary<Guid, ActiveTrackerReference>();
+
+    /// <summary>
+    /// The sensor's state, or null when nothing is known of it, which the glucose leaves read as
+    /// they would without it. <see cref="Alerts.SensorState.NoValue"/> when the newest reading has
+    /// no glucose value and no source reports a state other than ok.
+    /// </summary>
+    public SensorStateSnapshot? SensorState { get; init; }
+
+    /// <summary>
+    /// Where the newest reading came from, which a reported sensor state must match to describe it.
+    /// The host reads it; it is not sent to the engine.
+    /// </summary>
+    public ReadingSource? LatestSource { get; init; }
 }
+
+/// <summary>The device and data source a reading was written under.</summary>
+public sealed record ReadingSource(string? DataSource, string? Device);
 
 /// <summary>A tracker definition's active instance, as the <c>tracker_age</c> leaf reads it.</summary>
 /// <param name="ReferenceAt">Start time for a Duration tracker, scheduled time for an Event tracker.</param>
@@ -596,7 +612,7 @@ public enum TransmitterBatteryMetric
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -634,7 +650,8 @@ public record ConditionNode(
     [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null,
     [property: JsonPropertyName("sleep_session_active")] SleepSessionActiveCondition? SleepSessionActive = null,
     [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null,
-    [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null
+    [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null,
+    [property: JsonPropertyName("sensor_state")] SensorStateCondition? SensorState = null
 );
 
 /// <summary>

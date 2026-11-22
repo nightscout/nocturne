@@ -1334,7 +1334,10 @@ fn rule_reads_names_facts_by_wire_name() {
         &high_rule_resolving_on_cob().to_string(),
     );
     assert_eq!(response["ok"], json!(true));
-    assert_eq!(response["reads"], json!(["glucose", "carbs"]));
+    assert_eq!(
+        response["reads"],
+        json!(["glucose", "carbs", "sensor_state"])
+    );
     let unknown = call_json(
         nocturne_alerts_rule_reads,
         &json!({ "schema_version": 1, "condition_type": "no_such_kind" }).to_string(),

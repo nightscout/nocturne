@@ -166,7 +166,7 @@ describe("AlertHistoryCard", () => {
 			.toBeDisabled();
 	});
 
-	it("states that an alert closed because its data was missing for 24 hours", async () => {
+	it("states that an alert closed because it had no usable data for 24 hours", async () => {
 		render(AlertHistoryCard, {
 			history: history({
 				items: [excursion({ resolutionReason: "hold-bound" }), excursion({ id: "2", resolutionReason: "hysteresis" })],
@@ -177,7 +177,7 @@ describe("AlertHistoryCard", () => {
 		});
 
 		await expect
-			.element(page.getByText("Closed because its data was missing for 24 hours."))
+			.element(page.getByText("Closed because it had no usable data for 24 hours."))
 			.toBeVisible();
 		expect(page.getByTestId("history-hold-close").elements()).toHaveLength(1);
 	});
