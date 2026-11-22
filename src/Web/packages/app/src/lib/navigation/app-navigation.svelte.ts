@@ -48,7 +48,7 @@ export type NavItemId =
   | "time-spans"
   | "reports"
   | "clock"
-  | "tenants"
+  | "people"
   | "food"
   | "meals"
   | "tools"
@@ -214,9 +214,9 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
 
   if (viewer.tenantCount > 1) {
     items.push({
-      id: "tenants",
+      id: "people",
       title: "People",
-      href: "/tenants",
+      href: "/people",
       icon: Users,
     });
   }

@@ -117,7 +117,7 @@ describe("People wall display", () => {
 
       await userEvent.keyboard("{Escape}");
 
-      expect(navigation.goto).toHaveBeenCalledWith("/tenants", { replaceState: true });
+      expect(navigation.goto).toHaveBeenCalledWith("/people", { replaceState: true });
     });
 
     it("goes back in history, adding no entry, when the wall was opened from the People page", async () => {
@@ -125,7 +125,7 @@ describe("People wall display", () => {
       overview.data = { tenants: [named(1)] };
       render(PeopleWall);
       await expect.element(page.getByText("Person 001")).toBeVisible();
-      navigation.arrived({ from: { route: { id: "/(authenticated)/tenants" } } });
+      navigation.arrived({ from: { route: { id: "/(authenticated)/people" } } });
 
       await userEvent.keyboard("{Escape}");
 
@@ -149,7 +149,7 @@ describe("People wall display", () => {
       vi.useRealTimers();
 
       await page.getByRole("button", { name: "Back" }).click({ force: true });
-      expect(navigation.goto).toHaveBeenCalledWith("/tenants", { replaceState: true });
+      expect(navigation.goto).toHaveBeenCalledWith("/people", { replaceState: true });
     });
   });
 

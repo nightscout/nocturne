@@ -99,12 +99,12 @@
 
   let fromPeople = false;
   afterNavigate(({ from }) => {
-    fromPeople = from?.route.id === "/(authenticated)/tenants";
+    fromPeople = from?.route.id === "/(authenticated)/people";
   });
 
   function leave() {
     if (fromPeople) history.back();
-    else void goto(resolve("/(authenticated)/tenants"), { replaceState: true });
+    else void goto(resolve("/(authenticated)/people"), { replaceState: true });
   }
 
   function onkeydown(event: KeyboardEvent) {

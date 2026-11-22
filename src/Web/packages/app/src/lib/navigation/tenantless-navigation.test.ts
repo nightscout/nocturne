@@ -7,7 +7,7 @@ describe("filterTenantlessNav", () => {
       { title: "Dashboard", href: "/" },
       { title: "Calendar", href: "/calendar" },
       { title: "Clock", href: "/clock" },
-      { title: "People", href: "/tenants" },
+      { title: "People", href: "/people" },
     ];
 
     expect(filterTenantlessNav(items)).toEqual([{ title: "Dashboard", href: "/" }]);
@@ -88,7 +88,7 @@ describe("filterTenantlessNav", () => {
 describe("isTenantlessRoute", () => {
   it("rejects tenant-scoped routes", () => {
     expect(isTenantlessRoute("/calendar")).toBe(false);
-    expect(isTenantlessRoute("/tenants")).toBe(false);
+    expect(isTenantlessRoute("/people")).toBe(false);
     expect(isTenantlessRoute("/settings/members")).toBe(false);
   });
 

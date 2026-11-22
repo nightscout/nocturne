@@ -27,7 +27,7 @@ function eventFor(signedIn: boolean) {
       },
     },
     cookies: { get: () => undefined, set: () => {}, delete: () => {} } as unknown as Cookies,
-    url: new URL("https://acme.nocturne.run/tenants/wall"),
+    url: new URL("https://acme.nocturne.run/people/wall"),
     untrack: <T>(fn: () => T) => fn(),
     depends: () => {},
     parent: async () => ({ tenantless: false }),
@@ -68,7 +68,7 @@ describe("people wall route guard", () => {
       location = error.location;
     }
 
-    expect(location).toBe("/auth/login?returnUrl=%2Ftenants%2Fwall");
+    expect(location).toBe("/auth/login?returnUrl=%2Fpeople%2Fwall");
   });
 
   it("lets a signed-in visitor through", async () => {

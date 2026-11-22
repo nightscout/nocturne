@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ locals, request, parent, cookies, i
 
 	// A tenantless host serves the cross-tenant overview instead of one tenant's dashboard, so
 	// there is no tenant whose chart data could be loaded here. The overview itself is fetched
-	// client-side by the same remote query /tenants uses.
+	// client-side by the same remote query /people uses.
 	if (tenantless) {
 		const landing = resolveSingleTenantLanding(
 			await getReachableTenants(apiClient),
