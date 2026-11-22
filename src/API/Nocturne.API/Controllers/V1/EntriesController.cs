@@ -5,13 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
-using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 using Nocturne.Core.Contracts.Entries;
@@ -27,7 +25,6 @@ namespace Nocturne.API.Controllers.V1;
 /// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDocumentProcessingService"/>
-/// <seealso cref="IAlertOrchestrator"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
@@ -36,7 +33,6 @@ public class EntriesController : ControllerBase
 {
     private readonly IEntryService _entryService;
     private readonly IDocumentProcessingService _documentProcessingService;
-    private readonly ICanonicalAlertEvaluator _alertEvaluator;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EntriesController> _logger;
 
@@ -45,20 +41,17 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="entryService">Service handling glucose entry operations.</param>
     /// <param name="documentProcessingService">Service for async document processing and ingestion.</param>
-    /// <param name="alertEvaluator">Evaluates alert rules against the canonical stream after writes.</param>
     /// <param name="timeProvider">Clock the default read window is measured from.</param>
     /// <param name="logger">Logger instance.</param>
     public EntriesController(
         IEntryService entryService,
         IDocumentProcessingService documentProcessingService,
-        ICanonicalAlertEvaluator alertEvaluator,
         TimeProvider timeProvider,
         ILogger<EntriesController> logger
     )
     {
         _entryService = entryService;
         _documentProcessingService = documentProcessingService;
-        _alertEvaluator = alertEvaluator;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -441,8 +434,6 @@ public class EntriesController : ControllerBase
                 Request?.Headers.UserAgent.ToString(),
                 cancellationToken
             );
-
-            await _alertEvaluator.EvaluateForEntriesAsync(upload.GlucoseMoved, cancellationToken);
 
             var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, upload.Response);
 

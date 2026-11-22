@@ -47,7 +47,6 @@ public class V3SortTests
         new(
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = Context(queryString),

@@ -57,17 +57,43 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
         && _timeProvider.GetElapsedTime(previous.At) < MaxSkipWindow;
 
     /// <summary>
-    /// Records the reading a completed pass evaluated, replacing any earlier one for the tenant.
+    /// Claims the pass over <paramref name="reading"/> for the tenant, unless one inside the last
+    /// <see cref="MaxSkipWindow"/> already claimed it. Claimed before the pass dispatches, so a pass
+    /// that overlaps it on the same reading stops after its canonical read rather than waiting on, or
+    /// repeating, the first pass's delivery.
     /// </summary>
+    /// <returns>Whether the caller should evaluate the reading.</returns>
     /// <remarks>
-    /// <see cref="Guid.Empty"/> means no tenant was in scope, and the orchestrator returns before
-    /// its first read in that case; nothing was evaluated, so nothing is remembered. Refusing the
-    /// write here is what keeps <see cref="AlreadyEvaluated"/> from ever matching on that key.
+    /// <see cref="Guid.Empty"/> means no tenant was in scope; nothing is remembered under it, so
+    /// <see cref="AlreadyEvaluated"/> never matches on that key.
     /// </remarks>
-    public void Record(Guid tenantId, SensorGlucose reading)
+    public bool TryClaim(Guid tenantId, SensorGlucose reading)
     {
-        if (tenantId == Guid.Empty) return;
-        _lastPass[tenantId] = new Pass(Key(reading), _timeProvider.GetTimestamp());
+        if (tenantId == Guid.Empty) return true;
+
+        var claim = new Pass(Key(reading), _timeProvider.GetTimestamp());
+        while (true)
+        {
+            if (!_lastPass.TryGetValue(tenantId, out var previous))
+            {
+                if (_lastPass.TryAdd(tenantId, claim)) return true;
+                continue;
+            }
+
+            if (previous.Reading == claim.Reading && _timeProvider.GetElapsedTime(previous.At) < MaxSkipWindow)
+                return false;
+            if (_lastPass.TryUpdate(tenantId, claim, previous)) return true;
+        }
+    }
+
+    /// <summary>
+    /// Drops the claim on <paramref name="reading"/> when its pass did not complete, so the next
+    /// write evaluates it again. A newer claim is left alone.
+    /// </summary>
+    public void Release(Guid tenantId, SensorGlucose reading)
+    {
+        if (_lastPass.TryGetValue(tenantId, out var claimed) && claimed.Reading == Key(reading))
+            _lastPass.TryRemove(new KeyValuePair<Guid, Pass>(tenantId, claimed));
     }
 
     private static ReadingKey Key(SensorGlucose reading) =>

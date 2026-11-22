@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
@@ -30,14 +31,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </list>
 /// A device status's extras row has no source, so it follows its status
 /// (<see cref="V4RecordTables.StatusExtrasLeftBy"/>) after the snapshot tables, uncounted.
-/// Each purge and each release tells <see cref="ILegacyReadCacheInvalidation"/> once, after its tables have
-/// committed, which model types it changed, so the legacy read caches stop serving them.
+/// Each purge and each release announces once, after its tables have committed, which model types it
+/// changed (<see cref="IRecordChangePublisher"/>), so the legacy read caches stop serving them and the
+/// alert rules over them are evaluated.
 /// </remarks>
 public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDataPurge
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly IAuditContext _audit;
-    private readonly ILegacyReadCacheInvalidation? _legacyReads;
+    private readonly IRecordChangePublisher? _changes;
 
     /// <summary>
     /// A module whose calls each open their own context and attribute writes to <paramref name="audit"/>.
@@ -45,15 +47,17 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
     /// <c>deleted_by_user</c> flag, so the next sync would re-import what the user deleted.
     /// </summary>
     public SourceOwnedDataRepository(
-        INocturneDbContextFactory contexts, IAuditContext audit, ILegacyReadCacheInvalidation? legacyReads = null)
+        INocturneDbContextFactory contexts, IAuditContext audit, IRecordChangePublisher? changes = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
-        _legacyReads = legacyReads;
+        _changes = changes;
     }
 
     private Task ReportWrittenAsync(IReadOnlyCollection<Type> models) =>
-        models.Count == 0 ? Task.CompletedTask : _legacyReads?.WrittenAsync(models) ?? Task.CompletedTask;
+        models.Count == 0
+            ? Task.CompletedTask
+            : _changes?.PublishAsync(RecordsChanged.Written(models), CancellationToken.None) ?? Task.CompletedTask;
 
     /// <summary>The tables a purge deletes from (<see cref="SourceOwnedDataRepository"/>).</summary>
     private static readonly IReadOnlyList<V4RecordTable> PurgedTables =

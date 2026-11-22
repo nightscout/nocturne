@@ -647,10 +647,11 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// <para>
     /// A rule that <see cref="RuleTrees.WaitsForNextChange"/> is skipped while the next change its
     /// last evaluation recorded is still ahead, or it recorded none, and that evaluation read the
-    /// glucose facts this context carries (<see cref="NextChange.GlucoseOf"/>): such a rule reads
-    /// nothing else, so between them only the clock moves it. That holds only while the context
-    /// measures a usable canonical reading, the one the per-reading path measures; with none, its
-    /// reading time moves with writes that evaluate nothing, so every rule is evaluated.
+    /// glucose facts this context carries (<see cref="NextChange.GlucoseOf"/>): every write that moves
+    /// a fact such a rule reads evaluates it (<see cref="ContextFactWrites"/>), so between them only
+    /// the clock moves it. That holds only while the newest canonical reading is usable, the one a
+    /// write's evaluation measures (<see cref="CanonicalAlertEvaluator"/>); with none, or with one
+    /// found only by looking back, a write evaluates nothing, so every rule is evaluated.
     /// </para>
     /// </remarks>
     private async Task EvaluateWallClockRulesAsync(Sweep sweep, CancellationToken ct)
@@ -672,7 +673,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 TrendRate = null,
                 LastReadingAt = last.At,
             };
-        if (last.Reading is not null)
+        if (last.Newest)
         {
             wallClockRules = await NotYetDueAsync(sweep, wallClockRules, verdicts, NextChange.GlucoseOf(context), ct);
             if (wallClockRules.Count == 0) return;
@@ -742,7 +743,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             _usableLookbacks.TryRemove(sweep.TenantId, out _);
             return latest is null
                 ? new UsableReading(null, (await sweep.TenantAsync(ct)).LastReadingAt)
-                : new UsableReading(latest, latest.Timestamp);
+                : new UsableReading(latest, latest.Timestamp, Newest: true);
         }
 
         if (_usableLookbacks.TryGetValue(sweep.TenantId, out var kept)
@@ -763,7 +764,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
 
     /// <param name="Reading">The last usable reading, or null when none was found.</param>
     /// <param name="At">What <see cref="SensorContext.LastReadingAt"/> is.</param>
-    private sealed record UsableReading(SensorGlucose? Reading, DateTime? At);
+    /// <param name="Newest">Whether <paramref name="Reading"/> is the newest canonical reading selected, not one looked back for.</param>
+    private sealed record UsableReading(SensorGlucose? Reading, DateTime? At, bool Newest = false);
 
     /// <summary>
     /// Whether <paramref name="rule"/> references the wall clock, reusing its verdict in

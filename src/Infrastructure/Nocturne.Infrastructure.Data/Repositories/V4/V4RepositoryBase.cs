@@ -94,11 +94,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// publishes for every write that reaches it; a write that does not calls this itself.
     /// </summary>
     /// <remarks>
-    /// <see cref="WriteOrigin.Backfill"/> because the change carries no record and so is announced to
-    /// no one. Uncancellable for the reason <see cref="ILegacyReadCacheInvalidation"/> takes no token.
+    /// Uncancellable for the reason <see cref="ILegacyReadCacheInvalidation"/> takes no token.
     /// </remarks>
     protected Task ReportWrittenAsync() =>
-        PublishAsync([], [], [], WriteOrigin.Backfill, CancellationToken.None);
+        _changes?.PublishAsync(RecordsChanged.Written([typeof(TModel)]), CancellationToken.None) ?? Task.CompletedTask;
 
     private Task PublishAsync(
         IReadOnlyList<TModel> created,
@@ -1214,7 +1213,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         => Task.FromResult(UpsertSplit.Empty(entities));
 
     /// <summary>
-    /// Reports the committed write, then links <paramref name="inserted"/> into their duplicate groups.
+    /// Links <paramref name="inserted"/> into their duplicate groups, then reports the committed write,
+    /// so nothing the report starts (an alert evaluation) reads a copy before linking hides it.
     /// A failed link is logged and swallowed, as the write has committed; only a cancellation
     /// propagates, after the report, so it cannot leave a legacy read cache serving the rows as they were.
     /// A record missed here is never reconciled, which reads only links, but once older than
@@ -1225,17 +1225,23 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     private async Task DedupCommittedAsync(IReadOnlyList<TEntity> inserted, CancellationToken ct)
     {
-        await ReportWrittenAsync();
-        if (inserted.Count == 0 || _linker is null || DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is not { } recordType)
-            return;
-
         try
         {
-            await _linker.DeduplicateBatchAsync(recordType, LinkedRecordTypes.InputsOf(recordType, inserted), ct);
+            if (inserted.Count == 0 || _linker is null || DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is not { } recordType)
+                return;
+
+            try
+            {
+                await _linker.DeduplicateBatchAsync(recordType, LinkedRecordTypes.InputsOf(recordType, inserted), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", recordType, inserted.Count);
+            }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        finally
         {
-            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", recordType, inserted.Count);
+            await ReportWrittenAsync();
         }
     }
 

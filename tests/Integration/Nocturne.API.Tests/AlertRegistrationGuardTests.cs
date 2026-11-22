@@ -30,6 +30,8 @@ public class AlertRegistrationGuardTests(ServiceProviderValidationTests.Migrated
             "one registration per report dataset",
         [typeof(Microsoft.Extensions.Hosting.IHostedService)] =
             "one registration per hosted service, started in registration order",
+        [typeof(Nocturne.Core.Contracts.Events.IRecordChangeSubscriber)] =
+            "one registration per subscriber; the publisher runs them by stage",
     };
 
     private static bool IsAlertOrTracker(ServiceDescriptor descriptor) =>

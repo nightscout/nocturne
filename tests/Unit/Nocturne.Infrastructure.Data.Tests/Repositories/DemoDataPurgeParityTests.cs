@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -34,7 +35,7 @@ public class DemoDataPurgeParityTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> _tenantReports = [];
-    private readonly Mock<ILegacyReadCacheInvalidation> _scopeReads = new();
+    private readonly Mock<IRecordChangePublisher> _scopeReads = new();
     private readonly List<Type> _scopeReported = [];
 
     public DemoDataPurgeParityTests()
@@ -46,8 +47,9 @@ public class DemoDataPurgeParityTests : IDisposable
         db.SaveChanges();
 
         _scopeReads
-            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
-            .Callback((IReadOnlyCollection<Type> models) => _scopeReported.AddRange(models))
+            .Setup(r => r.PublishAsync(It.IsAny<RecordsChanged>(), It.IsAny<CancellationToken>()))
+            .Callback((RecordsChanged batch, CancellationToken _) =>
+                _scopeReported.AddRange(batch.Changes.Select(c => c.RecordType)))
             .Returns(Task.CompletedTask);
     }
 
@@ -71,8 +73,8 @@ public class DemoDataPurgeParityTests : IDisposable
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, ScopeTenantAccessor>();
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
-        services.AddScoped<ILegacyReadCacheInvalidation>(
-            sp => new TenantRecordingLegacyReads(sp.GetRequiredService<ITenantAccessor>(), _tenantReports));
+        services.AddScoped<IRecordChangePublisher>(
+            sp => new TenantRecordingChanges(sp.GetRequiredService<ITenantAccessor>(), _tenantReports));
 
         return new DemoDataPurgeRepository(
             TenantlessScopeFactory(), TimeProvider.System,
@@ -480,13 +482,13 @@ public class DemoDataPurgeParityTests : IDisposable
         public void SetTenant(TenantContext context) => Context = context;
     }
 
-    private sealed class TenantRecordingLegacyReads(
+    private sealed class TenantRecordingChanges(
         ITenantAccessor tenant, List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> reports)
-        : ILegacyReadCacheInvalidation
+        : IRecordChangePublisher
     {
-        public Task WrittenAsync(IReadOnlyCollection<Type> models)
+        public Task PublishAsync(RecordsChanged batch, CancellationToken ct)
         {
-            reports.Add((tenant.Context?.TenantId, models));
+            reports.Add((tenant.Context?.TenantId, [.. batch.Changes.Select(c => c.RecordType)]));
             return Task.CompletedTask;
         }
     }

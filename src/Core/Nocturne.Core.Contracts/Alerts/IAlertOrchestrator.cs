@@ -3,7 +3,7 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
-/// Top-level orchestrator for the alert pipeline. Evaluates all enabled
+/// Top-level orchestrator for the alert pipeline. Evaluates enabled
 /// <see cref="AlertRule"/> instances against incoming sensor data and triggers
 /// excursion tracking, escalation, and delivery as needed.
 /// </summary>
@@ -13,16 +13,9 @@ namespace Nocturne.Core.Contracts.Alerts;
 public interface IAlertOrchestrator
 {
     /// <summary>
-    /// Evaluate all enabled rules for the current tenant against the latest sensor data.
-    /// Called by the glucose ingest pipeline on each new reading.
-    /// </summary>
-    /// <param name="context">The current <see cref="SensorContext"/> containing the latest glucose reading and trend data.</param>
-    Task EvaluateAsync(SensorContext context, CancellationToken ct);
-
-    /// <summary>
-    /// Evaluate a specific set of rules for the current tenant against <paramref name="context"/>,
-    /// with the same enrichment, DND suppression, and delivery side effects as
-    /// <see cref="EvaluateAsync"/>. Used by the alert sweep for wall-clock-driven rules
+    /// Evaluate a specific set of rules for the current tenant against <paramref name="context"/>, with
+    /// enrichment, DND suppression and delivery side effects. Used for the rules a committed write
+    /// moved (<see cref="ICanonicalAlertEvaluator"/>) and by the alert sweep for wall-clock-driven rules
     /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
     /// </summary>
     /// <param name="rules">The rule snapshots to evaluate. Rules from other tenants are a caller bug.</param>
@@ -35,5 +28,24 @@ public interface IAlertOrchestrator
         IReadOnlyList<AlertRuleSnapshot> rules,
         IReadOnlySet<Guid> enabledRuleIds,
         SensorContext context,
+        CancellationToken ct) =>
+        EvaluateRulesAsync(rules, enabledRuleIds, context, readAt: null, ct);
+
+    /// <summary>
+    /// <see cref="EvaluateRulesAsync(IReadOnlyList{AlertRuleSnapshot}, IReadOnlySet{Guid}, SensorContext, CancellationToken)"/>
+    /// for a context built from a read of the canonical stream that began at <paramref name="readAt"/>.
+    /// A rule a newer context has already decided is not evaluated again with this one; every other
+    /// rule is.
+    /// </summary>
+    /// <param name="readAt">
+    /// When the read began, in the host's read order. Null for a context whose read is not ordered
+    /// with the others (the sweep's): it is neither checked nor recorded, since a read ordered late
+    /// could stop a newer reading's evaluation of a rule.
+    /// </param>
+    Task EvaluateRulesAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules,
+        IReadOnlySet<Guid> enabledRuleIds,
+        SensorContext context,
+        long? readAt,
         CancellationToken ct);
 }

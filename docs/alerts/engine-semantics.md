@@ -646,6 +646,56 @@ bound on a calendar gate holds only if every reading evaluates such a rule. Whic
 move which facts, derived ones included, is the host's record-to-fact map, not the
 crate's.
 
+The backend's map is `ContextFactWrites`: the facts a committed write of each V4 record type
+moves, and for each fact whether every write that moves it announces itself and whether it
+also moves with the clock. Every V4 repository announces each committed write, a restore as a
+creation, through the record-changed event, and so does a data source purge. After the commit,
+outside the write's request, the backend adds the facts the write moved to its tenant's pending
+set (`AlertFactEvaluationScheduler`):
+
+- A moved `glucose` fact starts an evaluation at once, with every fact pending for the tenant. It
+  joins only an evaluation that has not yet begun; once one has begun, a new glucose change starts
+  its own, overlapping it. So a glucose change never waits on another evaluation's delivery. The
+  reading is claimed before the evaluation dispatches, so an overlapping pass on the same reading
+  stops after its canonical read, and the rule lock and the evaluation gate serialise what
+  overlapping passes decide.
+- Per rule, the backend remembers the reading the engine last evaluated the rule with and when the
+  pass that read it began reading. Before evaluating a rule, under the rule's evaluation lock, a
+  pass skips that rule alone when a newer context has already decided it: a different reading from
+  a read of the canonical stream that began after this pass's (a later read that found an older
+  reading saw the newer one deleted; a correction at the same timestamp is ordered by its read). It then
+  goes on to the next rule. A rule a newer pass never reached, never selected or failed on is still
+  evaluated, so a stale evaluation can happen and a skipped one cannot. The sweep's evaluations
+  are neither checked nor recorded: its read is not ordered with the writes' reads, and recorded
+  out of order it could stop a newer reading's evaluation of a rule. A write's older pass can then
+  re-decide a rule the sweep just decided with a newer reading, a stale evaluation the next pass or
+  sweep corrects. So a delivery that holds an older pass cannot let it drive a rule after a
+  newer reading decided it.
+- Any other fact starts one evaluation 1 s after the tenant's last unhandled change, and no
+  later than 5 s after its first, once the tenant's previous such evaluation has ended. A write of
+  200 treatments is one evaluation. A change during an evaluation is taken by the next.
+- A `glucose` move that is not a reading (a target-range schedule moves the bucket) evaluates the
+  rules that read `glucose` even when the reading was just evaluated.
+- The evaluation selects the tenant's newest usable canonical reading, as a reading's does, and
+  evaluates the enabled rules that read a moved fact, or every enabled rule when a reading not yet
+  evaluated moved `glucose`, in a scope of its own pinned to the tenant, with none of the writing
+  request's execution context. With no usable reading it evaluates
+  nothing.
+
+Pending work lives in one process. On shutdown, after the server has drained its requests, every
+pending evaluation starts at once and the host waits for them, until its shutdown timeout. Work the
+timeout cuts off, and an evaluation that fails, records nothing. A pass that skipped a reading
+another pass had claimed is not retried when the claiming pass fails; the next write retries it. The 30 s sweep (§5.1) then
+evaluates the wall-clock rules it does not wait for (§5.3). Every other rule, a plain `threshold`
+for one, has no backstop but the tenant's next reading, as when a request that evaluated inline
+died. A write lands in the process that took it: two processes each evaluate their own writes, and
+the rule lock and the evaluation gate serialise what they decide.
+
+Some writes do not announce, and their facts' rules are evaluated only by the next reading and,
+when wall-clock, by the sweep: state spans, trackers, sleep sessions, alert instances and Do
+Not Disturb are written by stores outside the V4 repositories, and deduplication re-picks which
+copy of a device event or a glucose reading reads are shown without announcing it.
+
 ### 5.3 Next change
 
 Every evaluation (§7) reports `next_change_at`: the earliest instant strictly after `now`
@@ -706,17 +756,25 @@ reads moves without an evaluation of the rule (§5.1). Any evaluation of the rul
 path, replaces the value; a rule edit drops it. The replay driver (§8) steps a rule at it and
 does not report it.
 
-The backend's sweep waits for it only for a wall-clock rule that reads nothing but
-`glucose` (§5.2), and only while its context measures a
-usable canonical reading and carries the glucose facts the recorded value was computed from.
-A reading deleted, edited or recomputed moves those facts without an evaluation, as does an
-evaluation that failed or was dropped, so the sweep then evaluates. `predictions` does not qualify: the backend
-fetches them live, and they move with treatments and the clock. Nor does `time_zone`: the
-backend reads it from the profile, and a profile write moves it and evaluates nothing, so a
-`time_of_day`, `day_of_week` or `glucose_bucket` rule keeps the 30 s cadence. A
-`glucose_bucket` also moves with the clock: the bucket comes from the target-range schedule
-entry at the tenant's local time, and a schedule boundary or a profile edit changes it with no
-reading. Every other wall-clock rule keeps the 30 s cadence.
+The backend's sweep waits for it only for a wall-clock rule every fact of which (§5.2) has an
+announcing write for every write that moves it and does not move with the clock: `glucose`,
+`aps`, `uploader` and `transmitter` (`ContextFactWrites.SweepMayWaitFor`). It waits only while
+the newest canonical reading is usable, the one a write's evaluation measures, and the context
+carries the glucose facts the recorded value was computed from. A glucose reading deleted, edited
+or recomputed, or re-picked by deduplication, moves those facts, so the sweep then evaluates. An
+evaluation that failed or was dropped, after a write of another of those facts, leaves the rule
+waiting until its recorded next change or the next reading, whichever comes first.
+
+Every other wall-clock rule keeps the 30 s cadence:
+
+- `insulin`, `carbs`, `pump`, `predictions` and `time_zone` move with the clock whatever
+  announces: insulin and carbs on board decay, the reservoir estimate depletes by the basal
+  delivered, a forecast ages, and the calendar and the target-range schedule entry follow the
+  tenant's local time. A `glucose_bucket` rule reads `time_zone`, so it never waits.
+- `state_spans`, `trackers`, `sleep`, `active_alerts` and `do_not_disturb` have writes that do not
+  announce (§5.2).
+- `device_ages` has one too: deduplication can re-pick the copy of a site change or sensor start
+  that reads show, moving the anchor by the match tolerance with no announcement.
 
 A held evaluation (§6.4) records its next change like any other: the value is read from the
 state the evaluation left, which is the state it found, and it is keyed by the context's glucose
