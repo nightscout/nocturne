@@ -7,6 +7,7 @@
   import {
     getRule,
     getRules,
+    getSettingOptions,
     updateRule,
     deleteRule,
     testFire,
@@ -51,6 +52,7 @@
   import RuleBuilder from "#lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
+  import AdvancedSection from "#lib/components/alerts/AdvancedSection.svelte";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
   import OpenOnlyWarning from "#lib/components/alerts/OpenOnlyWarning.svelte";
@@ -63,6 +65,9 @@
   import {
     parseRule,
     buildBody,
+    freshnessIssue,
+    markFreshnessSaved,
+    toReplayRule,
     validateChannels,
     type RuleEditorState,
   } from "#lib/components/alerts/types.js";
@@ -88,6 +93,7 @@
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
   const rulesQuery = getRules();
+  const settingOptionsQuery = getSettingOptions();
   const ruleQuery = $derived(getRule(ruleId));
 
   const historyQuery = $derived(getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }));
@@ -139,15 +145,17 @@
   }
 
   async function save(): Promise<void> {
-    const channelError = validateChannels(editor.channels);
-    if (channelError) {
-      error = channelError;
+    const issue =
+      validateChannels(editor.channels) ?? freshnessIssue(editor, settingOptionsQuery.current);
+    if (issue) {
+      error = issue;
       return;
     }
     saving = true;
     error = null;
     try {
       await updateRule({ id: ruleId, request: buildBody(editor) });
+      markFreshnessSaved(editor);
       savedBody = buildBody(editor);
       savedEnabled = editor.isEnabled;
       toast.success("Alert saved");
@@ -237,17 +245,11 @@
   const severitySchema = z.enum(AlertRuleSeverity);
 
   function buildReplayRule() {
-    const body = buildBody(editor);
-    return {
-      id: ruleId,
-      name: body.name,
-      conditionType: body.conditionType,
-      conditionParams: body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
-      severity: body.severity,
-      allowThroughDnd: body.allowThroughDnd,
-      autoResolveEnabled: body.autoResolveEnabled,
-      autoResolveParams: body.autoResolveParams ? JSON.stringify(body.autoResolveParams) : undefined,
-    };
+    return toReplayRule(
+      editor,
+      ruleId,
+      settingOptionsQuery.current?.defaultGlucoseFreshnessMinutes,
+    );
   }
 
   // Switching smart snooze on adds no condition. With none, the engine extends only a high or
@@ -271,6 +273,9 @@
       body.conditionParams,
       body.autoResolveEnabled,
       body.autoResolveParams,
+      body.onUnknown,
+      body.glucoseFreshnessMinutes,
+      body.clearGlucoseFreshness,
     ]);
   });
 
@@ -490,6 +495,13 @@
           </CardContent>
         </Card>
 
+        <!-- Advanced -->
+        <Card data-testid="alert-advanced-card">
+          <CardContent class="pt-6">
+            <AdvancedSection bind:editor />
+          </CardContent>
+        </Card>
+
         <!-- Smart snooze -->
         <Card data-testid="alert-smart-snooze-card">
           <CardHeader>
@@ -563,7 +575,7 @@
           <CardTitle class="text-base">Check the alert</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
-          {#if !loading && editor.condition}
+          {#if !loading && editor.condition && !freshnessIssue(editor, settingOptionsQuery.current)}
             <HistoryCheck
               compact
               rule={buildReplayRule}

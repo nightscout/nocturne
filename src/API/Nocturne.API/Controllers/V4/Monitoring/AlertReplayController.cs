@@ -103,7 +103,7 @@ public class AlertReplayController : ControllerBase
     private ObjectResult? Invalid(ReplayRuleDefinition rule)
     {
         if (rule.OnUnknown is not null && !AlertRuleOnUnknown.IsKnown(rule.OnUnknown))
-            return Problem(detail: "OnUnknown must be hold, met or not_met", statusCode: 400, title: "Bad Request");
+            return Problem(detail: AlertRuleOnUnknown.InvalidMessage, statusCode: 400, title: "Bad Request");
         if (!AlertRuleGlucoseFreshness.IsValid(rule.GlucoseFreshnessMinutes))
             return Problem(detail: AlertRuleGlucoseFreshness.InvalidMessage, statusCode: 400, title: "Bad Request");
         return null;

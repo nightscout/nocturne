@@ -8,6 +8,9 @@ import {
 	parseRule,
 	applyChannelDestination,
 	buildBody,
+	buildCreateBody,
+	freshnessIssue,
+	toReplayRule,
 	parseChannelMetadata,
 	validateChannels,
 	type ChannelDef,
@@ -739,5 +742,77 @@ describe("reading a stored rule", () => {
 
 		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
 		expect(body.autoResolveParams).toEqual({ type: "composite", composite: { operator: "and" } });
+	});
+});
+
+describe("the missing-data settings in a save", () => {
+	it("leaves both out of a rule read without them, so an update keeps the stored values", () => {
+		const body = buildBody(parseRule({ name: "Low", conditionType: AlertConditionType.Threshold }));
+
+		expect(body.onUnknown).toBeUndefined();
+		expect(body.glucoseFreshnessMinutes).toBeUndefined();
+		expect(body.clearGlucoseFreshness).toBeUndefined();
+	});
+
+	it("sends the stored choice and bound back unchanged", () => {
+		const body = buildBody(
+			parseRule({
+				name: "Low",
+				conditionType: AlertConditionType.Threshold,
+				onUnknown: "not_met",
+				glucoseFreshnessMinutes: 20,
+			}),
+		);
+
+		expect(body).toMatchObject({ onUnknown: "not_met", glucoseFreshnessMinutes: 20 });
+	});
+
+	it("asks for the default bound only when told to, and a create never does", () => {
+		const state = parseRule({ name: "Low", conditionType: AlertConditionType.Threshold, glucoseFreshnessMinutes: 20 });
+		state.glucoseFreshnessMinutes = undefined;
+		state.clearGlucoseFreshness = true;
+
+		expect(buildBody(state).clearGlucoseFreshness).toBe(true);
+		expect(buildCreateBody(state)).not.toHaveProperty("clearGlucoseFreshness");
+	});
+
+	it("replays the stored choice and bound, and sends the default for a cleared bound", () => {
+		const state = parseRule({
+			name: "Low",
+			conditionType: AlertConditionType.Threshold,
+			onUnknown: "met",
+			glucoseFreshnessMinutes: 20,
+		});
+
+		expect(toReplayRule(state, "id", 11)).toMatchObject({
+			id: "id",
+			onUnknown: "met",
+			glucoseFreshnessMinutes: 20,
+		});
+
+		state.glucoseFreshnessMinutes = undefined;
+		state.clearGlucoseFreshness = true;
+		expect(toReplayRule(state, "id", 11).glucoseFreshnessMinutes).toBe(11);
+	});
+
+	it("knows whether the rule loaded with a bound of its own", () => {
+		expect(parseRule({ name: "Low", glucoseFreshnessMinutes: 20 }).hasStoredFreshnessBound).toBe(true);
+		expect(parseRule({ name: "Low" }).hasStoredFreshnessBound).toBe(false);
+	});
+
+	it("refuses a bound outside the range the API gave", () => {
+		const options = { minGlucoseFreshnessMinutes: 1, maxGlucoseFreshnessMinutes: 1440 };
+		const state = parseRule(null);
+
+		state.glucoseFreshnessMinutes = 1440;
+		expect(freshnessIssue(state, options)).toBeNull();
+		state.glucoseFreshnessMinutes = 1441;
+		expect(freshnessIssue(state, options)).toBe("Enter a whole number from 1 to 1440.");
+		state.glucoseFreshnessMinutes = 0;
+		expect(freshnessIssue(state, options)).not.toBeNull();
+		state.glucoseFreshnessMinutes = 2.5;
+		expect(freshnessIssue(state, options)).not.toBeNull();
+		state.glucoseFreshnessMinutes = undefined;
+		expect(freshnessIssue(state, options)).toBeNull();
 	});
 });

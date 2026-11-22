@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import type { AlertRuleResponse } from "@nocturne/api-client";
+import { ALERT_SETTING_OPTIONS } from "#lib/test-stubs/alert-setting-options.js";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const RULE_ID = "11111111-1111-1111-1111-111111111111";
@@ -20,6 +21,7 @@ let rule = {
 } as unknown as AlertRuleResponse;
 const lastCover = { ...rule, coversLow: true, isLastLowCover: true } as unknown as AlertRuleResponse;
 const rules = [rule];
+const settingOptions = ALERT_SETTING_OPTIONS;
 const history = { items: [], totalCount: 0 };
 
 const refusal = vi.hoisted(() => ({
@@ -34,6 +36,7 @@ const refusal = vi.hoisted(() => ({
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   getRule: () => remoteQuery(() => rule),
+  getSettingOptions: () => remoteQuery(() => settingOptions),
   updateRule: remoteCommand(() => refusal.update()),
   deleteRule: remoteCommand(() => refusal.remove()),
   testFire: remoteCommand(() =>

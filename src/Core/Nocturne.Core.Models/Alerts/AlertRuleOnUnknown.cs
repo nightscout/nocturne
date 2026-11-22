@@ -19,6 +19,11 @@ public static class AlertRuleOnUnknown
     /// <summary>An unknown root is read as false.</summary>
     public const string NotMet = "not_met";
 
-    /// <summary>Whether <paramref name="value"/> is exactly one of the three words.</summary>
-    public static bool IsKnown(string? value) => value is Hold or Met or NotMet;
+    /// <summary>The three words, in the order an editor offers them.</summary>
+    public static readonly IReadOnlyList<string> All = [Hold, Met, NotMet];
+
+    /// <summary>Whether <paramref name="value"/> is exactly one of <see cref="All"/>.</summary>
+    public static bool IsKnown(string? value) => value is not null && All.Contains(value);
+
+    public static readonly string InvalidMessage = $"OnUnknown must be {string.Join(", ", All.SkipLast(1))} or {All[^1]}";
 }
