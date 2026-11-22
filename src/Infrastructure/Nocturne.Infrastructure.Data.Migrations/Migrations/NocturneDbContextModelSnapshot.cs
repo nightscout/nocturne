@@ -5836,6 +5836,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("setup_hub_enrolled_at");
 
+                    b.Property<Guid?>("SetupOwnerSubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("setup_owner_subject_id");
+
                     b.Property<string>("SetupStripDismissedRevision")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -5884,6 +5888,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("LastReadingAt")
                         .HasDatabaseName("ix_tenants_last_reading_at");
+
+                    b.HasIndex("SetupOwnerSubjectId")
+                        .HasDatabaseName("ix_tenants_setup_owner_subject_id");
 
                     b.HasIndex("ShareToken")
                         .IsUnique()
@@ -11466,6 +11473,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", null)
+                        .WithMany()
+                        .HasForeignKey("SetupOwnerSubjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", b =>

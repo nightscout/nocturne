@@ -29,6 +29,16 @@ internal sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenan
         entity
             .HasIndex(t => t.LastReadingAt)
             .HasDatabaseName("ix_tenants_last_reading_at");
+
+        entity
+            .HasOne<SubjectEntity>()
+            .WithMany()
+            .HasForeignKey(t => t.SetupOwnerSubjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity
+            .HasIndex(t => t.SetupOwnerSubjectId)
+            .HasDatabaseName("ix_tenants_setup_owner_subject_id");
     }
 }
 

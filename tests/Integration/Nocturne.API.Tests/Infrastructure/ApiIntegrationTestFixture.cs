@@ -58,6 +58,21 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         public string? ServiceUrl => null;
     }
 
+    /// <summary>
+    /// The <see cref="IAccountLinkRoute"/> the API reads, which answers as its link delivery does
+    /// unless a test sets <see cref="Configured"/>. Only readers of the route see the override; the
+    /// delivery itself still sends nothing.
+    /// </summary>
+    public sealed class ControllableAccountLinkRoute : IAccountLinkRoute
+    {
+        internal IAccountLinkRoute? Delivery { get; set; }
+
+        /// <summary>The answer in place of the delivery's, or null for the delivery's own.</summary>
+        public bool? Configured { get; set; }
+
+        public bool IsConfigured => Configured ?? Delivery?.IsConfigured ?? false;
+    }
+
     /// <summary>The instance key the API runs with.</summary>
     public const string InstanceKey = "test-secret-for-integration-tests";
 
@@ -74,6 +89,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     private TestDatabase? _database;
 
     public ControllableDemoModeService DemoModeService { get; } = new();
+
+    public ControllableAccountLinkRoute LinkRoute { get; } = new();
 
     /// <summary>
     /// The clock the API issues and validates JWTs on, and nothing else. A test shifts it to age a
@@ -487,6 +504,11 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IDemoModeService>(DemoModeService);
+                services.Replace(ServiceDescriptor.Singleton<IAccountLinkRoute>(sp =>
+                {
+                    LinkRoute.Delivery = sp.GetRequiredService<IAccountLinkDelivery>();
+                    return LinkRoute;
+                }));
                 services.Replace(ServiceDescriptor.Scoped<IJwtService>(sp => new JwtService(
                     sp.GetRequiredService<IOptions<JwtOptions>>(),
                     sp.GetRequiredService<ILogger<JwtService>>(),
