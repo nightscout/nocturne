@@ -41,6 +41,18 @@ public static class PlatformAdminCredentials
     };
 
     /// <summary>
+    /// The role claim that presents the standing. It is added from <see cref="AuthContext.IsPlatformAdmin"/>
+    /// and from nothing else: a role a credential carries by this name, in any case, is never a claim.
+    /// </summary>
+    public const string RoleName = "platform_admin";
+
+    /// <summary>
+    /// Whether <paramref name="role"/> spells <see cref="RoleName"/>, ignoring case.
+    /// </summary>
+    public static bool IsRoleName(string? role) =>
+        string.Equals(role, RoleName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Whether <paramref name="auth"/> may present its subject's platform-admin standing.
     /// </summary>
     public static bool Carries(AuthContext auth) =>

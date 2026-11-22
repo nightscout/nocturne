@@ -95,6 +95,30 @@ public class PlatformAdminStandingTests
         IsPlatformAdmin(signedIn).Should().BeTrue();
     }
 
+    /// <summary>
+    /// A role entry spelling the platform-admin name, in any case, is not the standing: only the
+    /// subject's flag, presented by a credential that carries it, adds the claim, and it adds it once.
+    /// </summary>
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken, false, false)]
+    [InlineData(AuthType.DirectGrant, false, false)]
+    [InlineData(AuthType.SessionCookie, true, false)]
+    [InlineData(AuthType.LegacyJwt, true, false)]
+    [InlineData(AuthType.SessionCookie, false, true)]
+    [InlineData(AuthType.LegacyJwt, false, true)]
+    public async Task ARoleNamedPlatformAdmin_IsNotTheStanding(AuthType authType, bool handedOff, bool presentsStanding)
+    {
+        var auth = SessionOf(authType, handedOff);
+        auth.Roles = ["platform_admin", "Platform_Admin", "readable"];
+        var context = await RunAsync(new StubHandler(auth));
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        context.User.Identity?.IsAuthenticated.Should().BeTrue();
+        roles.Should().Contain("readable");
+        roles.Where(r => string.Equals(r, "platform_admin", StringComparison.OrdinalIgnoreCase))
+            .Should().BeEquivalentTo(presentsStanding ? ["platform_admin"] : Array.Empty<string>());
+    }
+
     private static bool IsPlatformAdmin(HttpContext context) =>
         context.User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "platform_admin");
 
