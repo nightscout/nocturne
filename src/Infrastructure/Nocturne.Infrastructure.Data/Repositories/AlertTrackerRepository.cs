@@ -257,7 +257,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         unit.CommitAsync(
             token => work(bound, token),
             verifySucceeded is null ? null : (result, token) => verifySucceeded(bound, result, token),
-            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity or AlertConditionTimerEntity,
+            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity or AlertConditionTimerEntity
+                or AlertConditionNotTrueEntity,
             ct);
 
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()

@@ -43,7 +43,7 @@ use nocturne_alerts_core::model::{
     ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
 };
 use nocturne_alerts_core::next_change::RESOLUTION;
-use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
+use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerState, TimerStore};
 use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
@@ -348,7 +348,7 @@ fn rule_from_wire(wire: Value) -> Rule {
     Rule::try_from(wire).expect("a known condition type")
 }
 
-fn snapshot(state: &EngineState) -> BTreeMap<String, DateTime<Utc>> {
+fn snapshot(state: &EngineState) -> BTreeMap<String, TimerState> {
     state
         .timers
         .snapshot_for_rule(RULE_ID)
@@ -361,19 +361,19 @@ fn context_of(tick: &Tick) -> SensorContext {
 }
 
 fn apply_ops(
-    mirror: &mut BTreeMap<String, DateTime<Utc>>,
+    mirror: &mut BTreeMap<String, TimerState>,
     ops: &[TimerOp],
 ) -> Result<(), TestCaseError> {
     for op in ops {
-        match op.kind {
-            TimerOpKind::Set => {
-                mirror.insert(op.path.clone(), op.at.expect("a set carries its instant"));
-            }
-            TimerOpKind::Clear => {
-                prop_assert!(mirror.remove(&op.path).is_some(), "cleared an unset timer");
-            }
-            other => prop_assert!(false, "unhandled op {other:?}"),
-        }
+        let state = match op.kind {
+            TimerOpKind::Set => TimerState::Running(op.at),
+            TimerOpKind::Clear => TimerState::NotTrue(op.at),
+            other => return Err(TestCaseError::fail(format!("unhandled op {other:?}"))),
+        };
+        prop_assert!(
+            mirror.insert(op.path.clone(), state) != Some(state),
+            "an op that changes nothing"
+        );
     }
     Ok(())
 }
@@ -393,10 +393,11 @@ fn model_since(now: DateTime<Utc>, anchor: DateTime<Utc>) -> Option<TimeDelta> {
 }
 
 /// The leaves and Kleene connectives of the generated trees, the reading
-/// freshness of §3, and the `sustained` rule of §3 stated as a run start per
-/// path.
+/// freshness of §3, and the `sustained` rule of §3 stated as each path's run
+/// start or last not-true evaluation. A node evaluates to its truth and, when
+/// true, the instant §3 says it has held since.
 struct Model {
-    run_starts: BTreeMap<String, DateTime<Utc>>,
+    run_starts: BTreeMap<String, TimerState>,
     glucose_freshness_minutes: i64,
 }
 
@@ -429,88 +430,140 @@ impl Model {
         })
     }
 
-    fn eval(&mut self, node: &Value, path: &str, ctx: &Value, now: DateTime<Utc>) -> Truth {
+    fn eval(
+        &mut self,
+        node: &Value,
+        path: &str,
+        ctx: &Value,
+        now: DateTime<Utc>,
+    ) -> (Truth, Option<DateTime<Utc>>) {
         let kind = node["type"].as_str().expect("a typed node");
         let payload = &node[kind];
         let child = |this: &mut Self, value: &Value, index: usize| {
             let own = format!("{path}[{index}].{}", value["type"].as_str().unwrap());
             this.eval(value, &own, ctx, now)
         };
+        let unheld = |truth: Truth| (truth, None);
         match kind {
             "threshold" => {
                 let value = payload["value"].as_i64().unwrap();
-                match ctx["latest_value"]
+                let truth = match ctx["latest_value"]
                     .as_i64()
                     .filter(|_| self.stale(ctx, now).is_false())
                 {
                     None => Truth::Unknown,
                     Some(latest) if payload["direction"] == "above" => (latest > value).into(),
                     Some(latest) => (latest < value).into(),
-                }
+                };
+                let read_at = ctx["latest_timestamp"]
+                    .as_str()
+                    .map(|at| at.parse::<DateTime<Utc>>().expect("an instant"));
+                (truth, read_at.filter(|_| truth.is_true()))
             }
             "iob" => {
                 let value = payload["value"].as_i64().unwrap();
                 let Some(iob) = ctx["iob_units"].as_i64() else {
-                    return Truth::Unknown;
+                    return unheld(Truth::Unknown);
                 };
-                match payload["operator"].as_str().unwrap() {
-                    ">" => iob > value,
-                    ">=" => iob >= value,
-                    "<" => iob < value,
-                    "<=" => iob <= value,
-                    "==" => iob == value,
-                    other => panic!("the generators produce no operator {other}"),
-                }
-                .into()
+                unheld(
+                    match payload["operator"].as_str().unwrap() {
+                        ">" => iob > value,
+                        ">=" => iob >= value,
+                        "<" => iob < value,
+                        "<=" => iob <= value,
+                        "==" => iob == value,
+                        other => panic!("the generators produce no operator {other}"),
+                    }
+                    .into(),
+                )
             }
-            "sleep_session_active" => {
-                (ctx["sleep_session_active"].as_bool() == payload["is_active"].as_bool()).into()
-            }
-            "not" => match child(self, &payload["child"], 0) {
+            "sleep_session_active" => unheld(
+                (ctx["sleep_session_active"].as_bool() == payload["is_active"].as_bool()).into(),
+            ),
+            "not" => unheld(match child(self, &payload["child"], 0).0 {
                 Truth::True => Truth::False,
                 Truth::False => Truth::True,
                 Truth::Unknown => Truth::Unknown,
-            },
+            }),
             "composite" => {
-                let results: Vec<Truth> = payload["conditions"]
+                let results: Vec<(Truth, Option<DateTime<Utc>>)> = payload["conditions"]
                     .as_array()
                     .unwrap()
                     .iter()
                     .enumerate()
                     .map(|(i, c)| child(self, c, i))
                     .collect();
-                let (decisive, otherwise) = if payload["operator"] == "and" {
+                let truths: Vec<Truth> = results.iter().map(|r| r.0).collect();
+                let and = payload["operator"] == "and";
+                let (decisive, otherwise) = if and {
                     (Truth::False, Truth::True)
                 } else {
                     (Truth::True, Truth::False)
                 };
-                if results.contains(&decisive) {
+                let truth = if truths.contains(&decisive) {
                     decisive
-                } else if results.contains(&Truth::Unknown) {
+                } else if truths.contains(&Truth::Unknown) {
                     Truth::Unknown
                 } else {
                     otherwise
-                }
+                };
+                let since = if and {
+                    results
+                        .iter()
+                        .map(|r| r.1)
+                        .collect::<Option<Vec<_>>>()
+                        .and_then(|s| s.into_iter().max())
+                } else {
+                    results
+                        .iter()
+                        .filter(|r| r.0.is_true())
+                        .filter_map(|r| r.1)
+                        .min()
+                };
+                (truth, since.filter(|_| truth.is_true()))
             }
-            "sustained" => match child(self, &payload["child"], 0) {
-                Truth::Unknown => Truth::Unknown,
-                Truth::False => {
-                    self.run_starts.remove(path);
-                    Truth::False
-                }
-                Truth::True => {
-                    let minutes = payload["minutes"].as_i64().unwrap();
-                    match self.run_starts.get(path) {
-                        None => {
-                            self.run_starts.insert(path.to_owned(), now);
-                            Truth::False
+            "sustained" => {
+                let (truth, since) = child(self, &payload["child"], 0);
+                match truth {
+                    Truth::Unknown => unheld(Truth::Unknown),
+                    Truth::False => {
+                        let leased = matches!(
+                            self.run_starts.get(path),
+                            Some(TimerState::NotTrue(last)) if now - *last < TimeDelta::minutes(5)
+                        );
+                        if !leased {
+                            self.run_starts
+                                .insert(path.to_owned(), TimerState::NotTrue(now));
                         }
-                        Some(first) => model_since(now, *first).map_or(Truth::Unknown, |passed| {
-                            (passed >= TimeDelta::minutes(minutes)).into()
-                        }),
+                        unheld(Truth::False)
+                    }
+                    Truth::True => {
+                        let minutes = TimeDelta::minutes(payload["minutes"].as_i64().unwrap());
+                        let start = match self.run_starts.get(path) {
+                            Some(TimerState::Running(first)) => *first,
+                            other => {
+                                let bound = match other {
+                                    Some(TimerState::NotTrue(last)) => {
+                                        (*last + TimeDelta::minutes(5)).min(now)
+                                    }
+                                    _ => now,
+                                };
+                                let start = since.unwrap_or(now).max(bound).min(now);
+                                self.run_starts
+                                    .insert(path.to_owned(), TimerState::Running(start));
+                                start
+                            }
+                        };
+                        match model_since(now, start) {
+                            None => unheld(Truth::Unknown),
+                            Some(passed) if passed >= minutes => {
+                                (Truth::True, Some(start + minutes))
+                            }
+                            Some(_) => unheld(Truth::False),
+                        }
                     }
                 }
-            },
+            }
             other => panic!("the generators produce no {other}"),
         }
     }
@@ -523,7 +576,7 @@ proptest! {
     fn timer_ops_replayed_give_the_stored_timers(spec in rule_spec(), ticks in skewed_ticks()) {
         let rule = rule_from_wire(spec.wire());
         let mut state = EngineState::new();
-        let mut mirror: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+        let mut mirror: BTreeMap<String, TimerState> = BTreeMap::new();
         for tick in &ticks {
             let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, true);
             let evaluation = outcome.evaluation.expect("the body is evaluable");
@@ -541,7 +594,7 @@ proptest! {
     ) {
         let rule = rule_from_wire(spec.wire());
         let mut continuous = EngineState::new();
-        let mut mirror: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+        let mut mirror: BTreeMap<String, TimerState> = BTreeMap::new();
         for tick in &ticks {
             let ctx = context_of(tick);
 
@@ -579,7 +632,7 @@ proptest! {
             let awaiting = state.tracker.awaiting_rearm(RULE_ID);
             let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false);
             let evaluation = outcome.evaluation.expect("the body is evaluable");
-            let expected = model.eval(&body, "composite", &tick.context, tick.now);
+            let (expected, _) = model.eval(&body, "composite", &tick.context, tick.now);
             prop_assert_eq!(evaluation.root, expected);
             let open = evaluation.auto_resolved
                 || state.tracker.active_excursion_id(RULE_ID).is_some();
@@ -589,6 +642,391 @@ proptest! {
             prop_assert_eq!(snapshot(&state), model.run_starts.clone());
         }
     }
+}
+
+/// `spec`'s body wrapped in a root `sustained` of `minutes`, so the root's
+/// truth is that node's.
+fn sustained_root(spec: &generators::RuleSpec, minutes: i64) -> Rule {
+    let mut wire = spec.wire();
+    let body = node("composite", wire["condition_params"].clone());
+    wire["condition_type"] = "sustained".into();
+    wire["condition_params"] = json!({ "minutes": minutes, "child": body });
+    rule_from_wire(wire)
+}
+
+/// What one tick of a root-`sustained` run shows: how many `sustained` starts
+/// it set, how many began before `now`, how many of those its path's last
+/// not-true evaluation bounded, and whether the root held.
+#[derive(Debug, Default, Clone, Copy)]
+struct StartTally {
+    starts: usize,
+    earlier: usize,
+    bounded: usize,
+    roots_true: usize,
+}
+
+/// §3 `sustained`, checked on one tick from the ops it returned and the state
+/// before it: every start is at or before `now`, and at or after the end of
+/// its path's not-true lease, five minutes past the recorded instant, or
+/// `now` when that is earlier (or `now`, for a path with no state, the rule
+/// having no `enabled_at`); and the root holds only once `minutes` have passed
+/// since its run's start.
+fn check_starts(
+    before: &BTreeMap<String, TimerState>,
+    ops: &[TimerOp],
+    root: Truth,
+    after: &BTreeMap<String, TimerState>,
+    now: DateTime<Utc>,
+    minutes: i64,
+) -> Result<StartTally, TestCaseError> {
+    let mut tally = StartTally::default();
+    for op in ops.iter().filter(|op| op.kind == TimerOpKind::Set) {
+        tally.starts += 1;
+        prop_assert!(op.at <= now, "{} starts at {} after {now}", op.path, op.at);
+        let bound = match before.get(&op.path) {
+            Some(TimerState::NotTrue(last)) => (*last + TimeDelta::minutes(5)).min(now),
+            _ => now,
+        };
+        prop_assert!(
+            op.at >= bound,
+            "{} starts at {} before its bound {bound}",
+            op.path,
+            op.at
+        );
+        if op.at < now {
+            tally.earlier += 1;
+            if op.at == bound {
+                tally.bounded += 1;
+            }
+        }
+    }
+    if root.is_true() {
+        tally.roots_true += 1;
+        let Some(TimerState::Running(start)) = after.get("sustained") else {
+            return Err(TestCaseError::fail("a true root with no run"));
+        };
+        prop_assert!(
+            now - *start >= TimeDelta::minutes(minutes),
+            "true at {now} with a run started at {start}"
+        );
+    }
+    Ok(tally)
+}
+
+/// Runs a root-`sustained` rule over `ticks`, checking every tick.
+fn run_starts(
+    spec: &generators::RuleSpec,
+    minutes: i64,
+    ticks: &[Tick],
+) -> Result<StartTally, TestCaseError> {
+    let rule = sustained_root(spec, minutes);
+    let mut state = EngineState::new();
+    let mut total = StartTally::default();
+    for tick in ticks {
+        let before = snapshot(&state);
+        let evaluation = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false)
+            .evaluation
+            .expect("the body is evaluable");
+        let tally = check_starts(
+            &before,
+            &evaluation.timer_ops,
+            evaluation.root,
+            &snapshot(&state),
+            tick.now,
+            minutes,
+        )?;
+        total.starts += tally.starts;
+        total.earlier += tally.earlier;
+        total.bounded += tally.bounded;
+        total.roots_true += tally.roots_true;
+    }
+    Ok(total)
+}
+
+/// A child whose truth and start the context states, and the instant it
+/// began to hold: a pump suspension started then, a low reading taken and
+/// received then, or a signal lost then (the last reading `timeout` before);
+/// or an `and` / `or` of a suspension and an override that begin at two
+/// instants, which holds from the later / the earlier of them.
+#[derive(Debug, Clone, Copy)]
+enum Begins {
+    Suspension,
+    LowReading,
+    SignalLoss,
+    AllOf,
+    AnyOf,
+}
+
+/// A child that is false at `base()`, the first evaluation, and true with one
+/// start from `began()` on (`base() + began_after`, or for a composite the
+/// instant its connective gives from that and `base() + second_after`); the minutes of the `sustained` over
+/// it; and the instants after `base()` it is evaluated at, as the seconds
+/// since `base()`, with the subset a sparser host evaluates at. No evaluation
+/// falls in the five minutes before the child begins: a not-true instant
+/// recorded there would bound the start by its lease, past where the child
+/// began, so the start would depend on which evaluations were made.
+#[derive(Debug, Clone)]
+struct CadenceCase {
+    begins: Begins,
+    began_after: i64,
+    second_after: i64,
+    minutes: i64,
+    evaluations: Vec<i64>,
+    sparse: Vec<bool>,
+}
+
+impl CadenceCase {
+    fn first(&self) -> DateTime<Utc> {
+        base() + TimeDelta::seconds(self.began_after)
+    }
+
+    fn second(&self) -> DateTime<Utc> {
+        base() + TimeDelta::seconds(self.second_after)
+    }
+
+    /// When the child begins to hold: an `and` once both have begun, an `or`
+    /// once either has.
+    fn began(&self) -> DateTime<Utc> {
+        match self.begins {
+            Begins::AllOf => self.first().max(self.second()),
+            Begins::AnyOf => self.first().min(self.second()),
+            Begins::Suspension | Begins::LowReading | Begins::SignalLoss => self.first(),
+        }
+    }
+
+    fn rule(&self) -> Rule {
+        let child = match self.begins {
+            Begins::Suspension => node("pump_suspended", json!({ "is_active": true })),
+            Begins::LowReading => node("threshold", json!({ "direction": "below", "value": 70 })),
+            Begins::SignalLoss => node(
+                "signal_loss",
+                json!({ "timeout_minutes": self.began_after / 60 }),
+            ),
+            Begins::AllOf | Begins::AnyOf => composite(
+                if matches!(self.begins, Begins::AllOf) {
+                    "and"
+                } else {
+                    "or"
+                },
+                vec![
+                    node("pump_suspended", json!({ "is_active": true })),
+                    node("override_active", json!({ "is_active": true })),
+                ],
+            ),
+        };
+        rule_from_wire(json!({
+            "id": RULE_ID.to_string(),
+            "condition_type": "sustained",
+            "condition_params": { "minutes": self.minutes, "child": child },
+            "glucose_freshness_minutes": 1440,
+        }))
+    }
+
+    fn context(&self, now: DateTime<Utc>) -> SensorContext {
+        let began = self.first();
+        let ctx = match self.begins {
+            Begins::Suspension => {
+                let mut ctx = json!({ "has_ever_pump_snapshot": true });
+                if now >= began {
+                    ctx["active_pump_suspension"] = json!({ "started_at": began.to_rfc3339() });
+                }
+                ctx
+            }
+            Begins::LowReading => {
+                let (at, value) = if now >= began {
+                    (began, 60)
+                } else {
+                    (base(), 150)
+                };
+                json!({
+                    "latest_value": value,
+                    "latest_timestamp": at.to_rfc3339(),
+                    "latest_received_at": at.to_rfc3339(),
+                    "last_reading_at": at.to_rfc3339(),
+                })
+            }
+            Begins::SignalLoss => json!({
+                "latest_value": 120,
+                "latest_timestamp": base().to_rfc3339(),
+                "last_reading_at": base().to_rfc3339(),
+            }),
+            Begins::AllOf | Begins::AnyOf => {
+                let mut ctx = json!({ "has_ever_pump_snapshot": true });
+                if now >= began {
+                    ctx["active_pump_suspension"] = json!({ "started_at": began.to_rfc3339() });
+                }
+                if now >= self.second() {
+                    ctx["active_override"] = json!({ "started_at": self.second().to_rfc3339() });
+                }
+                ctx
+            }
+        };
+        serde_json::from_value(ctx).expect("a context")
+    }
+
+    /// The root at each of `instants` after the false evaluation at `base()`,
+    /// and every timer op of the run.
+    fn run(&self, instants: &[DateTime<Utc>]) -> (Vec<(DateTime<Utc>, Truth)>, Vec<TimerOp>) {
+        let rule = self.rule();
+        let mut state = EngineState::new();
+        let first = evaluate_rule(&rule, &self.context(base()), base(), &mut state, false)
+            .evaluation
+            .expect("evaluable");
+        assert_eq!(first.root, Truth::False, "{self:?}");
+        let mut ops = first.timer_ops;
+        let roots = instants
+            .iter()
+            .map(|&at| {
+                let e = evaluate_rule(&rule, &self.context(at), at, &mut state, false)
+                    .evaluation
+                    .expect("evaluable");
+                ops.extend(e.timer_ops);
+                (at, e.root)
+            })
+            .collect();
+        (roots, ops)
+    }
+}
+
+fn cadence_case() -> impl Strategy<Value = CadenceCase> {
+    (
+        select(vec![
+            Begins::Suspension,
+            Begins::LowReading,
+            Begins::SignalLoss,
+            Begins::AllOf,
+            Begins::AnyOf,
+        ]),
+        (5..=60i64).prop_map(|m| m * 60),
+        (5..=60i64).prop_map(|m| m * 60),
+        1..=60i64,
+        vec(1..=7200i64, 1..=16),
+        vec(any::<bool>(), 16),
+    )
+        .prop_map(
+            |(begins, began_after, second_after, minutes, evaluations, sparse)| {
+                let mut case = CadenceCase {
+                    begins,
+                    began_after,
+                    second_after,
+                    minutes,
+                    evaluations,
+                    sparse,
+                };
+                let began = (case.began() - base()).num_seconds();
+                case.evaluations.retain(|&s| s >= began || s <= began - 300);
+                if case.evaluations.is_empty() {
+                    case.evaluations.push(began);
+                }
+                case.evaluations.sort_unstable();
+                case.evaluations.dedup();
+                case
+            },
+        )
+}
+
+proptest! {
+    /// §3 `sustained`: on every tick a start is never after `now` and never
+    /// before its path's last not-true evaluation, and a root `sustained`
+    /// holds only once its minutes have passed since its run's start, whose
+    /// clock steps back now and then.
+    #[test]
+    fn a_sustained_start_is_bounded_and_never_holds_early(
+        spec in rule_spec(),
+        minutes in 1..=30i64,
+        ticks in skewed_ticks(),
+    ) {
+        run_starts(&spec, minutes, &ticks)?;
+    }
+
+    /// §3 `sustained`: over a child that states since when it has held, how
+    /// many times it is evaluated in between does not change the outcome. The
+    /// run starts where the child began, whichever evaluations saw it, and an
+    /// evaluation every host makes reads the same root. For a composite that is
+    /// the later of its children's starts under `and` and the earlier under
+    /// `or`.
+    #[test]
+    fn a_sustained_run_does_not_depend_on_the_evaluation_cadence(case in cadence_case()) {
+        let instants: Vec<DateTime<Utc>> = case
+            .evaluations
+            .iter()
+            .map(|&s| base() + TimeDelta::seconds(s))
+            .collect();
+        let sparse: Vec<DateTime<Utc>> = instants
+            .iter()
+            .zip(&case.sparse)
+            .filter(|(_, keep)| **keep)
+            .map(|(at, _)| *at)
+            .chain(instants.last().copied())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let (dense_roots, dense_ops) = case.run(&instants);
+        let (sparse_roots, sparse_ops) = case.run(&sparse);
+        let dense_at: BTreeMap<_, _> = dense_roots.into_iter().collect();
+        for (at, root) in &sparse_roots {
+            prop_assert_eq!(dense_at.get(at), Some(root), "at {}", at);
+        }
+        let starts = |ops: &[TimerOp]| {
+            ops.iter()
+                .filter(|op| op.kind == TimerOpKind::Set)
+                .map(|op| op.at)
+                .collect::<Vec<_>>()
+        };
+        let began = case.began();
+        for start in starts(&dense_ops).into_iter().chain(starts(&sparse_ops)) {
+            prop_assert_eq!(start, began);
+        }
+    }
+}
+
+/// The start properties are not vacuous. Over 256 sampled rules and skewed
+/// tick runs, 191 of 1211 starts begin before their evaluation, 60 of those at
+/// the end of their path's not-true lease, and 341 roots hold; in 51 of 256
+/// cadence cases a run completes on the first evaluation to see its child.
+/// The floors are about half.
+#[test]
+fn generated_sustained_starts_reach_earlier_and_bounded_starts() {
+    let mut total = StartTally::default();
+    for (spec, minutes, ticks) in sample(&(rule_spec(), 1..=30i64, skewed_ticks()), 256) {
+        let tally = run_starts(&spec, minutes, &ticks).expect("the property holds");
+        total.starts += tally.starts;
+        total.earlier += tally.earlier;
+        total.bounded += tally.bounded;
+        total.roots_true += tally.roots_true;
+    }
+    assert!(
+        total.earlier * 100 >= total.starts * EARLIER_START_FLOOR_PERCENT,
+        "{total:?}"
+    );
+    assert!(
+        total.bounded * 100 >= total.earlier * BOUNDED_START_FLOOR_PERCENT,
+        "{total:?}"
+    );
+    assert!(total.roots_true >= ROOTS_TRUE_FLOOR, "{total:?}");
+
+    let (mut cases, mut at_once) = (0usize, 0usize);
+    for case in sample(&cadence_case(), 256) {
+        cases += 1;
+        let instants: Vec<DateTime<Utc>> = case
+            .evaluations
+            .iter()
+            .map(|&s| base() + TimeDelta::seconds(s))
+            .collect();
+        let (roots, _) = case.run(&instants);
+        let completes = case.began() + TimeDelta::minutes(case.minutes);
+        if roots
+            .iter()
+            .find(|(at, _)| *at >= case.began())
+            .is_some_and(|(at, root)| *at >= completes && root.is_true())
+        {
+            at_once += 1;
+        }
+    }
+    assert!(
+        at_once * 100 >= cases * AT_ONCE_FLOOR_PERCENT,
+        "{at_once} of {cases} complete on the first evaluation to see the child"
+    );
 }
 
 /// §6.4: the root as the tracker reads it under `on_unknown`; `None` holds.
@@ -653,7 +1091,10 @@ proptest! {
     /// the ticks after it come out as they do without it. Both runs close an
     /// elapsed hysteresis window at that instant, as the sweep does whatever
     /// it evaluates (§6.1). Only instants where nothing else is due count:
-    /// another clock change there is a reason to evaluate of its own.
+    /// another clock change there is a reason to evaluate of its own. A held
+    /// evaluation that records a false child's not-true instant there moves
+    /// that path's lease (§3, §5.1), which is the one thing it can change, so
+    /// only one that records nothing must leave the ticks after it as they are.
     #[test]
     fn under_hold_a_missed_evaluation_at_the_staleness_instant_changes_nothing_later(
         spec in rule_spec(),
@@ -695,10 +1136,10 @@ proptest! {
                 }
                 let _ = state.tracker.close_elapsed_hysteresis(RULE_ID, config, at);
                 let there = evaluate_there.then(|| {
-                    evaluate_rule(&rule, &ctx, at, &mut state, false)
+                    let e = evaluate_rule(&rule, &ctx, at, &mut state, false)
                         .evaluation
-                        .expect("the body is evaluable")
-                        .root
+                        .expect("the body is evaluable");
+                    (e.root, e.timer_ops.is_empty())
                 });
                 let later: Vec<Value> = ticks[k + 1..]
                     .iter()
@@ -706,14 +1147,17 @@ proptest! {
                     .collect();
                 (there, later)
             };
-            let (stale_root, evaluated) = run(true, stale_at);
-            let stale_root = stale_root.expect("evaluated");
+            let (stale, evaluated) = run(true, stale_at);
+            let (stale_root, recorded_nothing) = stale.expect("evaluated");
             if stale_root.is_unknown() {
+                if !recorded_nothing {
+                    continue;
+                }
                 let (_, missed) = run(false, stale_at);
                 prop_assert_eq!(evaluated, missed);
             } else {
-                let (fresh_root, _) = run(true, stale_at - RESOLUTION);
-                prop_assert_eq!(Some(stale_root), fresh_root);
+                let (fresh, _) = run(true, stale_at - RESOLUTION);
+                prop_assert_eq!(Some(stale_root), fresh.map(|(root, _)| root));
             }
         }
     }
@@ -811,6 +1255,10 @@ const SKEWED_TICKS_FLOOR_PERCENT: usize = 1;
 const CLOCK_CASE_FLOOR_PERCENT: usize = 4;
 
 const UNKNOWN_FLOOR_PERCENT: usize = 15;
+const EARLIER_START_FLOOR_PERCENT: usize = 8;
+const BOUNDED_START_FLOOR_PERCENT: usize = 15;
+const ROOTS_TRUE_FLOOR: usize = 170;
+const AT_ONCE_FLOOR_PERCENT: usize = 10;
 const HELD_FLOOR_PERCENT: usize = 10;
 
 fn plain_tree() -> BoxedStrategy<Value> {
@@ -863,8 +1311,8 @@ proptest! {
             let before = state.tracker.state(RULE_ID).copied();
             let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false);
             let evaluation = outcome.evaluation.expect("the body is evaluable");
-            let body_truth = model.eval(&body, "composite", &tick.context, tick.now);
-            let resolve_truth = model.eval(&resolve, "auto_resolve", &tick.context, tick.now);
+            let (body_truth, _) = model.eval(&body, "composite", &tick.context, tick.now);
+            let (resolve_truth, _) = model.eval(&resolve, "auto_resolve", &tick.context, tick.now);
             prop_assert_eq!(evaluation.root, body_truth);
             let met = model_met(&on_unknown, body_truth);
             let keeps = match met {

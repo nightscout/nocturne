@@ -17,7 +17,7 @@ use crate::context::SensorContext;
 use crate::engine::{EngineState, Rule};
 use crate::enums::WireEnum;
 use crate::eval::clock::{local, tenant_zone, time_of_day_zone};
-use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf};
+use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf, first_true_between};
 use crate::eval::glucose::freshness_expiry;
 use crate::excursion::{TrackerStateKind, hysteresis_window};
 use crate::leaf_identity::nodes_with_paths;
@@ -232,24 +232,4 @@ fn first_true_after(
         before = at;
         step = step.checked_mul(2)?;
     }
-}
-
-/// Bisects `(before, after]`, `holds` false at `before` and true at `after`,
-/// to the nanosecond.
-fn first_true_between(
-    mut before: DateTime<Utc>,
-    mut after: DateTime<Utc>,
-    holds: impl Fn(DateTime<Utc>) -> bool,
-) -> Option<DateTime<Utc>> {
-    while let Some(half) = after.signed_duration_since(before).checked_div(2)
-        && half > TimeDelta::zero()
-    {
-        let mid = before.checked_add_signed(half)?;
-        if holds(mid) {
-            after = mid;
-        } else {
-            before = mid;
-        }
-    }
-    Some(after)
 }

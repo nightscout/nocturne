@@ -287,6 +287,22 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     }
 
     [NativeFact]
+    public async Task A_false_child_s_not_true_instant_is_stored_where_the_timers_table_never_holds_it()
+    {
+        var (tenant, rule, _) = await SeedAsync(active: false, AlertConditionType.Sustained, SustainedBody);
+        await using var db = Context(tenant);
+
+        await Engine(new EditBeforeLockRepository(db, () => Task.CompletedTask))
+            .EvaluateRuleAsync(rule, Glucose(120), AlertEngineOptions.Default, CancellationToken.None);
+
+        (await TimersAsync(tenant)).Should().BeEmpty("the timers table holds only runs");
+        await using var read = Context(tenant);
+        (await read.AlertConditionNotTrue.AsNoTracking()
+                .ToDictionaryAsync(t => t.ConditionPath, t => t.NotTrueAt))
+            .Should().Equal(new Dictionary<string, DateTime> { ["sustained"] = Now.UtcDateTime });
+    }
+
+    [NativeFact]
     public async Task An_evaluation_whose_tracker_state_another_process_changed_writes_no_sustained_timer()
     {
         var (tenant, rule, _) = await SeedAsync(active: false, AlertConditionType.Sustained, SustainedBody);

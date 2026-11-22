@@ -54,6 +54,7 @@ public class FfiCorpusParityTests
     private static JsonNode RunScenarioThroughFfi(ScenarioFile scenario)
     {
         var timers = new Dictionary<Guid, Dictionary<string, DateTime>>();
+        var notTrue = new Dictionary<Guid, Dictionary<string, DateTime>>();
         var trackers = new Dictionary<Guid, RustTrackerState>();
         var nextExcursionOrdinal = 1;
 
@@ -78,7 +79,8 @@ public class FfiCorpusParityTests
                         context,
                         at,
                         timers.GetValueOrDefault(rule.Id),
-                        tracker);
+                        tracker,
+                        notTrue: notTrue.GetValueOrDefault(rule.Id));
                 }
                 catch (RustAlertEngineException ex) when (ex.Message.Contains("malformed condition_params for "))
                 {
@@ -88,6 +90,7 @@ public class FfiCorpusParityTests
                 }
 
                 timers[rule.Id] = response.Timers ?? new Dictionary<string, DateTime>();
+                notTrue[rule.Id] = response.NotTrue ?? new Dictionary<string, DateTime>();
                 if (response.Tracker is not null)
                 {
                     trackers[rule.Id] = response.Tracker;

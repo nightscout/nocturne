@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="IConditionTimerStore"/> backed by the
-/// <c>alert_condition_timers</c> table. Tenant scoping is provided by the
+/// <c>alert_condition_timers</c> (runs) and <c>alert_condition_not_true</c> tables. Tenant scoping is provided by the
 /// <see cref="NocturneDbContext"/> global query filter on <see cref="ITenantScoped"/>. Each call
 /// runs on its own context, or on the caller's <see cref="DbUnitOfWork"/> when constructed over one.
 /// Methods are virtual to allow mocking with CallBase in tests.
@@ -32,17 +32,26 @@ public class ConditionTimerRepository : IConditionTimerStore
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
 
     /// <inheritdoc />
-    public virtual async Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct)
+    /// <remarks>
+    /// A path with a row in both tables is a run: an image that knows only
+    /// <c>alert_condition_timers</c> can start one without removing the other row.
+    /// </remarks>
+    public virtual async Task<ConditionTimers> GetAllForRuleAsync(Guid ruleId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        var rows = await db.AlertConditionTimers
+        var running = await db.AlertConditionTimers
             .AsNoTracking()
             .Where(t => t.AlertRuleId == ruleId)
-            .Select(t => new { t.ConditionPath, t.FirstTrueAt })
-            .ToListAsync(ct);
+            .ToDictionaryAsync(t => t.ConditionPath, t => t.FirstTrueAt, ct);
+        var notTrue = await db.AlertConditionNotTrue
+            .AsNoTracking()
+            .Where(t => t.AlertRuleId == ruleId)
+            .ToDictionaryAsync(t => t.ConditionPath, t => t.NotTrueAt, ct);
+        foreach (var path in running.Keys)
+            notTrue.Remove(path);
 
-        return rows.ToDictionary(r => r.ConditionPath, r => r.FirstTrueAt);
+        return new ConditionTimers(running, notTrue);
     }
 
     /// <inheritdoc />
@@ -50,10 +59,9 @@ public class ConditionTimerRepository : IConditionTimerStore
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        var existing = await db.AlertConditionTimers
+        var run = await db.AlertConditionTimers
             .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
-
-        if (existing == null)
+        if (run == null)
         {
             db.AlertConditionTimers.Add(new AlertConditionTimerEntity
             {
@@ -65,25 +73,43 @@ public class ConditionTimerRepository : IConditionTimerStore
         }
         else
         {
-            existing.FirstTrueAt = at;
+            run.FirstTrueAt = at;
         }
+
+        if (await db.AlertConditionNotTrue
+                .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct) is { } notTrue)
+            db.AlertConditionNotTrue.Remove(notTrue);
 
         await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public virtual async Task ClearAsync(Guid ruleId, string path, CancellationToken ct)
+    public virtual async Task SetNotTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        var existing = await db.AlertConditionTimers
+        var notTrue = await db.AlertConditionNotTrue
             .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
-
-        if (existing != null)
+        if (notTrue == null)
         {
-            db.AlertConditionTimers.Remove(existing);
-            await db.SaveChangesAsync(ct);
+            db.AlertConditionNotTrue.Add(new AlertConditionNotTrueEntity
+            {
+                TenantId = db.TenantId,
+                AlertRuleId = ruleId,
+                ConditionPath = path,
+                NotTrueAt = at,
+            });
         }
+        else
+        {
+            notTrue.NotTrueAt = at;
+        }
+
+        if (await db.AlertConditionTimers
+                .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct) is { } run)
+            db.AlertConditionTimers.Remove(run);
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
@@ -96,16 +122,20 @@ public class ConditionTimerRepository : IConditionTimerStore
         var db = lease.Context;
         var retained = retainedPaths as ICollection<string> ?? retainedPaths.ToHashSet();
 
-        var rows = await db.AlertConditionTimers
+        var runs = await db.AlertConditionTimers
+            .Where(t => t.AlertRuleId == ruleId && !retained.Contains(t.ConditionPath))
+            .ToListAsync(ct);
+        var notTrue = await db.AlertConditionNotTrue
             .Where(t => t.AlertRuleId == ruleId && !retained.Contains(t.ConditionPath))
             .ToListAsync(ct);
 
-        if (rows.Count == 0)
+        if (runs.Count == 0 && notTrue.Count == 0)
         {
             return;
         }
 
-        db.AlertConditionTimers.RemoveRange(rows);
+        db.AlertConditionTimers.RemoveRange(runs);
+        db.AlertConditionNotTrue.RemoveRange(notTrue);
         await db.SaveChangesAsync(ct);
     }
 }

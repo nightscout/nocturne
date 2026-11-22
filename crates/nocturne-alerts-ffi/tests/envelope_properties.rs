@@ -545,7 +545,7 @@ proptest! {
         prop_assert_eq!(reported, expected);
     }
 
-    /// `evaluate` fed its own `timers` and `tracker` each tick returns, tick by
+    /// `evaluate` fed its own `timers`, `not_true` and `tracker` each tick returns, tick by
     /// tick, the `result` of the core engine run over the same sequence.
     #[test]
     fn evaluate_threaded_through_its_response_matches_the_core_engine(
@@ -557,6 +557,7 @@ proptest! {
         let mut engine = EngineState::new();
 
         let mut timers = json!({});
+        let mut not_true = json!({});
         let mut tracker = Value::Null;
         for tick in &ticks {
             let response = call_json(
@@ -567,6 +568,7 @@ proptest! {
                     "context": tick.context,
                     "now": tick.now.to_rfc3339_opts(SecondsFormat::Secs, true),
                     "timers": timers,
+                    "not_true": not_true,
                     "tracker": tracker,
                 })
                 .to_string(),
@@ -578,6 +580,7 @@ proptest! {
             prop_assert_eq!(&response["result"], &core.to_json());
 
             timers = response["timers"].clone();
+            not_true = response["not_true"].clone();
             tracker = response["tracker"].clone();
         }
     }

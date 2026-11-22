@@ -43,6 +43,32 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("DataProtectionKeys");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertConditionNotTrueEntity", b =>
+                {
+                    b.Property<Guid>("AlertRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alert_rule_id");
+
+                    b.Property<string>("ConditionPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("condition_path");
+
+                    b.Property<DateTime>("NotTrueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("not_true_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("AlertRuleId", "ConditionPath");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("alert_condition_not_true", (string)null);
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertConditionTimerEntity", b =>
                 {
                     b.Property<Guid>("AlertRuleId")
@@ -10192,6 +10218,23 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
 
                     b.ToTable("uploader_snapshots");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertConditionNotTrueEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", "AlertRule")
+                        .WithMany()
+                        .HasForeignKey("AlertRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AlertRule");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertConditionTimerEntity", b =>

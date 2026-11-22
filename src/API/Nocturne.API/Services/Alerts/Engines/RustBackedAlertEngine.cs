@@ -26,10 +26,18 @@ internal sealed class RustBackedAlertEngine(
     AlertRuleEvaluationGate gate,
     AlertEngineErrors errors,
     ConditionVersionLog conditionLog,
+    NotTrueRecordingFloor notTrueFloor,
     TimeProvider timeProvider,
     ILogger<RustBackedAlertEngine> logger)
     : IAlertEvaluationEngine
 {
+    /// <summary>
+    /// The rule's stored sustained state, as every evaluation here reads it: through
+    /// <see cref="NotTrueRecordingFloor.Raise"/>.
+    /// </summary>
+    private async Task<ConditionTimers> ReadTimersAsync(Guid ruleId, CancellationToken ct) =>
+        notTrueFloor.Raise(await trackerRepository.Timers.GetAllForRuleAsync(ruleId, ct));
+
     /// <inheritdoc/>
     public async Task<AlertEngineEvaluation> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
@@ -53,7 +61,7 @@ internal sealed class RustBackedAlertEngine(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var timers = RustEnvelopeMapper.BuildTimers(await trackerRepository.Timers.GetAllForRuleAsync(rule.Id, ct));
+        var timers = await ReadTimersAsync(rule.Id, ct);
         var trackerState = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
 
         var (response, result) = errors.Track("evaluate", () =>
@@ -62,9 +70,10 @@ internal sealed class RustBackedAlertEngine(
                 RustEnvelopeMapper.BuildRule(ruleRow),
                 RustEnvelopeMapper.BuildContext(context),
                 now,
-                timers,
+                RustEnvelopeMapper.BuildTimers(timers.FirstTrue),
                 RustEnvelopeMapper.BuildTracker(trackerState),
-                options.IncludeLeafValues);
+                options.IncludeLeafValues,
+                RustEnvelopeMapper.BuildTimers(timers.NotTrue));
             return (response, RustAlertEngine.GetRuleResult(response, options.IncludeLeafValues));
         });
 
@@ -159,7 +168,7 @@ internal sealed class RustBackedAlertEngine(
 
         var response = RustAuxiliaryEvaluation.EvaluateNode(
             errors, ruleId, SmartSnoozeConfig.ConditionTree(conditions), Conditions.AlertConditionTypeNames.SnoozePathRoot,
-            context, timeProvider.GetUtcNow().UtcDateTime, await trackerRepository.Timers.GetAllForRuleAsync(ruleId, ct));
+            context, timeProvider.GetUtcNow().UtcDateTime, await ReadTimersAsync(ruleId, ct));
         var held = await ExcursionTransitionWriter.ApplyTimerOpsAsync(
             trackerRepository, logger, ruleId,
             rule => SmartSnoozeConfig.SameConditions(SmartSnoozeConfig.StoredConditions(rule.ClientConfiguration), conditions),
@@ -181,7 +190,7 @@ internal sealed class RustBackedAlertEngine(
             return none;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var timers = await trackerRepository.Timers.GetAllForRuleAsync(rule.Id, ct);
+        var timers = await ReadTimersAsync(rule.Id, ct);
         var outcome = RustAuxiliaryEvaluation.AutoResolve(
             errors, rule, context, now, timers, state, logger);
 
@@ -204,7 +213,7 @@ internal sealed class RustBackedAlertEngine(
             RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams));
         var response = RustAuxiliaryEvaluation.EvaluateNode(
             errors, rule.Id, node, wire, context, timeProvider.GetUtcNow().UtcDateTime,
-            new Dictionary<string, DateTime>());
+            ConditionTimers.None);
         return response.Value!.Value;
     }
 }

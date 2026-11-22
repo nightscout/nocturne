@@ -361,9 +361,9 @@ internal static class ExcursionTransitionWriter
         foreach (var op in ops ?? [])
         {
             if (op.Op == RustTimerOpKind.Set)
-                await timers.SetFirstTrueAsync(ruleId, op.Path, op.At!.Value, ct);
+                await timers.SetFirstTrueAsync(ruleId, op.Path, op.At, ct);
             else
-                await timers.ClearAsync(ruleId, op.Path, ct);
+                await timers.SetNotTrueAsync(ruleId, op.Path, op.At, ct);
         }
     }
 

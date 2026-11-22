@@ -149,8 +149,9 @@ per-rule-tree per call.
 
 ### 2.3 Condition paths
 
-Paths are the **persistent identity for sustained timers** (`alert_condition_timers`
-keyed by `(rule_id, path)`). The Rust crate owns path generation and must match
+Paths are the **persistent identity for sustained state** (in the backend,
+`alert_condition_timers` for runs and `alert_condition_not_true` for not-true instants, each
+keyed by `(rule_id, path)`, §3). The Rust crate owns path generation and must match
 byte-for-byte:
 
 - Root segment: the root node's kind, **no index**.
@@ -337,17 +338,79 @@ the reservoir holds at least `b`.
 - **`composite`** — `{operator, conditions[]}`, `and` or `or` over at least one child.
   Evaluates every child (§2.4) and combines them in Kleene's logic.
 - **`not`** — `{child}`. Inverts the child; unknown stays unknown.
-- **`sustained`** — `{minutes, child}`, `minutes > 0`. Each evaluation: evaluate child
-  first (path-extended), then:
-  - child false ⇒ **clear** the `(rule_id, path)` timer, return false;
-  - child unknown ⇒ return **unknown** and leave the timer as it is, set or not: a run is
-    not broken by not knowing, and not started by it;
-  - child true, no timer ⇒ **set** timer to `now`, return **false** (a 0-elapsed check
-    does not happen on the set tick);
-  - child true, timer exists ⇒ return `(now - first).TotalMinutes >= minutes` (double), with
-    `first` ahead of `now` read by §5.4: within 5 minutes it is zero elapsed, beyond that the node
-    is **unknown** and the timer is kept.
-  - The timer key path is the path **of the sustained node itself**, not the child.
+- **`sustained`** — `{minutes, child}`, `minutes > 0`. Each `sustained` node keeps, under
+  the `(rule_id, path)` of the node itself (not its child), one of: a **run** with the
+  instant it started, a **not-true** instant (an evaluation that found the child false), or
+  nothing. The **not-true lease** is 5 minutes (`NOT_TRUE_LEASE`): a recorded not-true
+  instant stands for every evaluation that finds the child false less than 5 minutes after
+  it, so a child that stays false writes its state at most once every 5 minutes. Each
+  evaluation evaluates the child first (path-extended), then:
+  - child false ⇒ the node has no run. Its not-true instant becomes `now` when the node had
+    a run (the run ends here, whatever the age of any earlier record, so the bound is exact
+    right after a run), had nothing (a path's first false evaluation records, or it would
+    never have a bound), or had a not-true instant 5 minutes or more before `now`. A not-true
+    instant less than 5 minutes before `now`, or after it (a clock that went back), stays as
+    it is. Return false;
+  - child unknown ⇒ return **unknown** and leave the node as it is: a run is not broken by
+    not knowing, not started by it, and the not-true instant does not move. An unknown
+    evaluation is not a not-true one;
+  - child true, no run ⇒ **start** a run at `min(max(since, bound), now)`, where `since` is
+    the instant the child reports it has held since (table below) or `now` when it reports
+    none, and `bound` is `min(now, not-true instant + 5 minutes)`: every false evaluation the
+    lease did not record lies in that window, so the bound is never earlier than the last
+    evaluation that found the child false, and is later than it by at most the lease. With
+    neither a run nor a not-true instant, `bound` is the rule's `enabled_at` when the rule has
+    no state at all (no run or not-true instant at any path and no tracker state, so this is
+    its first evaluation, §6) and the host sends one, and `now` otherwise. A host that
+    recorded state before not-true instants existed holds runs only, so a path with no run
+    reads as `now` there, never as `enabled_at`; the one exception is a rule enabled before
+    then whose every evaluation was held, which has no tracker state and so reads as on its
+    first evaluation, bounded by `enabled_at` although an earlier evaluation may have found a
+    `sustained` child false. Then go on as for a run;
+  - child true, a run ⇒ return `(now - start).TotalMinutes >= minutes` (double), with
+    `start` ahead of `now` read by §5.4: within 5 minutes it is zero elapsed, beyond that the
+    node is **unknown** and the run is kept. A run started on this evaluation from an
+    instant long enough ago holds on this evaluation.
+  - So a run never starts after `now`, never before the last evaluation that found its child
+    false and whose state was recorded, and never before the earlier of `now` and the instant
+    its child says it began to hold: the node is never true unless its child has held, by
+    every evaluation that found it false and whose state was recorded, and by its own report,
+    for `minutes`. A start can be up to the lease later than that, never earlier.
+  - What that leaves out. An unknown evaluation does not move the bound, so a start can come
+    before an evaluation that could not read the child. A host that evaluates and then does
+    not persist the returned `not_true` and `timer_ops` (a write it drops because the rule
+    changed under it, a crash before the write) leaves a bound that can be earlier than that
+    evaluation. An image that does not know not-true instants evaluates without recording
+    them at all; the host's raise of §7 covers its evaluations.
+
+**Since when a node has held.** Evaluating a node gives its truth and, when it is true,
+optionally the instant it has held since. Only a true node reports one. A start ahead of
+`now` is clamped to `now` by the rule above, so no elapsed time is negative. An instant
+found by searching a comparison ("as the comparison finds it") is rounded up to the 100 ns
+tick, so a host that keeps ticks never reads an earlier one. Where a kind could claim an
+instant but the claim might not hold for the whole time since, it reports nothing, which
+starts the run later, never earlier.
+
+| Node | Reports, when true |
+|---|---|
+| `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` on the active side | the span's `StartedAt`; with `for_minutes`, the first instant it has held `for_minutes` (`StartedAt + for_minutes`, as the comparison finds it), not `StartedAt`, since the leaf is false until then |
+| the same kinds on the inactive side | nothing (no span is the state, and it has no start) |
+| `temp_basal` with `metric: rate` | the temp's `StartedAt`: its rate stands for the whole temp |
+| `temp_basal` with `metric: percent_of_scheduled` | nothing: the scheduled rate follows the schedule within the temp |
+| `staleness`, `signal_loss`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` with `>=` or `>` (`signal_loss` is `>=`) | the first instant the elapsed time since the anchor met the bound, found by the comparison evaluation makes (§1.3, §5.3), on or after the anchor and rounded up to the 100 ns tick; the anchor itself when the comparison already held there |
+| the same kinds with `<`, `<=` or `==` | nothing: they hold before a bound, not from one |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `predicted` | `LatestTimestamp`, the newest reading's time, read as the leaf reads its reading (§3 glucose freshness, §4 selection); nothing without one. `predicted` reports it too, although its points are not facts of the reading (§3) |
+| `alert_state`, with or without `for_minutes` | nothing: the other alert's trigger and acknowledgement are its excursion's, not a run of the facts this rule reads |
+| `iob`, `cob`, `reservoir`, `pump_battery`, `uploader_battery`, `transmitter_battery`, `sensitivity_ratio`, `time_of_day`, `day_of_week`, `sleep_session_active` | nothing |
+| `composite` `and` | the latest of its children's instants when every child reports one, else nothing |
+| `composite` `or` | the earliest instant among its true children that report one, else nothing. That child alone has held the `or` true since then, and a child that read false at the node's last evaluation cannot pull a start back past it: the `sustained` bound covers that evaluation |
+| `not` | nothing: its child's instant is when the child began to hold, not when it stopped |
+| `sustained` | its run's start plus its `minutes`, the first instant it held (as the comparison finds it) |
+
+The lease leaves `next_change_at` (§5.3) a lower bound: a not-true instant changes no root,
+leaf or transition, and a run's start only comes into play once the child is true, which is a
+change of the child that the child reports itself. A start the lease pushes later only moves
+the run's own completion later, and the `sustained` row of §5.3 reads the stored start.
 
 ---
 
@@ -507,7 +570,12 @@ reads the root an evaluation a tick earlier reads, or holds. A held evaluation s
 timer over the stale leaf, makes no tracker call (§6.4), resolves nothing and keeps a re-arm hold
 (§6.3); the one thing it does, closing an elapsed hysteresis window, the sweep does for every rule
 whatever it evaluates (§6.1). So the evaluation is the same as no evaluation, and the next one,
-per reading or periodic, decides.
+per reading or periodic, decides, but for one record: a `sustained` node whose child it finds
+false may take that evaluation as its not-true instant, when the node's lease has run out (§3).
+The child was false there whatever the stale leaf reads, so it was false on the evaluation before
+too, with only `now` advancing, and that evaluation or its lease covers it. Missing the evaluation
+at the staleness instant leaves the earlier record, so a later run may start up to the lease
+earlier, but never before an evaluation that found its child false.
 
 The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
@@ -596,7 +664,7 @@ even when the root does not. Containers contribute only through their children, 
 |---|---|
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
 | `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` with `for_minutes` | On the active side, with the span or alert present, the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
-| `sustained` with a timer (including one set by this evaluation) | The first instant `minutes` have passed since the timer was set, whatever its child returned; without one, only what its child contributes. |
+| `sustained` with a run (including one started by this evaluation) | The first instant `minutes` have passed since the run's start, whatever its child returned. The start can be before the evaluation that set it (§3), so this can be well before `now + minutes`; once passed it contributes nothing. Without a run, only what its child contributes. |
 | `threshold`, `rate_of_change`, `trend`, `glucose_bucket` with their fact present and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |
 | `day_of_week` | The next local midnight in the tenant zone, with gaps and folds as for `time_of_day`. |
@@ -670,7 +738,7 @@ The rule applies to every comparison of `now - anchor`:
 | `last_carb_at`, `last_bolus_at` | `time_since_last_carb`, `time_since_last_bolus` |
 | `active_alerts` | `alert_state` `for_minutes` |
 | `active_pump_suspension`, `active_override`, `active_do_not_disturb`, `active_pump_state`, `active_state_spans` | `for_minutes` on `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` |
-| `sustained` | a `sustained` timer's first-true instant (§3) |
+| `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
 
 Two instants are meant to be ahead of `now` and are exempt, so their elapsed time is negative
@@ -691,9 +759,11 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
   `signal_loss` and `staleness` measure from the readings that did arrive.
 - A glucose reading whose freshness runs from its timestamp is not known to be fresh, so the four
   judged leaves read unknown, as for a stale reading.
-- A `sustained` timer whose first-true instant is beyond the tolerance ahead returns unknown and
-  is kept: the run neither completes nor breaks on that evaluation. Within the tolerance it reads
-  zero elapsed, which is false, since `minutes > 0`.
+- A `sustained` run whose start is beyond the tolerance ahead returns unknown and is kept: the run
+  neither completes nor breaks on that evaluation. Within the tolerance it reads zero elapsed,
+  which is false, since `minutes > 0`. A run starts at or before `now` (§3), so only one started
+  before the host's clock went back is ahead; an instant a child reports ahead of `now` starts its
+  run at `now`.
 - A hysteresis window whose start is beyond the tolerance ahead does not close on that evaluation,
   by the tracker or by the sweep's `CloseElapsedHysteresisAsync`. Within the tolerance the start
   reads as `now`, so a window of zero or fewer minutes closes.
@@ -885,6 +955,21 @@ Evaluation errors in one rule are caught and logged; remaining rules still evalu
 rule whose tree cannot be evaluated (§1.4) is skipped before step 2, so it writes no
 timers and reports no next change.
 
+**Stored not-true instants.** A host persists the `not_true` state (or the `clear` ops) each
+evaluation returns and sends it back, and it raises every stored not-true instant it reads to
+at least the instant it began recording them without interruption, before the engine sees it.
+A not-true instant bounds a start (§3) only because every false evaluation after it was
+recorded or covered by its lease. A process that did not record (an older image across a
+rollback, or any image that ran before this one and lost its writes) leaves a stored instant
+older than evaluations that found the child false, and a start taken from it can go back over
+them. Raised to the instant this process began recording, the bound is no earlier than any of
+those, and a start after a restart is at most the lease past it, which errs later. The host
+raises the instant and keeps the path's state: a path left with no state reads as never found
+false, and a rule left with no state at all as on its first evaluation, bounded only by
+`enabled_at`. The backend captures the instant once per process (`NotTrueRecordingFloor`) and
+raises every not-true map it reads through it, for the rule evaluation, auto-resolve and the
+snooze alike.
+
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the
 `do_not_disturb` *leaf* (§3) is in the crate.
@@ -923,7 +1008,8 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
 - **State.** One fresh timer store for the whole call; nothing is read from or written to
-  persistent state. The excursion tracker is **not** consulted: hysteresis
+  persistent state. With no `enabled_at` (below), a path's first run starts no earlier than
+  the tick that starts it, unless its child read false on an earlier tick (§3). The excursion tracker is **not** consulted: hysteresis
   does not apply, and replay's firing state is replay-local.
 - **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
   `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
@@ -951,8 +1037,9 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
      (§6.3). A held `met` keeps the hold.
   4. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
      the tick, unless the rule still awaits re-arm; the rule becomes firing either way.
-     `!met && firing` ⇒ `cleared`: the rule stops firing and **all its timers are
-     cleared**, the auto-resolve tree's included. An unknown `met` that the rule holds
+     `!met && firing` ⇒ `cleared`: the rule stops firing and **all its runs end**, the
+     auto-resolve tree's included: the tick becomes each path's not-true instant, except a
+     path whose not-true lease still runs (§3), so a later run starts no earlier than it. An unknown `met` that the rule holds
      leaves the rule firing or not as it was and clears no timers.
   5. While firing — including on the tick it fired — and unless step 3 evaluated it, an
      enabled auto-resolve tree that parses and is evaluable is evaluated at `auto_resolve`
@@ -967,7 +1054,7 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 ## 9. Out of scope for the crate (stays host-side)
 
 - Context enrichment (`SensorContextEnricher` / Prelude's local assembler)
-- Persistence of timers (`alert_condition_timers`), tracker state, excursions, instances
+- Persistence of sustained state (`alert_condition_timers`, `alert_condition_not_true`), tracker state, excursions, instances
 - Delivery channels, DND dispatch suppression, info auto-ack
 - Sweep scheduling (30 s cadence) — including the wall-clock evaluation of §5.1 and the hysteresis expiry of §6.1
 - Smart snooze policy (extend/clear, max counts, trend-favorable heuristic) — but note

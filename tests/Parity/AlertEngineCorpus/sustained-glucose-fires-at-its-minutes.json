@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "name": "sustained-glucose-fires-at-its-minutes",
+  "description": "a false reading at 12:00, then no evaluation until 12:12 when a low reading taken at 12:10 arrives, then a reading every 5 minutes evaluated 2 minutes after it is taken: a sustained{15} over the low starts at 12:10, after the 12:00 lease has ended, and holds on the periodic evaluation at 12:25, not one evaluation later",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 15,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-11-02T12:00:00Z",
+        "last_reading_at": "2026-11-02T12:00:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:00:00Z"
+      }
+    },
+    {
+      "at": "2026-11-02T12:12:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-11-02T12:10:00Z",
+        "last_reading_at": "2026-11-02T12:10:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:12:00Z"
+      }
+    },
+    {
+      "at": "2026-11-02T12:17:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-11-02T12:15:00Z",
+        "last_reading_at": "2026-11-02T12:15:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:17:00Z"
+      }
+    },
+    {
+      "at": "2026-11-02T12:22:00Z",
+      "context": {
+        "latest_value": 63,
+        "latest_timestamp": "2026-11-02T12:20:00Z",
+        "last_reading_at": "2026-11-02T12:20:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:22:00Z"
+      }
+    },
+    {
+      "at": "2026-11-02T12:25:00Z",
+      "context": {
+        "latest_value": 63,
+        "latest_timestamp": "2026-11-02T12:20:00Z",
+        "last_reading_at": "2026-11-02T12:20:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:22:00Z"
+      }
+    },
+    {
+      "at": "2026-11-02T12:27:00Z",
+      "context": {
+        "latest_value": 62,
+        "latest_timestamp": "2026-11-02T12:25:00Z",
+        "last_reading_at": "2026-11-02T12:25:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:27:00Z"
+      }
+    }
+  ]
+}

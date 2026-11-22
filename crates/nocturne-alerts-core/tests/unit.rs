@@ -28,7 +28,7 @@ use nocturne_alerts_core::excursion::{
     TransitionType,
 };
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseResult, Reason, parse_payload};
-use nocturne_alerts_core::sustained::TimerStore;
+use nocturne_alerts_core::sustained::{NOT_TRUE_LEASE, TimerState, TimerStore};
 use nocturne_alerts_core::truth::Truth::{self, False, True, Unknown};
 
 fn base() -> DateTime<Utc> {
@@ -291,16 +291,19 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
     let path = "composite[1].sustained";
     assert_eq!(
         timers.snapshot_for_rule(Uuid::nil()).collect::<Vec<_>>(),
-        vec![(path, base())]
+        vec![(path, TimerState::Running(base()))]
     );
     // Ten minutes on, with the first row now true, the rule holds at once.
     assert_eq!(True, at(base() + TimeDelta::minutes(10), "65", &mut timers));
-    // Both rows false: the clock clears although the first row is false.
+    // Both rows false: the run ends although the first row is false.
     assert_eq!(
         False,
         at(base() + TimeDelta::minutes(15), "150", &mut timers)
     );
-    assert_eq!(timers.snapshot_for_rule(Uuid::nil()).count(), 0);
+    assert_eq!(
+        timers.snapshot_for_rule(Uuid::nil()).collect::<Vec<_>>(),
+        vec![(path, TimerState::NotTrue(base() + TimeDelta::minutes(15)))]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -2028,4 +2031,596 @@ fn payload_depth_counts_from_the_payload_document() {
 #[test]
 fn very_deep_nodes_are_a_parse_error_not_a_stack_overflow() {
     assert!(Node::parse(&not_chain(500, threshold_node())).is_err());
+}
+
+// ---------------------------------------------------------------------------
+// sustained: the instant a child has held since (engine-semantics.md §3)
+// ---------------------------------------------------------------------------
+
+/// The start a `sustained{minutes: 600}` over `child` sets on its first true
+/// evaluation at `base()`, its path's last not-true evaluation (and a nested
+/// `sustained` child's) a day before.
+fn start_over(child: Value, ctx: Value) -> DateTime<Utc> {
+    let tree = json!({"type": "sustained", "sustained": {"minutes": 600, "child": child}});
+    let node = Node::parse(&tree).expect("node parses");
+    let ctx: SensorContext = serde_json::from_value(ctx).expect("a context");
+    let mut timers = TimerStore::new();
+    for path in ["sustained", "sustained[0].sustained"] {
+        timers.seed(
+            Uuid::nil(),
+            path,
+            TimerState::NotTrue(base() - TimeDelta::days(1)),
+        );
+    }
+    let mut env = Env::new(base(), Uuid::nil(), &ctx, &mut timers);
+    assert_eq!(False, eval_node(&node, "sustained", &mut env), "{tree}");
+    match timers.snapshot_for_rule(Uuid::nil()).next() {
+        Some(("sustained", TimerState::Running(start))) => start,
+        other => panic!("{tree}: no run started ({other:?})"),
+    }
+}
+
+fn leaf(kind: &str, payload: Value) -> Value {
+    json!({ "type": kind, kind: payload })
+}
+
+fn ago(minutes: i64) -> String {
+    (base() - TimeDelta::minutes(minutes)).to_rfc3339()
+}
+
+#[test]
+fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
+    let minutes = |m: i64| base() - TimeDelta::minutes(m);
+    let tick = TimeDelta::nanoseconds(100);
+    let reading = json!({
+        "latest_value": 60, "trend_rate": -2, "trend_bucket": "falling",
+        "glucose_bucket": "low", "latest_timestamp": ago(3), "latest_received_at": ago(1),
+        "last_reading_at": ago(3), "predictions": [{"offset_minutes": 10, "mgdl": 60}],
+    });
+    let stopped = json!({"last_reading_at": ago(25), "latest_timestamp": ago(25)});
+    let pump = |extra: Value| {
+        let mut ctx = json!({ "has_ever_pump_snapshot": true });
+        ctx.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        ctx
+    };
+    let suspended = pump(json!({"active_pump_suspension": {"started_at": ago(40)}}));
+    let overridden = json!({"active_override": {"started_at": ago(40)}});
+    let temp =
+        json!({"active_temp_basal": {"rate": 1, "scheduled_rate": 0.8, "started_at": ago(20)}});
+    let tracker = Uuid::from_u128(7);
+    let other_rule = Uuid::from_u128(8);
+    let below = || leaf("threshold", json!({"direction": "below", "value": 70}));
+    let override_on = || leaf("override_active", json!({"is_active": true}));
+    let cases: Vec<(&str, Value, Value, DateTime<Utc>)> = vec![
+        ("threshold", below(), reading.clone(), minutes(3)),
+        (
+            "rate_of_change",
+            leaf("rate_of_change", json!({"direction": "falling", "rate": 1})),
+            reading.clone(),
+            minutes(3),
+        ),
+        (
+            "trend",
+            leaf("trend", json!({"bucket": "falling"})),
+            reading.clone(),
+            minutes(3),
+        ),
+        (
+            "glucose_bucket",
+            leaf("glucose_bucket", json!({"buckets": ["low"]})),
+            reading.clone(),
+            minutes(3),
+        ),
+        (
+            "predicted",
+            leaf(
+                "predicted",
+                json!({"operator": "<", "value": 70, "within_minutes": 30}),
+            ),
+            reading.clone(),
+            minutes(3),
+        ),
+        (
+            "staleness",
+            leaf("staleness", json!({"operator": ">=", "value": 10})),
+            stopped.clone(),
+            minutes(15),
+        ),
+        (
+            "staleness below its bound knows none",
+            leaf("staleness", json!({"operator": "<", "value": 30})),
+            stopped.clone(),
+            base(),
+        ),
+        (
+            "signal_loss",
+            leaf("signal_loss", json!({"timeout_minutes": 10})),
+            stopped.clone(),
+            minutes(15),
+        ),
+        (
+            "site_age",
+            leaf("site_age", json!({"operator": ">=", "value": 2})),
+            json!({"last_site_change_at": ago(180)}),
+            minutes(60),
+        ),
+        (
+            "sensor_age",
+            leaf("sensor_age", json!({"operator": ">=", "value": 1})),
+            json!({"last_sensor_start_at": ago(30 * 60)}),
+            minutes(6 * 60),
+        ),
+        (
+            "loop_stale",
+            leaf("loop_stale", json!({"operator": ">=", "minutes": 15})),
+            json!({"has_ever_aps_cycled": true, "last_aps_cycle_at": ago(20)}),
+            minutes(5),
+        ),
+        (
+            "loop_stale, strictly past its bound",
+            leaf("loop_stale", json!({"operator": ">", "minutes": 15})),
+            json!({"has_ever_aps_cycled": true, "last_aps_cycle_at": ago(20)}),
+            minutes(5) + tick,
+        ),
+        (
+            "loop_enaction_stale",
+            leaf(
+                "loop_enaction_stale",
+                json!({"operator": ">=", "minutes": 15}),
+            ),
+            json!({"has_ever_aps_cycled": true, "last_aps_enacted_at": ago(20)}),
+            minutes(5),
+        ),
+        (
+            "time_since_last_carb",
+            leaf(
+                "time_since_last_carb",
+                json!({"operator": ">=", "minutes": 30}),
+            ),
+            json!({"last_carb_at": ago(45)}),
+            minutes(15),
+        ),
+        (
+            "time_since_last_bolus",
+            leaf(
+                "time_since_last_bolus",
+                json!({"operator": ">", "minutes": 30}),
+            ),
+            json!({"last_bolus_at": ago(45)}),
+            minutes(15) + tick,
+        ),
+        (
+            "tracker_age",
+            leaf(
+                "tracker_age",
+                json!({"tracker_definition_id": tracker, "operator": ">=", "minutes": 60}),
+            ),
+            json!({"active_trackers": [
+                {"tracker_definition_id": tracker, "reference_at": ago(90), "recorded_at": ago(90)}
+            ]}),
+            minutes(30),
+        ),
+        (
+            "pump_suspended",
+            leaf("pump_suspended", json!({"is_active": true})),
+            suspended.clone(),
+            minutes(40),
+        ),
+        (
+            "pump_suspended with for_minutes",
+            leaf(
+                "pump_suspended",
+                json!({"is_active": true, "for_minutes": 10}),
+            ),
+            suspended.clone(),
+            minutes(30),
+        ),
+        (
+            "pump_suspended, inactive side",
+            leaf("pump_suspended", json!({"is_active": false})),
+            pump(json!({})),
+            base(),
+        ),
+        (
+            "override_active",
+            override_on(),
+            overridden.clone(),
+            minutes(40),
+        ),
+        (
+            "do_not_disturb",
+            leaf("do_not_disturb", json!({"is_active": true})),
+            json!({"active_do_not_disturb": {"started_at": ago(40)}}),
+            minutes(40),
+        ),
+        (
+            "pump_state",
+            leaf(
+                "pump_state",
+                json!({"mode": "Automatic", "is_active": true}),
+            ),
+            json!({"active_pump_state": {"mode": "Automatic", "started_at": ago(40)}}),
+            minutes(40),
+        ),
+        (
+            "pump_state, inactive side",
+            leaf("pump_state", json!({"mode": "Manual", "is_active": false})),
+            json!({"active_pump_state": {"mode": "Automatic", "started_at": ago(40)}}),
+            base(),
+        ),
+        (
+            "state_span_active",
+            leaf(
+                "state_span_active",
+                json!({"category": "Override", "is_active": true}),
+            ),
+            json!({"active_state_spans": [{"category": "Override", "started_at": ago(40)}]}),
+            minutes(40),
+        ),
+        (
+            "temp_basal rate",
+            leaf(
+                "temp_basal",
+                json!({"metric": "rate", "operator": ">", "value": 0.5}),
+            ),
+            temp.clone(),
+            minutes(20),
+        ),
+        (
+            "temp_basal percent_of_scheduled",
+            leaf(
+                "temp_basal",
+                json!({"metric": "percent_of_scheduled", "operator": ">", "value": 100}),
+            ),
+            temp.clone(),
+            base(),
+        ),
+        (
+            "alert_state",
+            leaf(
+                "alert_state",
+                json!({"alert_id": other_rule, "state": "firing", "for_minutes": 5}),
+            ),
+            json!({"active_alerts": [
+                {"alert_id": other_rule, "state": "firing", "triggered_at": ago(40)}
+            ]}),
+            base(),
+        ),
+        (
+            "iob",
+            leaf("iob", json!({"operator": ">", "value": 1})),
+            json!({"iob_units": 2}),
+            base(),
+        ),
+        (
+            "cob",
+            leaf("cob", json!({"operator": ">", "value": 1})),
+            json!({"cob_grams": 2}),
+            base(),
+        ),
+        (
+            "reservoir",
+            leaf("reservoir", json!({"operator": "<", "value": 10})),
+            json!({"reservoir_units": 5}),
+            base(),
+        ),
+        (
+            "pump_battery",
+            leaf("pump_battery", json!({"operator": "<", "value": 10})),
+            pump(json!({"pump_battery_percent": 5})),
+            base(),
+        ),
+        (
+            "uploader_battery",
+            leaf("uploader_battery", json!({"operator": "<", "value": 10})),
+            json!({"has_ever_uploader_snapshot": true, "uploader_battery_percent": 5}),
+            base(),
+        ),
+        (
+            "transmitter_battery",
+            leaf(
+                "transmitter_battery",
+                json!({"metric": "days", "operator": ">", "value": 10}),
+            ),
+            json!({"transmitter_days": 50}),
+            base(),
+        ),
+        (
+            "sensitivity_ratio",
+            leaf("sensitivity_ratio", json!({"operator": ">", "value": 1})),
+            json!({"has_ever_aps_sensitivity": true, "sensitivity_ratio": 1.5}),
+            base(),
+        ),
+        (
+            "time_of_day",
+            leaf("time_of_day", json!({"from": "00:00", "to": "23:59"})),
+            json!({}),
+            base(),
+        ),
+        (
+            "day_of_week",
+            leaf("day_of_week", json!({"days": ["monday"]})),
+            json!({}),
+            base(),
+        ),
+        (
+            "sleep_session_active",
+            leaf("sleep_session_active", json!({"is_active": true})),
+            json!({"sleep_session_active": true}),
+            base(),
+        ),
+        (
+            "and: the latest of its children",
+            leaf(
+                "composite",
+                json!({"operator": "and", "conditions": [below(), override_on()]}),
+            ),
+            json!({"latest_value": 60, "latest_timestamp": ago(3), "active_override": {"started_at": ago(40)}}),
+            minutes(3),
+        ),
+        (
+            "and with a child that knows none",
+            leaf(
+                "composite",
+                json!({"operator": "and", "conditions": [
+                    override_on(), leaf("iob", json!({"operator": ">", "value": 1}))
+                ]}),
+            ),
+            json!({"iob_units": 2, "active_override": {"started_at": ago(40)}}),
+            base(),
+        ),
+        (
+            "or: the earliest of its true children",
+            leaf(
+                "composite",
+                json!({"operator": "or", "conditions": [
+                    below(), override_on(), leaf("iob", json!({"operator": ">", "value": 1}))
+                ]}),
+            ),
+            json!({
+                "latest_value": 60, "latest_timestamp": ago(3), "iob_units": 2,
+                "active_override": {"started_at": ago(40)}
+            }),
+            minutes(40),
+        ),
+        (
+            "or: a false child is not read",
+            leaf(
+                "composite",
+                json!({"operator": "or", "conditions": [below(), override_on()]}),
+            ),
+            json!({"latest_value": 90, "latest_timestamp": ago(50), "active_override": {"started_at": ago(40)}}),
+            minutes(40),
+        ),
+        (
+            "not",
+            leaf(
+                "not",
+                json!({"child": leaf("override_active", json!({"is_active": false}))}),
+            ),
+            overridden.clone(),
+            base(),
+        ),
+        (
+            "a nested sustained: its start plus its minutes",
+            leaf("sustained", json!({"minutes": 15, "child": override_on()})),
+            overridden.clone(),
+            minutes(25),
+        ),
+    ];
+    for (label, child, ctx, expected) in cases {
+        assert_eq!(start_over(child, ctx), expected, "{label}");
+    }
+}
+
+#[test]
+fn a_start_is_never_before_the_last_not_true_evaluation_nor_after_now() {
+    let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
+        {"type": "override_active", "override_active": {"is_active": true}}}});
+    let node = Node::parse(&tree).expect("node parses");
+    let at = |now: DateTime<Utc>, started: Option<DateTime<Utc>>, timers: &mut TimerStore| {
+        let ctx: SensorContext = serde_json::from_value(match started {
+            Some(at) => json!({"active_override": {"started_at": at}}),
+            None => json!({}),
+        })
+        .unwrap();
+        eval_node(
+            &node,
+            "sustained",
+            &mut Env::new(now, Uuid::nil(), &ctx, timers),
+        )
+    };
+    let state = |timers: &TimerStore| timers.snapshot_for_rule(Uuid::nil()).next().map(|(_, s)| s);
+    let hour_before = Some(base() - TimeDelta::hours(1));
+
+    // False at T0, then a span recorded as begun an hour before T0: the run
+    // starts where T0's lease ends.
+    let mut timers = TimerStore::new();
+    assert_eq!(False, at(base(), None, &mut timers));
+    assert_eq!(
+        False,
+        at(base() + TimeDelta::minutes(10), hour_before, &mut timers)
+    );
+    let lease_end = base() + NOT_TRUE_LEASE;
+    assert_eq!(state(&timers), Some(TimerState::Running(lease_end)));
+    assert_eq!(
+        False,
+        at(lease_end + TimeDelta::minutes(29), hour_before, &mut timers)
+    );
+    assert_eq!(
+        True,
+        at(lease_end + TimeDelta::minutes(30), hour_before, &mut timers)
+    );
+
+    // Inside the lease the bound is `now`.
+    let mut timers = TimerStore::new();
+    assert_eq!(False, at(base(), None, &mut timers));
+    let inside = base() + TimeDelta::minutes(2);
+    assert_eq!(False, at(inside, hour_before, &mut timers));
+    assert_eq!(state(&timers), Some(TimerState::Running(inside)));
+
+    // A span that claims to begin after now starts the run at now.
+    let mut timers = TimerStore::new();
+    let ahead = Some(base() + TimeDelta::minutes(3));
+    assert_eq!(False, at(base(), ahead, &mut timers));
+    assert_eq!(state(&timers), Some(TimerState::Running(base())));
+
+    // No state and no enablement: the run starts now, however long the span ran.
+    let mut timers = TimerStore::new();
+    assert_eq!(False, at(base(), hour_before, &mut timers));
+    assert_eq!(state(&timers), Some(TimerState::Running(base())));
+
+    // A last not-true evaluation recorded after now, by a clock that went
+    // back, does not move back, and a run then starts at now.
+    let mut timers = TimerStore::new();
+    let later = TimerState::NotTrue(base() + TimeDelta::minutes(10));
+    timers.seed(Uuid::nil(), "sustained", later);
+    assert_eq!(False, at(base(), None, &mut timers));
+    assert_eq!(state(&timers), Some(later));
+    assert_eq!(False, at(base(), hour_before, &mut timers));
+    assert_eq!(state(&timers), Some(TimerState::Running(base())));
+}
+
+#[test]
+fn a_rule_s_first_evaluation_bounds_a_start_by_its_enabled_at() {
+    let rule_id = Uuid::from_u128(1);
+    let rule = |enabled_at: Option<DateTime<Utc>>| {
+        let wire: WireRule = serde_json::from_value(json!({
+            "id": rule_id,
+            "condition_type": "sustained",
+            "condition_params": {"minutes": 30, "child":
+                {"type": "override_active", "override_active": {"is_active": true}}},
+            "enabled_at": enabled_at,
+        }))
+        .unwrap();
+        Rule::try_from(wire).unwrap()
+    };
+    let ctx: SensorContext = serde_json::from_value(
+        json!({"active_override": {"started_at": base() - TimeDelta::hours(2)}}),
+    )
+    .unwrap();
+    let root = |rule: &Rule, state: &mut EngineState| {
+        evaluate_rule(rule, &ctx, base(), state, false)
+            .evaluation
+            .unwrap()
+            .root
+    };
+    let hour_ago = Some(base() - TimeDelta::hours(1));
+
+    assert_eq!(True, root(&rule(hour_ago), &mut EngineState::new()));
+    assert_eq!(
+        False,
+        root(
+            &rule(Some(base() - TimeDelta::minutes(10))),
+            &mut EngineState::new()
+        )
+    );
+    assert_eq!(False, root(&rule(None), &mut EngineState::new()));
+    // A rule with tracker state is not on its first evaluation.
+    let mut evaluated = EngineState::new();
+    let _ = evaluated.tracker.process_evaluation(
+        rule_id,
+        TrackerRuleConfig {
+            hysteresis_minutes: 0,
+        },
+        false,
+        false,
+        base() - TimeDelta::minutes(1),
+    );
+    assert_eq!(False, root(&rule(hour_ago), &mut evaluated));
+}
+
+#[test]
+fn a_not_true_instant_is_recorded_at_most_once_a_lease_and_whenever_a_run_ends() {
+    let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
+        {"type": "override_active", "override_active": {"is_active": true}}}});
+    let node = Node::parse(&tree).expect("node parses");
+    let mut timers = TimerStore::new();
+    let mut at = |minutes: i64, on: bool| {
+        let ctx: SensorContext = serde_json::from_value(if on {
+            json!({"active_override": {"started_at": base() - TimeDelta::hours(1)}})
+        } else {
+            json!({})
+        })
+        .unwrap();
+        let now = base() + TimeDelta::minutes(minutes);
+        eval_node(
+            &node,
+            "sustained",
+            &mut Env::new(now, Uuid::nil(), &ctx, &mut timers),
+        );
+        timers
+            .drain_ops()
+            .into_iter()
+            .map(|op| (op.kind.wire(), (op.at - base()).num_minutes()))
+            .collect::<Vec<_>>()
+    };
+    let lease = NOT_TRUE_LEASE.num_minutes();
+    assert_eq!(
+        at(0, false),
+        vec![("clear", 0)],
+        "a path with no state records"
+    );
+    assert_eq!(at(lease - 1, false), vec![], "inside the lease");
+    assert_eq!(
+        at(lease, false),
+        vec![("clear", lease)],
+        "the lease has run out"
+    );
+    assert_eq!(at(lease + 1, true), vec![("set", lease + 1)]);
+    assert_eq!(
+        at(lease + 2, false),
+        vec![("clear", lease + 2)],
+        "a run that ends records whatever the age of the last record"
+    );
+    assert_eq!(
+        at(lease - 10, false),
+        vec![],
+        "a clock that went back moves nothing"
+    );
+}
+
+/// The engine bounds a start only by the not-true instant it is given (engine-semantics.md §3,
+/// §7). An override back-dated to 40 minutes ago, read at noon, under a `sustained{30}`: a
+/// record of the false evaluation a minute ago starts the run at noon, but a record left from
+/// yesterday, with the evaluations since never recorded, lets it start 40 minutes ago and hold at
+/// once. So the host raises a stored instant to when it began recording without interruption.
+#[test]
+fn a_start_is_bounded_only_by_the_not_true_instant_the_host_gives() {
+    let noon = base();
+    let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
+        {"type": "override_active", "override_active": {"is_active": true}}}});
+    let node = Node::parse(&tree).expect("node parses");
+    let ctx: SensorContext = serde_json::from_value(
+        json!({"active_override": {"started_at": noon - TimeDelta::minutes(40)}}),
+    )
+    .unwrap();
+    let from = |recorded: DateTime<Utc>| {
+        let mut timers = TimerStore::new();
+        timers.seed(Uuid::nil(), "sustained", TimerState::NotTrue(recorded));
+        let root = eval_node(
+            &node,
+            "sustained",
+            &mut Env::new(noon, Uuid::nil(), &ctx, &mut timers),
+        );
+        let start = match timers.snapshot_for_rule(Uuid::nil()).next() {
+            Some((_, TimerState::Running(start))) => start,
+            other => panic!("no run started ({other:?})"),
+        };
+        (root, start)
+    };
+
+    assert_eq!(from(noon - TimeDelta::minutes(1)), (False, noon));
+    assert_eq!(
+        from(noon - TimeDelta::days(1)),
+        (True, noon - TimeDelta::minutes(40)),
+        "a stale record is taken at its word"
+    );
+    assert_eq!(
+        from(noon),
+        (False, noon),
+        "a record raised to noon starts the run there"
+    );
 }

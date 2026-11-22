@@ -88,7 +88,8 @@
           "timer_ops": [
             {
               "op": "clear",
-              "path": "sustained"
+              "path": "sustained",
+              "at": "2026-01-05T12:15:00Z"
             }
           ]
         }

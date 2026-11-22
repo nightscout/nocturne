@@ -2,7 +2,7 @@
 
 use rust_decimal::Decimal;
 
-use super::Env;
+use super::{Env, Held};
 use crate::enums::{CmpOp, TempBasalMetric, holds};
 use crate::model::{ComparePayload, TempBasalPayload};
 use crate::truth::Truth;
@@ -38,10 +38,13 @@ pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> Truth {
 /// No `has_ever_*` guard: no active temp is false, since the condition only
 /// concerns active temps. `rate` compares U/hr; `percent_of_scheduled`
 /// compares `rate / scheduled_rate * 100` in decimal, unknown when the
-/// scheduled rate is null or zero or the percentage overflows.
-pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> Truth {
+/// scheduled rate is null or zero or the percentage overflows. A temp's rate
+/// stands for the whole temp, so `rate` has held since it started; the
+/// scheduled rate follows the schedule within it, so `percent_of_scheduled`
+/// knows no start.
+pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> Held {
     let Some(temp) = &env.ctx.active_temp_basal else {
-        return Truth::False;
+        return Truth::False.into();
     };
     let actual = match p.metric {
         TempBasalMetric::Rate => Some(temp.rate),
@@ -50,5 +53,6 @@ pub(super) fn temp_basal(p: &TempBasalPayload, env: &Env) -> Truth {
             .and_then(|scheduled| temp.rate.checked_div(scheduled))
             .and_then(|ratio| ratio.checked_mul(Decimal::ONE_HUNDRED)),
     };
-    holds(p.operator, actual, p.value)
+    let since = (p.metric == TempBasalMetric::Rate).then_some(temp.started_at);
+    Held::since(holds(p.operator, actual, p.value), since)
 }

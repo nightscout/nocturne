@@ -3,9 +3,9 @@
 
 use chrono::{DateTime, TimeDelta, Utc};
 
-use super::Env;
 use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
 use super::signal::{DataStopped, data_stopped};
+use super::{Env, Held};
 use crate::clock_anomaly::ClockAnchor;
 use crate::compare::Unit;
 use crate::context::SensorContext;
@@ -76,6 +76,13 @@ pub(crate) fn freshness_expiry(
         _ => false,
     };
     present.then(|| expiry(ctx, bound)).flatten()
+}
+
+/// A glucose leaf's truth with the newest reading's timestamp, the instant
+/// the context says it held at (engine-semantics.md §3). A timestamp after
+/// `now` is no earlier start than `now`, which the `sustained` clamp reads.
+pub(super) fn reading(truth: Truth, ctx: &SensorContext) -> Held {
+    Held::since(truth, ctx.latest_timestamp)
 }
 
 /// Strict comparison: below `v < value`, above `v > value`; no fresh reading

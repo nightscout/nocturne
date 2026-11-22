@@ -3,12 +3,12 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use uuid::Uuid;
 
 use crate::clock_anomaly::ClockAnchor;
 use crate::eval::elapsed::Elapsed;
-use crate::eval::{Env, eval_node};
+use crate::eval::{Env, Held, eval_held};
 use crate::model::SustainedPayload;
 use crate::paths::node_child_path;
 use crate::truth::Truth;
@@ -16,7 +16,9 @@ use crate::truth::Truth;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TimerOpKind {
+    /// A run started at `at`.
     Set,
+    /// No run: the child was last found not true at `at`.
     Clear,
 }
 
@@ -30,19 +32,48 @@ impl TimerOpKind {
     }
 }
 
-/// A recorded timer mutation. `at` is present only for `set`.
+/// A recorded timer mutation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimerOp {
     pub kind: TimerOpKind,
     pub path: String,
-    pub at: Option<DateTime<Utc>>,
+    pub at: DateTime<Utc>,
 }
 
-/// First-true instants keyed by rule and condition path. A clear is recorded
-/// only when a timer existed.
+/// How long a recorded not-true instant stands for the not-true evaluations
+/// after it, so a child that stays false writes its state at most this often
+/// (engine-semantics.md §3).
+pub const NOT_TRUE_LEASE: TimeDelta = TimeDelta::minutes(5);
+
+/// What a `sustained` path holds between evaluations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimerState {
+    /// The child's run started at this instant.
+    Running(DateTime<Utc>),
+    /// No run; the last evaluation that found the child not true was at this
+    /// instant, so no run starts before it.
+    NotTrue(DateTime<Utc>),
+}
+
+impl TimerState {
+    fn op(self, path: &str) -> TimerOp {
+        let (kind, at) = match self {
+            TimerState::Running(at) => (TimerOpKind::Set, at),
+            TimerState::NotTrue(at) => (TimerOpKind::Clear, at),
+        };
+        TimerOp {
+            kind,
+            path: path.to_owned(),
+            at,
+        }
+    }
+}
+
+/// Each `sustained` path's state keyed by rule and condition path. An op is
+/// recorded only when a path's state changes.
 #[derive(Debug, Default)]
 pub struct TimerStore {
-    timers: HashMap<Uuid, BTreeMap<String, DateTime<Utc>>>,
+    timers: HashMap<Uuid, BTreeMap<String, TimerState>>,
     log: Vec<TimerOp>,
 }
 
@@ -52,41 +83,85 @@ impl TimerStore {
         Self::default()
     }
 
-    pub(crate) fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
+    fn get(&self, rule_id: Uuid, path: &str) -> Option<TimerState> {
         self.timers.get(&rule_id)?.get(path).copied()
     }
 
-    pub(crate) fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
-        self.seed(rule_id, path, at);
-        self.log.push(TimerOp {
-            kind: TimerOpKind::Set,
-            path: path.to_owned(),
-            at: Some(at),
-        });
-    }
-
-    pub(crate) fn clear(&mut self, rule_id: Uuid, path: &str) {
-        let removed = self
-            .timers
-            .get_mut(&rule_id)
-            .and_then(|timers| timers.remove(path));
-        if removed.is_some() {
-            self.log.push(TimerOp {
-                kind: TimerOpKind::Clear,
-                path: path.to_owned(),
-                at: None,
-            });
+    pub(crate) fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
+        match self.get(rule_id, path)? {
+            TimerState::Running(at) => Some(at),
+            TimerState::NotTrue(_) => None,
         }
     }
 
-    /// Clears every timer of `rule_id`, recording a clear for each.
-    pub(crate) fn clear_all_for_rule(&mut self, rule_id: Uuid) {
-        if let Some(timers) = self.timers.remove(&rule_id) {
-            self.log.extend(timers.into_keys().map(|path| TimerOp {
-                kind: TimerOpKind::Clear,
-                path,
-                at: None,
-            }));
+    pub(crate) fn not_true_at(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
+        match self.get(rule_id, path)? {
+            TimerState::NotTrue(at) => Some(at),
+            TimerState::Running(_) => None,
+        }
+    }
+
+    /// Whether `rule_id` has any recorded state.
+    pub(crate) fn has_any(&self, rule_id: Uuid) -> bool {
+        self.timers.get(&rule_id).is_some_and(|t| !t.is_empty())
+    }
+
+    fn record(&mut self, rule_id: Uuid, path: &str, state: TimerState) {
+        let previous = self
+            .timers
+            .entry(rule_id)
+            .or_default()
+            .insert(path.to_owned(), state);
+        if previous != Some(state) {
+            self.log.push(state.op(path));
+        }
+    }
+
+    pub(crate) fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
+        self.record(rule_id, path, TimerState::Running(at));
+    }
+
+    /// Ends any run at `path` and records `at` as its last not-true
+    /// evaluation, unless a not-true instant less than [`NOT_TRUE_LEASE`]
+    /// before `at`, or after it (a clock that went back), is recorded already:
+    /// that one stands for this evaluation (see [`TimerStore::not_true_bound`]).
+    pub(crate) fn mark_not_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
+        let leased = self
+            .not_true_at(rule_id, path)
+            .is_some_and(|recorded| at.signed_duration_since(recorded) < NOT_TRUE_LEASE);
+        if !leased {
+            self.record(rule_id, path, TimerState::NotTrue(at));
+        }
+    }
+
+    /// The earliest a run at `path` may start at `now` by its recorded
+    /// not-true instant: every not-true evaluation after it, up to
+    /// [`NOT_TRUE_LEASE`] later, went unrecorded, so the last lies no later
+    /// than the lease's end, and none at all lies after `now`.
+    pub(crate) fn not_true_bound(
+        &self,
+        rule_id: Uuid,
+        path: &str,
+        now: DateTime<Utc>,
+    ) -> Option<DateTime<Utc>> {
+        self.not_true_at(rule_id, path).map(|recorded| {
+            recorded
+                .checked_add_signed(NOT_TRUE_LEASE)
+                .map_or(now, |end| end.min(now))
+        })
+    }
+
+    /// Ends every run of `rule_id` at `at`, as [`TimerStore::mark_not_true`].
+    pub(crate) fn clear_all_for_rule(&mut self, rule_id: Uuid, at: DateTime<Utc>) {
+        let paths: Vec<String> = self
+            .timers
+            .get(&rule_id)
+            .into_iter()
+            .flat_map(BTreeMap::keys)
+            .cloned()
+            .collect();
+        for path in paths {
+            self.mark_not_true(rule_id, &path, at);
         }
     }
 
@@ -95,48 +170,63 @@ impl TimerStore {
         std::mem::take(&mut self.log)
     }
 
-    /// Loads a persisted timer without recording an op.
-    pub fn seed(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
+    /// Loads a persisted state without recording an op.
+    pub fn seed(&mut self, rule_id: Uuid, path: &str, state: TimerState) {
         self.timers
             .entry(rule_id)
             .or_default()
-            .insert(path.to_owned(), at);
+            .insert(path.to_owned(), state);
     }
 
-    /// `rule_id`'s timers by path, in path order: the state a host persists.
-    pub fn snapshot_for_rule(&self, rule_id: Uuid) -> impl Iterator<Item = (&str, DateTime<Utc>)> {
+    /// `rule_id`'s states by path, in path order: what a host persists.
+    pub fn snapshot_for_rule(&self, rule_id: Uuid) -> impl Iterator<Item = (&str, TimerState)> {
         self.timers
             .get(&rule_id)
             .into_iter()
             .flatten()
-            .map(|(path, &at)| (path.as_str(), at))
+            .map(|(path, &state)| (path.as_str(), state))
     }
 }
 
-/// The child evaluates first: false clears the timer keyed by this node's
-/// path; the first true sets it and is false; later trues hold once `minutes`
-/// fractional minutes have passed since it was set. Unknown is unknown and
-/// leaves the timer as it is: not knowing neither breaks a run nor starts one.
-/// A timer set beyond the tolerance ahead of `now` is unknown and kept: the
-/// clock went back, and the run is neither complete nor broken (§5.4).
-pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> Truth {
+/// The child evaluates first. False ends the run keyed by this node's path
+/// and records `now` as its last not-true evaluation, within the lease of
+/// [`TimerStore::mark_not_true`]. Unknown is unknown and
+/// leaves the path as it is: not knowing neither breaks a run nor starts one,
+/// nor moves the bound. True with no run starts one at the instant the child
+/// has held since, when it knows one, else at `now`, never before the path's
+/// [`TimerStore::not_true_bound`] (on a rule's first evaluation, the rule's
+/// `enabled_at`; with neither, `now`) and never after `now`; the node then
+/// holds once `minutes` fractional minutes have passed since the start, so a
+/// run that began long enough ago holds at once. A start beyond the tolerance
+/// ahead of `now`, set by a clock that has since gone back, is unknown and
+/// kept: the run is neither complete nor broken (§5.4). A true node has held
+/// since its start plus `minutes`.
+pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> Held {
     let now = env.now;
-    match eval_node(&p.child, &node_child_path(path, 0, &p.child), env) {
-        Truth::Unknown => Truth::Unknown,
+    let child = eval_held(&p.child, &node_child_path(path, 0, &p.child), env);
+    match child.truth {
+        Truth::Unknown => Truth::Unknown.into(),
         Truth::False => {
-            env.timers.clear(env.rule_id, path);
-            Truth::False
+            env.timers.mark_not_true(env.rule_id, path, now);
+            Truth::False.into()
         }
-        Truth::True => match env.timers.get_first_true(env.rule_id, path) {
-            None => {
-                env.timers.set_first_true(env.rule_id, path, now);
-                Truth::False
-            }
-            Some(first) => env.measure(Elapsed::held_for(
-                first,
-                p.minutes.get(),
-                ClockAnchor::Sustained,
-            )),
-        },
+        Truth::True => {
+            let start = env
+                .timers
+                .get_first_true(env.rule_id, path)
+                .unwrap_or_else(|| {
+                    let bound = env
+                        .timers
+                        .not_true_bound(env.rule_id, path, now)
+                        .or(env.first_evaluation_bound)
+                        .unwrap_or(now);
+                    let start = child.since.unwrap_or(now).max(bound).min(now);
+                    env.timers.set_first_true(env.rule_id, path, start);
+                    start
+                });
+            let run = Elapsed::held_for(start, p.minutes.get(), ClockAnchor::Sustained);
+            let truth = env.measure(run);
+            Held::since(truth, run.began(now))
+        }
     }
 }

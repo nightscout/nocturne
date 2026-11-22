@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "name": "sustained-start-ahead-of-the-clock",
+  "description": "a reading timestamped 3 minutes after now and an override that claims to start 20 minutes after now: each run starts at now, never ahead of it",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "override_active",
+          "override_active": {
+            "is_active": true
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-11-02T12:03:00Z",
+        "last_reading_at": "2026-11-02T12:03:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:00:00Z",
+        "active_override": {
+          "started_at": "2026-11-02T12:20:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:05:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-11-02T12:08:00Z",
+        "last_reading_at": "2026-11-02T12:08:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:05:00Z",
+        "active_override": {
+          "started_at": "2026-11-02T12:20:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:10:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-11-02T12:13:00Z",
+        "last_reading_at": "2026-11-02T12:13:00Z",
+        "trend_rate": 0,
+        "latest_received_at": "2026-11-02T12:10:00Z",
+        "active_override": {
+          "started_at": "2026-11-02T12:20:00Z"
+        }
+      }
+    }
+  ]
+}

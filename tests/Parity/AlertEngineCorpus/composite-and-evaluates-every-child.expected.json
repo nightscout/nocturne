@@ -166,7 +166,8 @@
           "timer_ops": [
             {
               "op": "clear",
-              "path": "composite[1].sustained"
+              "path": "composite[1].sustained",
+              "at": "2026-01-05T12:15:00Z"
             }
           ]
         },
@@ -192,7 +193,8 @@
           "timer_ops": [
             {
               "op": "clear",
-              "path": "composite[0].sustained"
+              "path": "composite[0].sustained",
+              "at": "2026-01-05T12:15:00Z"
             }
           ]
         }

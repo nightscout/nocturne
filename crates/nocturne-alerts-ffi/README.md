@@ -95,6 +95,9 @@ preserves sub-second precision when present.
   "timers": {                               // optional; default {}
     "sustained": "2026-01-05T11:55:00Z"     // condition path -> first-true instant
   },
+  "not_true": {                             // optional; default {}
+    "composite[1].sustained": "2026-01-05T11:55:00Z" // condition path -> last not-true instant
+  },
   "tracker": {                              // optional; absent = never evaluated
     "state": "active",                      // idle|active|hysteresis; absent = no per-rule state yet; any other string, a stored "confirming" included, reads as active with an excursion, else idle (semantics §6)
     "active_excursion_ordinal": 3,          // present only while an excursion is active
@@ -129,6 +132,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
                  auto_resolved?, timer_ops[], next_change_at?,
                  clock_anomaly? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
+  "not_true": {},                                     // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
     "state": "active",
     "active_excursion_ordinal": 3,
@@ -164,8 +168,8 @@ evaluated is an error envelope, this envelope never sets it.
 ### Next change
 
 `result.next_change_at` (RFC 3339, on the 100 ns tick grid) is the earliest
-instant strictly after `now` at which an evaluation from the returned `timers`
-and `tracker` can do anything other than repeat this result's `root` and
+instant strictly after `now` at which an evaluation from the returned `timers`,
+`not_true` and `tracker` can do anything other than repeat this result's `root` and
 `leaves` with no transition but `continues` and no auto-resolve, if the context
 stays as sent and only `now` advances (`docs/alerts/engine-semantics.md` §5.3).
 It is absent when no such instant exists, or when it would fall after
@@ -205,10 +209,35 @@ so `schema_version` stays 1.
 
 ### State threading
 
-- **`timers`** are per-rule: key is the condition path of the `sustained`
-  node, value the first-true instant. Persist the response `timers` object and
-  send it back on the rule's next evaluation. (It is keyed by path only — the
-  rule id is implicit in the call.)
+- **`timers`** and **`not_true`** are per-rule: key is the condition path of
+  the `sustained` node; a path is in `timers` with the instant its child's run
+  started, or in `not_true` with a recorded evaluation that found its child
+  false; no later run starts before the earlier of that instant plus 5
+  minutes (the not-true lease, engine-semantics.md §3) and `now`. A path is in
+  neither when nothing is recorded for it. Persist both response objects
+  and send them back on the rule's next evaluation. (They are keyed by path
+  only — the rule id is implicit in the call.) A host that persisted `timers`
+  alone before `not_true` existed sends `not_true` absent: a path in neither
+  starts its next run at `now`, as before, unless the rule has no state at all
+  (no `timers`, no `not_true`, no tracker `state`), when the rule's
+  `enabled_at` bounds it. A host that stores runs where an older version of
+  itself reads them keeps `not_true` apart, so the older version never reads a
+  not-true path as a run.
+- **Raise stored not-true instants.** Before sending `not_true`, raise every
+  instant in it to at least the instant your process began recording them
+  without interruption, and keep the path. A stored instant bounds a start
+  only because every false evaluation after it was recorded; one written before
+  an interruption (an older version that did not record them, writes lost
+  before a restart) can be older than evaluations that found the child false,
+  and a start taken from it could go back over them. Do not drop the path
+  instead: a path with no state reads as never found false, and a rule with no
+  state at all as on its first evaluation (engine-semantics.md §3, §7).
+- **`timer_ops`** are the same changes as deltas, for a host that writes rows:
+  `set` puts the path in `timers` at `at`, `clear` puts it in `not_true` at
+  `at` (and takes it out of `timers`). Every op carries `at`. A `clear` comes
+  when a run ends, on a path's first false evaluation, and on a false
+  evaluation 5 minutes or more after the path's recorded not-true instant;
+  a false evaluation inside that lease records nothing.
 - **`tracker`** per-rule fields (`state`,
   `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
   `awaiting_rearm`) round-trip the same way and are absent until the rule's first non-skipped
@@ -247,7 +276,8 @@ auto-resolve (`root: "auto_resolve"`).
   "now": "2026-01-05T12:00:00Z",
   "timers": {                               // optional; default {}
     "snooze": "2026-01-05T11:55:00Z"        // condition path -> first-true instant
-  }
+  },
+  "not_true": {}                            // optional; default {}; as in evaluate
 }
 ```
 
@@ -260,6 +290,7 @@ auto-resolve (`root: "auto_resolve"`).
   "value": true,                            // the node's truth; false when unknown
   "unknown": true,                          // present only when the node is unknown
   "timers": { "snooze": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
+  "not_true": {},                                  // full post-state; persist verbatim
   "timer_ops": [                            // observable mutations, execution order
     { "op": "set", "path": "snooze", "at": "2026-01-05T12:00:00Z" }
   ],
@@ -677,8 +708,9 @@ Response:
 
 `kind` is `fired`, `suppressed_by_dnd`, `auto_resolved`, or `cleared` (the
 body went false while firing). Each close removes the rule from the active
-alerts. A `cleared` also clears all its sustained timers, so a later fire
-starts its durations over; an `auto_resolved` keeps them. Auto-resolve is
+alerts. A `cleared` also ends all its sustained runs at that tick, so a later
+fire starts its durations over, no earlier than that tick; an `auto_resolved`
+keeps them. Auto-resolve is
 evaluated while the rule is firing, including on the tick it fired, and on
 every tick while it awaits re-arm (engine-semantics.md §6.3, §8). The leaf log holds,
 per leaf id, the first observation and every flip, at unix milliseconds;
@@ -777,7 +809,7 @@ func version() -> String
 // ... one per Kotlin function above; the module is `NocturneAlerts`
 ```
 
-Thread `timers` and `tracker` from each response into the next request as
+Thread `timers`, `not_true` and `tracker` from each response into the next request as
 described in "State threading". The package test replays a corpus scenario that
 way.
 

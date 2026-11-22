@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "scenario": "sustained-lease-records-again-once-expired",
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-11-02T12:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:03:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:06:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "timer_ops": [
+            {
+              "op": "clear",
+              "path": "sustained",
+              "at": "2026-11-02T12:06:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:08:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:12:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "timer_ops": [
+            {
+              "op": "set",
+              "path": "sustained",
+              "at": "2026-11-02T12:11:00Z"
+            }
+          ],
+          "next_change_at": "2026-11-02T12:41:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:40:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          },
+          "next_change_at": "2026-11-02T12:41:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-02T12:41:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          }
+        }
+      ]
+    }
+  ]
+}

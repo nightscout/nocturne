@@ -21,6 +21,7 @@ use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, WireRule};
 use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind};
 use nocturne_alerts_core::next_change::RESOLUTION;
+use nocturne_alerts_core::sustained::TimerState;
 
 #[path = "common/quiet.rs"]
 mod quiet;
@@ -69,15 +70,15 @@ fn ctx(v: Value) -> SensorContext {
 /// State seeded before the evaluation at `now`.
 #[derive(Clone, Default)]
 struct Seed {
-    timers: Vec<(&'static str, DateTime<Utc>)>,
+    timers: Vec<(&'static str, TimerState)>,
     tracker: Option<TrackerState>,
 }
 
 impl Seed {
     fn state(&self) -> EngineState {
         let mut state = EngineState::new();
-        for &(path, first) in &self.timers {
-            state.timers.seed(RULE, path, first);
+        for &(path, timer) in &self.timers {
+            state.timers.seed(RULE, path, timer);
         }
         if let Some(tracker) = self.tracker {
             state.tracker.restore_state(RULE, tracker);
@@ -433,10 +434,36 @@ fn sustained_over_a_reading_driven_child_changes_when_its_window_ends() {
     );
     assert_eq!(case.next_change(), Some(now() + min(15)));
     let running = Case::new(case.rule.clone(), case.ctx.clone()).seeded(Seed {
-        timers: vec![("sustained", now() - min(5))],
+        timers: vec![("sustained", TimerState::Running(now() - min(5)))],
         tracker: None,
     });
     assert_next_change(&running, now() + min(10));
+}
+
+/// A run starts where its child began, so its window ends that many minutes
+/// on from there, not from the evaluation; the end of the path's not-true
+/// lease bounds the start.
+#[test]
+fn sustained_over_a_child_that_began_earlier_changes_when_the_window_from_its_start_ends() {
+    let suspended = |not_true: TimeDelta| {
+        Case::new(
+            rule(
+                "sustained",
+                json!({ "minutes": 30, "child": { "type": "pump_suspended", "pump_suspended": { "is_active": true } } }),
+            ),
+            ctx(json!({
+                "has_ever_pump_snapshot": true,
+                "active_pump_suspension": { "started_at": ago(min(20)) },
+            })),
+        )
+        .seeded(Seed {
+            timers: vec![("sustained", TimerState::NotTrue(now() - not_true))],
+            tracker: None,
+        })
+    };
+    assert_next_change(&suspended(min(25)), now() + min(10));
+    // Recorded 10 minutes ago, its lease ends 5 minutes ago: the run starts there.
+    assert_next_change(&suspended(min(10)), now() + min(25));
 }
 
 #[test]

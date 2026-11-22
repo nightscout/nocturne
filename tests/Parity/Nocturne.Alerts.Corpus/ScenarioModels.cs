@@ -336,4 +336,4 @@ public sealed record ExpectedTrackerState
 public sealed record ExpectedTimerOp(
     [property: JsonPropertyName("op")] string Op,
     [property: JsonPropertyName("path")] string Path,
-    [property: JsonPropertyName("at")] DateTime? At);
+    [property: JsonPropertyName("at"), JsonRequired] DateTime At);
