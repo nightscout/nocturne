@@ -80,8 +80,8 @@ public enum LoginCodePurpose
     Recovery,
 
     /// <summary>
-    /// As <see cref="Recovery"/>, issued by the operator, who may also recover an instance
-    /// administrator or a member of several tenants.
+    /// As <see cref="Recovery"/>, issued by the operator for any active, non-system, non-demo
+    /// member of the tenant, whether or not the member can still sign in.
     /// </summary>
     OperatorRecovery,
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -26,12 +27,16 @@ public enum RecoveryEligibility
 }
 
 /// <summary>
-/// The one rule for whether a recovery code may be issued and, because the code is a bearer link
-/// that outlives the moment it was minted, whether it may still be redeemed.
+/// The rules for whether a recovery code may be issued and, because the code is a bearer link
+/// that outlives the moment it was minted, whether it may still be redeemed: one for a member
+/// administrator's code, one for the operator's.
 /// </summary>
 /// <remarks>
 /// A member administrator's authority is checked against this tenant's permissions, while the
 /// account a passkey is enrolled onto is global, hence <see cref="RecoveryEligibility.OperatorOnly"/>.
+/// The operator is not so limited: they can already mint a login code for any active member, which
+/// is a stronger grant, so their recovery code is bound to the member only
+/// (<see cref="AdmitsOperatorRecoveryAsync"/>), locked out or not.
 /// </remarks>
 public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers, IAccountLinkRoute linkRoute)
 {
@@ -68,13 +73,24 @@ public sealed class MemberRecoveryEligibility(ITenantMemberService tenantMembers
             .ToListAsync(ct);
 
     /// <summary>
-    /// Whether a code of <paramref name="purpose"/> may still be spent on a member in
-    /// <paramref name="eligibility"/>: a member administrator's code only while the member is
-    /// <see cref="RecoveryEligibility.Eligible"/>, the operator's while they are locked out at all.
+    /// Whether a member administrator's code may still be spent on a member in
+    /// <paramref name="eligibility"/>: only while the member is <see cref="RecoveryEligibility.Eligible"/>.
     /// </summary>
-    public static bool AllowsRedemption(RecoveryEligibility eligibility, LoginCodePurpose purpose) =>
-        eligibility == RecoveryEligibility.Eligible
-        || (eligibility == RecoveryEligibility.OperatorOnly && purpose == LoginCodePurpose.OperatorRecovery);
+    public static bool AllowsRedemption(RecoveryEligibility eligibility) =>
+        eligibility == RecoveryEligibility.Eligible;
+
+    /// <summary>
+    /// Whether the operator's recovery code may be issued for, and still spent on,
+    /// <paramref name="subject"/>: an active member of <paramref name="tenantId"/> who is neither a
+    /// system nor a demo subject. Whether the member can still sign in is not asked.
+    /// </summary>
+    /// <param name="tenantId">The tenant the code is bound to.</param>
+    /// <param name="subject">The member the code is for; null when there is no such subject.</param>
+    /// <param name="ct">Cancels the operation.</param>
+    public async Task<bool> AdmitsOperatorRecoveryAsync(
+        Guid tenantId, SubjectRecord? subject, CancellationToken ct = default) =>
+        subject is { IsActive: true, IsSystemSubject: false, IsDemoSubject: false }
+        && await tenantMembers.IsMemberAsync(subject.Id, tenantId, ct);
 
     /// <summary>Whether the account is an instance administrator or a member of another tenant.</summary>
     public async Task<bool> IsOperatorOnlyAsync(

@@ -336,6 +336,45 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         options.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task An_operators_code_for_a_member_who_still_has_a_passkey_starts_a_session_that_can_enrol_another()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var code = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.OperatorRecovery);
+
+        var redeemed = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
+
+        redeemed.StatusCode.Should().Be(HttpStatusCode.OK);
+        var setCookie = redeemed.Headers.GetValues("Set-Cookie")
+            .Single(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
+        var session = setCookie[(setCookie.IndexOf('=') + 1)..setCookie.IndexOf(';')];
+        var options = await PostAsync("/api/auth/passkey/register/options", new { username = "recovering" }, session);
+        options.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_operators_code_is_refused_once_its_member_has_left_the_tenant_or_been_deactivated(bool left)
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var code = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.OperatorRecovery);
+        await using (var db = await TenantDbAsync())
+        {
+            if (left)
+                await db.TenantMembers.Where(m => m.SubjectId == arranged.EmailMemberId).ExecuteDeleteAsync();
+            else
+                await db.Subjects.Where(s => s.Id == arranged.EmailMemberId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        }
+
+        var redeemed = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
+
+        redeemed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (redeemed.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies : [])
+            .Should().NotContain(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
+    }
+
     private static async Task ShouldAnswerAsync(HttpResponseMessage response, HttpStatusCode expected)
     {
         response.StatusCode.Should().Be(expected);
