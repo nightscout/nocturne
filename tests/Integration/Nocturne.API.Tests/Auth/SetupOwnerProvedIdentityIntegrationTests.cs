@@ -335,8 +335,8 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
     }
 
     /// <summary>
-    /// What the provider's sign-in callback does on the apex for an identity it has not seen that
-    /// returns to a usable tenant-creation link: a subject holding the identity, a session and a
+    /// What the provider's sign-in callback does on the apex for an identity it has not seen, when
+    /// the sign-in returns to a usable tenant-creation link: a subject holding the identity, a session and a
     /// last login, and no membership.
     /// </summary>
     private async Task<Guid> SignInOnTheApexAsync(string externalId)
