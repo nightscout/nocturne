@@ -20,6 +20,7 @@ public sealed record TenantMemberRecord(
     string? Label,
     string? Username,
     bool LimitTo24Hours,
+    DateTime? AccessEndsAt,
     DateTime? LastUsedAt,
     Guid? CreatedFromInviteId,
     DateTime SysCreatedAt)
@@ -43,6 +44,7 @@ public sealed record TenantMemberRoleRecord(Guid RoleId, string Name, string Slu
 
 /// <summary>A membership to store, with the roles it is assigned at once.</summary>
 /// <param name="MadeBy">Who the membership's audit rows name as the actor.</param>
+/// <param name="AccessEndsAt">When the membership ends, in UTC; null when it does not.</param>
 public sealed record NewTenantMember(
     Guid TenantId,
     Guid SubjectId,
@@ -52,7 +54,8 @@ public sealed record NewTenantMember(
     string? Username = null,
     bool LimitTo24Hours = false,
     Guid? CreatedFromInviteId = null,
-    MembershipMadeBy MadeBy = MembershipMadeBy.Caller);
+    MembershipMadeBy MadeBy = MembershipMadeBy.Caller,
+    DateTime? AccessEndsAt = null);
 
 /// <summary>Who made a membership, as its audit rows record it.</summary>
 public enum MembershipMadeBy
@@ -156,4 +159,10 @@ public enum OwnerGuardedChange
     Changed,
     NotFound,
     LastOwner,
+
+    /// <summary>
+    /// The change would leave an owner's membership with an end date: an end date set on an owner,
+    /// or the owner role given to a membership that has one.
+    /// </summary>
+    OwnerAccessEnds,
 }

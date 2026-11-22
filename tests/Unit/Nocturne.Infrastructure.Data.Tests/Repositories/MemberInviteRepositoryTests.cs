@@ -35,7 +35,7 @@ public class MemberInviteRepositoryTests : IDisposable
 
     private NewMemberInvite Invite(string hash, int? maxUses = 1, DateTime? expiresAt = null) =>
         new(_tenant, _owner, hash, [Guid.CreateVersion7()], ["glucose.read"], "Family", LimitTo24Hours: true,
-            expiresAt ?? Now.AddDays(7), maxUses, Now);
+            expiresAt ?? Now.AddDays(7), maxUses, Now, null);
 
     [Fact]
     public async Task ASingleUseInviteIsClaimedOnce()

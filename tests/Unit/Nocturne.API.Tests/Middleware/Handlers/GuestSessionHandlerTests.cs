@@ -229,7 +229,7 @@ public class GuestSessionHandlerTests
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",
-            Unbounded(), limitTo24Hours: limitTo24Hours);
+            Unbounded(), null, limitTo24Hours: limitTo24Hours);
         var activation = await service.ActivateAsync(created.Code, "1.2.3.4", "TestAgent");
 
         activation.Success.Should().BeTrue();

@@ -181,7 +181,7 @@ public class AlertSetupService(
 
         var channelRequests = ChannelsFor(callerId, request.Channels);
         if (await _channels.ResolveAndValidateAsync(
-            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, ct) is { } badChannel)
+            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, time.GetUtcNow().UtcDateTime, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
         var units = await UnitsAsync(callerId, ct);
@@ -461,7 +461,7 @@ public class AlertSetupService(
             .Select(c => c.Destination)
             .ToHashSet() ?? [];
 
-        var people = await members.ListPeopleAsync(db.TenantId, ct);
+        var people = await members.ListLivePeopleAsync(db.TenantId, time.GetUtcNow().UtcDateTime, ct);
 
         return people
             .Where(m => m.SubjectId != callerId)

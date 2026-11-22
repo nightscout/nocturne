@@ -1272,7 +1272,7 @@ public class DevAdminController : ControllerBase
             "Dev recovery-mode: orphaned subject {SubjectId} on tenant {Slug} (keeper: {Keeper})",
             target.SubjectId, tenant.Slug, keeperSubjectId);
 
-        var gate = await _members.ReadSetupGateAsync(tenant.Id, ct);
+        var gate = await _members.ReadSetupGateAsync(tenant.Id, _time.GetUtcNow().UtcDateTime, ct);
 
         return Ok(new
         {

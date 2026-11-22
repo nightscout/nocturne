@@ -40,7 +40,8 @@ public sealed class AccountLinkService(
     ILoginCodeService loginCodes,
     ISubjectRepository subjects,
     IAccountLinkDelivery delivery,
-    IOptions<BaseDomainOptions> baseDomain)
+    IOptions<BaseDomainOptions> baseDomain,
+    TimeProvider time)
 {
     /// <summary>The web page that redeems a recovery link.</summary>
     public const string RecoveryPath = "/auth/recovery";
@@ -59,7 +60,7 @@ public sealed class AccountLinkService(
         if (!delivery.IsConfigured)
             return;
 
-        foreach (var member in await subjects.FindMembersByConfirmedEmailAsync(tenant.TenantId, email, ct))
+        foreach (var member in await subjects.FindMembersByConfirmedEmailAsync(tenant.TenantId, email, time.GetUtcNow().UtcDateTime, ct))
             await SendAsync(tenant, member, member.Email!, LoginCodePurpose.EmailRecovery, actor, ipAddress, userAgent, ct);
     }
 

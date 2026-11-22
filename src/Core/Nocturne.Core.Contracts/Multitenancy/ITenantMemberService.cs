@@ -16,7 +16,8 @@ public interface ITenantMemberService
     Task<bool> IsMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns all tenant identifiers that the specified subject belongs to.
+    /// Returns all tenant identifiers that the specified subject belongs to, including tenants whose
+    /// membership has ended (<see cref="ITenantMembershipRepository.ListTenantIdsOfSubjectAsync"/>).
     /// </summary>
     /// <param name="subjectId">The subject (user) identifier.</param>
     Task<List<Guid>> GetTenantIdsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
@@ -50,4 +51,5 @@ public interface ITenantMemberService
 /// which is distinct from not being a member at all.
 /// </param>
 /// <param name="LimitTo24Hours">The membership's own <c>limit_to_24_hours</c> flag, before any exemption.</param>
-public sealed record TenantMemberAccess(IReadOnlySet<string> EffectivePermissions, bool LimitTo24Hours);
+/// <param name="AccessEndsAt">When the membership ends, in UTC; null when it does not.</param>
+public sealed record TenantMemberAccess(IReadOnlySet<string> EffectivePermissions, bool LimitTo24Hours, DateTime? AccessEndsAt);

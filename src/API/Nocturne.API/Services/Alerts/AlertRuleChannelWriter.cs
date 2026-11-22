@@ -44,6 +44,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     /// <param name="subjectId">
     /// The caller, or null for none; an in-app channel naming no member is delivered to it.
     /// </param>
+    /// <param name="now">The instant a member's end date is judged at.</param>
     /// <param name="ct">
     /// Cancels the operation.
     /// </param>
@@ -53,6 +54,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         NocturneDbContext db,
         ITenantMembershipRepository members,
         Guid? subjectId,
+        DateTime now,
         CancellationToken ct)
     {
         if (channels is null)
@@ -87,7 +89,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             {
                 var goesToSaver = string.IsNullOrWhiteSpace(ch.Destination)
                                   || storedRecipients.Contains(ch.Destination);
-                var member = await ResolveInAppRecipientAsync(members, db.TenantId, ch.Destination, storedRecipients, subjectId, ct);
+                var member = await ResolveInAppRecipientAsync(members, db.TenantId, ch.Destination, storedRecipients, subjectId, now, ct);
                 if (member is null)
                 {
                     return goesToSaver
@@ -217,10 +219,10 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
     /// </remarks>
     private static async Task<Guid?> ResolveInAppRecipientAsync(
         ITenantMembershipRepository members, Guid tenantId, string? destination, IReadOnlySet<string> storedRecipients,
-        Guid? subjectId, CancellationToken ct)
+        Guid? subjectId, DateTime now, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(destination)
-            && await InAppRecipients.ResolveAsync(members, tenantId, destination, ct) is { } named)
+            && await InAppRecipients.ResolveAsync(members, tenantId, destination, now, ct) is { } named)
         {
             return named;
         }
@@ -230,7 +232,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             return null;
         }
 
-        return await InAppRecipients.ResolveAsync(members, tenantId, subjectId?.ToString(), ct);
+        return await InAppRecipients.ResolveAsync(members, tenantId, subjectId?.ToString(), now, ct);
     }
 
     /// <summary>The in-app recipients stored on <paramref name="channels"/>.</summary>

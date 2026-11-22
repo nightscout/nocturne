@@ -146,6 +146,8 @@ public record TenantDetailDto(Guid Id, string Slug, string DisplayName, bool IsA
 /// <summary>
 /// Projection of a tenant member, including their assigned roles and direct permissions.
 /// </summary>
+/// <param name="AccessEndsAt">When the membership ends, in UTC; null when it does not.</param>
+/// <param name="HasEnded">Whether the membership has ended, so it grants nothing until the date is moved later.</param>
 public record TenantMemberDto(
     Guid Id,
     Guid SubjectId,
@@ -157,7 +159,9 @@ public record TenantMemberDto(
     bool LimitTo24Hours,
     DateTime? LastUsedAt,
     DateTime SysCreatedAt,
-    bool IsPlatformAdmin);
+    bool IsPlatformAdmin,
+    DateTime? AccessEndsAt,
+    bool HasEnded);
 
 /// <summary>
 /// A role a <see cref="TenantMemberDto"/> holds, with the permissions it confers.

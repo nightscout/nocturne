@@ -39,7 +39,7 @@ public class ChatIdentityControllerTests : IDisposable
         _db = TestDbContextFactory.CreateSqlite();
         _service = new ChatIdentityService(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             _db.ContextFactory.AsNocturneFactory(),
@@ -85,12 +85,18 @@ public class ChatIdentityControllerTests : IDisposable
         return id;
     }
 
+    /// <summary>
+    /// Inserts a link with the membership it stands for: the directory resolves a link only while
+    /// its subject holds a live membership of its tenant.
+    /// </summary>
     private Guid InsertLink(
         Guid tenantId, Guid subjectId, string label, bool isDefault,
         string platformUserId = CallerChatUser)
     {
         var id = Guid.CreateVersion7();
         using var db = _db.CreateContext();
+        if (!db.TenantMembers.Any(m => m.TenantId == tenantId && m.SubjectId == subjectId))
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId });
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = id,

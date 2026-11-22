@@ -79,7 +79,8 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.Body = new MemoryStream();
         var mw = new TenantSetupMiddleware(
             _ => { onNext?.Invoke(); return Task.CompletedTask; },
-            NullLogger<TenantSetupMiddleware>.Instance);
+            NullLogger<TenantSetupMiddleware>.Instance,
+            TimeProvider.System);
         return (mw, ctx);
     }
 
@@ -89,7 +90,8 @@ public class TenantSetupMiddlewareTests : IDisposable
         // Arrange — no passkey credentials in db
         var mw = new TenantSetupMiddleware(
             _ => Task.CompletedTask,
-            NullLogger<TenantSetupMiddleware>.Instance);
+            NullLogger<TenantSetupMiddleware>.Instance,
+            TimeProvider.System);
 
         var ctx = new DefaultHttpContext();
         ctx.Request.Path = "/api/status";
@@ -253,7 +255,7 @@ public class TenantSetupMiddlewareTests : IDisposable
 
         var logger = new Mock<ILogger<TenantSetupMiddleware>>();
         var nextCalled = false;
-        var mw = new TenantSetupMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, logger.Object);
+        var mw = new TenantSetupMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, logger.Object, TimeProvider.System);
         var ctx = new DefaultHttpContext();
         ctx.Request.Path = "/api/v1/entries";
         ctx.Response.Body = new MemoryStream();
@@ -498,7 +500,8 @@ public class TenantSetupMiddlewareTests : IDisposable
         // has resolved the sole tenant. The middleware should still check setup state.
         var mw = new TenantSetupMiddleware(
             _ => Task.CompletedTask,
-            NullLogger<TenantSetupMiddleware>.Instance);
+            NullLogger<TenantSetupMiddleware>.Instance,
+            TimeProvider.System);
 
         var ctx = new DefaultHttpContext();
         ctx.Request.Path = "/api/status";

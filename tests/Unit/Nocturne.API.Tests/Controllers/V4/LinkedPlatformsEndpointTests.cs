@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -55,7 +56,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => CreateDbContext());
-        return new ChatIdentityDirectoryService(factoryMock.Object.AsNocturneFactory(), TimeProvider.System, _loggerMock.Object);
+        return new ChatIdentityDirectoryService(factoryMock.Object.AsNocturneFactory(), new TenantMembershipRepository(factoryMock.Object.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, _loggerMock.Object);
     }
 
     [Fact]

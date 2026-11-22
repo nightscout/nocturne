@@ -229,7 +229,7 @@ public class TenantOverviewService : ITenantOverviewService
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         CancellationToken ct = default)
     {
-        var memberships = await _members.ListMembershipsOfSubjectAsync(subjectId, ct);
+        var memberships = await _members.ListMembershipsOfSubjectAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
 
         var result = new List<GlucoseReadTenant>();
         foreach (var (tenant, membership) in memberships)
