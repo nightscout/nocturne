@@ -32,6 +32,7 @@ public class MigrationSubjectGrantTests
     private const string ReaderMongoId = "5f1a00000000000000000001";
     private const string AdminMongoId = "5f1a00000000000000000002";
     private const string DeniedMongoId = "5f1a00000000000000000003";
+    private const string OperatorMongoId = "5f1a00000000000000000004";
 
     // Tokens are built the way the source instance built them, from the digest rather than from
     // thin air: DeriveDigest self-checks the reconstruction against the token it was issued with,
@@ -44,6 +45,7 @@ public class MigrationSubjectGrantTests
     private static readonly string ReaderToken = $"reader-{ReaderDigest[..16]}";
     private static readonly string AdminToken = $"boss-{AdminDigest[..16]}";
     private static readonly string DeniedToken = $"gone-{DeniedDigest[..16]}";
+    private static readonly string OperatorToken = $"operator-{Digest(OperatorMongoId)[..16]}";
 
     private static string Digest(string mongoId) => Convert.ToHexStringLower(
         System.Security.Cryptography.SHA1.HashData(
@@ -64,7 +66,8 @@ public class MigrationSubjectGrantTests
                     [
                       { "name": "readable", "permissions": ["*:*:read"] },
                       { "name": "admin", "permissions": ["*"] },
-                      { "name": "logger", "permissions": ["api:treatments:*"] }
+                      { "name": "logger", "permissions": ["api:treatments:*"] },
+                      { "name": "Platform_Admin", "permissions": ["api:entries:read"] }
                     ]
                     """,
                 "/api/v2/authorization/subjects" => $$"""
@@ -86,6 +89,12 @@ public class MigrationSubjectGrantTests
                         "name": "Gone",
                         "roles": ["denied"],
                         "accessToken": "{{DeniedToken}}"
+                      },
+                      {
+                        "_id": "{{OperatorMongoId}}",
+                        "name": "Operator",
+                        "roles": ["Platform_Admin"],
+                        "accessToken": "{{OperatorToken}}"
                       }
                     ]
                     """,
@@ -191,6 +200,18 @@ public class MigrationSubjectGrantTests
     }
 
     /// <summary>
+    /// Makes <paramref name="tenant"/> the instance's only tenant, where an import may add the
+    /// source's roles to the global roles.
+    /// </summary>
+    private static async Task SeedTenantAsync(IServiceProvider provider, TenantContext tenant)
+    {
+        using var scope = provider.CreateScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        db.Tenants.Add(new TenantEntity { Id = tenant.TenantId, Slug = tenant.Slug, DisplayName = tenant.DisplayName });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
     /// Runs a subjects-only API migration to completion against <see cref="NightscoutStub"/> and
     /// returns the tenant it imported into.
     /// </summary>
@@ -199,6 +220,8 @@ public class MigrationSubjectGrantTests
     {
         var tenant = new TenantContext(
             Guid.CreateVersion7(), "migrated", "Migrated Tenant", true, IsDemo: false);
+
+        await SeedTenantAsync(provider, tenant);
 
         if (seedOwner)
         {
@@ -419,7 +442,23 @@ public class MigrationSubjectGrantTests
         // The holder is created on demand and is not a person, so an import during first-run setup
         // is not blocked on somebody having claimed the site yet.
         (await db.OAuthGrants.IgnoreQueryFilters()
-            .CountAsync(g => g.TenantId == tenantId)).Should().Be(2);
+            .CountAsync(g => g.TenantId == tenantId)).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task A_source_role_spelt_as_the_platform_admin_role_adds_no_role_and_keeps_its_permissions()
+    {
+        await using var provider = BuildProvider();
+        var tenantId = await RunSubjectMigrationAsync(provider);
+
+        using var scope = provider.CreateScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+
+        // The instance's only tenant, where the import adds the source's other roles: the reserved
+        // name is still not added.
+        (await db.Roles.Select(r => r.Name).ToListAsync()).Should().Contain("logger")
+            .And.NotContain(name => PlatformAdminCredentials.IsRoleName(name));
+        (await GrantForAsync(db, tenantId, "Operator"))!.Scopes.Should().Equal(Scope.GlucoseRead);
     }
 
     [Fact]

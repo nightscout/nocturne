@@ -104,11 +104,10 @@ public class RequireSuperuserAttribute : RequirePermissionAttribute
 /// Requires standing over the whole instance, for a write to something every tenant reads, such as
 /// the global roles whose definitions are read when any tenant's sessions and Nightscout tokens are
 /// minted. Full access on one tenant is standing over the instance only when that tenant is the
-/// instance's only tenant, counted as
-/// <see cref="Services.Auth.PlatformAdminBootstrapService.EnsureFirstOwnerIsPlatformAdminAsync"/> counts
-/// it: a deactivated tenant counts, a demo tenant does not. Otherwise the caller must be a platform
-/// admin (<see cref="Nocturne.Core.Models.Authorization.AuthContext.IsPlatformAdmin"/>, which the
-/// instance key carries).
+/// instance's only tenant (<see cref="Services.Auth.InstanceStanding.IsOnlyTenantAsync"/>).
+/// Otherwise the caller must be a platform admin
+/// (<see cref="Nocturne.Core.Models.Authorization.AuthContext.IsPlatformAdmin"/>, which the instance
+/// key carries).
 /// </summary>
 /// <remarks>
 /// Adds to the action's other requirements rather than replacing them: an unauthenticated caller is
@@ -144,8 +143,7 @@ public sealed class RequireInstanceStandingAttribute : Attribute, IAsyncAuthoriz
             return false;
         }
 
-        var tenants = await httpContext.RequestServices.GetRequiredService<ITenantRepository>()
-            .ListNonDemoAsync(2, httpContext.RequestAborted);
-        return tenants.Count == 1 && tenants[0].Id == tenant.TenantId;
+        return await Services.Auth.InstanceStanding.IsOnlyTenantAsync(
+            httpContext.RequestServices.GetRequiredService<ITenantRepository>(), tenant.TenantId, httpContext.RequestAborted);
     }
 }
