@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
@@ -214,6 +215,23 @@ public static class HttpContextExtensions
     /// </summary>
     public const string AccessEndCeilingDetail =
         "Your access ends on a date, so you cannot give anyone access that lasts longer than yours.";
+
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads on any change to public sharing,
+    /// in either direction: a public link carries no end date, so it could outlast the caller.
+    /// </summary>
+    public const string PublicSharingEndDateDetail =
+        "Your access ends on a date, so you cannot change public sharing.";
+
+    /// <summary>
+    /// The 403 for a change to public sharing by a caller whose access ends
+    /// (<see cref="CallerAccessEndsAt"/>), or null when the caller may go on. Checked before anything is
+    /// written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? PublicSharingEndDateRefusal(this ControllerBase controller) =>
+        controller.HttpContext.CallerAccessEndsAt() is null
+            ? null
+            : controller.Problem(detail: PublicSharingEndDateDetail, statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>
     /// When the caller's own membership of the request's tenant ends, read from the membership the
