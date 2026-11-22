@@ -43,6 +43,7 @@ vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
     refusal.testSends ? Promise.resolve({ success: true }) : Promise.reject(refusal.error),
   ),
   getInAppRecipients: () => remoteQuery(() => []),
+  keepChannel: remoteCommand(() => Promise.reject(new Error("not under test"))),
   suggestAutoResolve: remoteCommand(() => Promise.resolve({ condition: null })),
 }));
 
@@ -135,6 +136,26 @@ describe("alert rule editor", () => {
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
     await expect.element(page.getByText("Test alert sent. Make sure that it arrived.")).toBeVisible();
+    expect(page.getByText(/Channels that do not send did not get it/).elements()).toHaveLength(0);
+  });
+
+  it("says that a channel that does not send did not get the test alert", async () => {
+    refusal.testSends = true;
+    rule = {
+      ...original,
+      channels: [
+        { id: "c1", channelType: "webhook", destination: "https://example.test/hook", state: "stopped" },
+      ],
+    } as unknown as AlertRuleResponse;
+    openRule(RULE_ID);
+
+    render(RuleEditorPage, {});
+
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect
+      .element(page.getByText(/Test alert sent. Make sure that it arrived. Channels that do not send did not get it./))
+      .toBeVisible();
   });
 
   it("says how many times the alert would have started in the recent past", async () => {

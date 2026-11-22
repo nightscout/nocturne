@@ -24,6 +24,7 @@
   import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
   import { channelLabel } from "./channelText.svelte";
+  import { channelsNotSendingMessage, isNotSending } from "./channelState.svelte";
 
   interface Props {
     rule: AlertRuleResponse;
@@ -69,6 +70,10 @@
 
   let severityClass = $derived(severity(rule.severity, "dot"));
 
+  let notSending = $derived(
+    channelsNotSendingMessage((rule.channels ?? []).filter(isNotSending).length)
+  );
+
   let confirmingDisable = $state(false);
 
   // The switch stays where the server last put it until the change is confirmed.
@@ -81,7 +86,10 @@
   }
 
   let attention = $derived(
-    [reviewReasonMessage(rule.reviewReason), storedConditionIssuesMessage(rule.conditionIssues)]
+    [
+      reviewReasonMessage(rule.reviewReason),
+      storedConditionIssuesMessage(rule.conditionIssues),
+    ]
       .filter((m): m is string => m !== null)
       .join(" ")
   );
@@ -128,6 +136,12 @@
         <span>{attention}</span>
       </p>
     {/if}
+    {#if notSending}
+      <p class="mt-1 flex items-start gap-1.5 text-xs text-status-warning">
+        <AlertTriangle class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>{notSending}</span>
+      </p>
+    {/if}
   </div>
 
   <!-- Channel icons -->
@@ -135,15 +149,24 @@
     <div class="hidden items-center gap-1 @sm:flex" aria-label="Channels">
       {#each rule.channels.slice(0, 4) as ch (ch.id)}
         {@const meta = findChannelMeta(ch.channelType)}
-        <span
-          class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
-          title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
-        >
-          {#if meta?.logo}
-            <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
-          {:else if meta?.icon}
-            {@const G = meta.icon}
-            <G class="h-3 w-3" />
+        <span class="relative">
+          <span
+            class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
+            title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
+          >
+            {#if meta?.logo}
+              <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
+            {:else if meta?.icon}
+              {@const G = meta.icon}
+              <G class="h-3 w-3" />
+            {/if}
+          </span>
+          {#if isNotSending(ch)}
+            <AlertTriangle
+              class="absolute -right-1 -top-1 h-3 w-3 text-status-warning"
+              aria-hidden="true"
+              data-testid="channel-not-sending"
+            />
           {/if}
         </span>
       {/each}

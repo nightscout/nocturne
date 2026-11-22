@@ -117,6 +117,11 @@
       return;
     }
 
+    if (notification.type === "alerts.channelNotSending" && actionId === "open_rule") {
+      markRead(notification.id);
+      return;
+    }
+
     if (notification.type === "data.rejected_uploads" && actionId === "review") {
       markRead(notification.id);
       goto(resolve('reports/data-quality/rejected-uploads'));

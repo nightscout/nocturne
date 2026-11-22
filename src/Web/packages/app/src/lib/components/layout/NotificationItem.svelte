@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cn } from "#lib/utils/index.js";
@@ -10,6 +11,7 @@
   } from "@nocturne/api-client";
   import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
   import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
+  import { channelNoticeSubtitle } from "#lib/components/alerts/channelState.svelte.js";
   import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";
   import InstanceKeyChanged from "#lib/components/notifications/InstanceKeyChanged.svelte";
 
@@ -63,6 +65,12 @@
   const Icon = $derived(resolveNotificationIcon(notification.icon, notification.category));
   const urgencyClasses = $derived(getUrgencyClasses(notification.urgency));
   const isRead = $derived(notification.readAt != null);
+  const channelNotice = $derived(notification.type === "alerts.channelNotSending");
+  const noticeRuleId = $derived(notification.metadata?.["alertRuleId"]?.toString());
+  const subtitle = $derived(
+    (channelNotice ? channelNoticeSubtitle(notification.metadata) : null) ??
+      resolveNotificationLabel(notification.subtitle)
+  );
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
 </script>
 
@@ -116,8 +124,19 @@
       </div>
     {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
-        {resolveNotificationLabel(notification.subtitle)}
+        {subtitle}
       </p>
+    {/if}
+    {#if channelNotice && noticeRuleId}
+      <Button
+        variant="outline"
+        size="sm"
+        class="mt-2"
+        href={resolve(`alerts/${noticeRuleId}`)}
+        onclick={() => onAction?.("open_rule")}
+      >
+        Edit this alert
+      </Button>
     {/if}
     {#if notification.actions && notification.actions.length > 0}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
