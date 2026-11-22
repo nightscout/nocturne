@@ -206,9 +206,11 @@ internal static class RustEnvelopeMapper
             TenantTimeZoneId = ctx.TenantTimeZoneId is { Length: > 0 } tenantZone
                 ? TimeZoneHelper.ToIanaIdIfWindows(tenantZone)
                 : ctx.TenantTimeZoneId,
-            ActivePumpState = ctx.ActivePumpState is { } pump
-                ? new WirePumpState(pump.Mode, Utc(pump.StartedAt)!.Value)
-                : null,
+            ActivePumpModes = ctx.ActivePumpModes.Count == 0
+                ? null
+                : ctx.ActivePumpModes
+                    .Select(m => new WirePumpMode(m.Mode, Utc(m.StartedAt)!.Value))
+                    .ToList(),
             // Serialise from the dictionary KEYS (not the snapshot's echoed fields) so the
             // engine reconstructs the exact same (category, state) lookup — including
             // null-state "any of category" keys.
@@ -324,7 +326,7 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
         [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
         [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
-        [JsonPropertyName("active_pump_state")] public WirePumpState? ActivePumpState { get; init; }
+        [JsonPropertyName("active_pump_modes")] public List<WirePumpMode>? ActivePumpModes { get; init; }
         [JsonPropertyName("active_state_spans")] public List<WireStateSpan>? ActiveStateSpans { get; init; }
         [JsonPropertyName("active_trackers")] public List<WireTrackerReference>? ActiveTrackers { get; init; }
         [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
@@ -352,7 +354,7 @@ internal static class RustEnvelopeMapper
         [property: JsonPropertyName("started_at")] DateTime StartedAt,
         [property: JsonPropertyName("source")] string Source);
 
-    private sealed record WirePumpState(
+    private sealed record WirePumpMode(
         [property: JsonPropertyName("mode")] string Mode,
         [property: JsonPropertyName("started_at")] DateTime StartedAt);
 

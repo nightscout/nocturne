@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -187,6 +188,82 @@ public class ClockAnomalyNoticeTests
         _clock.Advance(TimeSpan.FromMinutes(30));
         await _notice.RefreshAsync(Now, CancellationToken.None);
         Standing.Should().BeEmpty("the instant it reported is no longer ahead");
+    }
+
+    private const string RetiredPumpFact = "active_pump_state";
+    private const string PumpModesFact = "active_pump_modes";
+
+    private void StandingUnderTheRetiredPumpFact(DateTime aheadUntil) =>
+        _active.Add(new InAppNotificationDto
+        {
+            Type = ClockAnomalyNotice.NotificationType,
+            SourceId = RetiredPumpFact,
+            Metadata = new Dictionary<string, object>
+            {
+                [ClockAnomalyNotice.AheadUntilKey] = aheadUntil.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            },
+        });
+
+    private static SensorContext PumpModesStartingAt(DateTime start) =>
+        Context() with { ActivePumpModes = [new PumpModeSnapshot("Suspended", start)] };
+
+    [Fact]
+    public async Task A_notice_raised_under_the_retired_pump_fact_stands_for_the_same_span_and_is_not_raised_again()
+    {
+        StandingUnderTheRetiredPumpFact(T0.AddMinutes(30));
+        IReadOnlyCollection<ClockAnomaly> ahead = [new(PumpModesFact, TimeSpan.FromMinutes(30))];
+
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(30)), ahead, CancellationToken.None);
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(30)), ahead, CancellationToken.None);
+
+        _created.Should().Be(0);
+        Standing.Should().Equal(RetiredPumpFact);
+    }
+
+    [Fact]
+    public async Task A_notice_under_the_retired_pump_fact_is_archived_when_its_span_is_no_longer_ahead()
+    {
+        StandingUnderTheRetiredPumpFact(T0.AddMinutes(30));
+        _clock.Advance(TimeSpan.FromMinutes(31));
+
+        await _notice.ReportAsync(PumpModesStartingAt(T0.AddMinutes(30)), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+        _created.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_notice_under_the_retired_pump_fact_no_pass_observes_again_clears_once_its_instant_has_passed()
+    {
+        StandingUnderTheRetiredPumpFact(T0.AddMinutes(30));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        Standing.Should().Equal(new[] { RetiredPumpFact }, "its instant is still ahead");
+
+        _clock.Advance(TimeSpan.FromMinutes(31));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+
+        Standing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_pump_modes_are_observed_at_their_newest_start()
+    {
+        IReadOnlyCollection<ClockAnomaly> ahead = [new(PumpModesFact, TimeSpan.FromMinutes(30))];
+        var context = Context() with
+        {
+            ActivePumpModes =
+            [
+                new PumpModeSnapshot("Automatic", T0.AddMinutes(-60)),
+                new PumpModeSnapshot("Suspended", T0.AddMinutes(30)),
+            ],
+        };
+        await _notice.ReportAsync(context, ahead, CancellationToken.None);
+        Standing.Should().Equal(PumpModesFact);
+
+        _clock.Advance(TimeSpan.FromMinutes(31));
+        await _notice.ReportAsync(context, [], CancellationToken.None);
+
+        Standing.Should().BeEmpty("the newest start is no longer ahead, whatever the older one is");
     }
 
     /// <summary>

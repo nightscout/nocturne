@@ -176,7 +176,7 @@ public sealed record ScenarioContext
     [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
     [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
     [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
-    [JsonPropertyName("active_pump_state")] public ScenarioPumpState? ActivePumpState { get; init; }
+    [JsonPropertyName("active_pump_modes")] public List<ScenarioPumpMode>? ActivePumpModes { get; init; }
     [JsonPropertyName("active_state_spans")] public List<ScenarioStateSpan>? ActiveStateSpans { get; init; }
     [JsonPropertyName("active_trackers")] public List<ScenarioTrackerReference>? ActiveTrackers { get; init; }
     [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
@@ -205,7 +205,7 @@ public sealed record ScenarioDoNotDisturb(
     [property: JsonPropertyName("source")] string Source);
 
 /// <summary>Mode uses the PascalCase wire form of PumpModeState (<c>"Automatic"</c>, <c>"EaseOff"</c>, …).</summary>
-public sealed record ScenarioPumpState(
+public sealed record ScenarioPumpMode(
     [property: JsonPropertyName("mode")] string Mode,
     [property: JsonPropertyName("started_at")] DateTime StartedAt);
 

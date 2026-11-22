@@ -51,7 +51,7 @@ public class WireContractCompletenessTests
         ]),
         new(typeof(PumpSuspensionSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan), []),
         new(typeof(DoNotDisturbSnapshot), "WireDoNotDisturb", typeof(ScenarioDoNotDisturb), []),
-        new(typeof(PumpStateSnapshot), "WirePumpState", typeof(ScenarioPumpState), []),
+        new(typeof(PumpModeSnapshot), "WirePumpMode", typeof(ScenarioPumpMode), []),
         new(typeof(StateSpanSnapshot), "WireStateSpan", typeof(ScenarioStateSpan), []),
     ];
 

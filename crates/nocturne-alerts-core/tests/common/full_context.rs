@@ -146,10 +146,15 @@ fn temp_basal() -> BoxedStrategy<Value> {
         .boxed()
 }
 
-fn pump_state() -> BoxedStrategy<Value> {
-    (named::<PumpMode>(UNRECOGNISED_MODE), age_in(60))
-        .prop_map(|(mode, started)| json!({ "mode": mode, "started_at": instant(started) }))
-        .boxed()
+/// Active pump-mode spans, at least `min` of them, up to three.
+pub(crate) fn pump_modes(min: usize) -> BoxedStrategy<Value> {
+    vec(
+        (named::<PumpMode>(UNRECOGNISED_MODE), age_in(60))
+            .prop_map(|(mode, started)| json!({ "mode": mode, "started_at": instant(started) })),
+        min..=3,
+    )
+    .prop_map(Value::from)
+    .boxed()
 }
 
 fn state_spans() -> BoxedStrategy<Value> {
@@ -241,7 +246,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         half_present(started_at()),
         half_present(started_at()),
         half_present(started_at()),
-        half_present(pump_state()),
+        half_present(pump_modes(0)),
         half_present(state_spans()),
         half_present(alerts()),
         half_present(trackers()),
@@ -268,7 +273,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                 (iob, cob, reservoir, lower_bound, temp, carb, bolus),
                 (site, sensor, cycle, enacted, pump_battery, uploader_battery, sensitivity),
                 (voltage_a, voltage_b, resistance, days),
-                (suspension, override_, dnd, pump_state, state_spans, alerts, trackers),
+                (suspension, override_, dnd, pump_modes, state_spans, alerts, trackers),
                 (aps_cycled, pump_snapshot, uploader_snapshot, aps_sensitivity, asleep),
                 zone,
             )| {
@@ -308,7 +313,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                     ("last_carb_at", carb),
                     ("last_bolus_at", bolus),
                     ("tenant_time_zone_id", zone.map(Value::from)),
-                    ("active_pump_state", pump_state),
+                    ("active_pump_modes", pump_modes),
                     ("active_state_spans", state_spans),
                     ("active_trackers", trackers),
                     ("sleep_session_active", Some(asleep.into())),

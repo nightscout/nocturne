@@ -44,7 +44,7 @@ wire_enum! {
         ActivePumpSuspension = "active_pump_suspension",
         ActiveOverride = "active_override",
         ActiveDoNotDisturb = "active_do_not_disturb",
-        ActivePumpState = "active_pump_state",
+        ActivePumpModes = "active_pump_modes",
         ActiveStateSpans = "active_state_spans",
         Sustained = "sustained",
         HysteresisStartedAt = "hysteresis_started_at",

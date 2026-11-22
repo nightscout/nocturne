@@ -1,8 +1,8 @@
 //! `SensorContext` as plain data: pure input to the evaluators, read from the
 //! context wire format (engine-semantics.md §4). An enum name this crate does
 //! not know (a host newer than it) degrades only that fact: an unknown bucket
-//! reads as an absent one, an active pump in an unknown mode keeps its
-//! snapshot with no mode, and a state span of an unknown category is dropped,
+//! reads as an absent one, an active pump mode this crate cannot name keeps
+//! its entry with no mode, and a state span of an unknown category is dropped,
 //! so every other leaf still evaluates.
 
 use std::collections::HashMap;
@@ -37,9 +37,11 @@ pub struct StartedSpan {
     pub started_at: DateTime<Utc>,
 }
 
+/// One active pump-mode span. Spans of different modes overlap, and a repeated
+/// mode is allowed: `pump_state` reads the latest start of the mode it names.
 #[derive(Debug, Clone, Copy)]
-pub struct PumpStateSnapshot {
-    /// `None`: the pump is in a mode this crate has no name for.
+pub struct PumpModeSnapshot {
+    /// `None`: a mode this crate has no name for.
     pub mode: Option<PumpMode>,
     pub started_at: DateTime<Utc>,
 }
@@ -101,7 +103,8 @@ pub struct SensorContext {
     pub last_carb_at: Option<DateTime<Utc>>,
     pub last_bolus_at: Option<DateTime<Utc>>,
     pub tenant_time_zone_id: Option<String>,
-    pub active_pump_state: Option<PumpStateSnapshot>,
+    /// Every active pump-mode span, in the order the host sent them.
+    pub active_pump_modes: Vec<PumpModeSnapshot>,
     /// Keyed by `(category, state)`; a `None` state means "any state of this
     /// category".
     pub active_state_spans: HashMap<(StateSpanCategory, Option<String>), StateSpanSnapshot>,
@@ -215,7 +218,7 @@ struct WireContext {
     #[serde(default)]
     tenant_time_zone_id: Option<String>,
     #[serde(default)]
-    active_pump_state: Option<WirePumpState>,
+    active_pump_modes: Option<Vec<WirePumpMode>>,
     #[serde(default)]
     active_state_spans: Option<Vec<WireStateSpan>>,
     #[serde(default)]
@@ -253,7 +256,7 @@ struct WireStartedSpan {
 }
 
 #[derive(Deserialize)]
-struct WirePumpState {
+struct WirePumpMode {
     mode: String,
     started_at: DateTime<Utc>,
 }
@@ -374,6 +377,14 @@ impl SensorContext {
             );
         }
 
+        let mut active_pump_modes = Vec::new();
+        for p in w.active_pump_modes.unwrap_or_default() {
+            active_pump_modes.push(PumpModeSnapshot {
+                mode: PumpMode::from_name(&p.mode),
+                started_at: check_timestamp(p.started_at, "active_pump_modes.started_at")?,
+            });
+        }
+
         let mut active_state_spans = HashMap::new();
         for s in w.active_state_spans.unwrap_or_default() {
             let started_at = check_timestamp(s.started_at, "active_state_spans.started_at")?;
@@ -455,15 +466,7 @@ impl SensorContext {
             last_carb_at: opt_ts(w.last_carb_at, "last_carb_at")?,
             last_bolus_at: opt_ts(w.last_bolus_at, "last_bolus_at")?,
             tenant_time_zone_id: w.tenant_time_zone_id,
-            active_pump_state: w
-                .active_pump_state
-                .map(|p| {
-                    Ok::<_, String>(PumpStateSnapshot {
-                        mode: PumpMode::from_name(&p.mode),
-                        started_at: check_timestamp(p.started_at, "active_pump_state.started_at")?,
-                    })
-                })
-                .transpose()?,
+            active_pump_modes,
             active_state_spans,
             active_trackers,
             sleep_session_active: w.sleep_session_active,

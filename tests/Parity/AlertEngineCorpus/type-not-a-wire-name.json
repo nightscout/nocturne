@@ -340,10 +340,12 @@
         "sleep_session_active": false,
         "last_carb_at": "2026-01-05T11:30:00Z",
         "last_bolus_at": "2026-01-05T11:30:00Z",
-        "active_pump_state": {
-          "mode": "Manual",
-          "started_at": "2026-01-05T11:50:00Z"
-        },
+        "active_pump_modes": [
+          {
+            "mode": "Manual",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
         "active_pump_suspension": {
           "started_at": "2026-01-05T11:50:00Z"
         },

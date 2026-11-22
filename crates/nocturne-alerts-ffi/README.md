@@ -69,9 +69,12 @@ interchange shapes (`ScenarioRule`, `ScenarioContext`, `ExpectedRuleResult` in
 `tests/Parity/Nocturne.Alerts.Corpus/ScenarioModels.cs`)
 — the corpus in `tests/Parity/AlertEngineCorpus/` is the machine-checkable
 spec for all of them. An enum value in the context (a state span's
-`category`, `trend_bucket`, `glucose_bucket`, the active pump state's `mode`)
+`category`, `trend_bucket`, `glucose_bucket`, an active pump mode's `mode`)
 is exactly its wire name, as in condition JSON; any other spelling reads as
-absent. Timestamps are RFC 3339 UTC; the engine emits
+absent. `active_pump_modes` is the list of every active pump-mode span,
+`[{ "mode": ..., "started_at": ... }]`: spans of different modes overlap, so a
+host sends all of them, never the one it prefers, and a `pump_state` leaf reads
+the entry for the mode it names (engine-semantics.md §3, §4). Timestamps are RFC 3339 UTC; the engine emits
 whole-second instants without a fraction (`2026-01-05T12:00:00Z`) and
 preserves sub-second precision when present.
 
@@ -197,7 +200,7 @@ more than 5 minutes ahead of `now`, which the engine reads as not known
 `latest_timestamp`, `last_aps_cycle_at`, `last_aps_enacted_at`,
 `last_site_change_at`, `last_sensor_start_at`, `last_carb_at`, `last_bolus_at`,
 `active_alerts`, `active_pump_suspension`, `active_override`,
-`active_do_not_disturb`, `active_pump_state`, `active_state_spans`,
+`active_do_not_disturb`, `active_pump_modes`, `active_state_spans`,
 `active_trackers`), the rule's `enabled_at`, or the evaluation state that held
 it (`sustained` for a timer, `hysteresis_started_at` for the tracker).
 `ahead_ms` is how far ahead of `now` it was, in whole milliseconds, the furthest

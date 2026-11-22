@@ -34,7 +34,7 @@ public sealed record DataNeedsSet(
     bool NeedsTreatments,
     bool NeedsTenantTimeZone,
     bool NeedsSleepSession,
-    IReadOnlySet<PumpModeState> ReferencedPumpStates,
+    bool NeedsPumpModes,
     IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans,
     IReadOnlySet<Guid> ReferencedTrackerDefinitions)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
@@ -47,8 +47,7 @@ public sealed record DataNeedsSet(
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false,
             false, false, false, false, false, false, false, false,
-            false, false, false, false,
-            new HashSet<PumpModeState>(),
+            false, false, false, false, false,
             new HashSet<(StateSpanCategory, string?)>(),
             new HashSet<Guid>());
 }
@@ -94,13 +93,9 @@ public static class RuleDataNeeds
         if (leaf.Kind is not { } kind) return;
         ApplyLeaf(kind, b);
 
-        // pump_state, state_span_active and tracker_age select which mode, span or tracker the
-        // enricher fetches.
+        // state_span_active and tracker_age select which span or tracker the enricher fetches.
         switch (kind)
         {
-            case AlertConditionType.PumpState when leaf.EnumParam<PumpModeState>("mode") is { } mode:
-                b.PumpStates.Add(mode);
-                break;
             case AlertConditionType.StateSpanActive when leaf.EnumParam<StateSpanCategory>("category") is { } category:
                 b.StateSpans.Add((category, leaf.StringParam("state")));
                 break;
@@ -154,7 +149,7 @@ public static class RuleDataNeeds
             // this co-fetch the engine would silently fall back to UTC.
             case AlertConditionType.TimeOfDay: b.TenantTimeZone = true; break;
             case AlertConditionType.SleepSessionActive: b.SleepSession = true; break;
-            case AlertConditionType.PumpState: /* selection read in VisitLeaf */ break;
+            case AlertConditionType.PumpState: b.PumpModes = true; break;
             case AlertConditionType.StateSpanActive: /* selection read in VisitLeaf */ break;
             case AlertConditionType.TrackerAge: /* selection read in VisitLeaf */ break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
@@ -188,7 +183,7 @@ public static class RuleDataNeeds
         public bool Treatments;
         public bool TenantTimeZone;
         public bool SleepSession;
-        public readonly HashSet<PumpModeState> PumpStates = new();
+        public bool PumpModes;
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
         public readonly HashSet<Guid> TrackerDefinitionIds = new();
 
@@ -196,6 +191,6 @@ public static class RuleDataNeeds
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, ActiveAlerts,
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
                 SensitivityRatio,
-                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpStates, StateSpans, TrackerDefinitionIds);
+                GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpModes, StateSpans, TrackerDefinitionIds);
     }
 }

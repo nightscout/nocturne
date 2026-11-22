@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "name": "pump-state-for-minutes-over-overlapping-modes",
+  "description": "a pump_state leaf over for_minutes on a Suspended span that runs on top of a long Automatic one: the suspension has not lasted for_minutes until 10 minutes after it began, however long the automatic span has run, and the Automatic leaf over the same for_minutes holds throughout",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Suspended",
+        "is_active": true,
+        "for_minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "Automatic",
+        "is_active": true,
+        "for_minutes": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T10:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T10:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T10:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T10:00:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -220,10 +220,11 @@ public record SensorContext
     public string? TenantTimeZoneId { get; init; }
 
     /// <summary>
-    /// Currently active pump-mode StateSpan, or null when no pump-mode span is active. Pump
-    /// modes are mutually exclusive per StateSpan semantics, so this is a single snapshot.
+    /// Every active pump-mode StateSpan. Spans of different modes overlap: a Suspended span runs
+    /// on top of an Automatic or Manual one. Populated by the enricher when a rule reads
+    /// <c>pump_state</c>; empty when no pump-mode span is active.
     /// </summary>
-    public PumpStateSnapshot? ActivePumpState { get; init; }
+    public IReadOnlyList<PumpModeSnapshot> ActivePumpModes { get; init; } = [];
 
     /// <summary>
     /// Active state-span snapshots keyed by <c>(Category, State)</c>. Populated by the

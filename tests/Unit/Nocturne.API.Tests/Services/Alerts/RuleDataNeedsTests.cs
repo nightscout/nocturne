@@ -385,13 +385,21 @@ public class RuleDataNeedsTests
     }
 
     [NativeTheory]
-    [InlineData("""{"mode":8,"is_active":true}""")]
-    [InlineData("""{"mode":"suspended","is_active":true}""")]
-    public void A_pump_mode_that_is_not_a_member_name_selects_no_mode(string conditionParams)
+    [InlineData("""{"mode":"Suspended","is_active":true}""")]
+    [InlineData("""{"mode":"Automatic","is_active":false,"for_minutes":5}""")]
+    public void A_pump_state_leaf_needs_the_pump_modes(string conditionParams)
     {
         var rule = MakeRule(AlertConditionType.PumpState, conditionParams);
 
-        RuleDataNeeds.Walk(new[] { rule }).ReferencedPumpStates.Should().BeEmpty();
+        RuleDataNeeds.Walk(new[] { rule }).NeedsPumpModes.Should().BeTrue();
+    }
+
+    [NativeFact]
+    public void A_rule_without_a_pump_state_leaf_does_not_need_the_pump_modes()
+    {
+        var rule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+
+        RuleDataNeeds.Walk(new[] { rule }).NeedsPumpModes.Should().BeFalse();
     }
 
     private static AlertRuleSnapshot MakeRule(
