@@ -68,4 +68,25 @@ public class ReplayBindingTests
 
         act.Should().Throw<RustAlertEngineException>();
     }
+
+    /// <summary>The engine's step-limit error, as <c>ReplayError::StepLimit</c> words it, names its rule.</summary>
+    [Fact]
+    public void A_step_limit_rejection_names_its_rule()
+    {
+        var act = () => RustAlertEngine.ParseReplayResponse(
+            $$"""{"schema_version":1,"ok":false,"error":"rule {{RuleId}} changes more than 1000 times between two ticks, at 2026-01-05T12:00:00Z"}""",
+            ticksRequested: false);
+
+        act.Should().Throw<RustAlertEngineException>().Which.ReplayStepLimitRule.Should().Be(Guid.Parse(RuleId));
+    }
+
+    [Fact]
+    public void Another_rejection_names_no_step_limit_rule()
+    {
+        var act = () => RustAlertEngine.ParseReplayResponse(
+            $$"""{"schema_version":1,"ok":false,"error":"rule id {{RuleId}} appears more than once"}""",
+            ticksRequested: false);
+
+        act.Should().Throw<RustAlertEngineException>().Which.ReplayStepLimitRule.Should().BeNull();
+    }
 }

@@ -224,6 +224,22 @@ public interface ISensorGlucoseRepository
         SensorGlucose reading, DateTime since, CancellationToken ct = default);
 
     /// <summary>
+    /// The first arrival of every stream the tenant ever stored a reading from: the earliest
+    /// <c>sys_created_at</c> per writer, data source and device, in one grouped read. It is read with
+    /// the member history clamp lifted, since it feeds only replay's internal classification of
+    /// readings as live arrivals or imported history (docs/alerts/engine-semantics.md §8) and no row
+    /// of it reaches the caller.
+    /// </summary>
+    Task<IEnumerable<GlucoseStreamArrival>> GetStreamFirstArrivalsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The readings dated in [<paramref name="from"/>, <paramref name="to"/>], each with the writer,
+    /// data source and device it came with.
+    /// </summary>
+    Task<IEnumerable<GlucoseStreamReading>> GetStreamReadingsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
     /// The live readings in [<paramref name="from"/>, <paramref name="to"/>] a
     /// <see cref="GlucoseStreams.Canonical"/> read leaves out (non-primary duplicate copies and
     /// readings of a stream that lost its bucket), oldest first, keyset-paged on (timestamp, id).

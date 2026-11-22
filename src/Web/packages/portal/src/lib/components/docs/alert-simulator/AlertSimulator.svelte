@@ -67,7 +67,7 @@
                 failure = undefined;
                 if (found.some((f) => f.length > 0)) return;
                 const ticks = ticksFor(trace);
-                const replayed = await replay(sent, ticks);
+                const replayed = await replay(sent, ticks, trace.end);
                 if (cancelled) return;
                 view = { result: replayResult(trace, sent, ticks, replayed), chart: chartData(trace), rules: sent };
             } catch (error) {

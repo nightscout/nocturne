@@ -50,6 +50,7 @@ fn run(path: &Path) -> Result<(), String> {
         .collect();
     let options = ReplayOptions {
         include_ticks: true,
+        until: None,
     };
     let actual = replay(&rules, scenario.ticks, options)
         .expect("replay succeeds")

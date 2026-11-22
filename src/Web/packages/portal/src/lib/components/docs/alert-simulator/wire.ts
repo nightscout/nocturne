@@ -46,9 +46,17 @@ export interface TickContext {
 export interface ReplayTick {
 	at: string;
 	context: TickContext;
+	/** A reading arrived at `at`; otherwise the tick samples the other facts between readings. */
+	reading: boolean;
 }
 
-export type ReplayEventKind = "fired" | "suppressed_by_dnd" | "auto_resolved" | "cleared";
+export type ReplayEventKind =
+	| "fired"
+	| "suppressed_by_dnd"
+	| "hysteresis_started"
+	| "hysteresis_resumed"
+	| "closed"
+	| "auto_resolved";
 
 export interface ReplayResult {
 	order: string[];

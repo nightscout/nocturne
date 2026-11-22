@@ -151,20 +151,6 @@ impl TimerStore {
         })
     }
 
-    /// Ends every run of `rule_id` at `at`, as [`TimerStore::mark_not_true`].
-    pub(crate) fn clear_all_for_rule(&mut self, rule_id: Uuid, at: DateTime<Utc>) {
-        let paths: Vec<String> = self
-            .timers
-            .get(&rule_id)
-            .into_iter()
-            .flat_map(BTreeMap::keys)
-            .cloned()
-            .collect();
-        for path in paths {
-            self.mark_not_true(rule_id, &path, at);
-        }
-    }
-
     /// The ops recorded since the last drain.
     pub fn drain_ops(&mut self) -> Vec<TimerOp> {
         std::mem::take(&mut self.log)

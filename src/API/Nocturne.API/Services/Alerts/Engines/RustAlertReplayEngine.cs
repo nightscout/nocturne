@@ -17,7 +17,8 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// </remarks>
 internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertReplayEngine
 {
-    /// <exception cref="RustAlertEngineException">The native call failed.</exception>
+    /// <exception cref="ReplayStepLimitException">A rule reached the engine's step bound.</exception>
+    /// <exception cref="RustAlertEngineException">The native call failed otherwise.</exception>
     public Task<AlertReplayRun> ReplayAsync(AlertReplayInput input, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -31,11 +32,21 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
                 At = DateTime.SpecifyKind(t.At, DateTimeKind.Utc),
                 Context = RustEnvelopeMapper.BuildContext(t.Context),
                 SuppressedRuleIds = t.SuppressedRuleIds.Count == 0 ? null : t.SuppressedRuleIds.ToList(),
+                Reading = t.Reading,
             }).ToList(),
             IncludeTicks = input.IncludeTicks,
+            Until = input.Until is { } until ? DateTime.SpecifyKind(until, DateTimeKind.Utc) : null,
         };
-        var response = errors.Track("replay", () => RustAlertEngine.Replay(request));
-        return Task.FromResult(ToRun(response));
+        try
+        {
+            var response = errors.Track("replay", () => RustAlertEngine.Replay(request));
+            return Task.FromResult(ToRun(response));
+        }
+        catch (RustAlertEngineException ex) when (
+            ex.ReplayStepLimitRule is { } ruleId && input.Rules.FirstOrDefault(r => r.Id == ruleId) is { } rule)
+        {
+            throw new ReplayStepLimitException(rule.Id, rule.Name, ex);
+        }
     }
 
     /// <summary>
@@ -70,8 +81,10 @@ internal sealed class RustAlertReplayEngine(AlertEngineErrors errors) : IAlertRe
     {
         RustReplayEventKind.Fired => AlertReplayTransition.Fired,
         RustReplayEventKind.SuppressedByDnd => AlertReplayTransition.SuppressedByDnd,
+        RustReplayEventKind.HysteresisStarted => AlertReplayTransition.HysteresisStarted,
+        RustReplayEventKind.HysteresisResumed => AlertReplayTransition.HysteresisResumed,
+        RustReplayEventKind.Closed => AlertReplayTransition.Closed,
         RustReplayEventKind.AutoResolved => AlertReplayTransition.AutoResolved,
-        RustReplayEventKind.Cleared => AlertReplayTransition.Cleared,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 

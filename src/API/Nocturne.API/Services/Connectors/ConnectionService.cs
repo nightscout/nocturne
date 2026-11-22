@@ -44,7 +44,7 @@ public class ConnectionService(
 
         var writerIds = buckets.Where(b => b.WriterGrantId.HasValue).Select(b => b.WriterGrantId!.Value).ToHashSet();
         var grantRecords = (await grants.ListForConnectionsAsync(viewerSubjectId, writerIds, ct))
-            .Where(g => g.GrantType is OAuthGrantTypes.App or OAuthGrantTypes.Direct)
+            .Where(ConnectionKeys.NamesConnection)
             .ToList();
         var grantsById = grantRecords.ToDictionary(g => g.Id);
         var deviceCounts = await devices.GetDeviceCountsByGrantAsync([.. grantsById.Keys], ct);
@@ -55,18 +55,13 @@ public class ConnectionService(
 
         foreach (var bucket in buckets)
         {
-            if (bucket.WriterGrantId is { } writer && grantsById.TryGetValue(writer, out var grant))
-            {
+            var owner = ConnectionKeys.OwnerOf(bucket.WriterGrantId, bucket.DataSource, bucket.Device, grantsById);
+            if (owner.Grant is { } grant)
                 Add(writtenBuckets, KeyOf(grant), bucket);
-            }
-            else if (ConnectorMetadataService.GetByDataSourceId(bucket.DataSource ?? bucket.Device) is { } connector)
-            {
+            else if (owner.Connector is { } connector)
                 Add(connectorBuckets, connector.ConnectorId, bucket);
-            }
-            else if ((bucket.DataSource ?? bucket.Device) is { Length: > 0 })
-            {
+            else if (owner.Source is not null)
                 otherBuckets.Add(bucket);
-            }
         }
 
         var folded = await FoldedGrantsAsync(grantRecords, ct);
@@ -181,11 +176,7 @@ public class ConnectionService(
         list.Add(bucket);
     }
 
-    private static string KeyOf(OAuthGrantRecord grant) =>
-        grant.GrantType == OAuthGrantTypes.App
-            ? $"app:{(grant.ClientIdentity == OAuthClientIdentity.Verified ? grant.Client?.SoftwareId : null)
-                ?? grant.ClientEntityId?.ToString() ?? grant.Id.ToString()}"
-            : $"token:{grant.Id}";
+    private static string KeyOf(OAuthGrantRecord grant) => ConnectionKeys.Of(grant);
 
     private static Connection FromGrants(
         string id,

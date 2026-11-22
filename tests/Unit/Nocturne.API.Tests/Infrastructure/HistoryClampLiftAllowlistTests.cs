@@ -36,6 +36,9 @@ public class HistoryClampLiftAllowlistTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.ClearedBeforeTheClampAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.CreateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
+        // Each glucose stream's first arrival feeds only replay's internal classification of readings as
+        // live arrivals or imported history; no row of it reaches the caller.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SensorGlucoseRepository.cs: SensorGlucoseRepository.GetStreamFirstArrivalsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.LoadRecordInfoAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.UnlinkedAsync",
     ];

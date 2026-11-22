@@ -40,6 +40,19 @@ public sealed class RustAlertEngineException : Exception
         Rejection is { } error
         && (error.StartsWith("malformed condition", StringComparison.Ordinal)
             || error.StartsWith("unknown condition_type", StringComparison.Ordinal));
+
+    /// <summary>
+    /// The rule a replay stopped at because it changed more often between two ticks than the
+    /// engine steps (docs/alerts/engine-semantics.md §8), else <see langword="null"/>.
+    /// </summary>
+    public Guid? ReplayStepLimitRule =>
+        Rejection is { } error
+        && error.StartsWith("rule ", StringComparison.Ordinal)
+        && error.Length >= 41
+        && error.Contains(" changes more than ", StringComparison.Ordinal)
+        && Guid.TryParse(error.AsSpan(5, 36), out var rule)
+            ? rule
+            : null;
 }
 
 /// <summary>

@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::engine::{OnUnknown, WireRule, parse_auto_resolve};
+use crate::engine::{OnUnknown, Rule, WireRule, parse_auto_resolve};
 use crate::enums::{WireEnum, wire_enum};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, parse_payload};
@@ -136,6 +136,18 @@ impl<'a> From<&'a WireRule> for RuleConditions<'a> {
                 .as_deref()
                 .and_then(OnUnknown::from_name)
                 .unwrap_or(OnUnknown::Hold),
+        }
+    }
+}
+
+impl<'a> From<&'a Rule> for RuleConditions<'a> {
+    fn from(rule: &'a Rule) -> Self {
+        Self {
+            condition_type: rule.condition_type.name(),
+            condition_params: &rule.condition_params,
+            auto_resolve_enabled: rule.auto_resolve_enabled,
+            auto_resolve_params: rule.auto_resolve_params.as_ref(),
+            on_unknown: rule.on_unknown,
         }
     }
 }

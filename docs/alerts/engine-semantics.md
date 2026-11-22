@@ -693,7 +693,8 @@ zero, so it flips within the tick before the bound and is reported at that tick.
 A host may schedule its next evaluation of a rule at `next_change_at`, or pre-arm what that
 evaluation would deliver, instead of evaluating on a timer, as long as no fact the rule
 reads moves without an evaluation of the rule (§5.1). Any evaluation of the rule, by any
-path, replaces the value; a rule edit drops it. The replay driver (§8) does not report it.
+path, replaces the value; a rule edit drops it. The replay driver (§8) steps a rule at it and
+does not report it.
 
 The backend's sweep waits for it only for a wall-clock rule that reads nothing but
 `glucose` (§5.2), and only while its context measures a
@@ -978,39 +979,112 @@ DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 
 ## 8. Replay semantics (the replay driver)
 
-Replay answers "what would these rules have done over this window": the rule set is
-re-evaluated at a fixed **5-minute tick** over a historical window. The host builds each
-tick's context and the driver evaluates every tick in one call — `replay::replay` in the
-crate, `nocturne_alerts_replay` over the C ABI and UniFFI, `IAlertReplayEngine` in the
-backend. The
-machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
+Replay answers "what would these rules have done over this window" with the live state
+machine. The driver steps the rule set over a historical window through the per-evaluation
+driver sequence of §7 (`engine::evaluate_parsed_rule`, the function the `evaluate` envelope
+runs), with the sustained timers and the excursion tracker (§6) held in memory for the call.
+It is `replay::replay` in the crate, `nocturne_alerts_replay` over the C ABI, UniFFI and wasm,
+and `IAlertReplayEngine` in the backend. The machine-checkable form is
+`tests/Parity/AlertEngineCorpus/replay/`, and `live_replay_pairs` checks that over generated
+readings, upload delays, facts, Do Not Disturb and rules, `alert_state` pairs among them, replay
+opens, holds and closes the excursions the live driver does when it is stepped as a host steps
+it, evaluating each reading when it arrives.
 
-**Host side** (`AlertReplayService`; out of the driver's scope):
+**Ticks.** The host gives the driver ticks in time order, each an instant and the context as of
+it:
 
-- Window resolution, the canonical reading stream, and per-tick enrichment as of the tick.
-  Glucose is the most recent reading at or before the tick, and `LastReadingAt` is that
-  reading's time, so a gap after a reading reads as stale. `LatestReceivedAt` is the instant the
-  backend stored that reading, as live sends it, so past the rule's freshness bound after it
-  (§3) the reading-driven leaves read unknown on the ticks live would have read them unknown. A
-  reading stored after the tick it is picked for (a backfill) is fresh there, where live had not
-  received it yet.
-- Do Not Disturb: for each tick, the rules a fire opening on it is recorded for as
-  suppressed (the gate live delivery applies on open, receipt-gated to the tick).
-- Fact timelines, and mapping the driver's output to the API's events and leaf log.
-- A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown` and
-  `glucose_freshness_minutes`; without one it takes the stored rule's when it names one, else
-  `hold` and the 11-minute default, so it replays as the live engine evaluates.
+- A **reading** tick at each canonical reading where live evaluated it (below), and one at the
+  window's start, which stands for the evaluation of the last reading before the window. Every
+  rule is evaluated there, as live evaluates every rule per reading (§5.2).
+- A **sample** tick in a gap between readings, every 5 minutes after the last tick until the next
+  reading. It is a sweep: each rule's elapsed hysteresis window closes (§6.1), then the rules the
+  live sweep evaluates (wall-clock, §5.1) and the rules that read a fact other than `glucose` and
+  `time_zone` (§5.2) are evaluated. A rule that reads only those is not: live evaluates it only
+  per reading, so between readings a `sustained` run over its reading cannot complete.
 
-**Driver**, given the rules in any order and the ticks in time order:
+**Where a reading is evaluated.** Live evaluates a reading when it arrives, which the backend
+stores as the reading's `CreatedAt`. Replay tells a late upload from imported history by the
+first arrival of the reading's connection, as the connections list attributes it
+(`ConnectionKeys`, shared with `ConnectionService`). A reading a credential wrote belongs to that
+credential's connection: every grant of a verified app is one connection under its publisher's
+software id, every grant of another app one under its client, and a token is its own. A reading no
+credential wrote belongs to the connector its data source names, else to that data source or
+device, as one key, where the list draws each data source and device of such rows as its own
+stream; two devices under one data source then share a first arrival, which errs toward a live
+arrival. So an app authorised again, a second login and a new phone under the same app all stay one
+connection. A connection's first arrival is the earliest `CreatedAt` among its readings. One grouped
+read gives each stream's first arrival
+(`ISensorGlucoseRepository.GetStreamFirstArrivalsAsync`), folded into connections and cached per
+tenant (`ImportedHistory`); a reading of no connection is compared with the earliest arrival of any
+reading.
+
+- A reading dated before its connection's first arrival is **imported history**: no live engine
+  saw it as it came. So is one stored further before its timestamp than the clock tolerance (§5.4,
+  `RustAlertEngine.ClockTolerance`). It is ticked at its timestamp and sent with no
+  `LatestReceivedAt`, so its freshness runs from the timestamp and the gaps in it read stale as
+  they would have live. A connection's very first reading counts here too when it arrived after
+  its timestamp, so it is replayed early by its upload delay. A different app or a new connector
+  opens a new connection, so an outage that ended in a new connection's first upload, its backlog
+  dated before that upload, is replayed as imported history and is not shown as the signal loss
+  live raised.
+- Every other reading is a **live arrival**, however late: a catch-up after an outage, or an
+  upload delayed for minutes or hours. It is ticked at its arrival, or at its timestamp when it
+  was stored before it within the tolerance, since a tick is never before its reading. It is sent
+  with its arrival as `LatestReceivedAt`, so its freshness runs from the arrival (§3), as live
+  measures it. An outage live measured to the arrival is measured to it in replay too, so
+  `signal_loss` and `staleness` fire over an upload delay, or over an outage a connector caught
+  up after, as live raised them.
+
+So:
+
+- Ticks are in the order of evaluation, not of timestamp: a reading uploaded late can be evaluated
+  after a newer one. The context at a tick is built from the newest reading by timestamp of those
+  evaluated by then, the selection of §4 (`AlertReadings`): a late reading older than the newest
+  is evaluated with the newest's context. A reading's trend is derived from the readings before it
+  by timestamp (where replay differs from live, below).
+- An event's instant is the instant of the evaluation, so the chart draws an excursion that a
+  late reading opened at the reading's arrival, after the reading's point by its upload delay.
+- The first arrivals are read with the member history clamp lifted (`HistoryClampLiftExtensions`):
+  they feed only this classification and no row of them reaches the caller. So a reader clamped to
+  the last 24 hours classifies the readings it can see as an owner does, and an outage that began
+  before the clamp's edge and ended in a catch-up inside it is shown to it as to the owner. The
+  window's readings are still read under the clamp.
+
+**Steps between ticks.** After each evaluation the driver keeps, per rule, the next instant a
+host has to act on it if every fact stays as it is:
+
+- A wall-clock rule (`wall_clock::references_wall_clock`) is due at its `next_change_at` (§5.3).
+  There it is evaluated against the latest tick's context with only `now` advanced, the periodic
+  evaluation of §5.1. The backend's sweep, every 30 s, reaches the same instant up to 30 s later.
+- Any other rule is due only while its tracker is in hysteresis, at its `next_change_at`, which
+  reaches the window's end. There its elapsed window closes without an evaluation, as
+  `CloseElapsedHysteresisAsync` closes it (§6.1).
+
+At a step, as at a sample, a due rule's elapsed window closes first and its evaluation follows,
+the order of the backend's sweep: a condition true at the instant its window ends opens a new
+excursion rather than resuming the closed one. A rule that reads `active_alerts` is also stepped
+at an instant where a rule before it in the order opened or closed. Steps fall strictly before the
+next tick; at a tick's instant the tick decides. With `until` (the end of the window) the driver
+steps on past the last tick up to, not including, that instant; without it nothing is stepped
+after the last tick.
+
+**Bound.** Every step is strictly after the one before it (§5.3), on the 100 ns grid. With every
+fact frozen a rule changes only where an elapsed time crosses a bound, once each, and at the
+calendar edges of `time_of_day` and `day_of_week`, a few a day, so a gap of a day needs a few
+steps per rule. A rule due more than `MAX_STEPS_PER_GAP` (1,000) times between two ticks, or
+after the last tick, is an error (`StepLimit`), not a result cut short.
+
+**Driver**, given the rules in any order:
 
 - **Order.** Rules are topologically sorted by `alert_state` references (parents first).
   References are read from the `alert_state` leaves of a body that can be evaluated, and
   only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
-- **State.** One fresh timer store for the whole call; nothing is read from or written to
-  persistent state. With no `enabled_at` (below), a path's first run starts no earlier than
-  the tick that starts it, unless its child read false on an earlier tick (§3). The excursion tracker is **not** consulted: hysteresis
-  does not apply, and replay's firing state is replay-local.
+- **State.** One fresh timer store and one fresh tracker for the whole call; nothing is read from
+  or written to persistent state. The tracker reads each rule's `hysteresis_minutes`,
+  `on_unknown` (§6.4) and re-arm (§6.3), and the leaves its `glucose_freshness_minutes` (§3), as
+  live does. With no `enabled_at` (below), a path's first run starts no earlier than the
+  evaluation that starts it, unless its child read false on an earlier one (§3).
 - **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
   `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
   staleness and `signal_loss` cannot fire on an outage that began before the window.
@@ -1020,34 +1094,103 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   has never had a reading: live opens a `signal_loss` rule one timeout after it was enabled,
   and replay never fires it.
 - **Active alerts.** One map for the whole call replaces each tick context's
-  `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", tick, null)` when it
-  fires and leaves it when it clears or auto-resolves, so a parent's change is visible to
-  children later in the order on the same tick.
-- **Per rule per tick**, in order:
-  1. A rule whose body cannot be evaluated (§1.4), or whose `condition_params` is not a
-     payload, is **skipped**: no leaf log, no firing change. Its `alert_state` children
-     never see it fire.
-  2. Root truth `met` by the normal evaluators at the rule's root path (every child
-     evaluated, §2.4; shared timer store), read through the rule's `OnUnknown` (§6.4). The
-     leaf log force-evaluates every leaf alone at the same root path and records each leaf's
-     first observation and every flip, unknown included (`LeafTransitionPoint(atMs,
-     value)`, unix ms, with `unknown` beside `value`).
-  3. A rule awaiting re-arm (step 5) evaluates its enabled, evaluable auto-resolve tree at
-     `auto_resolve`; when `met` is known false or the tree is, it re-arms on this tick
-     (§6.3). A held `met` keeps the hold.
-  4. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
-     the tick, unless the rule still awaits re-arm; the rule becomes firing either way.
-     `!met && firing` ⇒ `cleared`: the rule stops firing and **all its runs end**, the
-     auto-resolve tree's included: the tick becomes each path's not-true instant, except a
-     path whose not-true lease still runs (§3), so a later run starts no earlier than it. An unknown `met` that the rule holds
-     leaves the rule firing or not as it was and clears no timers.
-  5. While firing — including on the tick it fired — and unless step 3 evaluated it, an
-     enabled auto-resolve tree that parses and is evaluable is evaluated at `auto_resolve`
-     (§7 step 5); true ⇒ `auto_resolved` (unknown does not resolve): the rule stops firing and awaits re-arm, and its
-     timers are kept, as the tracker keeps them.
-- **Output**: the evaluation order; events by tick then evaluation order; the leaf log per
-  rule in evaluation order; and, on request, each rule's `met` (with `unknown` beside it
-  when unknown)/`firing` (or `skipped`) after every tick. The backend's API drops `cleared`, which has no event kind there.
+  `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", instant, null)` when an
+  excursion opens and leaves it when the excursion closes, by hysteresis or auto-resolve, so a
+  parent's change is visible to rules later in the order at the same instant.
+- **Each evaluation** is §7 steps 1 to 6. A rule whose body cannot be evaluated (§1.4), or whose
+  `condition_params` is not a payload, is **skipped**: no leaf log, no tracker call. Its
+  `alert_state` children never see it fire. The leaf log force-evaluates every leaf alone at the
+  root path and records each leaf's first observation and every flip, unknown included
+  (`LeafTransitionPoint(atMs, value)`, unix ms, with `unknown` beside `value`).
+- **Events** are the tracker's transitions: `opened` is `fired`, or `suppressed_by_dnd` when the
+  host named the rule for the latest tick; `hysteresis_started`; `hysteresis_resumed`; a close by
+  hysteresis is `closed`; a close by auto-resolve is `auto_resolved`. `continues` and `none` are
+  no event.
+- **Output**: the evaluation order; events by instant then evaluation order; the leaf log per
+  rule in evaluation order; and, on request, every evaluation instant with each rule evaluated
+  there: its `met` (with `unknown` beside it when unknown) and `firing`, whether an excursion is
+  open after it, or `skipped` on a tick. The backend's API keeps `fired`, `suppressed_by_dnd` and
+  `auto_resolved`, so it reports one fire per excursion.
+
+**Host side** (`AlertReplayService`; out of the driver's scope):
+
+- Window resolution, the canonical reading stream, the ticks above and their enrichment as of
+  each tick. Glucose is the newest reading evaluated by the tick, and `LastReadingAt` is that
+  reading's time, so a gap after a reading reads as stale. `LatestReceivedAt` is its arrival
+  when that was a live arrival, else absent (Ticks). `until` is the window's end.
+- Do Not Disturb: for each tick, the rules an excursion opening on it, or on a step before the
+  next tick, is recorded for as suppressed (the gate live delivery applies on open,
+  receipt-gated to the tick).
+- Fact timelines, and mapping the driver's output to the API's events and leaf log.
+- A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown` and
+  `glucose_freshness_minutes`; without one it takes the stored rule's when it names one, else
+  `hold` and the 11-minute default, so it replays as the live engine evaluates.
+- The backend stores no `hysteresis_minutes` (§5.1) and sends none, so its excursions close at
+  the first step after the evaluation that found the condition false.
+
+**What replay cannot know.** Replay does not simulate these, and its result does not show them:
+
+- **Acknowledgement and snooze.** They are user actions that replay does not read. A replayed
+  excursion is never acknowledged, so an `alert_state` leaf over `acknowledged` never holds, and
+  no snooze or smart-snooze extension quiets it.
+- **Delivery.** Channels, retries, escalation and info auto-ack: replay reports that an excursion
+  opened, not who was told or how.
+- **Manual and rule-disabled closes** (§6.2). The only force-close replay makes is auto-resolve.
+- **Scheduled Do Not Disturb.** A schedule keeps no history, so only Do Not Disturb windows
+  suppress, as received by the tick.
+- **What live saw of imported history.** Such readings were never evaluated as they came, so
+  replay evaluates each at its timestamp, aged from it (Ticks).
+- **Old data uploaded again into a connection that was already sending.** A reading dated after
+  its connection's first arrival is a live arrival however late it was stored. So old readings
+  uploaded again into an existing connection, years later, are replayed at that upload. For the day they are
+  dated, replay shows no reading where they belong, so the day reads as a gap: its readings read
+  stale and `signal_loss` fires through it, and every one of them is evaluated together at the
+  upload instant. The same history uploaded for the first time through a new connection (a
+  different app or a new connector) is imported history.
+- **An outage that ended in a new connection's first upload.** The backlog that upload carries is
+  dated before the connection's first arrival, so it is replayed as imported history, and the
+  signal loss live raised over the outage is not shown (Ticks).
+- **When another fact moved.** Facts other than glucose are read as of each tick, so a write
+  between two ticks is seen at the next tick, at most 5 minutes later, where live evaluates the
+  rules that read it at the write (§5.2) and its sweep within 30 s.
+- **The rules as they were.** Replay evaluates the rules as they are now, not as they were
+  stored over the window, and reads no `enabled_at` (above).
+- **Clock anomalies** (§5.4) are not reported.
+
+**Where replay differs from live.** Replay steps the ideal host of §5.3. The backend differs in
+these, each by at most its 30 s sweep:
+
+- **The sweep's phase.** Replay closes a hysteresis window exactly at its end, and sees a change
+  with the clock exactly where it falls; the backend's sweep lands up to 30 s later. So a
+  condition true again within 30 s after a window's end is a new excursion in replay and a resume
+  live, where the sweep has not closed the window yet. Replay hides an opening the backend makes
+  in three ways, all from the sweep's phase:
+  1. A wall-clock change less than 30 s before a hysteresis window ends. Replay sees it before
+     the end and resumes; the sweep sees it only after the end, closes the window and opens a new
+     excursion. This needs a window longer than zero, so it cannot happen in the backend, whose
+     hysteresis is 0 (§5.1).
+  2. The not-true lease of a wall-clock rule (§3). Live evaluates the rule at every sweep and
+     replay only at its changes, so `sustained` records its not-true instants at other moments
+     and a run starts up to the cadence apart. A `sustained` body or auto-resolve can then
+     complete before the reading goes stale in one and after it in the other.
+  3. An `alert_state` child's `for_minutes`. Where replay opens the parent again (one of its
+     extra openings), the parent's `triggered_at` moves and the child's escalation clock starts
+     over, so the escalation opens later in replay, or not at all.
+
+  Over generated cases at the backend's hysteresis of 0, replay hides of the order of one opening
+  in a hundred cases, and shows an order of magnitude more extra ones (`live_replay_pairs`).
+- **A parent's change seen by its `alert_state` children.** Replay evaluates parents first and
+  steps a child at the instant its parent opens or closes (Active alerts). The backend evaluates a
+  batch of rules in stored order against one snapshot of the open alerts taken before the batch,
+  so a child sees its parent's change at the next sweep, up to 30 s later for each link of a
+  chain.
+- **A reading's trend.** Replay derives it from the readings before the reading by timestamp,
+  among them any stored after the reading's arrival; live derives it from those stored by then.
+  This moves `rate_of_change` and `trend` only where uploads interleave out of order.
+- **The backend's separate auto-resolve pass.** The sweep also evaluates the auto-resolve tree of
+  every open excursion every 30 s, against a context without glucose facts. Replay evaluates the
+  tree only inside an evaluation of its rule (§7 step 5), so a tree over a calendar gate alone,
+  on a rule that is not wall-clock, resolves at the rule's next evaluation.
 
 ---
 

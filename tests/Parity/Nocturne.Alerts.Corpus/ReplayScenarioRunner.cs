@@ -29,7 +29,8 @@ public static class ReplayScenarioRunner
             .Select(t => new AlertReplayTick(
                 DateTime.SpecifyKind(t.At, DateTimeKind.Utc),
                 ScenarioConversions.ToSensorContext(t.Context),
-                (t.SuppressedRuleIds ?? []).ToHashSet()))
+                (t.SuppressedRuleIds ?? []).ToHashSet(),
+                t.Reading))
             .ToList();
 
         var run = await engine.ReplayAsync(new AlertReplayInput(rules, ticks, IncludeTicks: true), ct);
@@ -72,8 +73,10 @@ public static class ReplayScenarioRunner
     {
         AlertReplayTransition.Fired => "fired",
         AlertReplayTransition.SuppressedByDnd => "suppressed_by_dnd",
+        AlertReplayTransition.HysteresisStarted => "hysteresis_started",
+        AlertReplayTransition.HysteresisResumed => "hysteresis_resumed",
+        AlertReplayTransition.Closed => "closed",
         AlertReplayTransition.AutoResolved => "auto_resolved",
-        AlertReplayTransition.Cleared => "cleared",
         _ => throw new InvalidOperationException($"Unknown replay transition {kind}"),
     };
 

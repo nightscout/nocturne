@@ -88,8 +88,8 @@ public record AlertFiringSearchResult(
 
 /// <summary>
 /// Thrown when a replay request's resolved window is longer than the configured maximum
-/// (<c>AlertEvaluation:MaxReplayWindow</c>). Replay evaluates every enabled rule on a 5-minute
-/// tick and re-enriches each tick from the historical repositories, so an unbounded window is
+/// (<c>AlertEvaluation:MaxReplayWindow</c>). Replay evaluates every enabled rule at each reading
+/// and re-enriches each tick from the historical repositories, so an unbounded window is
 /// an unbounded amount of work and an unbounded transition log. The request is rejected so the
 /// caller narrows it, rather than being answered with a silently truncated window.
 /// </summary>
@@ -109,6 +109,25 @@ public sealed class ReplayWindowTooLargeException : Exception
     public TimeSpan Requested { get; }
 
     public TimeSpan Maximum { get; }
+}
+
+/// <summary>
+/// Thrown when a rule changes more often between two replay ticks than the engine steps
+/// (docs/alerts/engine-semantics.md §8, the bound): the replay fails rather than return a result
+/// cut short.
+/// </summary>
+public sealed class ReplayStepLimitException : Exception
+{
+    public ReplayStepLimitException(Guid ruleId, string ruleName, Exception innerException)
+        : base($"The rule \"{ruleName}\" changes too often between two readings to replay.", innerException)
+    {
+        RuleId = ruleId;
+        RuleName = ruleName;
+    }
+
+    public Guid RuleId { get; }
+
+    public string RuleName { get; }
 }
 
 /// <summary>
@@ -152,11 +171,12 @@ public enum AlertReplayEventKind
 }
 
 /// <summary>
-/// A single point on a rule's replay timeline. <see cref="Kind"/> distinguishes the leading
-/// edge of firing, an auto-resolve close, and a fire that the live engine would have
-/// suppressed under DND. Continuous-fire periods still produce one <see cref="Kind.Fired"/>
-/// (or <see cref="Kind.SuppressedByDnd"/>) at the leading edge — re-fires after either a
-/// natural clear or an auto-resolve produce a second event.
+/// A single point on a rule's replay timeline. <see cref="Kind"/> distinguishes an excursion
+/// opening, an auto-resolve close, and an opening that the live engine would have suppressed
+/// under DND. One excursion produces one <see cref="Kind.Fired"/> (or
+/// <see cref="Kind.SuppressedByDnd"/>) when it opens, however often its condition goes false
+/// and true again inside its hysteresis window; a new excursion after it closes, or after an
+/// auto-resolve, produces a second.
 /// </summary>
 public record AlertReplayEvent(
     DateTime At,

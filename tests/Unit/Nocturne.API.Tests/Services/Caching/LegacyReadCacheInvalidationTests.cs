@@ -116,6 +116,7 @@ public class LegacyReadCacheInvalidationTests : IDisposable
             .AddSingleton(Mock.Of<IDuplicateLinker>())
             .AddScoped<IRecordChangePublisher, RecordChangePublisher>()
             .AddSingleton<IAuditContext>(new SystemAuditContext())
+            .AddSingleton(TimeProvider.System)
             .AddSingleton(cache.Object);
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
