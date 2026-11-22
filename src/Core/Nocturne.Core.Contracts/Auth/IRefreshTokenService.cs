@@ -11,13 +11,16 @@ public interface IRefreshTokenService
     /// <param name="oidcSessionId">OIDC session ID (for logout)</param>
     /// <param name="deviceDescription">Device description for session management</param>
     /// <param name="ipAddress">Client IP address</param>
+    /// <param name="loginCodeId">The login code the session was redeemed from, which its rotation
+    /// chain carries; null for a session the subject signed in for.</param>
     /// <returns>Plain refresh token string (only returned once)</returns>
     Task<string> CreateRefreshTokenAsync(
         Guid subjectId,
         string? oidcSessionId = null,
         string? deviceDescription = null,
         string? ipAddress = null,
-        string? userAgent = null);
+        string? userAgent = null,
+        Guid? loginCodeId = null);
 
     /// <summary>
     /// Validate a refresh token and return its owner if valid
@@ -92,7 +95,8 @@ public interface IRefreshTokenService
 /// </summary>
 /// <param name="SessionId">The OIDC session id the chain shares, or for a legacy chain issued
 /// before sessions were tagged, the id of its first token, which rotation carries forward.</param>
-public sealed record RefreshTokenSession(Guid SubjectId, string SessionId);
+/// <param name="HandedOff">Whether the chain began with a redeemed login code.</param>
+public sealed record RefreshTokenSession(Guid SubjectId, string SessionId, bool HandedOff = false);
 
 /// <summary>
 /// Refresh token information for session management

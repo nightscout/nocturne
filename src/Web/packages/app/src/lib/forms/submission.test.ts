@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { useSubmission } from "./submission.svelte";
-import { genericSubmitError } from "./submit-messages.svelte";
+import { genericSubmitError, signInRequiredError } from "./submit-messages.svelte";
+import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
 describe("useSubmission", () => {
   it("starts with no error", () => {
@@ -126,5 +127,57 @@ describe("useSubmission", () => {
 
     submission.clear();
     expect(submission.error).toBeNull();
+  });
+
+  describe("a write refused because the session started from a sign-in link", () => {
+    const refusal = () =>
+      Object.assign(new Error("http"), {
+        status: 403,
+        body: { message: "This session was opened from a sign-in link.", code: "sign_in_required" },
+      });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("says why and opens the sign-in prompt once", async () => {
+      const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+      const submission = useSubmission();
+
+      await submission.run(async () => {
+        throw refusal();
+      });
+
+      expect(submission.error).toBe(signInRequiredError());
+      expect(prompt).toHaveBeenCalledOnce();
+    });
+
+    it("opens it for a refused follow-up save too", async () => {
+      const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+      const submission = useSubmission();
+
+      await submission.run(
+        async () => true,
+        async () => {
+          throw refusal();
+        }
+      );
+
+      expect(prompt).toHaveBeenCalledOnce();
+    });
+
+    it("opens nothing for any other refusal", async () => {
+      const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+      const submission = useSubmission();
+
+      await submission.run(async () => {
+        throw Object.assign(new Error("http"), {
+          status: 403,
+          body: { message: "No.", code: "missing_scope" },
+        });
+      });
+
+      expect(prompt).not.toHaveBeenCalled();
+    });
   });
 });

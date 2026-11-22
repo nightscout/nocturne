@@ -6,6 +6,7 @@ import {
   missingItemError,
   missingScopeError,
   rateLimitedError,
+  signInRequiredError,
 } from "./submit-messages.svelte";
 
 /**
@@ -14,6 +15,17 @@ import {
  * sets `ownRefusalSentence`.
  */
 const MISSING_SCOPE_CODE = "missing_scope";
+
+/**
+ * The code of the API's refusal of an action only the person's own sign-in may do, sent to a
+ * session that started from a sign-in link someone else issued.
+ */
+export const SIGN_IN_REQUIRED_CODE = "sign_in_required";
+
+/** Whether a rejection is the API's {@link SIGN_IN_REQUIRED_CODE} refusal. */
+export function isSignInRequired(err: unknown): boolean {
+  return errorStatus(err) === 403 && errorCode(err) === SIGN_IN_REQUIRED_CODE;
+}
 
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
@@ -191,6 +203,13 @@ function serverWrittenReason(err: unknown): string | undefined {
  * than the operation decides, and the two {@link PERMISSION_GATED_MUTATION}
  * sets.
  *
+ * A `sign_in_required` 403 answers with {@link signInRequiredError} ahead of all of them except
+ * 429: the session started from a sign-in link someone else issued, and the person's own sign-in
+ * is what the action needs, so no caller's sentence fits. Describing it opens nothing: callers
+ * format inside `$derived`, where a state write throws. The write that was refused opens the
+ * prompt (`confirmIdentity.askAfterRefusal`), and a surface that knows the session is handed off
+ * offers it up front.
+ *
  * A 429 answers with {@link rateLimitedError} ahead of all of them, because
  * the rate limiter's body carries no `message` and a caller's fallback
  * describes what it asked for — "this invite link is invalid" for a request the
@@ -285,6 +304,8 @@ function describe(
   if (status === 429) return rateLimitedError();
 
   const code = errorCode(err);
+  if (status === 403 && code === SIGN_IN_REQUIRED_CODE) return signInRequiredError();
+
   if (code !== undefined && codes !== undefined && Object.hasOwn(codes, code)) {
     return codes[code];
   }

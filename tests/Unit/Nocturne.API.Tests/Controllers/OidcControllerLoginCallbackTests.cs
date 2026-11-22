@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -10,6 +11,7 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
@@ -104,6 +106,47 @@ public class OidcControllerLoginCallbackTests
         var setCookie = SetCookieHeader();
         setCookie.Should().Contain($"{_options.Cookie.AccessTokenName}=access");
         setCookie.Should().NotContain(SessionCookieExtensions.TotpStepUpCookieName);
+    }
+
+    /// <summary>
+    /// A provider sign-in over a session redeemed from a login code ends that session, so its refresh
+    /// token does not stay live beside the person's own sign-in; over an ordinary one it ends nothing.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Callback_OverAHandedOffSession_EndsIt(bool handedOff)
+    {
+        var subjectId = Guid.NewGuid();
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(subjectId, "previous-session", handedOff));
+        var audit = new Mock<IAuthAuditService>();
+        _controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(audit.Object).BuildServiceProvider();
+        _controller.HttpContext.Request.Headers["Cookie"] =
+            $"{_options.Cookie.StateCookieName}=state; {_options.Cookie.RefreshTokenName}=presented";
+        SetupCallbackResult(OidcCallbackResult.Succeeded(
+            new OidcTokenResponse
+            {
+                AccessToken = "access",
+                RefreshToken = "refresh",
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+                SubjectId = subjectId,
+            },
+            new OidcUserInfo { SubjectId = subjectId },
+            "/"));
+
+        await _controller.Callback("code", "state", null, null);
+
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(subjectId, "previous-session", It.IsAny<string>()),
+            handedOff ? Times.Once() : Times.Never());
+        audit.Verify(
+            a => a.LogAsync(AuthAuditEventType.Logout, subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
+                null, It.Is<string?>(d => d != null && d.Contains("replaced_by_sign_in")), null, null, null),
+            handedOff ? Times.Once() : Times.Never());
     }
 
     [Fact]

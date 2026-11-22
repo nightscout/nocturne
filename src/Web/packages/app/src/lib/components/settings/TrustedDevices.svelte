@@ -17,6 +17,7 @@
     revokeAll,
   } from "#lib/api/generated/trustedDevices.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
   const devicesQuery = list();
   const devices = $derived(devicesQuery.current ?? []);
@@ -40,6 +41,7 @@
       await revoke(id);
       successMessage = "Device removed.";
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(
         err,
         "Could not remove the device. Try again."
@@ -57,6 +59,7 @@
       await revokeAll();
       successMessage = "All trusted devices removed.";
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(
         err,
         "Could not remove the trusted devices. Try again."

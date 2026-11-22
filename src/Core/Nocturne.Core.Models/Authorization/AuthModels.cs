@@ -109,6 +109,13 @@ public class AuthContext
     public string? SessionId { get; set; }
 
     /// <summary>
+    /// Whether a session login was redeemed from a login code someone else issued, rather than
+    /// signed in for by the subject. Such a session reads and writes as the subject but is not
+    /// their own sign-in until they sign in on it. False for every other credential.
+    /// </summary>
+    public bool IsHandedOff { get; set; }
+
+    /// <summary>
     /// The OAuth client an access token was issued to; null for every other credential.
     /// </summary>
     public string? ClientId { get; set; }

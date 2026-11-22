@@ -232,6 +232,8 @@ public class ConfigurationController : ControllerBase
         {
             _logger.LogWarning("Refused a delegated change to {Fields} on connector {ConnectorName}",
                 string.Join(", ", refused), connectorName);
+            if (RequireInteractiveSessionAttribute.IsHandedOff(HttpContext))
+                return RequireInteractiveSessionAttribute.SignInRequired(HttpContext);
             return this.ProblemWithCode(
                 DelegatedChangeRefusedCode,
                 $"Only the account holder's own sign-in can change {string.Join(", ", refused)}. " +
@@ -494,7 +496,9 @@ public class ConfigurationController : ControllerBase
         if (ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null
             && RequireInteractiveSessionAttribute.Refuses(HttpContext))
         {
-            return Forbid();
+            return RequireInteractiveSessionAttribute.IsHandedOff(HttpContext)
+                ? RequireInteractiveSessionAttribute.SignInRequired(HttpContext)
+                : Forbid();
         }
 
         var modifiedBy = User.Identity?.Name ?? "api";

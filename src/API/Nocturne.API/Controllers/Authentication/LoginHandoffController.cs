@@ -85,7 +85,8 @@ public class LoginHandoffController : ControllerBase
         var session = await _sessionService.IssueSessionAsync(
             redeemed.SubjectId,
             new SessionContext(
-                DeviceDescription: "Login handoff", IpAddress: ipAddress, UserAgent: userAgent),
+                DeviceDescription: SessionContext.LoginHandoffDeviceDescription, IpAddress: ipAddress, UserAgent: userAgent,
+                LoginCodeId: redeemed.CodeId),
             ct);
 
         Response.SetSessionCookies(session, _oidcOptions);

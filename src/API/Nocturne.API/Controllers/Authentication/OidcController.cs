@@ -274,8 +274,8 @@ public class OidcController : ControllerBase
             );
         }
 
-        // Set session cookies
         SetSessionCookies(result.Tokens!);
+        await HttpContext.EndReplacedHandedOffSessionAsync(_options);
         SetLastSignInCookie(result.ProviderId);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
@@ -793,6 +793,7 @@ public class OidcController : ControllerBase
                     : null,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
+                IsHandedOff = authContext.IsHandedOff,
                 AvatarUrl = userInfo?.AvatarUrl,
                 Grant = await MyPermissionsController.TryBuildAsync(HttpContext),
             }
@@ -1032,6 +1033,13 @@ public class SessionInfo
     /// for the "platform admin access" indicator in the UI.
     /// </summary>
     public bool IsPlatformAccessGrant { get; set; }
+
+    /// <summary>
+    /// Whether this session was opened from a sign-in link someone else issued. It reads and writes
+    /// the member's data, but managing sign-in methods, credentials and sharing waits until the
+    /// member signs in on it, which the web offers up front.
+    /// </summary>
+    public bool IsHandedOff { get; set; }
 
     /// <summary>
     /// URL to the subject's avatar image

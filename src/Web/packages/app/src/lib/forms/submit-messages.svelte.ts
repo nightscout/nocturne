@@ -18,6 +18,14 @@ export function missingItemError(): string {
   return "That item no longer exists. Refresh the page to see what's there now.";
 }
 
+/**
+ * Shown when the server refused an action because the session started from a sign-in link someone
+ * else issued, and only the person's own sign-in may do it.
+ */
+export function signInRequiredError(): string {
+  return "Sign in again to do this. This session started from a sign-in link.";
+}
+
 /** Shown when the server refused an action because the caller's role lacks the scope it needs. */
 export function missingScopeError(): string {
   return "You do not have permission to do this.";

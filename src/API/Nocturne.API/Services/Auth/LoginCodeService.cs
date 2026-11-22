@@ -125,7 +125,11 @@ public sealed record LoginCode(string Code, DateTime ExpiresAt);
 /// <summary>
 /// Whom a redeemed code was minted for, for what, and for an emailed code the address it was sent to.
 /// </summary>
-public sealed record RedeemedLoginCode(Guid SubjectId, LoginCodePurpose Purpose, string? Email = null);
+public sealed record RedeemedLoginCode(Guid SubjectId, LoginCodePurpose Purpose, string? Email = null)
+{
+    /// <summary>The code's row, which its issue and redeem audit rows both name.</summary>
+    public Guid CodeId { get; init; }
+}
 
 /// <inheritdoc cref="ILoginCodeService"/>
 public class LoginCodeService : ILoginCodeService
@@ -244,7 +248,7 @@ public class LoginCodeService : ILoginCodeService
             throw new ArgumentException("An emailed code is issued by IssueEmailedAsync.", nameof(purpose));
 
         var issued = await MintAsync(dbContext, subjectId, purpose, email: null, ct);
-        await AuditIssueAsync(dbContext, subjectId, ipAddress, userAgent, actor);
+        await AuditIssueAsync(dbContext, subjectId, purpose, issued.Id, ipAddress, userAgent, actor);
         return issued.Code;
     }
 
@@ -277,7 +281,7 @@ public class LoginCodeService : ILoginCodeService
         if (issued is null)
             return null;
 
-        await AuditIssueAsync(dbContext, subjectId, ipAddress, userAgent, actor);
+        await AuditIssueAsync(dbContext, subjectId, purpose, issued.Id, ipAddress, userAgent, actor);
         return issued.Code;
     }
 
@@ -316,11 +320,13 @@ public class LoginCodeService : ILoginCodeService
     }
 
     private Task AuditIssueAsync(
-        NocturneDbContext dbContext, Guid subjectId, string? ipAddress, string? userAgent, AuthAuditActor actor) =>
+        NocturneDbContext dbContext, Guid subjectId, LoginCodePurpose purpose, Guid codeId,
+        string? ipAddress, string? userAgent, AuthAuditActor actor) =>
         _auditService.LogAsync(
             AuthAuditEventType.LoginCodeIssued, subjectId, success: true,
             ipAddress: ipAddress,
             userAgent: userAgent,
+            detailsJson: JsonSerializer.Serialize(new { purpose = purpose.ToString(), code_id = codeId }),
             actor: actor,
             tenantId: dbContext.TenantIdOrNull);
 
@@ -331,7 +337,7 @@ public class LoginCodeService : ILoginCodeService
         IReadOnlyCollection<LoginCodePurpose> purposes,
         CancellationToken ct = default) =>
         LiveCodes(dbContext, code, purposes, DateTime.UtcNow)
-            .Select(c => new RedeemedLoginCode(c.SubjectId, c.Purpose, c.Email))
+            .Select(c => new RedeemedLoginCode(c.SubjectId, c.Purpose, c.Email) { CodeId = c.Id })
             .FirstOrDefaultAsync(ct);
 
     private static IQueryable<LoginCodeEntity> LiveCodes(
@@ -375,7 +381,7 @@ public class LoginCodeService : ILoginCodeService
             if (live is null)
                 return null;
 
-            var found = new RedeemedLoginCode(live.SubjectId, live.Purpose, live.Email);
+            var found = new RedeemedLoginCode(live.SubjectId, live.Purpose, live.Email) { CodeId = live.Id };
             if (admits is not null && !await admits(found, token))
                 return null;
 
@@ -408,7 +414,9 @@ public class LoginCodeService : ILoginCodeService
             subjectId, success: subjectId is not null,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: JsonSerializer.Serialize(new { method = MethodOf(purposes) }),
+            detailsJson: JsonSerializer.Serialize(redeemed is null
+                ? (object)new { method = MethodOf(purposes) }
+                : new { method = MethodOf(purposes), code_id = redeemed.CodeId }),
             tenantId: dbContext.TenantIdOrNull);
 
         return redeemed;

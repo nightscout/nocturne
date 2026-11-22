@@ -130,6 +130,6 @@
   </Card.Root>
 
   {#if page.data.isAuthenticated}
-    <LockedOutMembers />
+    <LockedOutMembers signInRequired={page.data.isHandedOffSession === true} />
   {/if}
 </div>

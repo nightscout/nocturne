@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -169,6 +170,10 @@ public class TenantControllerLoginCodeTests : IDisposable
         row.ActorSubjectId.Should().BeNull();
         row.ActorCredential.Should().Be($"{AuthType.InstanceKey}:0123456789abcdef");
         row.TenantId.Should().Be(_tenantId);
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        var details = JsonDocument.Parse(row.DetailsJson!).RootElement;
+        details.GetProperty("purpose").GetString().Should().Be(nameof(LoginCodePurpose.Login));
+        details.GetProperty("code_id").GetGuid().Should().Be(stored.Id);
     }
 
     [Fact]
@@ -216,7 +221,7 @@ public class TenantControllerLoginCodeTests : IDisposable
         (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, null, null))
             .Should().BeNull("a recovery code is not a sign-in");
         (await _loginCodeService.RedeemAsync(_tenantContext, issued.Code, LoginCodeService.RecoveryPurposes, admits: null, withSpend: null, null, null))
-            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.OperatorRecovery));
+            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.OperatorRecovery) { CodeId = stored.Id });
     }
 
     [Fact]
@@ -340,10 +345,11 @@ public class TenantControllerLoginCodeTests : IDisposable
             null, null);
 
         await redeeming.Should().ThrowAsync<InvalidOperationException>();
-        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        stored.ConsumedAt.Should().BeNull();
         (await _loginCodeService.RedeemAsync(
                 _tenantContext, issued.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, null, null))
-            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.Login));
+            .Should().Be(new RedeemedLoginCode(_memberSubjectId, LoginCodePurpose.Login) { CodeId = stored.Id });
     }
 
     [Fact]

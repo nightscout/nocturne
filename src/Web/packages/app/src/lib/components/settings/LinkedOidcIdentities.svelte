@@ -19,6 +19,7 @@
     unlinkIdentity,
   } from "#lib/api/generated/oidcs.generated.remote.js";
   import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { isRecord } from "#lib/utils/type-guards.js";
   import { getProvidersInfo } from "#routes/(unauthenticated)/auth/auth.remote.js";
 
@@ -26,9 +27,11 @@
     primaryAuthFactorCount: number;
     /** The identity a recovery just linked, marked in the list. */
     justAddedId?: string;
+    /** List only: the session cannot add or remove a sign-in method, so neither control shows. */
+    readOnly?: boolean;
   }
 
-  const { primaryAuthFactorCount, justAddedId }: Props = $props();
+  const { primaryAuthFactorCount, justAddedId, readOnly = false }: Props = $props();
 
   const linkedQuery = getLinkedIdentities();
   const providersQuery = getProvidersInfo();
@@ -93,6 +96,7 @@
       successMessage = "Sign-in method removed.";
       clearMessagesSoon();
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       if (errorStatus(err) === 409 || errorBodyCode(err) === "last_factor") {
         errorMessage =
           "Cannot remove your only sign-in method. Add another first.";
@@ -131,6 +135,7 @@
           Google, Microsoft, or GitHub.
         </Card.Description>
       </div>
+      {#if !readOnly}
       <Button
         variant="outline"
         size="sm"
@@ -140,6 +145,7 @@
         <Plus class="mr-1.5 h-3.5 w-3.5" />
         Link an account
       </Button>
+      {/if}
     </div>
   </Card.Header>
   <Card.Content class="space-y-3">
@@ -200,6 +206,7 @@
               {/if}
             </div>
           </div>
+          {#if !readOnly}
           <Button
             type="button"
             variant="ghost-destructive"
@@ -215,11 +222,12 @@
               <Trash2 class="h-3.5 w-3.5" />
             {/if}
           </Button>
+          {/if}
         </div>
       {/each}
     {/if}
 
-    {#if !canRemove && identities.length > 0}
+    {#if !readOnly && !canRemove && identities.length > 0}
       <p class="text-xs text-muted-foreground">
         You cannot remove your only sign-in method. Add another first.
       </p>

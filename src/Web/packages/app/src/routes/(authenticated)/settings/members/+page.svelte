@@ -43,10 +43,12 @@
   import RolesSection from "#lib/components/members/RolesSection.svelte";
   import LockedOutMembers from "#lib/components/members/LockedOutMembers.svelte";
   import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
 
   const granted = $derived(page.data.effectivePermissions ?? []);
   const canInvite = $derived(satisfiesScope(granted, "members.invite"));
+  const handedOff = $derived(page.data.isHandedOffSession === true);
   const canManageMembers = $derived(
     satisfiesScope(granted, "members.manage") ||
       satisfiesScope(granted, "sharing.manage"),
@@ -249,8 +251,7 @@
     <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
-  <!-- Public access -->
-  <PublicAccessCard />
+  <PublicAccessCard signInRequired={handedOff} />
 
   <!-- Membership requests (independent of public access) -->
   <MembershipRequestsCard />
@@ -264,7 +265,7 @@
       </h2>
 
       {#if canEditMemberRoles}
-        <LockedOutMembers />
+        <LockedOutMembers signInRequired={handedOff} />
       {/if}
 
       {#if canManageMembers}
@@ -322,7 +323,9 @@
       {/if}
 
       <!-- Create Invite Link (inline card) -->
-      {#if canInvite}
+      {#if canInvite && handedOff}
+        <SignInGate reason="Sign in again to make an invite link." />
+      {:else if canInvite}
         {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
@@ -371,7 +374,7 @@
   {/if}
 
   <!-- Temporary Guest Links (self-gates on sharing.guest) -->
-  <GuestLinksSection />
+  <GuestLinksSection signInRequired={handedOff} />
 
   <!-- Roles & permissions -->
   {#if canManageRoles}

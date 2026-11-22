@@ -21,6 +21,7 @@
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -295,6 +296,9 @@
 
         <FormError issues={submission.error} />
 
+        {#if page.data.isHandedOffSession}
+          <SignInGate reason="Sign in again to approve or deny this app." />
+        {:else}
         <div class="flex gap-3">
           <form
             {...denyForm.enhance(async ({ submit }) => {
@@ -346,6 +350,7 @@
             </Button>
           </form>
         </div>
+        {/if}
       </Card.Content>
     </Card.Root>
   {/if}

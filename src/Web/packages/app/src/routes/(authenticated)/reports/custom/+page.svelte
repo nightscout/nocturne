@@ -2,6 +2,7 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { Button } from "#lib/components/ui/button/index.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import {
@@ -12,6 +13,7 @@
   import { clearDraft, draftOwner, dropExpiredDrafts } from "#lib/components/reports/custom/workspace/report-draft.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
   import Plus from "@lucide/svelte/icons/plus";
@@ -27,6 +29,7 @@
 
   onMount(() => dropExpiredDrafts());
   const clamped = $derived(page.data.limitTo24Hours === true);
+  const handedOff = $derived(page.data.isHandedOffSession === true);
 
   let pendingDelete = $state<CustomReportSummary | null>(null);
   let deleting = $state(false);
@@ -42,6 +45,7 @@
       pendingDelete = null;
       toast.success("Nocturne deleted the report.");
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       deleteError = describeSubmitError(err, "Could not delete the report. Try again.");
     } finally {
       deleting = false;
@@ -61,7 +65,7 @@
         account sees the same list.
       </p>
     </div>
-    {#if !clamped}
+    {#if !clamped && !handedOff}
       <Button class="@lg:ml-auto" href={resolve("/(authenticated)/reports/custom/new")}>
         <Plus aria-hidden="true" />
         New report
@@ -72,6 +76,8 @@
     <p class="text-sm text-muted-foreground" role="status" data-testid="clamped-note">
       Your access is limited to the last 24 hours. It cannot create reports.
     </p>
+  {:else if handedOff}
+    <SignInGate reason="Sign in again to make, change, or delete a report." />
   {/if}
 
   {#if deleteError}
@@ -82,7 +88,7 @@
     {#if reports.length === 0}
       <p class="text-sm text-muted-foreground">
         No custom reports.
-        {#if !clamped}To make a report, select New report.{/if}
+        {#if !clamped && !handedOff}To make a report, select New report.{/if}
       </p>
     {:else}
       <Table.Root>
@@ -103,7 +109,7 @@
               <Table.Cell class="whitespace-nowrap tabular-nums">{formatMediumDateTime(report.updatedAt)}</Table.Cell>
               <Table.Cell class="tabular-nums">{formatNumber(report.panelCount ?? 0)}</Table.Cell>
               <Table.Cell class="text-right">
-                {#if report.canEdit}
+                {#if report.canEdit && !handedOff}
                   <Button
                     variant="ghost"
                     size="sm"

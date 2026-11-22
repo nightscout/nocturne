@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { describeSubmitError, type ProblemCodeMessages } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { Button, type ButtonVariant } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
@@ -65,6 +66,7 @@
     try {
       await onsave(trimmed);
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       error = describeSubmitError(
         err,
         kind === "copy" ? "Could not save the copy. Try again." : "Could not save the report. Try again.",

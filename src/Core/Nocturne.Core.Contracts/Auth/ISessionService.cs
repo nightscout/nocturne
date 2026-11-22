@@ -41,11 +41,21 @@ public record SessionClaims(SubjectInfo Subject, List<string> Roles, List<string
 /// <summary>
 /// Contextual metadata attached to a session for audit and device tracking.
 /// </summary>
+/// <param name="LoginCodeId">The login code the session is redeemed from; null for a sign-in.</param>
 public record SessionContext(
     string? OidcSessionId = null,
     string? DeviceDescription = null,
     string? IpAddress = null,
-    string? UserAgent = null);
+    string? UserAgent = null,
+    Guid? LoginCodeId = null)
+{
+    /// <summary>
+    /// The <see cref="DeviceDescription"/> of a session redeemed from a login code. Rotation copies
+    /// it, so it also names every token of a session handed off before <see cref="LoginCodeId"/> was
+    /// recorded; <c>AddLoginCodeIdToRefreshTokens</c> revokes those by it.
+    /// </summary>
+    public const string LoginHandoffDeviceDescription = "Login handoff";
+}
 
 /// <summary>
 /// An access/refresh token pair with the access token's lifetime and the subject it was issued to.

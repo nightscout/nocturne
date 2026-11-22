@@ -229,6 +229,19 @@ describe("saved custom report page", () => {
     await expect.element(page.getByRole("link", { name: "Edit a copy" })).toBeVisible();
   });
 
+  it("on a handed-off session runs the report and offers a sign-in in place of Edit, Rename and Delete", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(CustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to change, copy, or delete this report.")).toBeVisible();
+    expect(page.getByRole("link", { name: "Edit" }).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: "Edit a copy" }).elements()).toHaveLength(0);
+    await page.getByTestId("report-actions").click();
+    await expect.element(page.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+    expect(page.getByRole("menuitem", { name: "Rename" }).elements()).toHaveLength(0);
+    expect(page.getByRole("menuitem", { name: "Delete" }).elements()).toHaveLength(0);
+  });
+
   it("shows why a stored spec no longer runs, and does not run it", async () => {
     saved = {
       id: "a1",

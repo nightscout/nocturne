@@ -22,6 +22,10 @@ namespace Nocturne.Core.Models.Authorization;
 /// rather than reading it off a subject; infrastructure has no subject to read.
 /// </para>
 /// <para>
+/// A session redeemed from a login code (<see cref="AuthContext.IsHandedOff"/>) passed none of the
+/// sign-in checks either: someone else issued the code, and redeeming it asks for no second factor.
+/// </para>
+/// <para>
 /// This is deliberately its own set rather than a reuse of
 /// <see cref="MemberScopeResolver.UnscopedCredentialTypes"/>. That set answers "does this credential
 /// carry a scope grant of its own"; this one answers "did the person sign in for it". Tying them
@@ -38,7 +42,8 @@ public static class PlatformAdminCredentials
     };
 
     /// <summary>
-    /// Whether <paramref name="authType"/> may present its subject's platform-admin standing.
+    /// Whether <paramref name="auth"/> may present its subject's platform-admin standing.
     /// </summary>
-    public static bool Carries(AuthType authType) => CarryingTypes.Contains(authType);
+    public static bool Carries(AuthContext auth) =>
+        CarryingTypes.Contains(auth.AuthType) && !auth.IsHandedOff;
 }

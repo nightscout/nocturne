@@ -1,3 +1,4 @@
+import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 import { describeSubmitError } from "./submit-error";
 
 export interface Submission {
@@ -59,6 +60,7 @@ export function useSubmission(options?: {
       } catch (err) {
         console.error("Form submission failed:", err);
         error = describeSubmitError(err, options?.fallback);
+        confirmIdentity.askAfterRefusal(err);
         return false;
       }
       if (!succeeded) return false;
@@ -67,6 +69,7 @@ export function useSubmission(options?: {
       } catch (err) {
         console.error("Follow-up after a successful submission failed:", err);
         error = describeSubmitError(err, options?.followUpFallback ?? options?.fallback);
+        confirmIdentity.askAfterRefusal(err);
       }
       return true;
     },

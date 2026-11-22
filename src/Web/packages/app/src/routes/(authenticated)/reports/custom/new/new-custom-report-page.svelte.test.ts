@@ -429,6 +429,14 @@ describe("a new custom report", () => {
     await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
     expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
   });
+
+  it("offers a handed-off session a sign-in in place of the starters", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(NewCustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to make a report.")).toBeVisible();
+    expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
+  });
 });
 
 describe("the safety net of a new report", () => {

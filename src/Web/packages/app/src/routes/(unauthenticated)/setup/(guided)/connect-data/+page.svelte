@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import {
     getUploaderApps,
@@ -17,6 +18,8 @@
   import DataSourceSelectionView from "#lib/components/connectors/DataSourceSelectionView.svelte";
   import UploaderSetupView from "#lib/components/connectors/UploaderSetupView.svelte";
   import { fresh } from "#lib/api/fresh-query.js";
+
+  const handedOff = $derived(page.data.isHandedOffSession === true);
 
   type ViewState = "selection" | "connector" | "uploader";
   let viewState = $state<ViewState>("selection");
@@ -105,6 +108,7 @@
       }}
       onSelectUploader={selectApp}
       onSkip={backToHub}
+      signInRequiredForApps={handedOff}
     />
   </svelte:boundary>
 {:else if viewState === "connector"}

@@ -444,6 +444,18 @@ describe("members page listing members who cannot sign in", () => {
     page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
     members = [member];
     lockedOut = [stuck];
+    page.data.isHandedOffSession = false;
+  });
+
+  it("lists them on a handed-off session and offers a sign-in in place of the recovery link", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.isHandedOffSession = true;
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Sam", { exact: true })).toBeVisible();
+    await expect.element(browserPage.getByText("Sign in again to make a recovery link.")).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
+    page.data.isHandedOffSession = false;
   });
 
   it("shows them to a caller with members.manage", async () => {

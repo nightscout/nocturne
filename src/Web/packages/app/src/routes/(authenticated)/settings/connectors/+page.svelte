@@ -52,6 +52,7 @@
     type ConnectorStatusWithDescription,
   } from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog from "#lib/components/connectors/ManualSyncDialog.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import DataSourceManageDialog from "#lib/components/connectors/DataSourceManageDialog.svelte";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -78,8 +79,14 @@
     icon: Database,
   };
 
+  // The connections list names the credentials it was given, and an app connects through a token
+  // or a device approval, so only the person's own sign-in reads the one or makes the others. A
+  // session opened from a sign-in link is offered that sign-in in their place; adding a cloud
+  // account stays open to it.
+  const handedOff = $derived(page.data.isHandedOffSession === true);
+
   // Queries — fire on the server during SSR; results land in cache for hydration.
-  const connectionsQuery = getConnections();
+  const connectionsQuery = $derived(handedOff ? null : getConnections());
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
   const canManage = $derived(
@@ -90,24 +97,24 @@
   );
   const googleHealthQuery = $derived(canManage ? getGoogleHealth() : null);
 
-  const overview = $derived(connectionsQuery.current ?? null);
+  const overview = $derived(connectionsQuery?.current ?? null);
   const connections = $derived(overview?.connections ?? []);
   const otherSources = $derived(overview?.otherSources ?? []);
   const windowDays = $derived(overview?.windowDays);
   const activeWithinMinutes = $derived(overview?.activeWithinMinutes);
   const loadError = $derived(
-    connectionsQuery.error == null
+    connectionsQuery?.error == null
       ? null
       : remoteErrorMessage(
           connectionsQuery.error,
           "Could not load your connections."
         )
   );
-  const isLoading = $derived(overview === null && loadError === null);
+  const isLoading = $derived(!handedOff && overview === null && loadError === null);
   let isRefreshing = $state(false);
   let dismissedLoadError = $state<unknown>(null);
   const showLoadError = $derived(
-    loadError !== null && connectionsQuery.error !== dismissedLoadError
+    loadError !== null && connectionsQuery?.error !== dismissedLoadError
   );
 
   function isNotInUse(connection: Connection): boolean {
@@ -269,7 +276,7 @@
   async function loadConnections() {
     isRefreshing = true;
     try {
-      await connectionsQuery.refresh();
+      await connectionsQuery?.refresh();
     } catch {
       // `connectionsQuery.error` carries the failure to the page.
     } finally {
@@ -509,7 +516,7 @@
             variant="ghost"
             size="icon"
             aria-label="Dismiss"
-            onclick={() => (dismissedLoadError = connectionsQuery.error)}
+            onclick={() => (dismissedLoadError = connectionsQuery?.error)}
           >
             <X class="size-4" aria-hidden="true" />
           </Button>
@@ -520,8 +527,8 @@
 
   {#if isLoading}
     <SettingsPageSkeleton cardCount={3} />
-  {:else if overview}
-    {#if hasNoConnections && canMoveFromNightscout}
+  {:else if overview || handedOff}
+    {#if hasNoConnections && !handedOff && canMoveFromNightscout}
       <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
 
@@ -557,7 +564,9 @@
         </Card.Action>
       </Card.Header>
       <Card.Content class="space-y-4">
-        {#if hasNoConnections}
+        {#if handedOff}
+          <SignInGate reason="Sign in again to see your connections, connect an app, or create an API token." />
+        {:else if hasNoConnections}
           <EmptyState
             art="plug"
             title="No connections"
@@ -700,7 +709,7 @@
 
     <ClientDevices />
 
-    {#if !hasNoConnections && canMoveFromNightscout}
+    {#if (!hasNoConnections || handedOff) && canMoveFromNightscout}
       <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
   {/if}
@@ -709,6 +718,7 @@
 <AddConnectionDialog
   bind:open={showAddDialog}
   canAddCloudAccount={canManage}
+  signInRequiredForApps={handedOff}
   uploaderApps={servicesOverview ? (servicesOverview.uploaderApps ?? []) : undefined}
   connectors={unconfiguredConnectors}
   listFailed={servicesFailed}

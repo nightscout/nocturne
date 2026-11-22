@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const state = vi.hoisted(() => ({
@@ -89,6 +90,7 @@ const flow = (id: string) => page.getByTestId(`sharing-flow-${id}`);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pageState.data.isHandedOffSession = false;
   state.relationship = { relationship: "Caregiver", patientName: "Sam" };
   state.hubState = "Open";
   state.handover = undefined;
@@ -97,6 +99,22 @@ beforeEach(() => {
 });
 
 describe("sharing guided page", () => {
+  it("offers a handed-off session a sign-in in place of each way to share", async () => {
+    pageState.data.isHandedOffSession = true;
+    render(SharingPage);
+
+    await card("family").click();
+    await card("temporary").click();
+    await card("public").click();
+
+    await expect.element(flow("family").getByText("Sign in again to make an invite link.")).toBeVisible();
+    expect(flow("family").getByTestId("create-invite-card").elements()).toHaveLength(0);
+    await expect.element(flow("temporary").getByText("Sign in again to make a guest link.")).toBeVisible();
+    await expect
+      .element(flow("public").getByText("Sign in again to make a public link, show it, or change what it shares."))
+      .toBeVisible();
+  });
+
   it("asks who else should see the patient's data, with a card per kind of person", async () => {
     render(SharingPage);
 
@@ -256,6 +274,15 @@ describe("sharing guided page", () => {
     beforeEach(() => {
       state.relationship = { relationship: "Helper", patientName: "Sam" };
       state.handover = { callerIsHelper: true };
+    });
+
+    it("offers a handed-off session a sign-in in place of the owner invite", async () => {
+      pageState.data.isHandedOffSession = true;
+      render(SharingPage);
+
+      const handover = page.getByTestId("sharing-handover");
+      await expect.element(handover.getByText("Sign in again to make an invite link.")).toBeVisible();
+      expect(handover.getByTestId("create-invite-card").elements()).toHaveLength(0);
     });
 
     it("hands it over with a single-use owner invite and says what that gives away", async () => {

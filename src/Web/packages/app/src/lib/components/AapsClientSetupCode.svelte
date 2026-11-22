@@ -7,6 +7,7 @@
   import QrCode from "@lucide/svelte/icons/qr-code";
   import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { buildAapsClientSetupCode } from "#lib/utils/aaps-client-setup.js";
 
   interface Props {
@@ -43,6 +44,7 @@
         color: { dark: "#000000", light: "#ffffff" },
       });
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       error = describeSubmitError(
         err,
         "Could not make the QR code. Try again.",

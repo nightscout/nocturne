@@ -88,4 +88,12 @@ describe("LockedOutMembers", () => {
 
     expect(page.getByText("Members who cannot sign in").elements()).toHaveLength(0);
   });
+
+  it("lists the members but gives the link to a sign-in on a handed-off session", async () => {
+    render(LockedOutMembers, { signInRequired: true });
+
+    await expect.element(page.getByText("Alex", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Sign in again to make a recovery link.")).toBeVisible();
+    expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
+  });
 });

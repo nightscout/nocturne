@@ -12,6 +12,7 @@
   import { getDeviceInfo } from "#routes/(authenticated)/oauth/oauth.remote.js";
   import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
   import FormError from "#lib/forms/FormError.svelte";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { fresh } from "#lib/api/fresh-query.js";
 
@@ -61,6 +62,7 @@
       await deviceApprove({ user_code: device.userCode ?? codeInput.trim(), approved });
       stage = approved ? "approved" : "denied";
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       error = describeSubmitError(
         err,
         approved

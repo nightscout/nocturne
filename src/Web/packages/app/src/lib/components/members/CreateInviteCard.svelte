@@ -30,6 +30,7 @@
   import AccessEndField from "#lib/components/members/AccessEndField.svelte";
   import { accessEndInstant, isAccessEndChoiceValid } from "#lib/components/members/access-end.js";
   import { Now } from "#lib/hooks/now.svelte.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
   interface Props {
     roles: TenantRoleDto[];
@@ -138,6 +139,7 @@
         onCreated?.(createdInviteUrl);
       }
     } catch (e) {
+      confirmIdentity.askAfterRefusal(e);
       errorMessage = describeSubmitError(e, "Failed to create invite. Try again.");
     } finally {
       isCreatingInvite = false;

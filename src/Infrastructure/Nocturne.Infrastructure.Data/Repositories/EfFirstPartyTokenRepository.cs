@@ -66,6 +66,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             UserAgent = scrub ? null : record.UserAgent,
             IssuedAt = record.IssuedAt,
             ExpiresAt = record.ExpiresAt,
+            LoginCodeId = record.LoginCodeId,
         };
 
         db.RefreshTokens.Add(entity);
@@ -400,5 +401,6 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             RevokedAt: entity.RevokedAt,
             RevokedReason: entity.RevokedReason,
             ReplacedByTokenId: entity.ReplacedByTokenId,
-            LastUsedAt: entity.LastUsedAt);
+            LastUsedAt: entity.LastUsedAt,
+            LoginCodeId: entity.LoginCodeId);
 }

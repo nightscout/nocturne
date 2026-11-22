@@ -281,10 +281,12 @@ public class TenantController : ControllerBase
     /// has already established which browser the member is at.
     /// </summary>
     /// <remarks>
-    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host. It grants no more than
-    /// the direct grant <see cref="TenantDirectGrantController"/> already mints for the same
-    /// member, and like that one it names the platform-admin caller as the actor in the audit
-    /// trail rather than the member.
+    /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host for a session that reads
+    /// and writes the member's data, without their second factor. The session is not the member's
+    /// own sign-in, so it cannot manage their sign-in factors or issue credentials
+    /// (<see cref="RequireInteractiveSessionAttribute"/>) and carries no platform-admin standing
+    /// until the member signs in on it. The issue row of the audit trail names the platform-admin
+    /// caller as the actor, and it and the redeem row both name the code.
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

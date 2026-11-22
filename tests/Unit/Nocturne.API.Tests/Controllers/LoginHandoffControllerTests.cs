@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -76,6 +77,14 @@ public class LoginHandoffControllerTests : IDisposable
     }
 
     [Fact]
+    public void TheHandoffDescriptionIsTheValueTheShippedMigrationRevokes()
+    {
+        SessionContext.LoginHandoffDeviceDescription.Should().Be(
+            "Login handoff",
+            "sessions written before a rename keep the old text, so a rename needs a new migration for the old value, and AddLoginCodeIdToRefreshTokens is not edited");
+    }
+
+    [Fact]
     public async Task Exchange_AValidCode_IssuesTheSessionCookiesAndConsumesTheCode()
     {
         SeedCode();
@@ -90,6 +99,26 @@ public class LoginHandoffControllerTests : IDisposable
 
         var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
         stored.ConsumedAt.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Someone else issued the code, so the session it redeems for is marked with it: that is what
+    /// keeps the session from counting as the member's own sign-in.
+    /// </summary>
+    [Fact]
+    public async Task Exchange_IssuesASessionMarkedWithTheCode()
+    {
+        SeedCode();
+
+        await ExchangeAsync();
+
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(
+                _memberSubjectId,
+                It.Is<SessionContext>(c => c.LoginCodeId == stored.Id),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -198,6 +227,8 @@ public class LoginHandoffControllerTests : IDisposable
         row.Success.Should().BeTrue();
         row.TargetSubjectId.Should().Be(_memberSubjectId);
         row.TenantId.Should().Be(_tenantId);
+        var stored = await _tenantContext.LoginCodes.AsNoTracking().SingleAsync();
+        JsonDocument.Parse(row.DetailsJson!).RootElement.GetProperty("code_id").GetGuid().Should().Be(stored.Id);
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Controllers.V4.Analytics;
@@ -152,6 +153,26 @@ public class RequireInteractiveSessionTests
     }
 
     /// <summary>
+    /// A session redeemed from a login code is a sign-in credential type that someone else
+    /// started, so it is refused, with the code the web answers by asking the member to sign in.
+    /// </summary>
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.LegacyJwt)]
+    public void HandedOffSession_IsRefusedWithSignInRequired(AuthType authType)
+    {
+        var result = Run(new AuthContext
+        {
+            IsAuthenticated = true, AuthType = authType, SubjectId = Guid.CreateVersion7(), IsHandedOff = true,
+        });
+
+        var refusal = result.Should().BeOfType<ObjectResult>().Subject;
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Extensions["code"].Should().Be(RequireInteractiveSessionAttribute.SignInRequiredCode);
+    }
+
+    /// <summary>
     /// Left to the action: the recovery session a spent recovery code mints is not an
     /// authenticated credential, and the registration endpoints must still admit it.
     /// </summary>
@@ -161,7 +182,10 @@ public class RequireInteractiveSessionTests
 
     private static IActionResult? Run(AuthContext auth)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection().AddMvcCore().Services.BuildServiceProvider(),
+        };
         httpContext.Items["AuthContext"] = auth;
 
         var context = new AuthorizationFilterContext(

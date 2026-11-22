@@ -31,6 +31,8 @@
     maxCredentials?: number;
     onAdd: () => void;
     onRemove: (credential: Credential) => void;
+    /** List only: the session cannot add or remove a sign-in method, so neither control shows. */
+    readOnly?: boolean;
   }
 
   const {
@@ -46,6 +48,7 @@
     maxCredentials,
     onAdd,
     onRemove,
+    readOnly = false,
   }: Props = $props();
 </script>
 
@@ -61,6 +64,7 @@
           {description}
         </Card.Description>
       </div>
+      {#if !readOnly}
       <Button
         variant="outline"
         size="sm"
@@ -75,6 +79,7 @@
         {/if}
         {addLabel}
       </Button>
+      {/if}
     </div>
   </Card.Header>
   <Card.Content class="space-y-3">
@@ -117,6 +122,7 @@
               {/if}
             </div>
           </div>
+          {#if !readOnly}
           <Button
             type="button"
             variant="ghost-destructive"
@@ -131,6 +137,7 @@
               <Trash2 class="h-3.5 w-3.5" />
             {/if}
           </Button>
+          {/if}
         </div>
       {/each}
     {/if}
