@@ -154,14 +154,14 @@ public class AuthenticationMiddleware
                     claims.Add(new(System.Security.Claims.ClaimTypes.Email, authContext.Email));
                 }
 
-                foreach (var role in authContext.Roles)
+                foreach (var role in authContext.Roles.Where(r => !PlatformAdminCredentials.IsRoleName(r)))
                 {
                     claims.Add(new(System.Security.Claims.ClaimTypes.Role, role));
                 }
 
                 if (authContext.IsPlatformAdmin)
                 {
-                    claims.Add(new(System.Security.Claims.ClaimTypes.Role, "platform_admin"));
+                    claims.Add(new(System.Security.Claims.ClaimTypes.Role, PlatformAdminCredentials.RoleName));
                 }
 
                 foreach (var permission in authContext.Permissions)

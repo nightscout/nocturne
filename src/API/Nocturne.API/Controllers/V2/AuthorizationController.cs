@@ -6,6 +6,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using IAuthorizationService = Nocturne.Core.Contracts.Identity.IAuthorizationService;
+using PlatformAdminCredentials = Nocturne.Core.Models.Authorization.PlatformAdminCredentials;
 
 namespace Nocturne.API.Controllers.V2;
 
@@ -320,9 +321,9 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Create role requested: {Name}", role.Name);
 
-        if (!ModelState.IsValid)
+        if (ReservedRoleName(role) is { } refused)
         {
-            return BadRequest(ModelState);
+            return refused;
         }
 
         // Clear ID to ensure new object
@@ -357,9 +358,9 @@ public class AuthorizationController : ControllerBase
     {
         _logger.LogDebug("Update role requested: {Id}", role.Id);
 
-        if (!ModelState.IsValid)
+        if (ReservedRoleName(role) is { } refused)
         {
-            return BadRequest(ModelState);
+            return refused;
         }
 
         if (string.IsNullOrEmpty(role.Id))
@@ -407,5 +408,20 @@ public class AuthorizationController : ControllerBase
 
         _logger.LogDebug("Successfully deleted role: {Id}", id);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Refuses a role named <see cref="PlatformAdminCredentials.RoleName"/>
+    /// as an invalid name is refused.
+    /// </summary>
+    private ActionResult? ReservedRoleName(Role role)
+    {
+        if (PlatformAdminCredentials.IsRoleName(role.Name))
+        {
+            ModelState.AddModelError(nameof(Role.Name), "The Name field names a reserved role.");
+            return ValidationProblem(ModelState);
+        }
+
+        return ModelState.IsValid ? null : BadRequest(ModelState);
     }
 }
