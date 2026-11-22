@@ -414,6 +414,7 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await ctx.PlanForEachArrayAsync(recordIds.Count, ct);
         await LockStreamsAsync(ctx, recordType, ct);
         var key = RecordTypeKeys.Key(recordType);
         var repaired = 0;
@@ -484,11 +485,11 @@ internal static class DuplicateGroupPrimaries
     /// <remarks>
     /// The groups are read in one statement and their links locked in the next, each joining its id
     /// array to the links. With the read folded into the lock as a subquery, a planner without
-    /// statistics for the tenant can nest one scan of the tenant's links inside another, and a
-    /// <c>= ANY</c> filter over an array parameter is searched linearly for each row it tests once the
-    /// statement is generic-planned. A join to the array is planned as a hash join on the link column
-    /// or a probe of an index of it, which <c>SourceDeleteGroupLockPlanTests</c> pins; neither bounds
-    /// the cost by the ids, since a hash join reads every link of the tenant.
+    /// statistics for the tenant can nest one scan of the tenant's links inside another. Planned for
+    /// its array, which the callers' transactions ask for (<see cref="ArrayFilterPlans"/>), a join to
+    /// the array is a hash join on the link column or a probe of an index of it, which
+    /// <c>SourceDeleteGroupLockPlanTests</c> pins; neither bounds the cost by the ids, since a hash
+    /// join reads every link of the tenant.
     /// </remarks>
     public static async Task LockGroupsOfAsync(
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)

@@ -314,6 +314,7 @@ public static class AuditedBulkDeleteExtensions
         // rows (when the table has no statistics) and a primary key probe per id otherwise.
         var ids = await query.Where(e => e.DeletedAt == null)
             .Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        await context.PlanForEachArrayAsync(ids.Count + hidden.Count, ct);
         using var wide = typeof(T) == typeof(SensorGlucoseEntity)
             ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count + hidden.Count, ct)
             : null;

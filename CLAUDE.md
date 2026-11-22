@@ -224,6 +224,18 @@ Then delete the tests that seed before a squashed migration, and the guard
 allowlist entries that name one. A branch holding a migration dated before the
 baseline must regenerate it, or it sorts ahead of the baseline on a fresh database.
 
+### Array filters under auto-prepare
+
+The runtime pool auto-prepares, so a statement run ten times on one connection may get a generic
+plan, which treats an array as a parameter: `= ANY(@ids)` is then searched end to end for every row
+tested (PostgreSQL hashes only an array it was given as a value), and `unnest(@ids)` is estimated at
+ten rows. On tables without statistics, as after a first large import or a restore, both shapes run
+tens to hundreds of times longer from that tenth run, and a lock that joins its array can pass the
+statement timeout. A transaction that filters by an id list as long as the data (a source's rows, a
+chunk of them, the groups they lead) calls `ArrayFilterPlans.PlanForEachArrayAsync` first, which plans
+the rest of that transaction for its values (`SET LOCAL plan_cache_mode`). The soft delete, the restore
+and the flag repair do. A filter by a handful of values needs nothing: no plan hashes fewer than nine.
+
 ### Unique indexes over existing data
 
 Migrations run on API startup, so a `CREATE UNIQUE INDEX` (or `unique: true`
