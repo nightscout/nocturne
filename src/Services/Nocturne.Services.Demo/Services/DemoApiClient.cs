@@ -113,7 +113,6 @@ public sealed class DemoApiClient
 
             if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
             {
-                // The temp-basal endpoint is array-only (uploaders batch).
                 var payload = new[]
                 {
                     new
@@ -126,7 +125,7 @@ public sealed class DemoApiClient
                         dataSource = treatment.DataSource,
                     },
                 };
-                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals", payload, SerializerOptions, ct);
+                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals/bulk", payload, SerializerOptions, ct);
                 response.EnsureSuccessStatusCode();
             }
             else if (treatment.Insulin is > 0)
