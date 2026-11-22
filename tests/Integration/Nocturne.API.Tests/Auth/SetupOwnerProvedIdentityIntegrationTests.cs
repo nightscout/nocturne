@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Npgsql;
 using Xunit;
@@ -83,8 +84,9 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
                 DELETE FROM subjects WHERE id IN (SELECT subject_id FROM proved_subjects)
                     AND NOT EXISTS (SELECT 1 FROM tenant_members m WHERE m.subject_id = subjects.id);
                 DELETE FROM oidc_providers WHERE id = @provider;
+                DELETE FROM tenant_creation_invites WHERE label = @issuer;
                 """,
-                ("restore", _deactivated.ToArray()), ("provider", _providerId));
+                ("restore", _deactivated.ToArray()), ("provider", _providerId), ("issuer", _issuer));
         }
 
         await base.DisposeAsync();
@@ -332,18 +334,30 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
     }
 
     /// <summary>
-    /// What the provider's sign-in callback does on the apex for an identity it has not seen: a
-    /// subject holding the identity, a session and a last login, and no membership.
+    /// What the provider's sign-in callback does on the apex for an identity it has not seen, from
+    /// a tenant-creation link that was never redeemed: a subject holding the identity, a session
+    /// and a last login, and no membership.
     /// </summary>
     private async Task<Guid> SignInOnTheApexAsync(string externalId)
     {
+        var token = $"start-{Guid.NewGuid():N}";
+        await using (var conn = await OpenAsync())
+        {
+            await ExecuteAsync(conn, """
+                INSERT INTO tenant_creation_invites (id, created_by_subject_id, token_hash, label, expires_at, use_count)
+                VALUES (@id, @creator, @hash, @label, now() + interval '1 day', 0);
+                """,
+                ("id", Guid.CreateVersion7()), ("creator", Fixture.OwnerSubjectId),
+                ("hash", HashUtils.Sha256Hex(token)), ("label", _issuer));
+        }
+
         using var scope = Fixture.Services.CreateScope();
         var service = (OidcAuthService)scope.ServiceProvider.GetRequiredService<IOidcAuthService>();
         var provider = await scope.ServiceProvider.GetRequiredService<IOidcProviderService>()
             .GetProviderByIdAsync(_providerId);
 
         var result = await service.CompleteLoginAsync(
-            State("login", subjectId: null),
+            State("login", subjectId: null, returnUrl: $"/start?token={token}"),
             provider!,
             new OidcAuthService.OidcIdTokenClaims { Sub = externalId, Name = externalId },
             currentTenantId: null,
@@ -371,11 +385,12 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
             userAgent: null);
     }
 
-    private OidcAuthService.OidcStateData State(string intent, Guid? subjectId, string? tenantSlug = null) => new()
+    private OidcAuthService.OidcStateData State(
+        string intent, Guid? subjectId, string? tenantSlug = null, string? returnUrl = null) => new()
     {
         Intent = intent,
         ProviderId = _providerId,
-        ReturnUrl = intent == "setup" ? "/setup" : "/",
+        ReturnUrl = returnUrl ?? (intent == "setup" ? "/setup" : "/"),
         Nonce = "nonce",
         SubjectId = subjectId,
         TenantSlug = tenantSlug,
