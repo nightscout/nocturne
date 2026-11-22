@@ -29,13 +29,14 @@ namespace Nocturne.API.Services.Alerts;
 /// before its rules are evaluated. The notice goes through the rule's own channels at the rule's
 /// severity, behind the same Do Not Disturb gate as its excursions (<see cref="DndGatedDispatch"/>).
 /// Its row (<see cref="IAlertRepository.RecordUnevaluableNoticeAsync"/>), not
-/// <see cref="ConditionVersionLog"/>, decides whether it is sent: each run reads the tenant's
-/// standing notices and dispatches one that has not been dispatched, so a run that fails or is
-/// cancelled between the row and the dispatch is made good by the next, and a restart or a second
-/// instance does not send it again. Sending is at least once only up to the delivery rows: a
-/// channel whose provider fails is recorded failed and not retried, as for an excursion. Two runs
-/// for one tenant are kept apart by the job ledger's lease; a run that loses its lease while it
-/// dispatches can send a notice twice, the safe way to fail.
+/// <see cref="ConditionVersionLog"/>, decides whether it is sent: the row is recorded owing its
+/// dispatch, which is settled once the dispatch returns, and each run reads the tenant's standing
+/// notices and dispatches one still owed. So a run that fails, is cancelled or dies anywhere between
+/// the row and the last send is made good by the next, which sends only the channels still owed
+/// (<see cref="IAlertDeliveryService.DispatchAsync"/>), and a restart or a second instance does not
+/// send it again. A channel whose provider fails is recorded failed and not retried, as for an
+/// excursion. Two runs for one tenant are kept apart by the job ledger's lease; a run that loses
+/// its lease while it dispatches can send a notice twice, the safe way to fail.
 /// </para>
 /// <para>
 /// A standing notice is resolved through <see cref="IExcursionResolutionHandler"/>, as a closed
@@ -252,6 +253,7 @@ internal sealed class UnevaluableRuleNotice(
         await DndGatedDispatch.DispatchAsync(
             rule.Name, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass, dnd.ActiveDndScopes, notice.InstanceId,
             channels, payload, repository, deliveryService, logger, ct);
+        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, ct);
 
         logger.LogInformation(
             "Notice {InstanceId} sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",

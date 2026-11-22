@@ -75,9 +75,36 @@ public interface IAlertRepository
     Task<IReadOnlyList<Guid>> GetUnacknowledgedExcursionIdsAsync(string managedBy, CancellationToken ct);
 
     /// <summary>
-    /// Creates a new <see cref="AlertInstanceSnapshot"/> for a triggered alert.
+    /// The instance <paramref name="excursionId"/>'s opening raised, created
+    /// <c>triggered</c> at <paramref name="triggeredAt"/> when it has none. Serialised per
+    /// excursion across processes with <see cref="ResolveInstancesForExcursionAsync"/>, so callers
+    /// acting on one opening at once raise one instance, and an opening and its close do not
+    /// interleave.
     /// </summary>
-    Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
+    /// <param name="whileOpen">
+    /// When true, null instead of an instance once the excursion has ended or no longer exists: a
+    /// late opening must not raise an instance its close will never resolve.
+    /// </param>
+    Task<OpenedInstance?> EnsureInstanceAsync(
+        Guid excursionId, DateTime triggeredAt, bool whileOpen, CancellationToken ct);
+
+    /// <summary>
+    /// The tenant's excursions of a condition whose opening or close still owes work
+    /// (<c>IAlertTrackerRepository.CreateExcursionAsync</c>) and was last taken up before
+    /// <paramref name="takenUpBefore"/>, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(DateTime takenUpBefore, CancellationToken ct);
+
+    /// <summary>
+    /// Takes up the work <paramref name="kind"/> of <paramref name="excursionId"/> still owes, as of
+    /// <paramref name="now"/>, when it was last taken up at <paramref name="seen"/>. False when
+    /// another caller took it up or settled it since it was read.
+    /// </summary>
+    Task<bool> TakeUpOwedTransitionAsync(
+        Guid excursionId, ExcursionTransitionType kind, DateTime seen, DateTime now, CancellationToken ct);
+
+    /// <summary>Records that the work <paramref name="kind"/> of <paramref name="excursionId"/> owed is done.</summary>
+    Task SettleTransitionAsync(Guid excursionId, ExcursionTransitionType kind, CancellationToken ct);
 
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
@@ -91,7 +118,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
-    /// with the given resolution timestamp and reason.
+    /// with the given resolution timestamp and reason, under the excursion's instance lock
+    /// (<see cref="EnsureInstanceAsync"/>).
     /// </summary>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="resolvedAt">The timestamp when the excursion was resolved.</param>
@@ -172,9 +200,9 @@ public interface IAlertRepository
     /// one version records one notice however many callers find it at once.
     /// </summary>
     /// <returns>
-    /// The notice standing for the version, new or not, and whether it was dispatched (it has a
-    /// delivery row, or Do Not Disturb suppressed it); null when the rule is not enabled, or its
-    /// stored condition is no longer the one in <paramref name="rule"/>.
+    /// The notice standing for the version, new or not, and whether it was dispatched (its
+    /// opening owes no work, and it has a delivery row or Do Not Disturb suppressed it); null when
+    /// the rule is not enabled, or its stored condition is no longer the one in <paramref name="rule"/>.
     /// </returns>
     Task<UnevaluableNoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct);
@@ -222,3 +250,16 @@ public interface IAlertRepository
     /// </returns>
     Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(CancellationToken ct);
 }
+
+/// <summary>
+/// An excursion's opening or close whose work the host still owes: which transition
+/// (<see cref="ExcursionTransitionType.ExcursionOpened"/> or
+/// <see cref="ExcursionTransitionType.ExcursionClosed"/>), when the work was last taken up, and the
+/// excursion's end as it stood when read.
+/// </summary>
+public record OwedTransition(
+    Guid ExcursionId,
+    Guid AlertRuleId,
+    ExcursionTransitionType Kind,
+    DateTime TakenUpAt,
+    DateTime? EndedAt);

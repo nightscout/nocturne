@@ -44,21 +44,56 @@ internal sealed class AlertDeliveryService(
     /// </summary>
     internal static readonly TimeSpan DeviceActionTestFireWindow = TimeSpan.FromSeconds(90);
 
-    public async Task DispatchAsync(
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A call for an instance some earlier call already dispatched sends only what that call left
+    /// owed: a channel with no delivery row, or one whose row is still <c>pending</c> (written, and
+    /// the process died before its provider answered). A row <c>delivered</c>, <c>failed</c> (the
+    /// provider answered and refused, which is not retried) or <c>expired</c> is done. With nothing
+    /// owed it sends nothing, not even the broadcast; otherwise the broadcast and the alarm go out
+    /// again with the sends. A chat-bot row stays <c>pending</c> until the bot reports it, so such a
+    /// call can send a chat message twice: the safe way to fail. An instance already resolved, by a
+    /// close that ran while its opening was still owed, is not dispatched.
+    /// </remarks>
+    public Task DispatchAsync(
         Guid alertInstanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
+        CancellationToken ct) =>
+        SendAsync(alertInstanceId, channels, payload, owedOnly: true, ct);
+
+    /// <inheritdoc/>
+    public Task RenotifyAsync(
+        Guid alertInstanceId,
+        IReadOnlyList<AlertRuleChannelSnapshot> channels,
+        AlertPayload payload,
+        CancellationToken ct) =>
+        SendAsync(alertInstanceId, channels, payload, owedOnly: false, ct);
+
+    private async Task SendAsync(
+        Guid alertInstanceId,
+        IReadOnlyList<AlertRuleChannelSnapshot> channels,
+        AlertPayload payload,
+        bool owedOnly,
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
 
         await using var db = await contextFactory.CreateAsync(ct);
 
-        var snoozedUntil = await db.AlertInstances
+        var instance = await db.AlertInstances
             .AsNoTracking()
             .Where(i => i.Id == alertInstanceId)
-            .Select(i => i.SnoozedUntil)
+            .Select(i => new { i.SnoozedUntil, i.ResolvedAt })
             .FirstOrDefaultAsync(ct);
+        if (owedOnly && instance?.ResolvedAt is not null)
+        {
+            logger.LogInformation(
+                "Alert instance {InstanceId} was resolved before its dispatch; dispatch skipped", alertInstanceId);
+            return;
+        }
+
+        var snoozedUntil = instance?.SnoozedUntil;
         if (AlertSnooze.IsSnoozed(snoozedUntil, timeProvider.GetUtcNow().UtcDateTime))
         {
             logger.LogInformation(
@@ -67,11 +102,33 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
+        var earlier = owedOnly
+            ? await db.AlertDeliveries
+                .Where(d => d.AlertInstanceId == alertInstanceId && !d.IsTest)
+                .ToListAsync(ct)
+            : [];
+
+        var notice = payload.Kind == AlertPayloadKind.Unevaluable;
+        var configured = channels.Count;
+        if (notice)
+            channels = [.. channels.Where(c => c.ChannelType != ChannelType.DeviceAction)];
+
+        var muted = channels.Count == 0
+            ? null
+            : await MutedDestinationsAsync(db, tenantId, payload.ExcursionId, channels, ct);
+        var owed = channels
+            .Where(c => !muted!.Contains(c))
+            .Select(c => (Channel: c, Rows: earlier.Where(d => d.AlertRuleChannelId == c.Id).ToList()))
+            .Where(x => x.Rows.All(d => d.Status == "pending"))
+            .Select(x => (x.Channel, Row: x.Rows.FirstOrDefault()))
+            .ToList();
+        if (earlier.Count > 0 && owed.Count == 0)
+            return;
+
         // Every fire emits the alert_dispatch broadcast so SignalR-connected web clients render
         // the toast even when there are zero configured channels (the user explicitly opted
         // out of every push/sound/in-app delivery surface). A notice reaches only its channels:
         // the hub's subscribers are not its recipients.
-        var notice = payload.Kind == AlertPayloadKind.Unevaluable;
         if (!notice)
         {
             try
@@ -88,10 +145,6 @@ internal sealed class AlertDeliveryService(
 
         var payloadJson = JsonSerializer.Serialize(payload);
 
-        var configured = channels.Count;
-        if (notice)
-            channels = [.. channels.Where(c => c.ChannelType != ChannelType.DeviceAction)];
-
         if (channels.Count == 0)
         {
             var anchor = NoChannelAnchor(
@@ -103,15 +156,10 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
-        var muted = await MutedDestinationsAsync(db, tenantId, payload.ExcursionId, channels, ct);
-
-        var deliveries = new List<(AlertDeliveryEntity Row, AlertRuleChannelSnapshot Channel)>(channels.Count);
-        foreach (var channel in channels)
+        var deliveries = new List<(AlertDeliveryEntity Row, AlertRuleChannelSnapshot Channel)>(owed.Count);
+        foreach (var (channel, row) in owed)
         {
-            if (muted.Contains(channel))
-                continue;
-
-            var delivery = new AlertDeliveryEntity
+            var delivery = row ?? new AlertDeliveryEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
@@ -119,11 +167,12 @@ internal sealed class AlertDeliveryService(
                 AlertRuleChannelId = channel.Id,
                 ChannelType = channel.ChannelType,
                 Destination = channel.Destination,
-                Payload = payloadJson,
                 Status = "pending",
                 CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
             };
-            db.AlertDeliveries.Add(delivery);
+            delivery.Payload = payloadJson;
+            if (row is null)
+                db.AlertDeliveries.Add(delivery);
             deliveries.Add((delivery, channel));
         }
         await db.SaveChangesAsync(ct);

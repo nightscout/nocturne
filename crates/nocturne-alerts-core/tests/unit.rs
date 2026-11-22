@@ -934,6 +934,7 @@ fn tracker_restore_without_hysteresis_start_adopts_updated_at() {
         nocturne_alerts_core::excursion::TrackerState {
             state: TrackerStateKind::Hysteresis,
             active_excursion: Some(1),
+            last_excursion: 1,
             updated_at: at(5),
             hysteresis_started_at: None,
             awaiting_rearm: false,
@@ -1551,14 +1552,59 @@ fn temp_basal_percent_in_range_still_compares() {
 }
 
 #[test]
-fn tracker_excursion_ordinal_saturates() {
+fn tracker_numbers_each_rules_excursions_from_one() {
     let mut tracker = ExcursionTracker::new();
-    tracker.set_next_excursion_ordinal(u32::MAX);
     let first = Uuid::from_u128(1);
     let second = Uuid::from_u128(2);
     let t = tracker.process_evaluation(first, cfg(0), true, false, at(0));
-    assert_eq!(t.excursion, Some(u32::MAX));
+    assert_eq!(t.excursion, Some(1));
     let t = tracker.process_evaluation(second, cfg(0), true, false, at(0));
+    assert_eq!(
+        t.excursion,
+        Some(1),
+        "another rule's excursion does not move this rule's count"
+    );
+    let _ = tracker.force_close(first, CloseReason::Manual, at(1));
+    let t = tracker.process_evaluation(first, cfg(0), true, false, at(2));
+    assert_eq!(t.kind, TransitionType::ExcursionOpened);
+    assert_eq!(t.excursion, Some(2));
+    assert_eq!(tracker.state(first).unwrap().last_excursion, 2);
+}
+
+#[test]
+fn a_restored_last_ordinal_below_the_active_one_is_raised_to_it() {
+    let mut tracker = ExcursionTracker::new();
+    tracker.restore_state(
+        rule_id(),
+        nocturne_alerts_core::excursion::TrackerState {
+            state: TrackerStateKind::Active,
+            active_excursion: Some(3),
+            last_excursion: 0,
+            updated_at: at(0),
+            hysteresis_started_at: None,
+            awaiting_rearm: false,
+        },
+    );
+    let _ = tracker.force_close(rule_id(), CloseReason::Manual, at(1));
+    let t = tracker.process_evaluation(rule_id(), cfg(0), true, false, at(2));
+    assert_eq!(t.excursion, Some(4));
+}
+
+#[test]
+fn tracker_excursion_ordinal_saturates() {
+    let mut tracker = ExcursionTracker::new();
+    tracker.restore_state(
+        rule_id(),
+        nocturne_alerts_core::excursion::TrackerState {
+            state: TrackerStateKind::Idle,
+            active_excursion: None,
+            last_excursion: u32::MAX,
+            updated_at: at(0),
+            hysteresis_started_at: None,
+            awaiting_rearm: false,
+        },
+    );
+    let t = tracker.process_evaluation(rule_id(), cfg(0), true, false, at(1));
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(u32::MAX));
 }
@@ -1623,6 +1669,7 @@ fn a_hysteresis_close_leaves_the_rule_armed() {
     let restored = || TrackerState {
         state: TrackerStateKind::Hysteresis,
         active_excursion: Some(1),
+        last_excursion: 1,
         updated_at: at(0),
         hysteresis_started_at: Some(at(0)),
         awaiting_rearm: true,
@@ -1648,6 +1695,7 @@ fn hysteresis_expiry_past_the_calendar_does_not_panic() {
         nocturne_alerts_core::excursion::TrackerState {
             state: TrackerStateKind::Hysteresis,
             active_excursion: Some(1),
+            last_excursion: 1,
             updated_at: DateTime::<Utc>::MAX_UTC,
             hysteresis_started_at: None,
             awaiting_rearm: false,

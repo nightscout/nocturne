@@ -814,7 +814,11 @@ host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_a
 ## 6. Excursion state machine (`ExcursionTracker`)
 
 Per-rule persisted state: `{State, ActiveExcursionId, UpdatedAt,
-HysteresisStartedAt, AwaitingRearm}` with states `idle | active | hysteresis`. Rule inputs:
+HysteresisStartedAt, AwaitingRearm, LastExcursion}` with states `idle | active | hysteresis`.
+A rule numbers its own excursions 1, 2, ... in the order it opens them: opening one takes
+`LastExcursion + 1` and records it as `LastExcursion`, so an excursion is identified by its rule
+and that ordinal, and no counter is shared between rules. A state restored without
+`LastExcursion` reads it as the active excursion's ordinal, or 0. Rule inputs:
 `HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
 read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
 autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
@@ -831,7 +835,7 @@ flag (§6.3) are dropped. Every operation reads it so.
 | idle, awaiting re-arm | true, and `autoResolveMet` | None (§6.3) |
 | idle, awaiting re-arm | false, or not `autoResolveMet` | clear `AwaitingRearm`, then as idle below in the same call |
 | idle | false | None |
-| idle | true | open excursion → **active**, emit `ExcursionOpened` |
+| idle | true | open excursion `LastExcursion + 1` → **active**, emit `ExcursionOpened` |
 | active | true | `ExcursionContinues` |
 | active | false | → **hysteresis**, `HysteresisStartedAt = now` (state and excursion row), emit `HysteresisStarted` |
 | hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` (same excursion) |
@@ -952,7 +956,7 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
    otherwise it is not evaluated here. A held root makes no call: the transition is `none`,
    or the hysteresis close of §6.4.
 4. Open/close side effects (instances, delivery, DND suppression, info auto-ack) —
-   host-side, out of crate scope.
+   host-side, out of crate scope, in the order below ("Acting on a transition").
 5. **Unconditionally** (even on the same tick as an open), if `AutoResolveEnabled` and
    `AutoResolveParams` non-blank and an active excursion exists, and step 3 did not
    evaluate the tree: deserialise the auto-resolve tree; evaluate it with
@@ -984,6 +988,36 @@ false, and a rule left with no state at all as on its first evaluation, bounded 
 `enabled_at`. The backend captures the instant once per process (`NotTrueRecordingFloor`) and
 raises every not-true map it reads through it, for the rule evaluation, auto-resolve and the
 snooze alike.
+
+**Acting on a transition.** An `ExcursionOpened` or `ExcursionClosed` is work the host owes,
+identified by `(rule, excursion, kind)`. A host MUST:
+
+1. persist the tracker state, the timers and a record that the transition's work is owed in one
+   transaction, the record unique by `(rule, excursion, kind)`;
+2. then act on it, every step safe to run again: an opening's instance is the one an earlier
+   attempt raised, a channel whose delivery is recorded as delivered or refused is not sent
+   again, and one with no answer recorded is;
+3. then mark the record done;
+4. on start, and periodically after, act on every record still owed whose last attempt is older
+   than a lease, taking it up first so that two workers do not both act on it.
+
+Delivery is at least once: a duplicate alert is acceptable and a lost one is not, so a step that
+cannot tell whether it completed runs again. An owed `ExcursionOpened` is marked done without
+sending in exactly two cases, since an alert for a condition that has ended misleads; these are the
+only places the order favours not sending:
+
+- its excursion has closed, read again under the lock its close's resolution of instances also
+  takes, so a close that came first stops the opening (a close that lands while the opening is
+  being sent can still leave its alert standing);
+- its rule is disabled or deleted.
+
+An acknowledgement is not a cutoff: an acknowledge-all made for another alarm must not consume an
+alert nobody received. An enabled rule whose stored row cannot be read keeps its opening owed,
+taken up again each lease, until one of the two cases applies. An owed `ExcursionClosed` is always
+finished. A late alert is built from the context when it is sent, and
+carries that reading's time. The backend records the work owed on the excursion row
+(`opened_owed_at`, `closed_owed_at`), leases it for 2 minutes, and finishes it from the alert
+sweep (`AlertSweepJob`), whose first run after a start is the start's pass.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the

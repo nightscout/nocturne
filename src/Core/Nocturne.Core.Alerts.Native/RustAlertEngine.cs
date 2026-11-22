@@ -104,7 +104,6 @@ public static partial class RustAlertEngine
             },
             Context = JsonSerializer.SerializeToElement(new { last_reading_at = now.AddMinutes(-5) }),
             Now = now,
-            IncludeLeaves = false,
         });
         try
         {
@@ -153,7 +152,7 @@ public static partial class RustAlertEngine
         DateTime now,
         IReadOnlyDictionary<string, DateTime>? timers = null,
         RustTrackerState? tracker = null,
-        bool includeLeaves = true,
+        bool includeLeaves = false,
         IReadOnlyDictionary<string, DateTime>? notTrue = null)
     {
         return Evaluate(new RustEvaluateRequest
@@ -174,7 +173,7 @@ public static partial class RustAlertEngine
     /// <paramref name="leavesRequested"/>.
     /// </summary>
     /// <exception cref="RustAlertEngineException">The result payload was unparseable or incomplete.</exception>
-    public static RustRuleResult GetRuleResult(RustEvaluateResponse response, bool leavesRequested = true)
+    public static RustRuleResult GetRuleResult(RustEvaluateResponse response, bool leavesRequested = false)
     {
         ArgumentNullException.ThrowIfNull(response);
         Require(response.Result is not null, "evaluate", "result");

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Reports;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -196,7 +197,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
     }
 
     [Fact]
-    public async Task A_notice_counts_as_dispatched_once_it_has_a_delivery_row_or_was_silenced()
+    public async Task A_notice_counts_as_dispatched_once_its_dispatch_is_settled_with_a_delivery_row_or_a_silence()
     {
         var (tenant, rule) = await SeedAsync();
         var repository = Instance(tenant);
@@ -216,13 +217,35 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
             });
             await db.SaveChangesAsync();
         }
+        (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched
+            .Should().BeFalse("a dispatch that died after its first row may still owe another channel");
+        await repository.SettleTransitionAsync(notice.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), Version, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
         (await repository.GetHomeAssistantInstancesSentExcursionAsync(notice.ExcursionId, CancellationToken.None))
             .Should().Equal("kitchen-ha");
 
         var silenced = (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!;
         await repository.MarkInstanceSuppressedAsync(silenced.InstanceId, "dnd:all", CancellationToken.None);
+        await repository.SettleTransitionAsync(silenced.ExcursionId, ExcursionTransitionType.ExcursionOpened, CancellationToken.None);
         (await repository.RecordUnevaluableNoticeAsync(Snapshot(tenant, rule), OtherVersion, At, CancellationToken.None))!.Dispatched.Should().BeTrue();
+
+        await using (var db = Context(tenant))
+        {
+            var written = Guid.CreateVersion7();
+            db.AlertExcursions.Add(new AlertExcursionEntity
+            {
+                Id = written, TenantId = tenant, AlertRuleId = rule, StartedAt = At,
+                EndedAt = AlertExcursionEntity.NoticeStandingEnd, UnevaluableConditionVersion = "0000000000000000000000000000000000000000000000000000000000000003",
+            });
+            db.AlertInstances.Add(new AlertInstanceEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = tenant, AlertExcursionId = written, Status = "triggered", TriggeredAt = At,
+            });
+            await db.SaveChangesAsync();
+        }
+        (await repository.GetStandingUnevaluableNoticesAsync(rule, CancellationToken.None))
+            .Single(n => n.ConditionVersion.EndsWith('3')).Dispatched
+            .Should().BeFalse("a notice recorded before its dispatch was owed, and never sent, is still sent");
     }
 
     [Fact]

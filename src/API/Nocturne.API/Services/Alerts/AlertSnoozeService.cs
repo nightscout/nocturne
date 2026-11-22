@@ -168,7 +168,7 @@ internal sealed class AlertSnoozeService(
         var payload = AlertPayloads.Build(
             rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
 
-        await deliveryService.DispatchAsync(instance.Id, channels, payload, ct);
+        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

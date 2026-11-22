@@ -70,6 +70,24 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     public string? UnevaluableConditionVersion { get; set; }
 
     /// <summary>
+    /// Set while the host still owes the work its opening calls for: the instance, its delivery on
+    /// each channel and the info auto-acknowledge for an excursion, the delivery for a notice. It is
+    /// written with the row, in the transaction that opens it, and cleared once that work is done.
+    /// The value is when the work was last taken up, which a later taker reads as a lease
+    /// (<c>AlertSweepJob.OwedTransitionLease</c>). Null on a row written before the column existed,
+    /// so an upgrade owes nothing for it, and on a notice once it is resolved.
+    /// </summary>
+    [Column("opened_owed_at")]
+    public DateTime? OpenedOwedAt { get; set; }
+
+    /// <summary>
+    /// As <see cref="OpenedOwedAt"/>, for the work the excursion's close calls for
+    /// (<c>IExcursionResolutionHandler</c>), written in the transaction that closes it.
+    /// </summary>
+    [Column("closed_owed_at")]
+    public DateTime? ClosedOwedAt { get; set; }
+
+    /// <summary>
     /// The <see cref="EndedAt"/> of a notice that stands (PostgreSQL <c>infinity</c>), set to the
     /// time it is resolved. A null end would make it an open excursion to every reader of one. An
     /// end in the past would let the 24-hour history clamp, which shows an excursion while its end

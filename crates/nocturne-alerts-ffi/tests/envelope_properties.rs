@@ -116,14 +116,14 @@ fn tracker_object() -> BoxedStrategy<Value> {
         any::<bool>(),
         0..5u32,
     )
-        .prop_map(|(state, excursion, updated, started, rearm, next)| {
+        .prop_map(|(state, excursion, updated, started, rearm, last)| {
             json!({
                 "state": state,
                 "active_excursion_ordinal": excursion,
                 "updated_at": updated,
                 "hysteresis_started_at": started,
                 "awaiting_rearm": rearm,
-                "next_excursion_ordinal": next,
+                "last_excursion_ordinal": last,
             })
         })
         .boxed()
@@ -570,6 +570,7 @@ proptest! {
                     "timers": timers,
                     "not_true": not_true,
                     "tracker": tracker,
+                    "include_leaves": true,
                 })
                 .to_string(),
             );

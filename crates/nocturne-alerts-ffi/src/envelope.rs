@@ -113,25 +113,20 @@ struct EvaluateRequest {
     /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
-    #[serde(default = "yes")]
+    #[serde(default)]
     include_leaves: bool,
-}
-
-fn yes() -> bool {
-    true
-}
-
-pub(crate) fn one<T: From<u8>>() -> T {
-    T::from(1)
 }
 
 #[derive(Deserialize)]
 pub(crate) struct WireTracker {
-    /// Absent or null: no per-rule state yet, only the shared ordinal.
+    /// Absent or null: no per-rule state yet.
     #[serde(default)]
     state: Option<String>,
     #[serde(default)]
     active_excursion_ordinal: Option<u32>,
+    /// Absent: the active ordinal, or 0 without one.
+    #[serde(default)]
+    last_excursion_ordinal: u32,
     /// Required whenever `state` is present.
     #[serde(default)]
     updated_at: Option<DateTime<Utc>>,
@@ -140,8 +135,6 @@ pub(crate) struct WireTracker {
     hysteresis_started_at: Option<DateTime<Utc>>,
     #[serde(default)]
     awaiting_rearm: bool,
-    #[serde(default = "one")]
-    next_excursion_ordinal: u32,
 }
 
 impl WireTracker {
@@ -150,7 +143,6 @@ impl WireTracker {
         tracker: &mut ExcursionTracker,
         rule_id: Uuid,
     ) -> Result<(), String> {
-        tracker.set_next_excursion_ordinal(self.next_excursion_ordinal);
         let Some(s) = &self.state else {
             return Ok(());
         };
@@ -165,11 +157,16 @@ impl WireTracker {
             Some(state) => TrackerState {
                 state,
                 active_excursion: self.active_excursion_ordinal,
+                last_excursion: self.last_excursion_ordinal,
                 updated_at,
                 hysteresis_started_at: self.hysteresis_started_at,
                 awaiting_rearm: self.awaiting_rearm,
             },
-            None => TrackerState::recovered(self.active_excursion_ordinal, updated_at),
+            None => TrackerState::recovered(
+                self.active_excursion_ordinal,
+                self.last_excursion_ordinal,
+                updated_at,
+            ),
         };
         tracker.restore_state(rule_id, restored);
         Ok(())
@@ -211,14 +208,17 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
     Ok(ok(Value::Object(response)))
 }
 
-/// The tracker after evaluation. The per-rule fields are present once the
-/// rule has state; `next_excursion_ordinal` always is.
+/// The tracker after evaluation: empty until the rule has state.
+/// `last_excursion_ordinal` is present once the rule has opened an excursion.
 pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
     let mut t = Map::new();
     if let Some(s) = tracker.state(rule_id) {
         t.insert("state".into(), s.state.wire().into());
         if let Some(excursion) = s.active_excursion {
             t.insert("active_excursion_ordinal".into(), excursion.into());
+        }
+        if s.last_excursion > 0 {
+            t.insert("last_excursion_ordinal".into(), s.last_excursion.into());
         }
         t.insert("updated_at".into(), format_instant(s.updated_at).into());
         if let Some(at) = s.hysteresis_started_at {
@@ -228,10 +228,6 @@ pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
             t.insert("awaiting_rearm".into(), true.into());
         }
     }
-    t.insert(
-        "next_excursion_ordinal".into(),
-        tracker.next_excursion_ordinal().into(),
-    );
     Value::Object(t)
 }
 

@@ -109,12 +109,8 @@ public sealed record RustAlertRule
 }
 
 /// <summary>
-/// Persisted tracker state carried in and out of every evaluate call. The
-/// per-rule fields (<see cref="State"/>,
-/// <see cref="ActiveExcursionOrdinal"/>, <see cref="UpdatedAt"/>) are absent
-/// until the rule has been evaluated at least once;
-/// <see cref="NextExcursionOrdinal"/> is shared across all rules of a tenant
-/// and must be threaded between calls in evaluation order.
+/// One rule's persisted tracker state, carried in and out of every evaluate call. Its fields are
+/// absent until the rule has been evaluated at least once.
 /// </summary>
 public sealed record RustTrackerState
 {
@@ -143,9 +139,12 @@ public sealed record RustTrackerState
     [JsonPropertyName("awaiting_rearm")]
     public bool AwaitingRearm { get; init; }
 
-    /// <summary>1-based ordinal the next opened excursion will receive.</summary>
-    [JsonPropertyName("next_excursion_ordinal")]
-    public int NextExcursionOrdinal { get; init; } = 1;
+    /// <summary>
+    /// The ordinal of the excursion the rule opened last; the wire carries it once the rule has
+    /// opened one. A rule numbers its own excursions 1, 2, ... (docs/alerts/engine-semantics.md §7).
+    /// </summary>
+    [JsonPropertyName("last_excursion_ordinal")]
+    public int? LastExcursionOrdinal { get; init; }
 }
 
 /// <summary>Request envelope for <c>nocturne_alerts_evaluate</c>.</summary>
@@ -172,11 +171,10 @@ public sealed record RustEvaluateRequest
     public RustTrackerState? Tracker { get; init; }
 
     /// <summary>
-    /// Whether <c>result.leaves</c> is produced. Every leaf is otherwise evaluated alone on every
-    /// call, so a caller that does not read the leaves sends false.
+    /// Whether <c>result.leaves</c> is produced, each leaf evaluated alone. Off unless asked for.
     /// </summary>
     [JsonPropertyName("include_leaves")]
-    public bool IncludeLeaves { get; init; } = true;
+    public bool IncludeLeaves { get; init; }
 }
 
 /// <summary>The fields every nocturne_alerts response envelope carries, success or error.</summary>

@@ -11,13 +11,17 @@ namespace Nocturne.API.Services.Alerts;
 /// Shared cleanup pathway invoked after an excursion closes (whether via the
 /// orchestrator's per-reading state machine or <see cref="AlertSweepJob"/>'s
 /// periodic run): stamps <c>resolution_reason</c> on instances, expires their
-/// pending deliveries, deletes members' mutes of the excursion, and broadcasts
-/// <c>alert_resolved</c>.
+/// pending deliveries, deletes members' mutes of the excursion, broadcasts
+/// <c>alert_resolved</c>, archives the in-app notifications and clears the alarm, then records
+/// that the close owes no more work (<see cref="IAlertRepository.SettleTransitionAsync"/>).
 /// </summary>
 /// <remarks>
 /// The tracker is the single owner of <see cref="Nocturne.Core.Models.AlertTrackerState"/>
 /// and the open/closed flag on the <see cref="Nocturne.Core.Models.AlertExcursion"/>
-/// itself; this handler runs strictly after the close has been persisted.
+/// itself; this handler runs strictly after the close has been persisted. Every step is safe to
+/// run again, which is how <see cref="AlertSweepJob"/> finishes a close a run that died left
+/// unsettled; that run passes no close reason, since none is stored, so an instance it resolves
+/// has none.
 /// </remarks>
 public interface IExcursionResolutionHandler
 {
@@ -96,6 +100,7 @@ internal sealed class ExcursionResolutionHandler(
             : [InAppProvider.NotificationTypeFor(rule.IsUnevaluableNotice)];
         await ArchiveInAppNotificationsAsync(excursionId, notificationTypes, ct);
         await alarmRelay.ClearIfQuietAsync([excursionId], ct);
+        await repository.SettleTransitionAsync(excursionId, ExcursionTransitionType.ExcursionClosed, ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",

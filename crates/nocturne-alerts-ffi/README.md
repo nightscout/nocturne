@@ -107,16 +107,17 @@ preserves sub-second precision when present.
     "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
     "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
     "awaiting_rearm": true,                 // present only when true; absent = armed (§6.3)
-    "next_excursion_ordinal": 4             // default 1; see "State threading"
+    "last_excursion_ordinal": 3             // the rule's last opened excursion; absent = the active ordinal, or 0
   },
-  "include_leaves": true                    // optional; default true
+  "include_leaves": true                    // optional; default false
 }
 ```
 
-`include_leaves: false` skips the leaf log: every leaf is otherwise evaluated
-alone on every call, and `result.leaves` is then absent. Nothing else in the
-response changes, so a host that does not read `result.leaves` on the live
-path should send `false`.
+`include_leaves: true` adds the leaf log, `result.leaves`: every leaf of the
+body evaluated alone, which costs an evaluation per leaf on every call. It is
+off unless asked for, and nothing else in the response depends on it. A host
+asks for it only where it shows the leaf log (a corpus harness, a per-leaf
+readout); live evaluation does not.
 
 Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 `ScenarioRule` object can be passed as `rule` verbatim.
@@ -142,7 +143,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
     "updated_at": "2026-01-05T12:00:00Z",
     "hysteresis_started_at": "…",                     // present only while in hysteresis
     "awaiting_rearm": true,                            // present only when true
-    "next_excursion_ordinal": 4
+    "last_excursion_ordinal": 3                        // present once the rule has opened one
   }
 }
 ```
@@ -241,21 +242,69 @@ so `schema_version` stays 1.
   when a run ends, on a path's first false evaluation, and on a false
   evaluation 5 minutes or more after the path's recorded not-true instant;
   a false evaluation inside that lease records nothing.
-- **`tracker`** per-rule fields (`state`,
+- **`tracker`** fields (`state`,
   `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
-  `awaiting_rearm`) round-trip the same way and are absent until the rule's first non-skipped
-  evaluation. `hysteresis_started_at` is what hysteresis expiry measures
+  `awaiting_rearm`, `last_excursion_ordinal`) are the rule's alone: persist
+  the response object and send it back on the rule's next evaluation. They
+  are absent until the rule's first non-skipped evaluation.
+  `hysteresis_started_at` is what hysteresis expiry measures
   from; dropping it makes every restore adopt `updated_at`, which slides the
   window forward on each evaluation. `awaiting_rearm` holds an auto-resolved
   rule off while both its condition and its auto-resolve tree hold; dropping
   it lets the next evaluation re-open and re-dispatch.
-- **`next_excursion_ordinal`** is the 1-based ordinal the next opened
-  excursion will receive. It is **shared across all rules** of a tenant (the
-  corpus assigns excursion ordinals in creation order across the whole
-  scenario), so thread the latest response value into the next call in
-  evaluation order, whichever rule it is for. Hosts that key excursions
-  differently can ignore the ordinals entirely and treat
-  `result.transition` (`opened`/`closed`) as the event source.
+- **Excursion identity is per rule.** A rule numbers its excursions 1, 2, ...
+  in the order it opens them; `last_excursion_ordinal` is the last it opened
+  and `active_excursion_ordinal` the one open now. An excursion is identified
+  by its rule id and that ordinal, and nothing is threaded between rules.
+  Dropping `last_excursion_ordinal` restarts the numbering from the active
+  ordinal (or 1), which reuses an ordinal an earlier, closed excursion of the
+  rule had: a host that keys work by the ordinal persists it. A host that
+  keys excursions by ids of its own may send only whether one is active, and
+  map `result.transition` to its ids.
+- **Migrating stored state.** A host that stored tracker state with the
+  tenant-wide `next_excursion_ordinal` MUST seed each rule's
+  `last_excursion_ordinal` with that stored `next_excursion_ordinal` minus 1.
+  The tenant-wide counter was at least every rule's highest ordinal, so no
+  rule's next excursion reuses an ordinal it already had. Without the seed
+  the next excursion restarts at the active ordinal plus 1, or 1, and a host
+  that dedupes work by `(rule, ordinal, kind)` against its history would drop
+  that new alert as a duplicate.
+
+## Acting on transitions
+
+An `opened` or `closed` transition is work the host owes: for an opening, the
+alert itself (its record, its delivery on each channel, Do Not Disturb, an
+info rule's acknowledgement); for a close, its resolution. Hosts MUST act on
+transitions in this order, so that a process that dies at any point loses no
+alert (`docs/alerts/engine-semantics.md` §7):
+
+1. **Persist the state and the transition together.** Write the returned
+   `timers`, `not_true` and `tracker`, and a record that the transition's
+   work is owed, in one transaction. The record is identified by
+   `(rule, excursion, kind)` (kind `opened` or `closed`); writing it twice
+   is a no-op.
+2. **Act on it.** Every step MUST be safe to run again: act on a
+   `(rule, excursion, kind)` at most once per channel, skip a channel the
+   record shows delivered or refused, and send one it shows no answer for.
+3. **Mark it done**, after the last step.
+4. **On start, and periodically after,** act on every record still owed
+   whose last attempt is older than a lease (the backend uses 2 minutes),
+   taking it up first so that two workers do not both act on it.
+
+Delivery is therefore at least once, never at most once: a duplicate alert
+is acceptable, a lost one is not. Where a step cannot tell whether it
+completed, it runs again. An owed `opened` is marked done without sending in
+exactly two cases, since an alert for a condition that has ended misleads:
+its excursion has closed, or its rule is disabled or deleted. An
+acknowledgement is not a cutoff: an acknowledge-all made for another alarm
+must not consume an alert nobody received. A rule the host cannot read keeps
+its `opened` owed until one of the two cases applies. Check the close again
+where the opening's record is written, under the lock its close's
+resolution also takes, so a close that came first stops the opening. A close
+that lands while the opening is being sent can still leave its alert
+standing. An owed `closed` is
+always finished. A late alert is built from the context at the time it is
+sent and carries that reading's time, not the opening's.
 
 ## Evaluate node (`nocturne_alerts_evaluate_node`)
 
@@ -628,7 +677,7 @@ Response:
 {
   "schema_version": 1,
   "ok": true,
-  "transition": { "type": "closed", "excursion_ordinal": 3, "close_reason": "manual" },
+  "transition": { "type": "closed", "excursion_ordinal": 3, "close_reason": "manual" },  // the rule's ordinal
   "tracker": { /* full post-state; persist verbatim */ }
 }
 ```

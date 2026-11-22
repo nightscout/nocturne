@@ -200,28 +200,102 @@ public class AlertRepository : IAlertRepository
 
     private static AlertRuleRecord ToRecord(AlertRuleEntity r) => AlertRuleMapper.ToRecord(r);
 
+    private const int OpenedInstanceLockClass = 0x4E4F_494E;
+
     /// <inheritdoc/>
-    public virtual async Task<AlertInstanceSnapshot> CreateInstanceAsync(
-        CreateAlertInstanceRequest request, CancellationToken ct)
+    /// <remarks>See <see cref="AdvisoryLockExtensions"/>.</remarks>
+    public virtual async Task<OpenedInstance?> EnsureInstanceAsync(
+        Guid excursionId, DateTime triggeredAt, bool whileOpen, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+        return await context.ExecuteInTransactionAsync<OpenedInstance?>(async token =>
+        {
+            await context.LockForTransactionAsync(OpenedInstanceLockClass, excursionId, token);
+
+            if (whileOpen && !await context.AlertExcursions.AnyAsync(e => e.Id == excursionId && e.EndedAt == null, token))
+                return null;
+
+            var raised = await context.AlertInstances
+                .AsNoTracking()
+                .Where(i => i.AlertExcursionId == excursionId && !i.IsTest)
+                .OrderBy(i => i.TriggeredAt)
+                .Select(i => new OpenedInstance(i.Id, i.SuppressionReason != null))
+                .FirstOrDefaultAsync(token);
+            if (raised is not null)
+                return raised;
+
+            var entity = new AlertInstanceEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = context.TenantId,
+                AlertExcursionId = excursionId,
+                Status = "triggered",
+                TriggeredAt = triggeredAt,
+            };
+            context.AlertInstances.Add(entity);
+            await context.SaveChangesAsync(token);
+            return new OpenedInstance(entity.Id, Suppressed: false);
+        },
+        verifySucceeded: async (raised, token) =>
+            raised is null || await context.AlertInstances.AnyAsync(i => i.Id == raised.Id, token),
+        ct: ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<OwedTransition>> GetOwedTransitionsAsync(
+        DateTime takenUpBefore, CancellationToken ct)
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        var entity = new AlertInstanceEntity
+        var rows = await context.AlertExcursions
+            .AsNoTracking()
+            .OfCondition()
+            .Where(e => e.OpenedOwedAt < takenUpBefore || e.ClosedOwedAt < takenUpBefore)
+            .Select(e => new { e.Id, e.AlertRuleId, e.OpenedOwedAt, e.ClosedOwedAt, e.EndedAt })
+            .ToListAsync(ct);
+
+        var owed = new List<OwedTransition>();
+        foreach (var row in rows)
         {
-            Id = Guid.CreateVersion7(),
-            TenantId = context.TenantId,
-            AlertExcursionId = request.ExcursionId,
-            Status = request.Status,
-            TriggeredAt = request.TriggeredAt,
-        };
+            if (row.OpenedOwedAt is { } opened && opened < takenUpBefore)
+                owed.Add(new OwedTransition(
+                    row.Id, row.AlertRuleId, ExcursionTransitionType.ExcursionOpened, opened, row.EndedAt));
+            if (row.ClosedOwedAt is { } closed && closed < takenUpBefore)
+                owed.Add(new OwedTransition(
+                    row.Id, row.AlertRuleId, ExcursionTransitionType.ExcursionClosed, closed, row.EndedAt));
+        }
+        return owed.OrderBy(t => t.TakenUpAt).ToList();
+    }
 
-        context.AlertInstances.Add(entity);
+    /// <inheritdoc/>
+    public virtual async Task<bool> TakeUpOwedTransitionAsync(
+        Guid excursionId, ExcursionTransitionType kind, DateTime seen, DateTime now, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        var excursion = context.AlertExcursions.Where(e => e.Id == excursionId);
+        var taken = kind == ExcursionTransitionType.ExcursionOpened
+            ? await excursion.Where(e => e.OpenedOwedAt == seen)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.OpenedOwedAt, now), ct)
+            : await excursion.Where(e => e.ClosedOwedAt == seen)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.ClosedOwedAt, now), ct);
+        return taken == 1;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task SettleTransitionAsync(
+        Guid excursionId, ExcursionTransitionType kind, CancellationToken ct)
+    {
+        await using var context = await _contexts.CreateAsync(ct);
+
+        var excursion = await context.AlertExcursions.FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        if (excursion is null)
+            return;
+        if (kind == ExcursionTransitionType.ExcursionOpened)
+            excursion.OpenedOwedAt = null;
+        else
+            excursion.ClosedOwedAt = null;
         await context.SaveChangesAsync(ct);
-
-        return new AlertInstanceSnapshot(
-            entity.Id, entity.TenantId, entity.AlertExcursionId,
-            entity.Status, entity.TriggeredAt,
-            entity.SnoozedUntil, entity.SnoozeCount);
     }
 
     /// <inheritdoc/>
@@ -260,13 +334,17 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contexts.CreateAsync(ct);
 
-        await context.AlertInstances
-            .Where(i => i.AlertExcursionId == excursionId
-                        && i.Status != "resolved")
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(i => i.Status, "resolved")
-                .SetProperty(i => i.ResolvedAt, resolvedAt)
-                .SetProperty(i => i.ResolutionReason, resolutionReason), ct);
+        await context.ExecuteInTransactionAsync(async token =>
+        {
+            await context.LockForTransactionAsync(OpenedInstanceLockClass, excursionId, token);
+            await context.AlertInstances
+                .Where(i => i.AlertExcursionId == excursionId
+                            && i.Status != "resolved")
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(i => i.Status, "resolved")
+                    .SetProperty(i => i.ResolvedAt, resolvedAt)
+                    .SetProperty(i => i.ResolutionReason, resolutionReason), token);
+        }, ct);
     }
 
     /// <inheritdoc/>
@@ -519,6 +597,7 @@ public class AlertRepository : IAlertRepository
                 StartedAt = at,
                 EndedAt = AlertExcursionEntity.NoticeStandingEnd,
                 UnevaluableConditionVersion = conditionVersion,
+                OpenedOwedAt = at,
             };
             var instance = new AlertInstanceEntity
             {
@@ -551,6 +630,7 @@ public class AlertRepository : IAlertRepository
         if (notice is null) return;
 
         notice.EndedAt = at;
+        notice.OpenedOwedAt = null;
         await context.SaveChangesAsync(ct);
     }
 
@@ -575,7 +655,8 @@ public class AlertRepository : IAlertRepository
                 i.Id,
                 i.AlertExcursion!.AlertRuleId,
                 i.AlertExcursion.UnevaluableConditionVersion!,
-                i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id)));
+                i.AlertExcursion.OpenedOwedAt == null
+                && (i.SuppressionReason != null || context.AlertDeliveries.Any(d => d.AlertInstanceId == i.Id))));
 
     /// <summary>
     /// Gets alert instances whose snooze period has expired.

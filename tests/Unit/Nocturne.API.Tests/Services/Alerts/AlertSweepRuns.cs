@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 internal static class AlertSweepRuns
 {
     /// <summary>
-    /// A repository whose tenant is active and whose four sweep reads find nothing, for a test to
+    /// A repository whose tenant is active and whose sweep reads find nothing, for a test to
     /// override the read it drives.
     /// </summary>
     public static Mock<IAlertRepository> Repository(Guid tenant, Func<DateTime?> lastReadingAt)
@@ -21,6 +21,9 @@ internal static class AlertSweepRuns
         repository
             .Setup(r => r.GetTenantAlertContextAsync(tenant, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new TenantAlertContext(tenant, "owner", "slug", "Slug", true, lastReadingAt()));
+        repository
+            .Setup(r => r.GetOwedTransitionsAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         repository
             .Setup(r => r.GetExcursionsInHysteresisAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);

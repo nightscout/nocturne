@@ -254,6 +254,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("alert_rule_id");
 
+                    b.Property<DateTime?>("ClosedOwedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_owed_at");
+
                     b.Property<DateTime?>("EndedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ended_at");
@@ -261,6 +265,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("HysteresisStartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("hysteresis_started_at");
+
+                    b.Property<DateTime?>("OpenedOwedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_owed_at");
 
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone")
