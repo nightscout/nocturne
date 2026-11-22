@@ -106,6 +106,14 @@ public class TenantResolutionMiddleware
         // provisioning is a tenant-affecting write with no place on a host that resolves
         // no tenant — in the hosted deployment it goes through billing instead.
         new TenantlessPath("/api/v4/me/tenants", HttpMethods.Get),
+        // The subject's teams, which belong to no tenant. Keyed on SubjectId alone and refused to
+        // every credential but the person's own session, and a team answers only its members.
+        new TenantlessPath("/api/v4/me/teams", HttpMethods.Get),
+        new TenantlessPath("/api/v4/me/teams", HttpMethods.Post),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Get, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Post, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Put, Prefix: true),
+        new TenantlessPath("/api/v4/me/teams/", HttpMethods.Delete, Prefix: true),
         // The caller's own global subject-role scopes. Tenantless, MemberScopeMiddleware
         // returns before applying tenant-derived scopes, so this reports whatever the JWT
         // carries — empty for an ordinary subject, non-empty for one holding global roles.

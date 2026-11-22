@@ -38,6 +38,8 @@ public class HistoryClampLiftPremiseTests
         // inserts do nothing on conflict.
         "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
         "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
+        // platform_policy is a platform table no policy covers, and its insert does nothing on conflict.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantCreationInviteRepository.cs",
         // dedup_reconcile_state has no recency column, so no clamp reads it, and its insert does nothing
         // on conflict as a plain command.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/DuplicateReconciler.cs",

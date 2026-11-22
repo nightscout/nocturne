@@ -545,6 +545,7 @@ public static class ServiceRegistrationExtensions
         });
         services.AddSingleton<DelegatedConnectorSyncLimiter>();
         services.AddSingleton<GuestActivationLimiter>();
+        services.AddSingleton<TeamCreationLimiter>();
 
         return services;
     }

@@ -22,6 +22,10 @@ internal sealed class PlatformPolicyEntityConfiguration : IEntityTypeConfigurati
         entity
             .Property(p => p.Id)
             .ValueGeneratedNever();
+
+        entity
+            .Property(p => p.RestrictTeamCreationToAdmins)
+            .HasDefaultValue(false);
     }
 }
 

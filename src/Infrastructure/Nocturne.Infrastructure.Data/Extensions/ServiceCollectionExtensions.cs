@@ -174,6 +174,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
         services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
         services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
+        services.AddTransient<ITeamRepository, TeamRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();

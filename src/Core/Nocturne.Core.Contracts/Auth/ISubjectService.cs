@@ -124,8 +124,9 @@ public interface ISubjectService
 
     /// <returns>
     /// <see cref="SubjectChange.Changed"/> when deleted, <see cref="SubjectChange.LastOwnerOf"/> naming
-    /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.NotFound"/> when
-    /// it does not exist or is a system subject
+    /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.LastManagerOf"/>
+    /// naming the teams when the subject is the last manager of any with other members,
+    /// <see cref="SubjectChange.NotFound"/> when it does not exist or is a system subject
     /// </returns>
     Task<SubjectChange> DeleteSubjectAsync(Guid subjectId);
 
