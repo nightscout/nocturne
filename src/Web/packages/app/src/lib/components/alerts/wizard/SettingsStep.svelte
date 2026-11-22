@@ -8,7 +8,9 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import { bg, bgLabel, convertFromDisplayUnits } from "#lib/utils/formatting.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import AdvancedSection from "../AdvancedSection.svelte";
   import RuleBuilder from "../RuleBuilder.svelte";
+  import type { RuleEditorState } from "../types";
   import NumberField from "./NumberField.svelte";
   import {
     ageDays,
@@ -22,12 +24,14 @@
   interface Props {
     /** Edited in place. */
     draft: AlertDraft;
+    /** Edited in place. */
+    editor: RuleEditorState;
     availableRules: { id: string; name: string }[];
     /** The trackers that measure the age this type alerts on; empty when it reads none. */
     trackers?: TrackerDefinitionDto[];
   }
 
-  let { draft = $bindable(), availableRules, trackers = [] }: Props = $props();
+  let { draft = $bindable(), editor = $bindable(), availableRules, trackers = [] }: Props = $props();
 
   const template = $derived(draft.def);
   const leaf = $derived(draft.leaf);
@@ -317,4 +321,6 @@
       {/if}
     </div>
   {/if}
+
+  <AdvancedSection bind:editor />
 </div>

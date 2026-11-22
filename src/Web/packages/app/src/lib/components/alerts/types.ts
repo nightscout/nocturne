@@ -12,6 +12,8 @@ import {
 } from "@nocturne/api-client";
 import type {
 	AlertRuleResponse,
+	AlertRuleSettingOptionsResponse,
+	ReplayRuleDefinition,
 	AlertRuleChannelResponse,
 	CreateAlertRuleChannelRequest,
 	InAppRecipientResponse,
@@ -744,8 +746,70 @@ export function buildBody(state: RuleEditorState) {
 					.map((c) => stripEditorFields(flattenSingleChildRoot(c))),
 			},
 		},
+		onUnknown: state.onUnknown,
+		glucoseFreshnessMinutes: state.glucoseFreshnessMinutes,
+		clearGlucoseFreshness: state.clearGlucoseFreshness || undefined,
 		channels: state.channels.map(toChannelRequest),
 	};
+}
+
+export function buildCreateBody(state: RuleEditorState) {
+	const { clearGlucoseFreshness: _cleared, ...body } = buildBody(state);
+	return body;
+}
+
+/**
+ * The rule a replay or history check judges, from the body a save sends. A replay has no clear
+ * flag, so a bound returned to the default is sent as the default.
+ */
+export function toReplayRule(
+	state: RuleEditorState,
+	id: string,
+	defaultGlucoseFreshnessMinutes: number | undefined,
+): ReplayRuleDefinition {
+	const body = buildBody(state);
+	return {
+		id,
+		name: body.name,
+		conditionType: body.conditionType,
+		conditionParams:
+			body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
+		severity: body.severity,
+		allowThroughDnd: body.allowThroughDnd,
+		autoResolveEnabled: body.autoResolveEnabled,
+		autoResolveParams: body.autoResolveParams ? JSON.stringify(body.autoResolveParams) : undefined,
+		onUnknown: body.onUnknown,
+		glucoseFreshnessMinutes: body.clearGlucoseFreshness
+			? defaultGlucoseFreshnessMinutes
+			: body.glucoseFreshnessMinutes,
+	};
+}
+
+/** Brings the freshness fields in line with what a save stored. */
+export function markFreshnessSaved(state: RuleEditorState): void {
+	state.hasStoredFreshnessBound = state.glucoseFreshnessMinutes !== undefined;
+	state.clearGlucoseFreshness = false;
+}
+
+/** Why the rule's glucose freshness bound cannot be saved, or `null` when it can. */
+export function freshnessIssue(
+	state: RuleEditorState,
+	options: AlertRuleSettingOptionsResponse | undefined,
+): string | null {
+	const minutes = state.glucoseFreshnessMinutes;
+	if (minutes === undefined) return null;
+	const min = options?.minGlucoseFreshnessMinutes;
+	const max = options?.maxGlucoseFreshnessMinutes;
+	if (
+		!Number.isInteger(minutes) ||
+		(min !== undefined && minutes < min) ||
+		(max !== undefined && minutes > max)
+	) {
+		return min !== undefined && max !== undefined
+			? `Enter a whole number from ${min} to ${max}.`
+			: "Enter a whole number of minutes.";
+	}
+	return null;
 }
 
 export function toChannelRequest(c: ChannelDef): CreateAlertRuleChannelRequest {
@@ -897,6 +961,14 @@ export interface RuleEditorState {
 	/** When true, this rule still fires while the tenant is in Do not disturb
 	 *  mode. Critical-severity rules implicitly bypass DND regardless. */
 	allowThroughDnd: boolean;
+	/** What the rule does when its data is missing; unset takes the API's default on create and keeps the stored value on update. */
+	onUnknown?: string;
+	/** The rule's own glucose freshness bound; unset is the engine's default. */
+	glucoseFreshnessMinutes?: number;
+	/** Returns a stored bound to the engine's default on save. */
+	clearGlucoseFreshness: boolean;
+	/** Whether the rule has a bound of its own stored, so that emptying the field has one to clear. */
+	hasStoredFreshnessBound: boolean;
 }
 
 export function defaultClientConfig(): ClientConfiguration {
@@ -952,6 +1024,8 @@ function defaultState(): RuleEditorState {
 		clientConfig: defaultClientConfig(),
 		channels: defaultChannels(),
 		allowThroughDnd: false,
+		clearGlucoseFreshness: false,
+		hasStoredFreshnessBound: false,
 	};
 }
 
@@ -1070,5 +1144,9 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 		clientConfig,
 		channels: channels.length > 0 ? channels : defaultChannels(),
 		allowThroughDnd: r.allowThroughDnd ?? false,
+		onUnknown: r.onUnknown,
+		glucoseFreshnessMinutes: r.glucoseFreshnessMinutes ?? undefined,
+		clearGlucoseFreshness: false,
+		hasStoredFreshnessBound: r.glucoseFreshnessMinutes != null,
 	};
 }

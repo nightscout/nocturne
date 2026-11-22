@@ -150,6 +150,24 @@ public class AlertRulesController : ControllerBase
             .ToList());
 
     /// <summary>
+    /// The values a rule's missing-data behaviour and glucose freshness bound may take.
+    /// </summary>
+    [HttpGet("setting-options")]
+    [RequireScope(Scope.AlertsRead)]
+    [RemoteQuery]
+    [ErrorEnvelope]
+    [ProducesResponseType(typeof(AlertRuleSettingOptionsResponse), StatusCodes.Status200OK)]
+    public ActionResult<AlertRuleSettingOptionsResponse> GetSettingOptions() =>
+        Ok(new AlertRuleSettingOptionsResponse
+        {
+            OnUnknownValues = [.. AlertRuleOnUnknown.All],
+            DefaultOnUnknown = AlertRuleOnUnknown.Hold,
+            DefaultGlucoseFreshnessMinutes = AlertRuleGlucoseFreshness.DefaultMinutes,
+            MinGlucoseFreshnessMinutes = AlertRuleGlucoseFreshness.MinMinutes,
+            MaxGlucoseFreshnessMinutes = AlertRuleGlucoseFreshness.MaxMinutes,
+        });
+
+    /// <summary>
     /// The condition that closes an alert at once: the opposite of the given condition tree. The
     /// answer has no condition when the tree has no opposite.
     /// </summary>
@@ -698,6 +716,17 @@ public class AutoResolveSuggestionResponse
 {
     /// <summary>The opposite condition node, or null when the condition has none.</summary>
     public object? Condition { get; set; }
+}
+
+/// <summary>The accepted values of <see cref="AlertRuleResponse.OnUnknown"/> and <see cref="AlertRuleResponse.GlucoseFreshnessMinutes"/>.</summary>
+public class AlertRuleSettingOptionsResponse
+{
+    public List<string> OnUnknownValues { get; set; } = [];
+    /// <summary>What a rule created without a choice gets.</summary>
+    public string DefaultOnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+    public int DefaultGlucoseFreshnessMinutes { get; set; }
+    public int MinGlucoseFreshnessMinutes { get; set; }
+    public int MaxGlucoseFreshnessMinutes { get; set; }
 }
 
 /// <summary>An <see cref="AlertPreset"/>, with its condition as a JSON object.</summary>

@@ -7,6 +7,7 @@ import {
   type AlertFiringSearchResult,
 } from "@nocturne/api-client";
 import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
+import { ALERT_SETTING_OPTIONS } from "#lib/test-stubs/alert-setting-options.js";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const calls = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const calls = vi.hoisted(() => ({
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => []),
   getPresets: () => remoteQuery(() => ALERT_PRESETS),
+  getSettingOptions: () => remoteQuery(() => ALERT_SETTING_OPTIONS),
   suggestAutoResolve: remoteCommand((request: unknown) => {
     calls.opposites.push(Reflect.get(Object(request), "condition"));
     return Promise.resolve({
@@ -88,6 +90,13 @@ async function toCheckStep() {
   await page.getByTestId("alert-type-low").click();
   await next().click();
   await next().click();
+}
+
+async function setAdvanced() {
+  await page.getByTestId("alert-type-low").click();
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page.getByTestId("alert-on-unknown-met").click();
+  await page.getByLabelText("Minutes until a glucose reading counts as missing").fill("20");
 }
 
 describe("new alert wizard", () => {
@@ -275,6 +284,81 @@ describe("new alert wizard", () => {
     await expect
       .element(page.getByTestId("alert-auto-resolve"))
       .toHaveTextContent("The alert closes when this is true: Glucose above 70 mg/dL.");
+  });
+
+  it("creates the alert with the missing-data choice and freshness bound set under Advanced", async () => {
+    render(NewAlertPage, {});
+
+    await setAdvanced();
+    await next().click();
+    await next().click();
+    await page.getByRole("button", { name: "Create alert" }).click();
+
+    await expect.poll(() => calls.created).toHaveLength(1);
+    expect(calls.created[0]).toMatchObject({ onUnknown: "met", glucoseFreshnessMinutes: 20 });
+    expect(calls.created[0]).not.toHaveProperty("clearGlucoseFreshness");
+  });
+
+  it("creates the alert without either field when Advanced is not touched", async () => {
+    render(NewAlertPage, {});
+
+    await toCheckStep();
+    await page.getByRole("button", { name: "Create alert" }).click();
+
+    await expect.poll(() => calls.created).toHaveLength(1);
+    const body = calls.created[0] as { onUnknown?: string; glucoseFreshnessMinutes?: number };
+    expect(body.onUnknown ?? null).toBeNull();
+    expect(body.glucoseFreshnessMinutes ?? null).toBeNull();
+  });
+
+  it("checks the history with the choice and bound the person set, before the alert exists", async () => {
+    render(NewAlertPage, {});
+
+    await setAdvanced();
+    await next().click();
+    await next().click();
+
+    await expect.poll(() => calls.searched.length).toBeGreaterThan(0);
+    expect((calls.searched.at(-1) as { rule: unknown }).rule).toMatchObject({
+      onUnknown: "met",
+      glucoseFreshnessMinutes: 20,
+    });
+  });
+
+  it("sends no bound to the history check once the bound is returned to the default", async () => {
+    render(NewAlertPage, {});
+
+    await setAdvanced();
+    await page.getByRole("button", { name: "Use the default" }).click();
+    await next().click();
+    await next().click();
+
+    await expect.poll(() => calls.searched.length).toBeGreaterThan(0);
+    const rule = (calls.searched.at(-1) as { rule: { onUnknown?: string; glucoseFreshnessMinutes?: number } }).rule;
+    expect(rule.onUnknown).toBe("met");
+    expect(rule.glucoseFreshnessMinutes ?? null).toBeNull();
+  });
+
+  it("does not leave the settings step with a bound out of range", async () => {
+    render(NewAlertPage, {});
+
+    await page.getByTestId("alert-type-low").click();
+    await page.getByRole("button", { name: "Advanced" }).click();
+    await page.getByLabelText("Minutes until a glucose reading counts as missing").fill("5000");
+
+    await expect.element(page.getByText("Enter a whole number from 1 to 1440.").first()).toBeVisible();
+    await expect.element(next()).toBeDisabled();
+  });
+
+  it("shows what is set on the closed section", async () => {
+    render(NewAlertPage, {});
+
+    await setAdvanced();
+    await page.getByRole("button", { name: /Advanced/ }).first().click();
+
+    await expect
+      .element(page.getByTestId("alert-advanced-summary"))
+      .toHaveTextContent("Count the condition as true, 20 min");
   });
 
   it("keeps a name the person typed", async () => {

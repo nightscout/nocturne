@@ -183,6 +183,51 @@ is "I have treated this low; stay quiet while glucose is climbing back".
 Details, including the limit on how many times a snooze can be extended, are on
 [When an alert fires](/docs/alerts/when-an-alert-fires#snoozing).
 
+## Advanced
+
+The **Advanced** section is closed until you open it. It holds two settings
+for what a rule does when its data is missing. When a rule has a setting that is
+not the default, the closed section shows it.
+
+### When data is missing
+
+These choices apply only when missing data stops the rule from knowing whether
+its full condition is true. If the other parts of the condition give a result,
+the rule uses that result.
+
+- **Wait** (the default). The rule does not change the alert. It opens no alert,
+  and it does not close an open alert, until it knows again. A true auto-resolve
+  condition can still close the alert.
+- **Count the condition as true.** The rule counts its full condition as true. It
+  can open an alert because data is missing. A "for N minutes" part does not delay
+  this alert.
+- **Count the condition as false.** The rule counts its full condition as false.
+  An open alert closes as it does when the condition stops being true. A condition
+  that uses "not" also counts as false when data is missing.
+
+<Callout type="warning" title="A slow data source needs its own bound">
+
+  If your data source sends readings less often than every 5 minutes, set a bound
+  for this rule. Make it at least the time between two readings plus the time a
+  reading can be late. If you do not: with **Count the condition as true**, the
+  rule can open an alert between two readings that arrive on time. With **Count
+  the condition as false**, it can close an open alert between them.
+
+</Callout>
+
+### Minutes until a glucose reading counts as missing
+
+The rule counts a glucose reading as missing when Nocturne received it more than this
+number of minutes ago. This applies to conditions on the glucose value, rate of
+change, trend and glucose range. It does not apply to signal loss, data age,
+predicted glucose or Smart snooze conditions.
+
+The bound is a number of minutes. When you leave the field empty, the rule uses
+the default that the setting shows. **Use the default** clears the bound you set.
+
+This section explains what each setting does. It does not say which setting is
+right for you.
+
 ## Testing a rule
 
 The panel on the right has two ways to check a rule before you rely on it:
