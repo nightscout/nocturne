@@ -12,8 +12,8 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
-/// An administrator-issued recovery code is spent only by a redemption that starts a recovery
-/// session. Every refusal leaves it unspent and answers as an unknown code does, and of several
+/// An administrator's or the operator's recovery code is spent only by a redemption that starts a
+/// recovery session. Every refusal leaves it unspent and answers as an unknown code does, and of several
 /// presentations of one code at once, one redeems it.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
@@ -31,14 +31,20 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         NoLongerAMember,
         Deactivated,
         AdministratorCodeForAnOperatorOnlyMember,
+        SystemSubject,
+        DemoSubject,
     }
 
     [Theory]
-    [InlineData(Refusal.MemberCanStillSignIn)]
-    [InlineData(Refusal.NoLongerAMember)]
-    [InlineData(Refusal.Deactivated)]
-    [InlineData(Refusal.AdministratorCodeForAnOperatorOnlyMember)]
-    public async Task A_refused_redemption_leaves_the_code_unspent(Refusal refusal)
+    [InlineData(Refusal.MemberCanStillSignIn, "Recovery")]
+    [InlineData(Refusal.NoLongerAMember, "Recovery")]
+    [InlineData(Refusal.Deactivated, "Recovery")]
+    [InlineData(Refusal.AdministratorCodeForAnOperatorOnlyMember, "Recovery")]
+    [InlineData(Refusal.NoLongerAMember, "OperatorRecovery")]
+    [InlineData(Refusal.Deactivated, "OperatorRecovery")]
+    [InlineData(Refusal.SystemSubject, "OperatorRecovery")]
+    [InlineData(Refusal.DemoSubject, "OperatorRecovery")]
+    public async Task A_refused_redemption_leaves_the_code_unspent(Refusal refusal, string purpose)
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
@@ -47,7 +53,7 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         var (memberId, _) = refusal == Refusal.MemberCanStillSignIn
             ? await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Recovering Member")
             : await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Recovering Member");
-        var (codeId, code) = await IssueCodeAsync(conn, tenantId, memberId, "Recovery");
+        var (codeId, code) = await IssueCodeAsync(conn, tenantId, memberId, purpose);
 
         switch (refusal)
         {
@@ -59,6 +65,12 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
                 break;
             case Refusal.AdministratorCodeForAnOperatorOnlyMember:
                 await ExecuteAsync(conn, "UPDATE subjects SET is_platform_admin = true WHERE id = @id;", ("id", memberId));
+                break;
+            case Refusal.SystemSubject:
+                await ExecuteAsync(conn, "UPDATE subjects SET is_system_subject = true WHERE id = @id;", ("id", memberId));
+                break;
+            case Refusal.DemoSubject:
+                await ExecuteAsync(conn, "UPDATE subjects SET is_demo_subject = true WHERE id = @id;", ("id", memberId));
                 break;
         }
 
@@ -84,6 +96,31 @@ public class RecoveryModeRedeemIntegrationTests : ApiIntegrationTestBase
         finally
         {
             // A locked-out member left behind would show on the shared tenant's recovery list.
+            await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
+        }
+    }
+
+    [Fact]
+    public async Task An_operators_code_redeems_for_a_member_who_still_has_a_passkey()
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
+
+        var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Recovering Member");
+        var (_, code) = await IssueCodeAsync(conn, tenantId, memberId, "OperatorRecovery");
+
+        try
+        {
+            using var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi);
+
+            var redeemed = await client.PostAsJsonAsync(RedeemPath, new { code });
+
+            redeemed.StatusCode.Should().Be(HttpStatusCode.OK, await redeemed.Content.ReadAsStringAsync());
+            RecoveryCookies(redeemed).Should().ContainSingle();
+        }
+        finally
+        {
             await ExecuteAsync(conn, "DELETE FROM tenant_members WHERE subject_id = @id;", ("id", memberId));
         }
     }

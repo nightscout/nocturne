@@ -703,6 +703,51 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoveryModeRedeem_AnOperatorCode_RecoversAMemberWhoStillHasAPasskey()
+    {
+        var memberId = await SeedMemberAsync("rhys", withPasskey: true);
+
+        var result = await RedeemAsync(LoginCodesRedeeming(memberId, LoginCodePurpose.OperatorRecovery));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task RecoveryModeRedeem_AnAdministratorCode_ForAMemberWhoStillHasAPasskey_IsRefused()
+    {
+        var memberId = await SeedMemberAsync("rhys", withPasskey: true);
+
+        var result = await RedeemAsync(LoginCodesRedeeming(memberId, LoginCodePurpose.Recovery));
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("inactive")]
+    [InlineData("system")]
+    [InlineData("demo")]
+    [InlineData("left")]
+    public async Task RecoveryModeRedeem_AnOperatorCode_ForAMemberTheOperatorMayNotRecover_IsRefused(string reason)
+    {
+        var memberId = await SeedMemberAsync("rhys", withPasskey: true);
+        var subject = await _dbContext.Subjects.SingleAsync(s => s.Id == memberId);
+        switch (reason)
+        {
+            case "inactive": subject.IsActive = false; break;
+            case "system": subject.IsSystemSubject = true; break;
+            case "demo": subject.IsDemoSubject = true; break;
+            default: _dbContext.TenantMembers.RemoveRange(_dbContext.TenantMembers.Where(m => m.SubjectId == memberId)); break;
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var result = await RedeemAsync(LoginCodesRedeeming(memberId, LoginCodePurpose.OperatorRecovery));
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        RecoveryCookieSet().Should().BeNull();
+    }
+
+    [Fact]
     public async Task RegisterComplete_VoidsTheSubjectsOutstandingRecoveryCodes()
     {
         var subjectId = await SeedMemberAsync("orphan");
