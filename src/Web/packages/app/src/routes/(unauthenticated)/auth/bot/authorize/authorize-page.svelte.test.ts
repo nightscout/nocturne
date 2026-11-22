@@ -20,6 +20,7 @@ import AuthorizePage from "./+page.svelte";
 describe("confirming a chat link", () => {
   beforeEach(() => {
     page.url = new URL("http://localhost/auth/bot/authorize?state=pending-token") as typeof page.url;
+    page.data.isHandedOffSession = false;
     claim_link.mockReset();
   });
 
@@ -35,5 +36,14 @@ describe("confirming a chat link", () => {
 
     await expect.element(browser_page.getByText(message)).toBeVisible();
     expect(claim_link).toHaveBeenCalledExactlyOnceWith({ token: "pending-token" });
+  });
+
+  it("offers a handed-off session a sign-in in place of Connect", async () => {
+    page.data.isHandedOffSession = true;
+    render(AuthorizePage);
+
+    await expect.element(browser_page.getByText("Sign in again to connect your chat account.")).toBeVisible();
+    expect(browser_page.getByRole("button", { name: "Connect" }).elements()).toHaveLength(0);
+    expect(claim_link).not.toHaveBeenCalled();
   });
 });

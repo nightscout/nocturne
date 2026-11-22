@@ -111,6 +111,11 @@ declare global {
 			 */
 			isPlatformAccessGrant: boolean;
 			/**
+			 * Whether the current session was opened from a sign-in link someone else issued, so it
+			 * cannot change sign-in methods, credentials or sharing until the person signs in again
+			 */
+			isHandedOffSession?: boolean;
+			/**
 			 * Whether the current session is a guest link session (read-only, no subjectId)
 			 */
 			isGuestSession?: boolean;

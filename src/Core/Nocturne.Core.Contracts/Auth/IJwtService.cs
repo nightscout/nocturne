@@ -17,12 +17,15 @@ public interface IJwtService
     /// <param name="sessionId">The refresh-token family the session belongs to, emitted as
     /// <c>sid</c>; null for a family with no session id.</param>
     /// <param name="lifetime">Optional custom lifetime (defaults to configuration)</param>
+    /// <param name="handedOff">Whether the session was redeemed from a login code, emitted as
+    /// <see cref="JwtClaims.HandedOff"/>.</param>
     string GenerateAccessToken(
         SubjectInfo subject,
         IEnumerable<string> permissions,
         IEnumerable<string> roles,
         string? sessionId = null,
-        TimeSpan? lifetime = null
+        TimeSpan? lifetime = null,
+        bool handedOff = false
     );
 
     /// <summary>
@@ -174,6 +177,12 @@ public class JwtClaims
     /// token, and for a session token minted before the claim existed.
     /// </summary>
     public string? SessionId { get; set; }
+
+    /// <summary>
+    /// Whether a session token was minted for a session redeemed from a login code rather than
+    /// signed in for. False for every other token.
+    /// </summary>
+    public bool HandedOff { get; set; }
 
     /// <summary>
     /// JWT ID (jti claim)

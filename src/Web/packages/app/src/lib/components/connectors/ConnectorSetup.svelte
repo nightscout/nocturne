@@ -21,6 +21,7 @@
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import {
     Card,
@@ -286,6 +287,7 @@
 
       if (primaryAction === "save-and-finish") onComplete?.();
     } catch (e) {
+      confirmIdentity.askAfterRefusal(e);
       saveMessage = {
         type: "error",
         text: describeSubmitError(e, "Failed to save configuration"),

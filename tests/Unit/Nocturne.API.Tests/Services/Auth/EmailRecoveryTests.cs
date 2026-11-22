@@ -152,8 +152,9 @@ public class EmailRecoveryTests : IDisposable
         message.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(30), TimeSpan.FromMinutes(1));
 
         await using var db = _db.CreateContext(_tenantId);
+        var stored = await db.LoginCodes.AsNoTracking().SingleAsync(c => c.Purpose == LoginCodePurpose.EmailRecovery);
         (await _loginCodes.FindLiveAsync(db, CodeIn(message), [LoginCodePurpose.EmailRecovery]))
-            .Should().Be(new RedeemedLoginCode(memberId, LoginCodePurpose.EmailRecovery, Address));
+            .Should().Be(new RedeemedLoginCode(memberId, LoginCodePurpose.EmailRecovery, Address) { CodeId = stored.Id });
     }
 
     [Fact]

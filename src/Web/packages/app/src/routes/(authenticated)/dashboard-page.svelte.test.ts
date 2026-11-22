@@ -78,6 +78,7 @@ const pageData: HarnessProps["data"] = {
   isGuestSession: false,
   isPlatformAdmin: false,
   isPlatformAccessGrant: false,
+  isHandedOffSession: false,
   tenantSlug: "sleepy",
   baseDomain: null,
   guestExpiresAt: null,

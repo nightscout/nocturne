@@ -194,6 +194,7 @@ function asManager() {
 beforeEach(() => {
   vi.clearAllMocks();
   asManager();
+  page.data.isHandedOffSession = false;
   mocks.statuses.mockReturnValue([]);
   mocks.overview.mockReturnValue({
     current: {
@@ -866,4 +867,69 @@ describe("Google Health status", () => {
       expect(mocks.refreshConnections).toHaveBeenCalledTimes(1);
     }
   );
+});
+
+/**
+ * A session opened from a sign-in link someone else issued is refused the connections list, a
+ * token and a device approval, and nothing else on this page. Only those give way to the sign-in.
+ */
+describe("a session opened from a sign-in link", () => {
+  beforeEach(() => {
+    page.data.isHandedOffSession = true;
+  });
+
+  it("offers the sign-in in place of the list, and does not ask for it", async () => {
+    render(ConnectorsPage);
+
+    await expect
+      .element(browserPage.getByText("Sign in again to see your connections", { exact: false }))
+      .toBeVisible();
+    await expect.element(browserPage.getByText("xDrip+")).not.toBeInTheDocument();
+    expect(mocks.connections).not.toHaveBeenCalled();
+  });
+
+  it("places the Nightscout move below the sign-in, since the connections were not read", async () => {
+    page.data.effectivePermissions = ["*"];
+    render(ConnectorsPage);
+
+    const move = browserPage.getByRole("link", { name: /Move from Nightscout/ });
+    await expect.element(move).toBeVisible();
+    expect(move.elements()).toHaveLength(1);
+    const gate = browserPage.getByTestId("sign-in-gate").element();
+    expect(gate.compareDocumentPosition(move.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("still adds a cloud account", async () => {
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: "Add a connection" }).click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await dialog.getByRole("button", { name: /A cloud account/ }).click();
+
+    await expect
+      .element(dialog.getByRole("link", { name: /Glooko cloud/ }))
+      .toHaveAttribute("href", expect.stringContaining("settings/connectors/glooko"));
+  });
+
+  it("offers the sign-in in place of the apps and the token, and keeps the base URL", async () => {
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: "Add a connection" }).click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await dialog
+      .getByRole("button", { name: /An app on your phone or computer/ })
+      .click();
+
+    await expect
+      .element(dialog.getByText("Sign in again to connect an app or create an API token."))
+      .toBeVisible();
+    await expect.element(dialog.getByRole("button", { name: /xDrip\+/ })).not.toBeInTheDocument();
+    await expect
+      .element(dialog.getByRole("button", { name: /Create API token/ }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(dialog.getByRole("link", { name: /Enter a device code/ }))
+      .not.toBeInTheDocument();
+    await expect.element(dialog.getByRole("button", { name: "Copy base URL" })).toBeVisible();
+  });
 });

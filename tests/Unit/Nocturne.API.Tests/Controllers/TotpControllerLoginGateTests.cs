@@ -2,6 +2,7 @@ using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -34,6 +35,7 @@ public class TotpControllerLoginGateTests
     private const string TenantHost = "erik.nocturne.example.com";
     private const string DashboardHost = "app.nocturne.example.com";
     private string _host = TenantHost;
+    private IServiceProvider? _requestServices;
 
     private TotpController CreateController()
         => new(
@@ -50,7 +52,11 @@ public class TotpControllerLoginGateTests
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext { Request = { Host = new HostString(_host) } },
+                HttpContext = new DefaultHttpContext
+                {
+                    Request = { Host = new HostString(_host) },
+                    RequestServices = _requestServices!,
+                },
             }
         };
 
@@ -147,6 +153,36 @@ public class TotpControllerLoginGateTests
             AuthAuditEventType.DeviceTrustGranted, subjectId, true,
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()));
+    }
+
+    /// <summary>
+    /// Signing in over a session redeemed from a login code ends that session, so its refresh token
+    /// does not stay live beside the person's own sign-in; signing in over an ordinary one leaves it.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Login_OverAHandedOffSession_EndsIt(bool handedOff)
+    {
+        var subjectId = Guid.NewGuid();
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(subjectId, "previous-session", handedOff));
+        var audit = new Mock<IAuthAuditService>();
+        _requestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(audit.Object).BuildServiceProvider();
+
+        await SignInAsync(subjectId, trustDevice: false,
+            presentedCookie: $"{new OidcOptions().Cookie.RefreshTokenName}=presented");
+
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(subjectId, "previous-session", It.IsAny<string>()),
+            handedOff ? Times.Once() : Times.Never());
+        audit.Verify(
+            a => a.LogAsync(AuthAuditEventType.Logout, subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
+                null, It.Is<string?>(d => d != null && d.Contains("replaced_by_sign_in")), null, null, null),
+            handedOff ? Times.Once() : Times.Never());
     }
 
     [Fact]

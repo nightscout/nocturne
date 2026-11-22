@@ -606,6 +606,7 @@
                   onSelectConnector={handleSelectConnector}
                   onSelectUploader={handleSelectUploader}
                   onSkip={goToFinish}
+                  signInRequiredForApps={page.data?.isHandedOffSession === true}
                 />
               </div>
             {:else if activeStep?.id === "sync"}

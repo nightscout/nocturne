@@ -185,6 +185,16 @@ describe("editing a report saved without the workspace's state", () => {
     expect(page.getByTestId("save-copy-trigger").elements()).toHaveLength(0);
   });
 
+  it("offers a handed-off session a sign-in in place of saving or copying", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(EditCustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to change or copy this report.")).toBeVisible();
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    expect(page.getByTestId("save-trigger").elements()).toHaveLength(0);
+    expect(page.getByTestId("save-copy-trigger").elements()).toHaveLength(0);
+  });
+
   it("lets a member who cannot change the report save a copy only", async () => {
     saved = { ...saved, canEdit: false };
     render(EditCustomReportPage, {});

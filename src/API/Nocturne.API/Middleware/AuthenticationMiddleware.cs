@@ -119,7 +119,7 @@ public class AuthenticationMiddleware
             if (authContext is { IsAuthenticated: true, SubjectId: { } subjectId }
                 && HeldToMembership(authContext) is { } tenantId)
             {
-                var carriesPlatformAdmin = PlatformAdminCredentials.Carries(authContext.AuthType);
+                var carriesPlatformAdmin = PlatformAdminCredentials.Carries(authContext);
                 if (carriesPlatformAdmin || RequestMembership.Of(context, subjectId, tenantId) is null)
                 {
                     var (membership, isPlatformAdmin) = await RequestMembership.ReadAsync(
@@ -132,7 +132,7 @@ public class AuthenticationMiddleware
                 }
             }
             else if (authContext is { IsAuthenticated: true, SubjectId: not null }
-                && PlatformAdminCredentials.Carries(authContext.AuthType))
+                && PlatformAdminCredentials.Carries(authContext))
             {
                 using var scope = _scopeFactory.CreateScope();
                 authContext.IsPlatformAdmin = await scope.ServiceProvider

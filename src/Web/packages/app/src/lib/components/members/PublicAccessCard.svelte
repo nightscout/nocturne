@@ -29,9 +29,21 @@
   import { categoriesIn } from "./data-categories";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { FormError } from "#lib/forms/index.js";
 
-  let { onEnabled }: { onEnabled?: () => void } = $props();
+  let {
+    onEnabled,
+    signInRequired = false,
+  }: {
+    onEnabled?: () => void;
+    /**
+     * The session started from a sign-in link. Making, showing or changing the link is the
+     * person's own sign-in's to do, so those controls give way to it; turning access off stays.
+     */
+    signInRequired?: boolean;
+  } = $props();
 
   const canManageSharing = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
@@ -98,6 +110,7 @@
         revealSucceeded = null;
       }
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(
         err,
         on
@@ -117,6 +130,7 @@
     try {
       await mint(rotateShareLink);
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not regenerate the link. Try again.");
     } finally {
       busy = false;
@@ -144,6 +158,7 @@
       revealSucceeded = link.canReveal ?? revealedUrl != null;
       return revealedUrl;
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not show the link. Try again.");
       return null;
     } finally {
@@ -167,6 +182,7 @@
     try {
       await setShareLinkScopes({ scopes: list });
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not update what is shared. Try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
@@ -182,6 +198,7 @@
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not update the time window. Try again.");
     } finally {
       pendingFullHistory = null;
@@ -223,6 +240,7 @@
           need no account and no invite. Choose carefully what they can see.
         </p>
       </div>
+      {#if !signInRequired || enabled}
       <Switch
         data-testid="public-access-toggle"
         checked={enabled}
@@ -230,11 +248,16 @@
         onCheckedChange={(v: boolean) => setEnabled(v)}
         aria-label="Public access"
       />
+      {/if}
     </div>
 
     <FormError issues={errorMessage} focusOnShow class="mx-5 mb-2 @md:mx-6" />
 
-    {#if enabled}
+    {#if signInRequired}
+      <div class="border-t border-border px-5 py-5 @md:px-6">
+        <SignInGate reason="Sign in again to make a public link, show it, or change what it shares." />
+      </div>
+    {:else if enabled}
       <div class="space-y-6 border-t border-border px-5 py-5 @md:px-6">
         <!-- Link row -->
         <div class="space-y-2">

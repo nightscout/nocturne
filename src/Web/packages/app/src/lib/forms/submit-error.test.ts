@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
@@ -8,6 +8,7 @@ import {
   describeSubmitError,
   errorIssues,
   errorMessage,
+  isSignInRequired,
   PERMISSION_GATED_MUTATION,
   permissionGatedMutationError,
 } from "./submit-error";
@@ -16,7 +17,9 @@ import {
   missingItemError,
   missingScopeError,
   rateLimitedError,
+  signInRequiredError,
 } from "./submit-messages.svelte";
+import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
 /**
@@ -239,6 +242,56 @@ describe("describeSubmitError", () => {
   it("tolerates null and non-objects", () => {
     expect(describeSubmitError(null)).toBe(genericSubmitError());
     expect(describeSubmitError("string throw")).toBe(genericSubmitError());
+  });
+});
+
+describe("a sign_in_required refusal", () => {
+  const handedOffRefusal = {
+    ...problemDetails(403, "Sign in to do this. This session was opened from a sign-in link."),
+    code: "sign_in_required",
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("asks a writer to sign in, ahead of its fallback and of a sentence it has for the code", async () => {
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    expect(
+      describeSubmitError(crossed, "Could not create the token.", { sign_in_required: "Other." })
+    ).toBe(signInRequiredError());
+  });
+
+  it("tells a reader to sign in", async () => {
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    expect(remoteErrorMessage(crossed, "Could not load your connections.")).toBe(
+      signInRequiredError()
+    );
+  });
+
+  // Callers format inside `$derived` (the error page, the join page), where a state write throws,
+  // so describing the refusal opens nothing; the refused write opens the prompt itself.
+  it("opens nothing while it is described, for a writer or a reader", async () => {
+    const prompt = vi.spyOn(confirmIdentity, "request").mockResolvedValue(false);
+    const crossed = await crossThe403Arm(handedOffRefusal);
+
+    describeSubmitError(crossed, "Could not create the token.");
+    remoteErrorMessage(crossed, "Could not load your connections.");
+
+    expect(prompt).not.toHaveBeenCalled();
+    expect(confirmIdentity.open).toBe(false);
+  });
+
+  it("is recognised as this refusal, and no other 403 is", async () => {
+    expect(isSignInRequired(await crossThe403Arm(handedOffRefusal))).toBe(true);
+    expect(
+      isSignInRequired(
+        await crossThe403Arm({ ...problemDetails(403, "No."), code: "missing_scope" })
+      )
+    ).toBe(false);
+    expect(isSignInRequired({ status: 401, body: { code: "sign_in_required" } })).toBe(false);
   });
 });
 

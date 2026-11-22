@@ -558,7 +558,8 @@ public class OidcAuthService : IOidcAuthService
             claims.Permissions,
             claims.Roles,
             owner.SessionId,
-            accessTokenLifetime
+            accessTokenLifetime,
+            owner.HandedOff
         );
 
         return new OidcTokenResponse

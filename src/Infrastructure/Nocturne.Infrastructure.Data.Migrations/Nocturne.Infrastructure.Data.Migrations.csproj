@@ -10,6 +10,7 @@
     </PropertyGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Tests" />
+        <InternalsVisibleTo Include="Nocturne.API.Tests" />
     </ItemGroup>
     <!-- The baseline's script (scripts/squash-migrations.cs). Embedded rather than a string
          literal, which at this size exceeds the compiler's string heap. -->

@@ -1921,6 +1921,39 @@ public class PasskeyControllerTests : IDisposable
         _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
     }
 
+    /// <summary>
+    /// A passkey sign-in over a session redeemed from a login code ends that session, so its refresh
+    /// token does not stay live beside the person's own sign-in; over an ordinary one it ends nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LoginComplete_OverAHandedOffSession_EndsIt(bool handedOff)
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(subjectId, "previous-session", handedOff));
+        var audit = new Mock<IAuthAuditService>();
+        _controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(audit.Object).BuildServiceProvider();
+        _controller.HttpContext.Request.Headers.Cookie = ".Nocturne.RefreshToken=presented";
+
+        await LoginCompleteAsync();
+
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(subjectId, "previous-session", It.IsAny<string>()),
+            handedOff ? Times.Once() : Times.Never());
+        audit.Verify(
+            a => a.LogAsync(AuthAuditEventType.Logout, subjectId, true, It.IsAny<string?>(), It.IsAny<string?>(),
+                null, It.Is<string?>(d => d != null && d.Contains("replaced_by_sign_in")), null, null, null),
+            handedOff ? Times.Once() : Times.Never());
+    }
+
     [Fact]
     public async Task LoginComplete_WhenItIssuesTheSession_RecordsTheSignInTime()
     {

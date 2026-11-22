@@ -76,6 +76,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     isGuestSession: false,
     isPlatformAdmin: false,
     isPlatformAccessGrant: false,
+    isHandedOffSession: false,
     tenantSlug: null,
     baseDomain: null,
     guestExpiresAt: null,

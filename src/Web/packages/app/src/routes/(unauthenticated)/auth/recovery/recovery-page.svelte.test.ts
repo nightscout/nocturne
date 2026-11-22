@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   url: new URL("https://acme.nocturne.example/auth/recovery"),
   redeem: vi.fn(),
   emailRecoveryOffered: false,
+  pageData: {} as Record<string, unknown>,
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -21,7 +22,9 @@ vi.mock("$app/state", () => ({
       return state.url;
     },
     state: {},
-    data: { isAuthenticated: false },
+    get data() {
+      return state.pageData;
+    },
   },
 }));
 
@@ -35,12 +38,27 @@ vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   getAuthStatus: () => remoteQuery(() => ({ emailRecoveryOffered: state.emailRecoveryOffered })),
 }));
 
+vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
+  getLockedOutMembers: () =>
+    remoteQuery(() => [
+      {
+        subjectId: "11111111-1111-1111-1111-111111111111",
+        name: "Alex",
+        username: "alex",
+        hasRecoveryCodes: false,
+        operatorOnly: false,
+      },
+    ]),
+  issueRecoveryCode: vi.fn(),
+}));
+
 import RecoveryPage from "./+page.svelte";
 
 describe("Recovery mode page", () => {
   beforeEach(() => {
     state.url = new URL("https://acme.nocturne.example/auth/recovery");
     state.emailRecoveryOffered = false;
+    state.pageData = { isAuthenticated: false };
     state.redeem.mockReset();
     state.redeem.mockResolvedValue({ username: "alex" });
     navigation.goto.mockClear();
@@ -117,5 +135,22 @@ describe("Recovery mode page", () => {
     await expect
       .element(page.getByText("Too many attempts.", { exact: false }))
       .toBeInTheDocument();
+  });
+
+  it("offers a signed-in member the recovery link of a locked-out member", async () => {
+    state.pageData = { isAuthenticated: true };
+    render(RecoveryPage);
+
+    await expect.element(page.getByRole("button", { name: "Create link" })).toBeInTheDocument();
+    expect(page.getByText("Sign in again to make a recovery link.").elements()).toHaveLength(0);
+  });
+
+  it("gives a handed-off session a sign-in in place of the recovery link", async () => {
+    state.pageData = { isAuthenticated: true, isHandedOffSession: true };
+    render(RecoveryPage);
+
+    await expect.element(page.getByText("Alex", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Sign in again to make a recovery link.")).toBeVisible();
+    expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
   });
 });

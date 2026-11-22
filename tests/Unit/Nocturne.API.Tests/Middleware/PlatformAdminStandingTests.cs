@@ -79,6 +79,26 @@ public class PlatformAdminStandingTests
             .Should().Be(CarriesStanding.GetValueOrDefault(authType));
     }
 
+    /// <summary>
+    /// A session redeemed from a login code is of a type that carries the standing, but someone else
+    /// started it and it passed no second factor, so it carries none.
+    /// </summary>
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.LegacyJwt)]
+    public async Task AHandedOffSession_PresentsNoPlatformAdminStanding(AuthType authType)
+    {
+        var context = await RunAsync(new StubHandler(SessionOf(authType, handedOff: true)));
+        var signedIn = await RunAsync(new StubHandler(SessionOf(authType, handedOff: false)));
+
+        context.User.Identity?.IsAuthenticated.Should().BeTrue();
+        IsPlatformAdmin(context).Should().BeFalse();
+        IsPlatformAdmin(signedIn).Should().BeTrue();
+    }
+
+    private static bool IsPlatformAdmin(HttpContext context) =>
+        context.User.Claims.Any(c => c.Type == ClaimTypes.Role && c.Value == "platform_admin");
+
     private sealed class StubHandler(AuthContext authContext) : IAuthHandler
     {
         public int Priority => 50;
@@ -98,16 +118,21 @@ public class PlatformAdminStandingTests
             ? new InstanceKeyHandler(
                 Mock.Of<IInstanceKeyValidator>(v => v.Classify(It.IsAny<HttpContext>()) == InstanceKeyRequestKind.Valid),
                 NullLogger<InstanceKeyHandler>.Instance)
-            : new StubHandler(new AuthContext
-            {
-                IsAuthenticated = true,
-                AuthType = authType,
-                SubjectId = SubjectId,
-                TenantId = TenantId,
-                SubjectName = "Operator",
-            });
+            : new StubHandler(SessionOf(authType, handedOff: false));
 
-    private static async Task<DefaultHttpContext> RunAsync(AuthType authType)
+    private static AuthContext SessionOf(AuthType authType, bool handedOff) => new()
+    {
+        IsAuthenticated = true,
+        AuthType = authType,
+        SubjectId = SubjectId,
+        TenantId = TenantId,
+        SubjectName = "Operator",
+        IsHandedOff = handedOff,
+    };
+
+    private static Task<DefaultHttpContext> RunAsync(AuthType authType) => RunAsync(HandlerFor(authType));
+
+    private static async Task<DefaultHttpContext> RunAsync(IAuthHandler handler)
     {
         var dbName = $"platform_admin_standing_{Guid.NewGuid()}";
         var services = new ServiceCollection();
@@ -143,7 +168,7 @@ public class PlatformAdminStandingTests
         var middleware = new AuthenticationMiddleware(
             next: _ => Task.CompletedTask,
             logger: NullLogger<AuthenticationMiddleware>.Instance,
-            handlers: [HandlerFor(authType)],
+            handlers: [handler],
             environment: Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"),
             publicAccessCacheService: null!,
             oidcOptions: Options.Create(new OidcOptions()),

@@ -76,6 +76,8 @@ export default {
     //
     // The refusal's `code` is forwarded beside the reason, so a page words a
     // `missing_scope` refusal itself instead of showing the server's English.
+    // A `sign_in_required` code opens nothing here: a refused write opens the
+    // sign-in prompt from its call site (`confirmIdentity.askAfterRefusal`).
     //
     // The generator emits this arm inside a block of its own, so it may declare
     // the locals the read order needs.

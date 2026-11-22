@@ -4065,6 +4065,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
+                    b.Property<Guid?>("LoginCodeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("login_code_id");
+
                     b.Property<string>("OidcSessionId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")

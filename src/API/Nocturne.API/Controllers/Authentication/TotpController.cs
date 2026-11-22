@@ -326,6 +326,7 @@ public class TotpController : ControllerBase
 
         // The sign-in hint names the primary factor, which wrote it when it minted the step-up token.
         Response.SetSessionCookies(session, _oidcOptions);
+        await HttpContext.EndReplacedHandedOffSessionAsync(_oidcOptions);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 

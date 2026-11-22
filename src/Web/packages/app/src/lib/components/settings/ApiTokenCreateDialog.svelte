@@ -12,6 +12,7 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   let {
@@ -60,6 +61,7 @@
       createdToken = data.token ?? null;
       onCreated?.(data.id);
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       createError = describeSubmitError(err, "Failed to create token.");
     } finally {
       isCreating = false;

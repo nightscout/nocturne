@@ -59,7 +59,8 @@ public class RefreshTokenService : IRefreshTokenService
         string? oidcSessionId = null,
         string? deviceDescription = null,
         string? ipAddress = null,
-        string? userAgent = null)
+        string? userAgent = null,
+        Guid? loginCodeId = null)
     {
         var refreshToken = _jwtService.GenerateRefreshToken();
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
@@ -77,7 +78,8 @@ public class RefreshTokenService : IRefreshTokenService
             RevokedAt: null,
             RevokedReason: null,
             ReplacedByTokenId: null,
-            LastUsedAt: null);
+            LastUsedAt: null,
+            LoginCodeId: loginCodeId);
 
         await _repository.CreateAsync(record);
 
@@ -113,7 +115,7 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        return new RefreshTokenSession(record.SubjectId, SessionKeyOf(record));
+        return SessionOf(record);
     }
 
     /// <inheritdoc />
@@ -161,7 +163,8 @@ public class RefreshTokenService : IRefreshTokenService
             RevokedAt: null,
             RevokedReason: null,
             ReplacedByTokenId: null,
-            LastUsedAt: null);
+            LastUsedAt: null,
+            LoginCodeId: oldRecord.LoginCodeId);
 
         var claimed = await _repository.TryRotateAsync(oldRecord.Id, newRecord);
         if (!claimed)
@@ -335,8 +338,11 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        return new RefreshTokenSession(record.SubjectId, SessionKeyOf(record));
+        return SessionOf(record);
     }
+
+    private static RefreshTokenSession SessionOf(RefreshTokenRecord record) =>
+        new(record.SubjectId, SessionKeyOf(record), HandedOff: record.LoginCodeId.HasValue);
 
     /// <summary>
     /// The session a token's chain belongs to: its OIDC session id, or for a legacy token issued

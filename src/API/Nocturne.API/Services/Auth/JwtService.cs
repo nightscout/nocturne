@@ -27,6 +27,8 @@ public class JwtService : IJwtService
     /// </summary>
     public static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(30);
 
+    private const string HandedOffClaim = "handoff";
+
     private readonly JwtOptions _options;
     private readonly ILogger<JwtService> _logger;
     private readonly TimeProvider _timeProvider;
@@ -127,7 +129,8 @@ public class JwtService : IJwtService
         IEnumerable<string> permissions,
         IEnumerable<string> roles,
         string? sessionId = null,
-        TimeSpan? lifetime = null
+        TimeSpan? lifetime = null,
+        bool handedOff = false
     )
     {
         var now = _timeProvider.GetUtcNow();
@@ -162,6 +165,11 @@ public class JwtService : IJwtService
         if (!string.IsNullOrEmpty(sessionId))
         {
             claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sessionId));
+        }
+
+        if (handedOff)
+        {
+            claims.Add(new Claim(HandedOffClaim, "true", ClaimValueTypes.Boolean));
         }
 
         // Add roles
@@ -373,6 +381,7 @@ public class JwtService : IJwtService
                 LimitTo24Hours = limitTo24Hours,
                 // Read off the raw token: the inbound claim map renames sid to ClaimTypes.Sid.
                 SessionId = jwtToken.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sid)?.Value,
+                HandedOff = principal.FindFirst(HandedOffClaim)?.Value == "true",
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
                 ExpiresAt = new DateTimeOffset(jwtToken.ValidTo, TimeSpan.Zero),

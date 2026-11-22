@@ -1,5 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
+import { page as pageState } from "$app/state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReportSummary } from "@nocturne/api-client";
@@ -18,6 +19,7 @@ import CustomReportsPage from "./+page.svelte";
 
 describe("custom reports list", () => {
   beforeEach(() => {
+    pageState.data.isHandedOffSession = false;
     removed.length = 0;
     reports = [
       { id: "a1", name: "Lunch on weekdays", updatedAt: "2026-10-29T10:00:00Z", panelCount: 2, canEdit: false },
@@ -70,5 +72,15 @@ describe("custom reports list", () => {
     await vi.waitFor(() => expect(localStorage.getItem(old)).toBeNull());
     expect(localStorage.getItem(recent)).not.toBeNull();
     localStorage.clear();
+  });
+
+  it("on a handed-off session lists the reports and offers a sign-in in place of New report and Delete", async () => {
+    pageState.data.isHandedOffSession = true;
+    render(CustomReportsPage, {});
+
+    await expect.element(page.getByRole("link", { name: "Nights" })).toBeVisible();
+    await expect.element(page.getByText("Sign in again to make, change, or delete a report.")).toBeVisible();
+    expect(page.getByRole("link", { name: "New report" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Delete Nights" }).elements()).toHaveLength(0);
   });
 });

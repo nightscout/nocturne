@@ -66,6 +66,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   event.locals.isAuthenticated = false;
   event.locals.isPlatformAdmin = false;
   event.locals.isPlatformAccessGrant = false;
+  event.locals.isHandedOffSession = false;
 
   const apiBaseUrl = getApiBaseUrl();
 
@@ -152,6 +153,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.isAuthenticated = true;
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
       event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
+      event.locals.isHandedOffSession = session.isHandedOff ?? false;
 
       // Effective permissions (granted scopes and history window) for the current tenant. Absent
       // where the permissions endpoint would refuse the caller, which leaves them defaulting empty.

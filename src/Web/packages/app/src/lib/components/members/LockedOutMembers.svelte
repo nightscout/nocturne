@@ -3,6 +3,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { FormError } from "#lib/forms/index.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
@@ -13,6 +15,13 @@
   } from "#lib/api/generated/memberRecoveries.generated.remote.js";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { page } from "$app/state";
+
+  let {
+    signInRequired = false,
+  }: {
+    /** True on a handed-off session, for which the server makes no recovery link. */
+    signInRequired?: boolean;
+  } = $props();
 
   /**
    * Shown to a signed-in visitor. Only a member administrator gets a list back; anyone else is
@@ -36,6 +45,7 @@
       issuedFor = subjectId;
       issuedLink = link.toString();
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       errorMessage = describeSubmitError(err, "Could not create a recovery link.");
     } finally {
       issuingFor = null;
@@ -53,6 +63,9 @@
       </Card.Description>
     </Card.Header>
     <Card.Content class="space-y-3">
+      {#if signInRequired}
+        <SignInGate reason="Sign in again to make a recovery link." />
+      {/if}
       <FormError issues={errorMessage} />
       {#each members.current as member (member.subjectId)}
         <div class="space-y-2 rounded-md border p-3">
@@ -67,7 +80,7 @@
               <p class="text-right text-xs text-muted-foreground">
                 Only the operator can recover this account
               </p>
-            {:else}
+            {:else if !signInRequired}
               <Button
                 size="sm"
                 variant="outline"

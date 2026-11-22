@@ -7,6 +7,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import {
     createCustomReport,
     getCustomReportCatalogue,
@@ -79,6 +80,8 @@
     <p class="text-sm text-muted-foreground" role="status" data-testid="clamped-note">
       Your access is limited to the last 24 hours. It cannot create reports.
     </p>
+  {:else if page.data.isHandedOffSession === true}
+    <SignInGate reason="Sign in again to make a report." />
   {:else if catalogue.current}
     {@const current = catalogue.current}
     {#if report === null}
