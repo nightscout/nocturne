@@ -342,6 +342,9 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
@@ -449,6 +452,9 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
@@ -538,6 +544,9 @@ public class MemberInviteController : ControllerBase
 
         if (member == null)
             return NotFound();
+
+        if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
 
         // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.

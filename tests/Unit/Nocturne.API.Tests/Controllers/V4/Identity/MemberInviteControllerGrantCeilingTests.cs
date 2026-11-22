@@ -925,5 +925,74 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         (await TargetAccessEndAsync()).Should().BeNull();
     }
 
+    private async Task MakeTargetThePublicSubjectAsync()
+    {
+        var target = await _dbContext.Subjects.FirstAsync(s => s.Id == _targetSubjectId);
+        target.Name = PublicSubjectFilter.PublicSubjectName;
+        target.IsSystemSubject = true;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    public static TheoryData<string> PublicMemberEdits => new() { "roles", "permissions", "limit" };
+
+    private async Task<IActionResult> EditTargetAsync(MemberInviteController controller, string edit) => edit switch
+    {
+        "roles" => await controller.SetMemberRoles(
+            _targetMemberId, new SetMemberRolesRequest([_caretakerRoleId]), _publicAccessCache, CancellationToken.None),
+        "permissions" => await controller.SetMemberPermissions(
+            _targetMemberId, new SetMemberPermissionsRequest([Scope.GlucoseRead, Scope.TreatmentsRead]),
+            _publicAccessCache, CancellationToken.None),
+        _ => await controller.SetMemberLimitTo24Hours(
+            _targetMemberId, new SetMemberLimitTo24HoursRequest(true), _publicAccessCache, CancellationToken.None),
+    };
+
+    private async Task<(string Permissions, bool Limited, int Roles)> TargetStateAsync()
+    {
+        var member = await _dbContext.TenantMembers.AsNoTracking().FirstAsync(m => m.Id == _targetMemberId);
+        return (string.Join(",", member.DirectPermissions ?? []), member.LimitTo24Hours, await _dbContext.TenantMemberRoles.CountAsync());
+    }
+
+    [Theory]
+    [MemberData(nameof(PublicMemberEdits))]
+    public async Task EditingThePublicMember_byACallerWhoseAccessEnds_isRefusedAndWritesNothing(string edit)
+    {
+        await MakeTargetThePublicSubjectAsync();
+        var before = await TargetStateAsync();
+        var controller = BuildController(Scope.FullAccess);
+        CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
+
+        var result = await EditTargetAsync(controller, edit);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HttpContextExtensions.PublicSharingEndDateDetail);
+        (await TargetStateAsync()).Should().Be(before);
+    }
+
+    [Theory]
+    [MemberData(nameof(PublicMemberEdits))]
+    public async Task EditingThePublicMember_byACallerWithNoEnd_isAllowedAndWrites(string edit)
+    {
+        await MakeTargetThePublicSubjectAsync();
+        var before = await TargetStateAsync();
+        var controller = BuildController(Scope.FullAccess);
+
+        var result = await EditTargetAsync(controller, edit);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await TargetStateAsync()).Should().NotBe(before);
+    }
+
+    [Theory]
+    [MemberData(nameof(PublicMemberEdits))]
+    public async Task EditingAnotherMember_byACallerWhoseAccessEnds_isNotRefusedForPublicSharing(string edit)
+    {
+        var controller = BuildController(Scope.FullAccess);
+        CallerAccessEndsAt(controller, AccessEndNow.UtcDateTime.AddDays(10));
+
+        var result = await EditTargetAsync(controller, edit);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
     public void Dispose() => _dbContext.Dispose();
 }

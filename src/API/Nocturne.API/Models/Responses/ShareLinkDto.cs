@@ -48,4 +48,10 @@ public class ShareLinkDto
 
     /// <summary>When the share link was last accessed, or null if never (or not yet recorded).</summary>
     public DateTime? LastAccessedAt { get; set; }
+
+    /// <summary>
+    /// When the caller's own access ends, or null when it does not. A caller whose access ends
+    /// cannot change the link. Set by the plain read only.
+    /// </summary>
+    public DateTime? CallerAccessEndsAt { get; set; }
 }

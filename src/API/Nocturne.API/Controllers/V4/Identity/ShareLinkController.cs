@@ -50,7 +50,9 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
-        return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
+        var link = await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct);
+        link.CallerAccessEndsAt = HttpContext.CallerAccessEndsAt();
+        return Ok(link);
     }
 
     /// <summary>
@@ -99,6 +101,9 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         if (await WouldHandOutFullHistoryAsync(ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
@@ -113,6 +118,9 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> DisableShareLink(CancellationToken ct)
     {
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         return Ok(await _shareLinkService.DisableAsync(_tenantAccessor.TenantId, ct));
     }
 
@@ -126,6 +134,9 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         if (request.FullHistory && HttpContext.IsCallerHistoryClamped())
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
@@ -147,6 +158,9 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
+
         // A member may publish only what they can read themselves.
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
