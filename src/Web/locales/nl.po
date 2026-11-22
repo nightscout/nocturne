@@ -47231,3 +47231,89 @@ msgstr ""
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Your access ends on {0}. This credential stops then."
 msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Waiting"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Glucose readings"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Glucose forecast"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Insulin data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Carb data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Pump data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Loop data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Uploader data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Transmitter data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Pump mode and override data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Site and sensor change data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Tracker data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Sleep data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Alert data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Do Not Disturb data"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Time zone"
+msgstr ""
+
+#. 0: formatDateTimeCompact(hold.since)
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Waiting for data since {0}."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Waiting for data."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "This alert stays open while its data is missing. It closes after 24 hours of missing data."
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Closed because its data was missing for 24 hours."
+msgstr ""
+
+#. 0: holdSinceText(hold)
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid "{0} This rule cannot open an alert until the data comes back. After 24 hours of missing data, Nocturne closes an open alert."
+msgstr ""
