@@ -13,7 +13,9 @@ namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
 /// Nightscout authorization. A client can exchange an access token for a JWT and read its
-/// permissions. A client with full access can list, create, update and delete subjects and roles.
+/// permissions. A client with full access can list, create, update and delete subjects and list
+/// roles. Writing a role also needs <see cref="RequireInstanceStandingAttribute"/>, since roles are
+/// shared by every tenant.
 /// </summary>
 /// <remarks>
 /// Provides 1:1 compatibility with Nightscout authorization endpoints.
@@ -312,6 +314,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Created role</returns>
     [HttpPost("roles")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 201)]
@@ -348,6 +351,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Updated role</returns>
     [HttpPut("roles")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 200)]
@@ -389,6 +393,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Success response</returns>
     [HttpDelete("roles/{id}")]
     [RequireSuperuser]
+    [RequireInstanceStanding]
     [NightscoutEndpoint("/api/v2/authorization/roles/:id")]
     [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(204)]
