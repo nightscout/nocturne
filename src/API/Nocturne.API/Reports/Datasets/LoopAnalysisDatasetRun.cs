@@ -143,7 +143,7 @@ internal static class LoopAnalysisDatasetRun
     public static double? Glucose(double? mgdl, bool useMmol) => mgdl is { } v ? ReportGlucose.Scale(v, useMmol) : null;
 
     /// <summary>A figure rounded for the rows.</summary>
-    public static double? Round(double? value, int digits = 2) => value is { } v ? Math.Round(v, digits) : null;
+    public static double? Round(double? value, int digits = 2) => value is { } v ? ScaledRounding.Round(v, digits) : null;
 
     /// <summary>A local time of day, HH:mm, for minutes after midnight.</summary>
     public static string Clock(int minuteOfDay) =>

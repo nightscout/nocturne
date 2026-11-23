@@ -1,0 +1,8 @@
+<Project>
+    <PropertyGroup>
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
+    </PropertyGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Rounding.txt" Link="BannedSymbols.Rounding.txt"/>
+    </ItemGroup>
+</Project>

@@ -83,8 +83,8 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         var rows = kept.Select(p => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
             ["time"] = p.Timestamp,
-            ["delivered"] = Math.Round(p.Rate, 3),
-            ["scheduled"] = therapy && p.ScheduledRate is { } s ? Math.Round(s, 3) : null,
+            ["delivered"] = ScaledRounding.Round(p.Rate, 3),
+            ["scheduled"] = therapy && p.ScheduledRate is { } s ? ScaledRounding.Round(s, 3) : null,
             ["origin"] = p.Origin.ToString(),
         }).ToList();
 
