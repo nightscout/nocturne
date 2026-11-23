@@ -51,8 +51,6 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 internal static class MemberAccessAudit
 {
     internal const string RoleKey = "role";
-    internal const string TenantKind = "tenant";
-    private const string GlobalKind = "global";
     internal const string GainedKey = "gained";
     internal const string LostKey = "lost";
     internal const string PermissionKey = "permission";
@@ -96,7 +94,7 @@ internal static class MemberAccessAudit
     {
         var details = new Dictionary<string, object?>
         {
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             [HowKey] = JoinedHow[how],
         };
         if (inviteId is { } invite)
@@ -121,7 +119,7 @@ internal static class MemberAccessAudit
 
         Add(db, AuthAuditEventType.MemberRemoved, tenantId, subjectId, new Dictionary<string, object?>
         {
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             [HowKey] = RemovedHow[how],
         }, source);
     }
@@ -164,7 +162,7 @@ internal static class MemberAccessAudit
         var details = new Dictionary<string, object?>
         {
             [AccessEndsAtKey] = after is { } end ? DateTime.SpecifyKind(end, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture) : null,
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
@@ -185,7 +183,7 @@ internal static class MemberAccessAudit
             {
                 [GrantKey] = grantId.ToString(),
                 [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
-                [AuthAuditRows.KindKey] = TenantKind,
+                [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             }, source: null);
 
     /// <summary>
@@ -197,7 +195,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.DeviceCredentialKept, tenantId, makerSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         }, source: null);
 
     /// <summary>
@@ -209,7 +207,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.GuestLinkRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         }, source: null);
 
     /// <summary>
@@ -219,17 +217,17 @@ internal static class MemberAccessAudit
     public static void StageRolePermissions(
         NocturneDbContext db, Guid tenantId, Guid roleId, string roleSlug,
         IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
-        StageRolePermissions(db, tenantId, TenantKind, roleId, roleSlug, before, after);
+        StageRolePermissions(db, tenantId, AuthAuditKind.Tenant, roleId, roleSlug, before, after);
 
     /// <summary>
     /// <see cref="StageRolePermissions(NocturneDbContext, Guid, Guid, string, IReadOnlyCollection{string}, IReadOnlyCollection{string})"/>
-    /// for a global role, which belongs to no tenant: the row's <c>kind</c> is <c>global</c> and its tenant is the one
-    /// the edit was made under, if any.
+    /// for a global role, which belongs to no tenant: the row's <c>kind</c> is <see cref="AuthAuditKind.Global"/>
+    /// and it carries no tenant id, whatever tenant the edit was made under.
     /// </summary>
     public static void StageGlobalRolePermissions(
         NocturneDbContext db, Guid roleId, string roleName,
         IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
-        StageRolePermissions(db, db.TenantIdOrNull, GlobalKind, roleId, roleName, before, after);
+        StageRolePermissions(db, null, AuthAuditKind.Global, roleId, roleName, before, after);
 
     private static void StageRolePermissions(
         NocturneDbContext db, Guid? tenantId, string kind, Guid roleId, string role,
@@ -246,7 +244,7 @@ internal static class MemberAccessAudit
             [RoleKey] = role,
             [GainedKey] = gained,
             [LostKey] = lost,
-            [AuthAuditRows.KindKey] = kind,
+            [AuthAuditKind.Key] = kind,
         }, source: null);
     }
 
@@ -264,7 +262,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object?> { [key] = item, [AuthAuditRows.KindKey] = TenantKind };
+        var details = new Dictionary<string, object?> { [key] = item, [AuthAuditKind.Key] = AuthAuditKind.Tenant };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 

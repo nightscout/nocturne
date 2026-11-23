@@ -23,11 +23,9 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// </remarks>
 internal static class TeamAudit
 {
-    internal const string TeamKind = "team";
     internal const string NameKey = "name";
     internal const string OldNameKey = "old_name";
     internal const string InviteKey = "invite";
-    internal const string TeamAccessKind = "team_access";
     internal const string LinkKey = "link";
     internal const string RolesKey = "roles";
     internal const string StoppedHow = "stopped";
@@ -76,7 +74,7 @@ internal static class TeamAudit
     {
         var details = new Dictionary<string, object?>
         {
-            [AuthAuditRows.KindKey] = TeamAccessKind,
+            [AuthAuditKind.Key] = AuthAuditKind.TeamAccess,
             [NameKey] = teamName,
             [RolesKey] = roleSlugs.Order(StringComparer.Ordinal).ToList(),
             [MemberAccessAudit.HistoryLimitKey] = access.LimitTo24Hours ? MemberAccessAudit.TwentyFourHours : MemberAccessAudit.FullHistory,
@@ -94,7 +92,7 @@ internal static class TeamAudit
     private static void Stage(
         NocturneDbContext db, string eventType, Guid teamId, Guid? targetSubjectId, Dictionary<string, object?> details)
     {
-        details[AuthAuditRows.KindKey] = TeamKind;
+        details[AuthAuditKind.Key] = AuthAuditKind.Team;
         AuthAuditRows.Stage(db, eventType, tenantId: null, teamId, targetSubjectId, details);
     }
 }

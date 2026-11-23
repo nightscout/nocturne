@@ -18,7 +18,6 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// </remarks>
 internal static class AuthAuditRows
 {
-    internal const string KindKey = "kind";
     internal const string System = "system";
     internal const string Anonymous = "anonymous";
     private const int CredentialLength = 64;

@@ -81,7 +81,7 @@ public class RoleRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AnUpdateMadeUnderATenantRecordsThatTenantAndNamesTheRoleByItsNewName()
+    public async Task AnUpdateMadeUnderATenantRecordsNoTenantKindGlobalAndNamesTheRoleByItsNewName()
     {
         var role = await Roles().CreateAsync(new NewRole("careportal", null, ["careportal:*"], IsSystemRole: false), CancellationToken.None);
 
@@ -90,8 +90,8 @@ public class RoleRepositoryTests : IDisposable
 
         await using var db = _db.CreateContext();
         var row = await db.AuthAuditLog.AsNoTracking().SingleAsync();
-        row.TenantId.Should().Be(_tenant);
-        row.DetailsJson.Should().Contain("\"role\":\"care\"");
+        row.TenantId.Should().BeNull();
+        row.DetailsJson.Should().Contain("\"role\":\"care\"").And.Contain($"\"kind\":\"{AuthAuditKind.Global}\"");
     }
 
     [Fact]

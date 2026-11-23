@@ -98,4 +98,12 @@ public interface IAuthAuditService
         Guid? refreshTokenId = null,
         AuthAuditActor? actor = null,
         Guid? tenantId = null);
+
+    /// <summary>
+    /// Logs a role given to or taken from a subject across every tenant, as a row of
+    /// <see cref="AuthAuditKind.Global"/>, whatever tenant the request is pinned to.
+    /// </summary>
+    /// <param name="eventType"><see cref="AuthAuditEventType.RoleAssigned"/> or <see cref="AuthAuditEventType.RoleRemoved"/>.</param>
+    /// <param name="actor">As for <see cref="LogAsync"/>.</param>
+    Task LogGlobalRoleChangeAsync(string eventType, Guid subjectId, string role, AuthAuditActor? actor = null);
 }

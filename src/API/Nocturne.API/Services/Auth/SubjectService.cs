@@ -252,9 +252,8 @@ public class SubjectService : ISubjectService
             subjectId
         );
 
-        await _auditService.LogAsync(AuthAuditEventType.RoleAssigned, subjectId, success: true,
-            detailsJson: JsonSerializer.Serialize(new { role = roleName }),
-            actor: assignedBy is null ? null : new AuthAuditActor(assignedBy, null));
+        await _auditService.LogGlobalRoleChangeAsync(AuthAuditEventType.RoleAssigned, subjectId, roleName,
+            assignedBy is null ? null : new AuthAuditActor(assignedBy, null));
 
         return true;
     }
@@ -273,8 +272,7 @@ public class SubjectService : ISubjectService
             subjectId
         );
 
-        await _auditService.LogAsync(AuthAuditEventType.RoleRemoved, subjectId, success: true,
-            detailsJson: JsonSerializer.Serialize(new { role = roleName }));
+        await _auditService.LogGlobalRoleChangeAsync(AuthAuditEventType.RoleRemoved, subjectId, roleName);
 
         return true;
     }
