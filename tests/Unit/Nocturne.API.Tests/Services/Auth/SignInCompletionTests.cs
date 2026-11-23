@@ -191,6 +191,58 @@ public class SignInCompletionTests
     }
 
     [Fact]
+    public async Task A_refusal_with_nothing_added_records_no_error_message_and_only_the_method_and_reason()
+    {
+        NotAMember();
+
+        await Completion().CompleteAsync(Attempt(SignInMethod.Totp));
+
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, _subjectId, false, Ip, Agent, null,
+            """{"method":"totp","reason":"not_a_member"}""", null, null, null));
+    }
+
+    [Fact]
+    public async Task A_provider_refusal_records_the_reason_as_the_error_and_the_providers_row_byte_for_byte()
+    {
+        NotAMember();
+        var providerId = Guid.NewGuid();
+        var attempt = Attempt(SignInMethod.Oidc, providerId: providerId) with
+        {
+            RefusalAudit = new RefusalAudit(ReasonAsErrorMessage: true, [new("providerId", providerId)]),
+        };
+
+        var outcome = await Completion().CompleteAsync(attempt);
+
+        outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
+        var providersRow = Nocturne.API.Controllers.Authentication.OidcController.NotAMemberDetails(
+            OidcCallbackResult.NotAMember(_subjectId, providerId, externalIdentityDigest: null));
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, _subjectId, false, Ip, Agent, "not_a_member", providersRow,
+            null, null, null));
+    }
+
+    [Theory]
+    [InlineData("method")]
+    [InlineData("reason")]
+    public async Task A_refusal_detail_cannot_replace_the_method_or_the_reason(string reserved)
+    {
+        NotAMember();
+        var attempt = Attempt(SignInMethod.Oidc) with
+        {
+            RefusalAudit = new RefusalAudit(ReasonAsErrorMessage: false, [new(reserved, "other")]),
+        };
+
+        var act = () => Completion().CompleteAsync(attempt);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task A_verified_code_satisfies_the_gate_without_asking_whether_one_is_owed()
     {
         var outcome = await Completion().CompleteAsync(
@@ -254,6 +306,44 @@ public class SignInCompletionTests
         setCookie.Should().Contain($"{new OidcOptions().Cookie.AccessTokenName}=access");
         setCookie.Should().NotContain(SessionCookieExtensions.LastSignInCookieName);
     }
+
+    [Fact]
+    public async Task A_session_writes_the_same_cookies_as_the_session_writer_given_the_expiry_it_computes()
+    {
+        var options = new OidcOptions
+        {
+            Cookie = new CookieSettings
+            {
+                Secure = true, Path = "/app", SessionDomain = ".nocturne.example.com",
+                SameSite = Nocturne.Core.Models.Configuration.SameSiteMode.Strict,
+            },
+        };
+        var providerId = Guid.NewGuid();
+        var session = new SessionTokenPair("access", "refresh", 3600, _subjectId);
+        var applied = new DefaultHttpContext();
+        var direct = new DefaultHttpContext();
+
+        await applied.ApplySignInAsync(new SignInOutcome.SignedIn(session, false, SignInMethod.Oidc, providerId), options);
+        direct.Response.SetSessionCookies(
+            session.AccessToken, session.RefreshToken, DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds), options);
+        direct.Response.SetLastSignInCookie(SessionCookieExtensions.SignInMethods.Oidc, providerId.ToString(), options);
+
+        var appliedCookies = applied.Response.Headers.SetCookie.ToArray();
+        var directCookies = direct.Response.Headers.SetCookie.ToArray();
+        appliedCookies.Select(WithoutExpiry).Should().Equal(directCookies.Select(WithoutExpiry));
+        appliedCookies.Zip(directCookies, (a, d) => (Expiry(d) - Expiry(a)).Duration())
+            .Should().OnlyContain(gap => gap <= TimeSpan.FromSeconds(1), "the cookie's expiry is formatted to the second");
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex ExpiresAttribute =
+        new("expires=([^;]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static string WithoutExpiry(string? cookie) => ExpiresAttribute.Replace(cookie!, "expires=");
+
+    private static DateTimeOffset Expiry(string? cookie) =>
+        ExpiresAttribute.Match(cookie!) is { Success: true } match
+            ? DateTimeOffset.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
+            : DateTimeOffset.MinValue;
 
     [Fact]
     public async Task A_refusal_sets_no_cookie()

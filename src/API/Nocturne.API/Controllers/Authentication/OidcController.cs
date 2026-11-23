@@ -160,8 +160,8 @@ public class OidcController : ControllerBase
     /// <returns>Redirect to return URL with session cookie set.</returns>
     /// <remarks>
     /// Flow: verifies state cookie against the state parameter, exchanges code for tokens
-    /// via <see cref="IOidcAuthService.HandleCallbackAsync"/>, sets session cookies, and
-    /// logs an <see cref="AuthAuditEventType.Login"/> audit event.
+    /// via <see cref="IOidcAuthService.HandleCallbackAsync"/>, whose <see cref="SignInCompletion"/>
+    /// writes the <see cref="AuthAuditEventType.Login"/> row, then sets the cookies the outcome calls for.
     /// On failure, logs <see cref="AuthAuditEventType.FailedAuth"/> and redirects to the error page.
     /// </remarks>
     /// <response code="302">Redirect to return URL on success, or error page on failure.</response>
@@ -226,16 +226,15 @@ public class OidcController : ControllerBase
             Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]
         );
 
+        // The sign-in outcome reaches here flattened into the result; the outcomes rebuilt from it
+        // below only say which cookies to write.
         if (result.StepUpToken is { } stepUpToken)
         {
             Response.SetTotpStepUpCookie(stepUpToken, _options);
-            SetLastSignInCookie(result.ProviderId);
-
-            // Not a completed login, so not a successful one; the success row is written when the
-            // second factor lands.
-            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+            await HttpContext.ApplySignInAsync(
+                new SignInOutcome.SecondFactorRequired(
+                    result.SubjectId!.Value, stepUpToken, SignInMethod.Oidc, result.ProviderId),
+                _options);
 
             return Redirect(
                 $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
@@ -248,11 +247,13 @@ public class OidcController : ControllerBase
             // when the tenant allows access requests.
             if (result.IsAccessDenied)
             {
-                // CompleteLoginAsync has already logged the denial with the tenant id.
-                await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
-                    ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-                    errorMessage: "not_a_member",
-                    detailsJson: NotAMemberDetails(result));
+                if (!result.RefusalAudited)
+                {
+                    await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
+                        ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                        errorMessage: "not_a_member",
+                        detailsJson: NotAMemberDetails(result));
+                }
 
                 return RedirectToLogin();
             }
@@ -274,15 +275,14 @@ public class OidcController : ControllerBase
             );
         }
 
-        SetSessionCookies(result.Tokens!);
-        await HttpContext.EndReplacedHandedOffSessionAsync(_options);
-        SetLastSignInCookie(result.ProviderId);
-
-        await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
-            detailsJson: result.UsedTrustedDevice
-                ? JsonSerializer.Serialize(new { method = "oidc", secondFactor = "trusted_device" })
-                : JsonSerializer.Serialize(new { method = "oidc" }));
+        var tokens = result.Tokens!;
+        await HttpContext.ApplySignInAsync(
+            new SignInOutcome.SignedIn(
+                new SessionTokenPair(tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresIn, tokens.SubjectId),
+                result.UsedTrustedDevice,
+                SignInMethod.Oidc,
+                result.ProviderId),
+            _options);
 
         _logger.LogInformation(
             "OIDC login successful for subject {SubjectId}",
@@ -819,10 +819,6 @@ public class OidcController : ControllerBase
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
-
-    private void SetLastSignInCookie(Guid? providerId) =>
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body

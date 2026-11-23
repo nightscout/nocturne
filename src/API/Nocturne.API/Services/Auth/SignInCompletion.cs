@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 
@@ -28,11 +29,7 @@ public sealed class SignInCompletion(
     public async Task<SignInOutcome> CompleteAsync(SignInAttempt attempt, CancellationToken ct = default)
     {
         if (!await IsAdmittedAsync(attempt.Admission, attempt.SubjectId, ct))
-        {
-            await WriteAuditAsync(AuthAuditEventType.FailedAuth, attempt, success: false,
-                new { method = MethodName(attempt.Method), reason = "not_a_member" });
-            return new SignInOutcome.Refused(SignInRefusal.NotAMember);
-        }
+            return await RefuseAsync(attempt, SignInRefusal.NotAMember);
 
         var gate = attempt.SecondFactor switch
         {
@@ -80,6 +77,31 @@ public sealed class SignInCompletion(
             SignInAdmission.Invite invite => (invite.TenantId, true),
             _ => (null, false),
         };
+
+    private async Task<SignInOutcome> RefuseAsync(SignInAttempt attempt, SignInRefusal reason)
+    {
+        var reasonName = ReasonName(reason);
+        var details = new JsonObject
+        {
+            ["method"] = MethodName(attempt.Method),
+            ["reason"] = reasonName,
+        };
+        foreach (var (name, value) in attempt.RefusalAudit?.Details ?? [])
+            details.Add(name, JsonSerializer.SerializeToNode(value));
+
+        await audit.LogAsync(AuthAuditEventType.FailedAuth, attempt.SubjectId, success: false,
+            ipAddress: attempt.Session.IpAddress,
+            userAgent: attempt.Session.UserAgent,
+            errorMessage: attempt.RefusalAudit is { ReasonAsErrorMessage: true } ? reasonName : null,
+            detailsJson: details.ToJsonString());
+        return new SignInOutcome.Refused(reason);
+    }
+
+    private static string ReasonName(SignInRefusal reason) => reason switch
+    {
+        SignInRefusal.NotAMember => "not_a_member",
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
+    };
 
     private static string MethodName(SignInMethod method) => method switch
     {
@@ -150,13 +172,23 @@ public abstract record SecondFactorProof
 /// <param name="Session">The session's device description and the request's address and agent,
 /// which the audit rows record too.</param>
 /// <param name="ProviderId">The identity provider, for <see cref="SignInMethod.Oidc"/>.</param>
+/// <param name="RefusalAudit">What the method adds to the row of a refusal.</param>
 public sealed record SignInAttempt(
     Guid SubjectId,
     SignInMethod Method,
     SignInAdmission Admission,
     SecondFactorProof SecondFactor,
     SessionContext Session,
-    Guid? ProviderId = null);
+    Guid? ProviderId = null,
+    RefusalAudit? RefusalAudit = null);
+
+/// <summary>
+/// What a method adds to the <see cref="AuthAuditEventType.FailedAuth"/> row of a refused sign-in,
+/// which records the method and the <see cref="SignInRefusal"/> whatever is added.
+/// </summary>
+/// <param name="ReasonAsErrorMessage">Whether the row's error message is the reason too.</param>
+/// <param name="Details">Recorded after the method and the reason, in this order.</param>
+public sealed record RefusalAudit(bool ReasonAsErrorMessage, IReadOnlyList<KeyValuePair<string, object?>> Details);
 
 /// <summary>Why a proved subject was not signed in.</summary>
 public enum SignInRefusal

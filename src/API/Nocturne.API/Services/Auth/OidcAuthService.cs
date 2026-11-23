@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -35,7 +36,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IMemberInviteService _memberInviteService;
     private readonly ITenantCreationInviteService _tenantCreationInvites;
     private readonly ITenantRepository _tenants;
-    private readonly ITotpService _totpService;
+    private readonly SignInCompletion _signIn;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
@@ -54,7 +55,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
     /// <param name="tenantCreationInvites">Reads the tenant-creation link a tenantless login returns to.</param>
     /// <param name="tenants">Finds the sole tenant a tenantless host serves, for a join link handed out there.</param>
-    /// <param name="totpService">Service that withholds the session behind an authenticator code when one is enrolled.</param>
+    /// <param name="signIn">Finishes a login once the identity is proved and admitted.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
@@ -70,7 +71,7 @@ public class OidcAuthService : IOidcAuthService
         IMemberInviteService memberInviteService,
         ITenantCreationInviteService tenantCreationInvites,
         ITenantRepository tenants,
-        ITotpService totpService,
+        SignInCompletion signIn,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -87,7 +88,7 @@ public class OidcAuthService : IOidcAuthService
         _memberInviteService = memberInviteService;
         _tenantCreationInvites = tenantCreationInvites;
         _tenants = tenants;
-        _totpService = totpService;
+        _signIn = signIn;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
@@ -315,12 +316,13 @@ public class OidcAuthService : IOidcAuthService
     /// Completes a login after the OIDC callback has been validated and the ID token parsed:
     /// looks up the subject the external identity is linked to, refuses it when deactivated,
     /// enforces tenant membership, and only then records the sign-in on the subject (creating it
-    /// for an identity not seen before) and issues a session. Because an OIDC identity resolves to
-    /// a <em>global</em> subject, a valid external identity must still be a member of
-    /// <paramref name="currentTenantId"/> before a session is issued; otherwise any external
-    /// identity could mint a session on any tenant's subdomain. With no tenant resolved, only an
-    /// existing subject, or a first-time identity holding a link that authorises an account, is
-    /// admitted. A refused sign-in writes no subject, identity link or profile change.
+    /// for an identity not seen before) and hands it to <see cref="SignInCompletion"/>. Because an
+    /// OIDC identity resolves to a <em>global</em> subject, a valid external identity must still be
+    /// a member of <paramref name="currentTenantId"/> before a session is issued; otherwise any
+    /// external identity could mint a session on any tenant's subdomain. With no tenant resolved,
+    /// only an existing subject, or a first-time identity holding a link that authorises an
+    /// account, is admitted. A sign-in refused here writes no subject, identity link or profile
+    /// change; the completion checks a member's membership again after them.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
     /// </summary>
@@ -411,28 +413,47 @@ public class OidcAuthService : IOidcAuthService
             provider.DefaultRoles
         );
 
-        var secondFactor = await _totpService.GetSecondFactorRequirementAsync(subject.Id, trustedDeviceToken);
-
-        if (secondFactor == SecondFactorRequirement.CodeRequired)
-        {
-            return OidcCallbackResult.SecondFactorRequired(
-                subject.Id,
-                await _totpService.CreateStepUpTokenAsync(subject.Id, currentTenantId, admittedByInvite),
-                stateData.ReturnUrl,
-                provider.Id);
-        }
-
-        // Update last login
-        await _subjectService.UpdateLastLoginAsync(subject.Id);
-
-        // Issue session via SessionService
-        var session = await _sessionService.IssueSessionAsync(
+        SignInAdmission admission = currentTenantId is { } admittedTo
+            ? admittedByInvite ? new SignInAdmission.Invite(admittedTo) : new SignInAdmission.Member(admittedTo)
+            : new SignInAdmission.Account();
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
             subject.Id,
+            SignInMethod.Oidc,
+            admission,
+            new SecondFactorProof.Primary(trustedDeviceToken),
             new SessionContext(
                 OidcSessionId: idTokenClaims.SessionId,
                 DeviceDescription: ParseUserAgentShort(userAgent),
                 IpAddress: ipAddress,
-                UserAgent: userAgent));
+                UserAgent: userAgent),
+            provider.Id,
+            new RefusalAudit(ReasonAsErrorMessage: true, [new("providerId", provider.Id)])));
+
+        SessionTokenPair session;
+        bool usedTrustedDevice;
+        switch (outcome)
+        {
+            case SignInOutcome.SecondFactorRequired required:
+                return OidcCallbackResult.SecondFactorRequired(
+                    subject.Id, required.StepUpToken, stateData.ReturnUrl, provider.Id);
+            case SignInOutcome.SignedIn signedIn:
+                session = signedIn.Session;
+                usedTrustedDevice = signedIn.TrustedDevice;
+                break;
+            case SignInOutcome.Refused:
+                _logger.LogWarning(
+                    "OIDC login refused at completion: subject {SubjectId} via provider {ProviderId} "
+                        + "is not admitted to tenant {TenantId}",
+                    subject.Id,
+                    provider.Id,
+                    currentTenantId);
+                var refused = OidcCallbackResult.NotAMember(
+                    subject.Id, provider.Id, externalIdentityDigest: null, stateData.ReturnUrl);
+                refused.RefusalAudited = true;
+                return refused;
+            default:
+                throw new UnreachableException($"Unknown sign-in outcome {outcome.GetType().Name}");
+        }
 
         var tokens = new OidcTokenResponse
         {
@@ -468,8 +489,7 @@ public class OidcAuthService : IOidcAuthService
         );
 
         return OidcCallbackResult.Succeeded(
-            tokens, userInfo, stateData.ReturnUrl, provider.Id,
-            usedTrustedDevice: secondFactor == SecondFactorRequirement.SatisfiedByTrustedDevice);
+            tokens, userInfo, stateData.ReturnUrl, provider.Id, usedTrustedDevice);
     }
 
     /// <summary>
