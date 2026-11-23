@@ -221,6 +221,66 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         response.Headers.Location!.OriginalString.Should().StartWith($"/api/auth/oidc/login?provider={_providerId}");
     }
 
+    [Fact]
+    public async Task A_session_whose_member_lost_access_after_it_began_gets_no_passkey_challenge()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddMinutes(-1));
+
+        var response = await PostAsync("/api/auth/passkey/register/options", new { username = Username }, session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_session_whose_member_keeps_access_until_later_gets_a_passkey_challenge()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddDays(1));
+
+        var response = await PostAsync("/api/auth/passkey/register/options", new { username = Username }, session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_session_whose_member_lost_access_after_it_began_gets_no_provider_authorisation_url()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddMinutes(-1));
+
+        var response = await PostAsync("/api/auth/oidc/recovery/link", new { providerId = _providerId }, session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        _factory.Oidc.Verify(s => s.GenerateRecoveryLinkAuthorizationUrlAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_session_whose_member_keeps_access_until_later_gets_a_provider_authorisation_url()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddDays(1));
+        _factory.Oidc
+            .Setup(s => s.GenerateRecoveryLinkAuthorizationUrlAsync(
+                _providerId, arranged.EmailMemberId, It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(new OidcAuthorizationRequest
+            {
+                AuthorizationUrl = "https://idp.example/auth",
+                State = RecoveryState,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5),
+                ProviderId = _providerId,
+            });
+
+        var response = await PostAsync("/api/auth/oidc/recovery/link", new { providerId = _providerId }, session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     private async Task SetAccessEndsAtAsync(Guid subjectId, DateTime accessEndsAt)
     {
         await using var db = await TenantDbAsync();
