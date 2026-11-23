@@ -4868,6 +4868,23 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("sleep_stages");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SpentPasskeyChallengeEntity", b =>
+                {
+                    b.Property<string>("Challenge")
+                        .HasColumnType("text")
+                        .HasColumnName("challenge");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.HasKey("Challenge");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("spent_passkey_challenges");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.StateSpanEntity", b =>
                 {
                     b.Property<Guid>("TenantId")

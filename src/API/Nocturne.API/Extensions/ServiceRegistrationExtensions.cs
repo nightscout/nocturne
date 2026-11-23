@@ -614,6 +614,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
+        services.AddScheduledJob<SpentPasskeyChallengeCleanupJob>();
         services.AddScheduledJob<TrustedDeviceCleanupJob>();
         services.AddScheduledJob<MembershipLapseJob>();
 

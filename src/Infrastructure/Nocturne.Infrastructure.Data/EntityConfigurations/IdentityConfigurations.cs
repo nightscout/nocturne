@@ -179,6 +179,15 @@ internal sealed class TotpStepUpTokenEntityConfiguration : IEntityTypeConfigurat
     }
 }
 
+internal sealed class SpentPasskeyChallengeEntityConfiguration : IEntityTypeConfiguration<SpentPasskeyChallengeEntity>
+{
+    public void Configure(EntityTypeBuilder<SpentPasskeyChallengeEntity> entity)
+    {
+        // The cleanup sweep deletes by expiry.
+        entity.HasIndex(e => e.ExpiresAt);
+    }
+}
+
 internal sealed class TrustedDeviceEntityConfiguration : IEntityTypeConfiguration<TrustedDeviceEntity>
 {
     public void Configure(EntityTypeBuilder<TrustedDeviceEntity> entity)

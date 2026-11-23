@@ -2339,6 +2339,7 @@ public class PasskeyControllerTests : IDisposable
     public static TheoryData<Exception> RefusedAssertions() => new()
     {
         new InvalidOperationException("Credential not found."),
+        new InvalidOperationException("Challenge token has already been presented. Please restart the authentication flow."),
         new Fido2NetLib.Fido2VerificationException("Invalid signature"),
         new System.Text.Json.JsonException("not an assertion"),
     };
