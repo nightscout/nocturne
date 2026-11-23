@@ -117,6 +117,38 @@ public class OidcAuthServiceLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CompleteSetupAsync_LinksTheIdentityAndAnswersItsProviderAndSessionIdWithoutSigningIn()
+    {
+        var provider = Provider();
+        var ownerId = Guid.NewGuid();
+        var state = LoginState(returnUrl: "/setup");
+        state.Intent = "setup";
+        state.SubjectId = ownerId;
+        _subjectService
+            .Setup(s => s.AttachOidcIdentityAsync(
+                ownerId, provider.Id, "google-123", provider.IssuerUrl, "user@example.com", false))
+            .ReturnsAsync((OidcLinkOutcome.Created, Guid.NewGuid()));
+        _subjectService.Setup(s => s.GetSubjectByIdAsync(ownerId)).ReturnsAsync(new Subject { Id = ownerId, Name = "Owner" });
+
+        var claims = Claims();
+        claims.Sid = "provider-sid";
+
+        var result = await _service.CompleteSetupAsync(state, provider, claims);
+
+        result.Success.Should().BeTrue(result.ErrorDescription);
+        result.SubjectId.Should().Be(ownerId);
+        result.ProviderId.Should().Be(provider.Id);
+        result.OidcSessionId.Should().Be("provider-sid");
+        result.ReturnUrl.Should().Be("/setup");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the caller ends setup before the sign-in issues a session");
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task CompleteLoginAsync_WhenSubjectIsNotMemberOfTenant_DeniesWithoutIssuingSession()
     {
         var subject = SetupResolvedSubject();

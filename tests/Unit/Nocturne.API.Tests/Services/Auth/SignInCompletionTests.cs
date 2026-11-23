@@ -357,6 +357,84 @@ public class SignInCompletionTests
             ? DateTimeOffset.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
             : DateTimeOffset.MinValue;
 
+    [Theory]
+    [InlineData(SignInMethod.SetupPasskey, """{"method":"passkey","enrolment":"setup"}""")]
+    [InlineData(SignInMethod.SetupOidc, """{"method":"oidc","enrolment":"setup"}""")]
+    public async Task A_setup_sign_in_writes_the_login_row_of_its_method_with_the_enrolment_it_completes(
+        SignInMethod method, string row)
+    {
+        var outcome = await Completion().CompleteAsync(Attempt(method));
+
+        outcome.Should().BeOfType<SignInOutcome.SignedIn>().Which.Method.Should().Be(method);
+        _steps.Should().Equal("admission", "gate", "session", "last-login", "audit:login");
+        _audit.Verify(a => a.LogAsync(AuthAuditEventType.Login, _subjectId, true, Ip, Agent, null, row, null, null, null));
+    }
+
+    [Fact]
+    public async Task A_setup_sign_in_over_a_trusted_device_names_the_enrolment_before_the_second_factor()
+    {
+        GateAnswers(SecondFactorRequirement.SatisfiedByTrustedDevice);
+
+        await Completion().CompleteAsync(Attempt(SignInMethod.SetupOidc));
+
+        _rows.Single().Details.GetRawText().Should()
+            .Be("""{"method":"oidc","enrolment":"setup","secondFactor":"trusted_device"}""");
+    }
+
+    [Fact]
+    public async Task A_setup_sign_in_that_owes_a_code_writes_the_pending_row_with_the_enrolment()
+    {
+        GateAnswers(SecondFactorRequirement.CodeRequired);
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.SetupPasskey));
+
+        outcome.Should().BeOfType<SignInOutcome.SecondFactorRequired>();
+        _sessions.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _rows.Single().Details.GetRawText().Should()
+            .Be("""{"method":"passkey","enrolment":"setup","secondFactorPending":true}""");
+    }
+
+    [Fact]
+    public async Task A_refused_setup_sign_in_records_the_enrolment_between_the_method_and_the_reason()
+    {
+        NotAMember();
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.SetupPasskey));
+
+        outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, _subjectId, false, Ip, Agent, null,
+            """{"method":"passkey","enrolment":"setup","reason":"not_a_member"}""", null, null, null));
+    }
+
+    [Fact]
+    public async Task A_setup_by_passkey_sets_the_passkey_sign_in_hint()
+    {
+        var context = new DefaultHttpContext();
+
+        await context.ApplySignInAsync(
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.SetupPasskey, null), new OidcOptions());
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        setCookie.Should().Contain($"{new OidcOptions().Cookie.AccessTokenName}=access");
+        setCookie.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}=passkey");
+    }
+
+    [Fact]
+    public async Task A_setup_by_provider_sets_the_sign_in_hint_that_names_the_provider()
+    {
+        var context = new DefaultHttpContext();
+        var providerId = Guid.NewGuid();
+
+        await context.ApplySignInAsync(
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.SetupOidc, providerId), new OidcOptions());
+
+        context.Response.Headers.SetCookie.ToString().Should()
+            .Contain($"{SessionCookieExtensions.LastSignInCookieName}=oidc%3A{providerId}");
+    }
+
     [Fact]
     public async Task A_refusal_sets_no_cookie()
     {
