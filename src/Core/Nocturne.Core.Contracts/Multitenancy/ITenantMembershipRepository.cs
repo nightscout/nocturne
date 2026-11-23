@@ -146,8 +146,7 @@ public interface ITenantMembershipRepository
     /// Sets when the membership ends, null clearing it, and stamps it updated at
     /// <paramref name="now"/> when the date moved. Refused with
     /// <see cref="OwnerGuardedChange.OwnerAccessEnds"/> when it would give an owner an end date.
-    /// In the same save, an alert channel the member added stops no later than the end, and a
-    /// later end does not move a channel's stop back.
+    /// It does not cap what the member made: <see cref="ITenantService.SetMemberAccessEndAsync"/> does, in the same commit.
     /// </summary>
     /// <remarks>Holds the tenant's owner lock as <see cref="RemoveMemberUnlessLastOwnerAsync"/> does, so it and a role change cannot race.</remarks>
     Task<OwnerGuardedChange> SetAccessEndUnlessOwnerAsync(

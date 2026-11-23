@@ -374,8 +374,7 @@ public partial class TenantService : ITenantService
                 if (accessEndsAt is { } end)
                 {
                     var member = await members.GetMemberAsync(tenantId, memberId, token);
-                    lowered = await new OAuthGrantRepository(unit)
-                        .CapGrantsCreatedByAsync(member!.SubjectId, end, now, token);
+                    lowered = await MemberCreations.CapAsync(unit, member!.SubjectId, end, now, token);
                 }
 
                 await unit.Context.SaveChangesAsync(token);
