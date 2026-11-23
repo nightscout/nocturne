@@ -435,60 +435,49 @@ public class InAppNotificationService : IInAppNotificationService
             notificationId
         );
 
-        // Handle built-in actions
-        switch (actionId.ToLowerInvariant())
+        var builtInArchive = actionId.ToLowerInvariant() switch
         {
-            case "dismiss":
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Dismissed,
-                    userId,
-                    cancellationToken
-                );
+            "dismiss" => NotificationArchiveReason.Dismissed,
+            "navigate" => NotificationArchiveReason.Completed,
+            _ => (NotificationArchiveReason?)null,
+        };
 
-            case "navigate":
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Completed,
-                    userId,
-                    cancellationToken
-                );
+        if (_actionHandlers.TryGetValue(notification.Type, out var handler))
+        {
+            var metadata = DeserializeMetadata(notification.MetadataJson);
+            var result = await handler.HandleAsync(
+                notificationId,
+                actionId,
+                userId,
+                notification.SourceId,
+                metadata,
+                cancellationToken
+            );
 
-            default:
-                // Dispatch to type-specific action handler if registered
-                if (_actionHandlers.TryGetValue(notification.Type, out var handler))
+            if (result.Handled || builtInArchive is null)
+            {
+                if (result.Archive is { } reason)
                 {
-                    var metadata = DeserializeMetadata(notification.MetadataJson);
-                    var result = await handler.HandleAsync(
-                        notificationId,
-                        actionId,
-                        userId,
-                        notification.SourceId,
-                        metadata,
-                        cancellationToken
-                    );
-
-                    if (result.Archive is { } reason)
-                    {
-                        await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
-                    }
-
-                    return result.Handled;
+                    await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
                 }
 
-                // No handler registered — default to archiving as completed
-                _logger.LogInformation(
-                    "No action handler for type {Type}, archiving notification {NotificationId} as completed",
-                    notification.Type,
-                    notificationId
-                );
-                return await ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Completed,
-                    userId,
-                    cancellationToken
-                );
+                return result.Handled;
+            }
+
+            _logger.LogInformation(
+                "Handler for type {Type} declined {ActionId}, archiving notification {NotificationId}",
+                notification.Type,
+                actionId,
+                notificationId
+            );
         }
+
+        return await ArchiveNotificationAsync(
+            notificationId,
+            builtInArchive ?? NotificationArchiveReason.Completed,
+            userId,
+            cancellationToken
+        );
     }
 
     /// <inheritdoc />

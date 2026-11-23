@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http;
 using Moq;
+using Nocturne.API.Services.NotificationActionHandlers;
 using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -382,5 +385,169 @@ public class InAppNotificationServiceTests
             b => b.BroadcastNotificationArchivedAsync(
                 "user-1", It.IsAny<InAppNotificationDto>(), NotificationArchiveReason.Dismissed),
             Times.Once);
+    }
+
+    private const string HandledType = "handled.type";
+
+    private InAppNotificationService ServiceWith(INotificationActionHandler? handler) =>
+        new(
+            _repository.Object,
+            _broadcast.Object,
+            Mock.Of<INotificationTemplateRegistry>(),
+            handler is null ? Array.Empty<INotificationActionHandler>() : [handler],
+            Mock.Of<ILogger<InAppNotificationService>>());
+
+    private Mock<INotificationActionHandler> HandlerReturning(NotificationActionResult result)
+    {
+        var handler = new Mock<INotificationActionHandler>();
+        handler.SetupGet(h => h.NotificationType).Returns(HandledType);
+        handler
+            .Setup(h => h.HandleAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+        return handler;
+    }
+
+    private InAppNotificationEntity Owned(string type)
+    {
+        var entity = Notification("user-1");
+        entity.Type = type;
+        _repository
+            .Setup(r => r.GetByIdAsync(entity.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entity);
+        _repository
+            .Setup(r => r.ArchiveAsync(
+                entity.Id, It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entity);
+        return entity;
+    }
+
+    private void VerifyArchivedOnce(Guid id, NotificationArchiveReason reason)
+    {
+        _repository.Verify(
+            r => r.ArchiveAsync(id, reason, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData("dismiss", NotificationArchiveReason.Dismissed)]
+    [InlineData("navigate", NotificationArchiveReason.Completed)]
+    public async Task ExecuteActionAsync_WhenTheTypeHasNoHandler_ArchivesForTheBuiltInAction(
+        string actionId, NotificationArchiveReason expected)
+    {
+        var entity = Owned("glucose.compression_low_review");
+
+        var result = await ServiceWith(null).ExecuteActionAsync(entity.Id, actionId, "user-1");
+
+        result.Should().BeTrue();
+        VerifyArchivedOnce(entity.Id, expected);
+    }
+
+    [Theory]
+    [InlineData("dismiss", NotificationArchiveReason.Dismissed)]
+    [InlineData("navigate", NotificationArchiveReason.Completed)]
+    public async Task ExecuteActionAsync_WhenTheHandlerDeclinesABuiltInAction_ArchivesForIt(
+        string actionId, NotificationArchiveReason expected)
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(NotificationActionResult.NotHandled);
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, actionId, "user-1");
+
+        result.Should().BeTrue();
+        handler.Verify(
+            h => h.HandleAsync(
+                entity.Id, actionId, "user-1", It.IsAny<string?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        VerifyArchivedOnce(entity.Id, expected);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_DismissingAMealMatchWithoutTheFoodWriteScope_ArchivesAndLeavesTheEntryPending()
+    {
+        var entity = Owned("meal_matching.suggested_match");
+        entity.SourceId = Guid.NewGuid().ToString();
+        var foodEntries = new Mock<IConnectorFoodEntryRepository>();
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.SetupGet(a => a.HttpContext).Returns(new DefaultHttpContext());
+        var handler = new MealMatchActionHandler(
+            foodEntries.Object, accessor.Object, Mock.Of<ILogger<MealMatchActionHandler>>());
+
+        var result = await ServiceWith(handler).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
+
+        result.Should().BeTrue();
+        foodEntries.Verify(
+            r => r.DismissAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        VerifyArchivedOnce(entity.Id, NotificationArchiveReason.Dismissed);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_WhenTheHandlerHandlesDismiss_RunsItAndArchivesOnceWithItsReason()
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(new NotificationActionResult(true, NotificationArchiveReason.ConditionMet));
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
+
+        result.Should().BeTrue();
+        handler.Verify(
+            h => h.HandleAsync(
+                entity.Id, "dismiss", "user-1", It.IsAny<string?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        VerifyArchivedOnce(entity.Id, NotificationArchiveReason.ConditionMet);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_WhenTheHandlerHandlesDismissWithoutArchiving_LeavesTheNotification()
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(NotificationActionResult.HandledNoArchive);
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
+
+        result.Should().BeTrue();
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_WhenTheHandlerDeclinesAnotherAction_FailsWithoutArchiving()
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(NotificationActionResult.NotHandled);
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "accept", "user-1");
+
+        result.Should().BeFalse();
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_WhenTheNotificationBelongsToAnotherUser_RunsNoHandler()
+    {
+        var entity = Owned(HandledType);
+        var handler = HandlerReturning(NotificationActionResult.Dismissed);
+
+        var result = await ServiceWith(handler.Object).ExecuteActionAsync(entity.Id, "dismiss", "someone-else");
+
+        result.Should().BeFalse();
+        handler.Verify(
+            h => h.HandleAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

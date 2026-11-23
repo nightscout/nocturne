@@ -8,6 +8,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -158,6 +160,86 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await GetActiveOverHttpAsync()).Should().NotContain(n => n.Id == created.Id);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Dismissed);
+    }
+
+    private const string MealMatchType = "meal_matching.suggested_match";
+
+    private async Task<Guid> SeedFoodEntryAsync(
+        ConnectorFoodEntryStatus status = ConnectorFoodEntryStatus.Pending,
+        Guid? matchedCarbIntakeId = null)
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var entry = new ConnectorFoodEntryEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectorSource = "notification-test",
+            ExternalEntryId = Guid.NewGuid().ToString("N"),
+            ExternalFoodId = "food-1",
+            ConsumedAt = DateTimeOffset.UtcNow,
+            Carbs = 12,
+            Servings = 1,
+            Status = status,
+            MatchedCarbIntakeId = matchedCarbIntakeId,
+        };
+        db.ConnectorFoodEntries.Add(entry);
+        await db.SaveChangesAsync();
+        return entry.Id;
+    }
+
+    private async Task<Guid> SeedCarbIntakeAsync()
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var intake = new CarbIntakeEntity { Id = Guid.CreateVersion7(), Timestamp = DateTime.UtcNow, Carbs = 40 };
+        db.CarbIntakes.Add(intake);
+        await db.SaveChangesAsync();
+        return intake.Id;
+    }
+
+    private async Task<(ConnectorFoodEntryStatus Status, Guid? MatchedCarbIntakeId)> StoredFoodEntryAsync(Guid id)
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var stored = await db.ConnectorFoodEntries
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => new { e.Status, e.MatchedCarbIntakeId })
+            .SingleAsync();
+        return (stored.Status, stored.MatchedCarbIntakeId);
+    }
+
+    private Task<InAppNotificationDto> CreateMealMatchAsync(Guid foodEntryId) =>
+        WithServiceAsync(s => s.CreateNotificationAsync(
+            OwnerUserId,
+            MealMatchType,
+            "Suggested meal match",
+            NotificationCategory.ActionRequired,
+            sourceId: foodEntryId.ToString(),
+            actions: [new NotificationActionDto { ActionId = "dismiss", Label = "Dismiss" }]));
+
+    [Fact]
+    public async Task ExecuteAction_DismissingAMealMatch_ResolvesTheFoodEntryAndArchivesTheNotification()
+    {
+        var foodEntryId = await SeedFoodEntryAsync();
+        var created = await CreateMealMatchAsync(foodEntryId);
+
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/dismiss", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await StoredFoodEntryAsync(foodEntryId)).Status.Should().Be(ConnectorFoodEntryStatus.Standalone);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Dismissed);
+    }
+
+    [Fact]
+    public async Task ExecuteAction_DismissingAMealMatchAlreadyAccepted_LeavesTheFoodEntryAndArchivesTheStaleNotification()
+    {
+        var carbIntakeId = await SeedCarbIntakeAsync();
+        var foodEntryId = await SeedFoodEntryAsync(ConnectorFoodEntryStatus.Matched, carbIntakeId);
+        var created = await CreateMealMatchAsync(foodEntryId);
+
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/dismiss", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await StoredFoodEntryAsync(foodEntryId)).Should().Be((ConnectorFoodEntryStatus.Matched, carbIntakeId));
         (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Dismissed);
     }
 
