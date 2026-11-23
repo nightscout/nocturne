@@ -445,6 +445,7 @@ public class SetupControllerTests : IDisposable
             TenantId = tenantId,
             SubjectId = subjectId,
         });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
 
         _passkeyService
@@ -481,6 +482,7 @@ public class SetupControllerTests : IDisposable
         {
             Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = formerId, Username = "taken",
         });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
 
         var result = await _controller.OwnerOptions(
@@ -542,6 +544,7 @@ public class SetupControllerTests : IDisposable
         {
             Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
         });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
 
         Guid enrolling = default;
@@ -575,10 +578,7 @@ public class SetupControllerTests : IDisposable
         {
             Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
         });
-        _dbContext.Set<TenantRoleEntity>().Add(new TenantRoleEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenantId, Name = "Owner", Slug = RoleSeeds.Owner, IsSystem = true,
-        });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
         _passkeyService
             .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
@@ -609,6 +609,78 @@ public class SetupControllerTests : IDisposable
             ActorCredential = (string?)null,
             DetailsJson = """{"role":"owner","kind":"tenant"}""",
         });
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenTheTenantHasNoOwnerRole_AnswersAnErrorAndCreatesNothing()
+    {
+        var logger = new Mock<ILogger<SetupController>>();
+        var controller = BuildController(
+            new OperatorConfiguration(), new Mock<IHttpClientFactory>().Object, logger.Object);
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+
+        var result = await controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(500);
+        problem.Value.Should().BeOfType<ProblemDetails>().Subject.Detail
+            .Should().NotContain(tenantId.ToString());
+        await AssertNothingWrittenAsync(tenantId);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(tenantId.ToString())),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenTheTenantHasNoOwnerRole_LeavesTheRecordedSetupOwnerUnchanged()
+    {
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+        var subjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = "First Name", Username = "first", IsActive = true,
+        });
+        (await _dbContext.Set<TenantEntity>().SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId = subjectId;
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "second", DisplayName = "Second Name" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.Name.Should().Be("First Name");
+        subject.Username.Should().Be("first");
+        await AssertNothingWrittenAsync(tenantId, expectedSubjects: 1);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenRetriedBySubjectAlreadyMember_StillSucceedsWithTheSameSubject()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner", PasskeyRegistrationFlow.SetupOwner), Times.Once);
+        var context = FreshContext();
+        (await context.TenantMembers.CountAsync(m => m.TenantId == tenantId)).Should().Be(1);
+        (await context.Subjects.CountAsync()).Should().Be(1);
     }
 
     // SoftLock_TenantWithOnlySystemMembers_OwnerOptionsSucceeds is an integration test — it
@@ -942,6 +1014,22 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<ConflictObjectResult>();
     }
 
+    [Fact]
+    public async Task OwnerOidc_WhenTheTenantHasNoOwnerRole_AnswersAnErrorAndCreatesNothing()
+    {
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+
+        var result = await _controller.OwnerOidc(
+            new SetupOwnerOidcRequest { Username = "owner", DisplayName = "Owner", ProviderId = Guid.CreateVersion7() },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await AssertNothingWrittenAsync(tenantId);
+        _oidcAuthService.Verify(
+            s => s.GenerateSetupAuthorizationUrlAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
     // OwnerOidc field-validation cases (empty username, empty ProviderId) are left to
     // the integration suite; the sole-tenant guard itself is exercised above.
 
@@ -1189,6 +1277,31 @@ public class SetupControllerTests : IDisposable
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private NocturneDbContext FreshContext() => _db.CreateContext();
+
+    private static TenantRoleEntity OwnerRole(Guid tenantId) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = tenantId, Name = "Owner", Slug = RoleSeeds.Owner, IsSystem = true,
+    };
+
+    /// <summary>Seeds the sole tenant of a damaged install: it holds no owner role.</summary>
+    private async Task<Guid> SeedTenantWithoutOwnerRoleAsync()
+    {
+        var tenantId = Guid.CreateVersion7();
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        await _dbContext.SaveChangesAsync();
+        return tenantId;
+    }
+
+    private async Task AssertNothingWrittenAsync(Guid tenantId, int expectedSubjects = 0)
+    {
+        var context = FreshContext();
+        (await context.Subjects.CountAsync()).Should().Be(expectedSubjects, "a refused step creates no subject");
+        (await context.TenantMembers.CountAsync(m => m.TenantId == tenantId)).Should().Be(0, "a refused step grants nothing");
+        _subjectService.Verify(s => s.AssignRoleAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+    }
 
     /// <summary>
     /// Drives the passkey completion step with the mocks it needs to reach the grant.
