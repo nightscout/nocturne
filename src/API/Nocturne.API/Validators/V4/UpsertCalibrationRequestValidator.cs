@@ -23,7 +23,7 @@ public class UpsertCalibrationRequestValidator : AbstractValidator<UpsertCalibra
     /// </summary>
     public UpsertCalibrationRequestValidator()
     {
-        RuleFor(x => x.Timestamp).NotEqual(default(DateTimeOffset)).WithMessage("Timestamp is required");
+        RuleFor(x => x.Timestamp).TimestampRequired();
         RuleFor(x => x.Device).MaximumLength(500).When(x => x.Device is not null);
         RuleFor(x => x.App).MaximumLength(500).When(x => x.App is not null);
         RuleFor(x => x.DataSource).MaximumLength(RecordColumnLengths.Provenance).When(x => x.DataSource is not null);

@@ -56,7 +56,7 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
         [FromBody] UpsertUploaderSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (await this.ValidateBulkAsync(requests, "Uploader snapshot", "snapshot", "snapshots", ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Uploader snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
@@ -64,13 +64,8 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
         return StatusCode(201, persisted.ToArray());
     }
 
-    private static UploaderSnapshot MapToModel(UpsertUploaderSnapshotRequest request) => new()
+    private static UploaderSnapshot MapToModel(UpsertUploaderSnapshotRequest request) => new UploaderSnapshot
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         Name = request.Name,
@@ -80,5 +75,5 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
         Temperature = request.Temperature,
         Type = request.Type,
         AdditionalProperties = request.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

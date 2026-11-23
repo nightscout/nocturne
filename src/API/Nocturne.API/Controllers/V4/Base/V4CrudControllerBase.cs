@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
@@ -98,8 +99,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var model = MapCreateToModel(request);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeCreateAsync(model, request, ct) is { } result)
             return result;
@@ -145,7 +146,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         [FromBody] IReadOnlyList<TCreateRequest> requests, CancellationToken ct = default)
     {
         var naming = BulkNaming;
-        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
             return invalid;
 
         var models = new List<TModel>(requests.Count);
@@ -191,8 +192,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         var model = MapUpdateToModel(id, request, existing);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } result)
             return result;

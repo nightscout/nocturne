@@ -17,7 +17,7 @@ public class CreateTempBasalRequestValidator : AbstractValidator<CreateTempBasal
 {
     public CreateTempBasalRequestValidator()
     {
-        RuleFor(x => x.Timestamp).NotEqual(default(DateTimeOffset)).WithMessage("Timestamp is required");
+        RuleFor(x => x.Timestamp).TimestampRequired();
         When(x => !x.IsCancel, () =>
         {
             RuleFor(x => x.Device).MaximumLength(RecordColumnLengths.Provenance).When(x => x.Device is not null);

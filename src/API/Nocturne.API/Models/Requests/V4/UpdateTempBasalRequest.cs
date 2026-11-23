@@ -12,7 +12,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </remarks>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.TempBasalController"/>
 /// <seealso cref="TempBasal"/>
-public class UpdateTempBasalRequest
+public class UpdateTempBasalRequest : IV4RecordHeader
 {
     /// <summary>
     /// When the temp basal started.

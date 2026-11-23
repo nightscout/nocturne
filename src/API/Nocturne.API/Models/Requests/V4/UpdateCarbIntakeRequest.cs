@@ -6,7 +6,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpdateCarbIntakeRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.CarbIntakeController"/>
-public class UpdateCarbIntakeRequest
+public class UpdateCarbIntakeRequest : IV4RecordHeader
 {
     /// <summary>
     /// When the carbs were consumed.

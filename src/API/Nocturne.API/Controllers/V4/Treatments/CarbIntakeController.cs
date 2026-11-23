@@ -47,7 +47,7 @@ public class CarbIntakeController(ICarbIntakeRepository repo, ITreatmentFoodServ
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Carb intake", "intake", "intakes");
+    protected override V4BulkNaming BulkNaming => new("Carb intake", "intakes");
 
     /// <inheritdoc/>
     /// <remarks>
@@ -74,13 +74,8 @@ public class CarbIntakeController(ICarbIntakeRepository repo, ITreatmentFoodServ
     protected override Task OnBeforeReturnAsync(IReadOnlyCollection<CarbIntake> records, CancellationToken ct)
         => treatmentFoodService.ApplyFoodTypesAsync(records, ct);
 
-    protected override CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
+    protected override CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new CarbIntake
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Carbs = request.Carbs,
         SyncIdentifier = request.SyncIdentifier,
         CarbTime = request.CarbTime,
@@ -90,16 +85,11 @@ public class CarbIntakeController(ICarbIntakeRepository repo, ITreatmentFoodServ
         // Records split from one source share a correlation_id; it is a free-standing
         // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
         CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
-    };
+    }.WithHeaderFrom(request);
 
-    protected override CarbIntake MapUpdateToModel(Guid id, UpdateCarbIntakeRequest request, CarbIntake existing) => new()
+    protected override CarbIntake MapUpdateToModel(Guid id, UpdateCarbIntakeRequest request, CarbIntake existing) => new CarbIntake
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Carbs = request.Carbs,
         SyncIdentifier = request.SyncIdentifier,
         CarbTime = request.CarbTime,
@@ -110,7 +100,7 @@ public class CarbIntakeController(ICarbIntakeRepository repo, ITreatmentFoodServ
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).

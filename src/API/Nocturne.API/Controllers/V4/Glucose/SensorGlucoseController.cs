@@ -48,7 +48,7 @@ public class SensorGlucoseController(
     public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Sensor glucose", "reading", "readings");
+    protected override V4BulkNaming BulkNaming => new("Sensor glucose", "readings");
 
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
@@ -108,13 +108,8 @@ public class SensorGlucoseController(
         return await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
     }
 
-    protected override SensorGlucose MapCreateToModel(UpsertSensorGlucoseRequest request) => new()
+    protected override SensorGlucose MapCreateToModel(UpsertSensorGlucoseRequest request) => new SensorGlucose
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         Mgdl = request.Mgdl,
         Direction = request.Direction,
@@ -124,16 +119,11 @@ public class SensorGlucoseController(
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
         Rssi = request.Rssi,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override SensorGlucose MapUpdateToModel(Guid id, UpsertSensorGlucoseRequest request, SensorGlucose existing) => new()
+    protected override SensorGlucose MapUpdateToModel(Guid id, UpsertSensorGlucoseRequest request, SensorGlucose existing) => new SensorGlucose
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Mgdl = request.Mgdl,
         Direction = request.Direction,
         TrendRate = request.TrendRate,
@@ -147,7 +137,7 @@ public class SensorGlucoseController(
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <inheritdoc/>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(

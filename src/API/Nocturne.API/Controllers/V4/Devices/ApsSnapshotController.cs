@@ -61,7 +61,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         [FromBody] UpsertApsSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshot", "snapshots", ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
@@ -71,13 +71,8 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         return StatusCode(201, persisted);
     }
 
-    private static ApsSnapshot MapToModel(UpsertApsSnapshotRequest request) => new()
+    private static ApsSnapshot MapToModel(UpsertApsSnapshotRequest request) => new ApsSnapshot
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         AidAlgorithm = request.AidAlgorithm,
@@ -106,5 +101,5 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
         LoopJson = request.LoopJson,
         OverrideJson = request.OverrideJson,
         AdditionalProperties = request.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

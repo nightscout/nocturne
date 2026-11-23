@@ -223,8 +223,42 @@ public class BasalInjectionControllerTests
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
         objectResult.Value.Should().BeOfType<ProblemDetails>()
-            .Which.Detail.Should().Be("Timestamp must be set");
+            .Which.Detail.Should().Be("Timestamp is required");
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Basal injection has no request validator, so an unset timestamp is answered by the CRUD base
+    /// check: a plain problem body with a <c>detail</c>, not a validation problem with <c>errors</c>.
+    /// </summary>
+    [Fact]
+    public async Task Create_with_an_unset_timestamp_answers_the_base_problem_body()
+    {
+        var result = await CreateController().Create(new CreateBasalInjectionRequest { Timestamp = default, Units = 12 });
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        var problem = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Title.Should().Be("Bad Request");
+        problem.Status.Should().Be(400);
+        problem.Detail.Should().Be("Timestamp is required");
+        problem.Extensions.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The base reads the stored record before it maps the request, so an update of an unknown id is
+    /// a 404 whatever the timestamp.
+    /// </summary>
+    [Fact]
+    public async Task Update_of_an_unknown_id_with_an_unset_timestamp_answers_404()
+    {
+        var id = Guid.NewGuid();
+        _repoMock.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync((BasalInjection?)null);
+
+        var result = await CreateController().Update(id, new UpdateBasalInjectionRequest { Timestamp = default, Units = 12 });
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+        VerifyNoUpdate();
     }
 
     /// <summary>
@@ -246,7 +280,7 @@ public class BasalInjectionControllerTests
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
         objectResult.Value.Should().BeOfType<ProblemDetails>()
-            .Which.Detail.Should().Be("Timestamp must be set");
+            .Which.Detail.Should().Be("Timestamp is required");
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

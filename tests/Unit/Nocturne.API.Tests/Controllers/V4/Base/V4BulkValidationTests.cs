@@ -114,7 +114,7 @@ public class V4BulkValidationTests
         var requests = Snapshots(3);
         requests[2].Timestamp = default;
 
-        Rejected((await ApsController().CreateApsSnapshots(requests)).Result, "Timestamp must be set on every snapshot");
+        Rejected((await ApsController().CreateApsSnapshots(requests)).Result, "Timestamp is required");
         NothingPersisted();
     }
 
@@ -153,17 +153,17 @@ public class V4BulkValidationTests
     /// </summary>
     private static readonly Dictionary<Type, V4BulkNaming> ExpectedNaming = new()
     {
-        [typeof(BasalInjectionController)] = new("Basal injection", "injection", "injections"),
-        [typeof(BGCheckController)] = new("BG check", "check", "checks"),
-        [typeof(BolusCalculationController)] = new("Bolus calculation", "calculation", "calculations"),
-        [typeof(BolusController)] = new("Bolus", "bolus", "boluses"),
-        [typeof(CalibrationController)] = new("Calibration", "calibration", "calibrations"),
-        [typeof(CarbIntakeController)] = new("Carb intake", "intake", "intakes"),
-        [typeof(DeviceEventController)] = new("Device event", "event", "events"),
-        [typeof(MeterGlucoseController)] = new("Meter glucose", "reading", "readings"),
-        [typeof(NoteController)] = new("Note", "note", "notes"),
-        [typeof(SensorGlucoseController)] = new("Sensor glucose", "reading", "readings"),
-        [typeof(TempBasalController)] = new("Temp basal", "temp basal", "temp basals"),
+        [typeof(BasalInjectionController)] = new("Basal injection", "injections"),
+        [typeof(BGCheckController)] = new("BG check", "checks"),
+        [typeof(BolusCalculationController)] = new("Bolus calculation", "calculations"),
+        [typeof(BolusController)] = new("Bolus", "boluses"),
+        [typeof(CalibrationController)] = new("Calibration", "calibrations"),
+        [typeof(CarbIntakeController)] = new("Carb intake", "intakes"),
+        [typeof(DeviceEventController)] = new("Device event", "events"),
+        [typeof(MeterGlucoseController)] = new("Meter glucose", "readings"),
+        [typeof(NoteController)] = new("Note", "notes"),
+        [typeof(SensorGlucoseController)] = new("Sensor glucose", "readings"),
+        [typeof(TempBasalController)] = new("Temp basal", "temp basals"),
     };
 
     /// <summary>
@@ -179,15 +179,13 @@ public class V4BulkValidationTests
 
         naming.Should().Be(ExpectedNaming[controllerType]);
         naming.Subject.Should().MatchRegex("^[A-Z]", "the subject opens a sentence");
-        naming.Singular.Should().Be(naming.Singular.ToLowerInvariant(), "the singular sits mid-sentence");
         naming.Plural.Should().Be(naming.Plural.ToLowerInvariant(), "the plural sits mid-sentence");
-        naming.Plural.Should().NotBe(naming.Singular, "one item and many read differently");
 
         Rejected(await DriveBulkAsync(controllerType, 0), $"{naming.Subject} data is required");
         Rejected(
             await DriveBulkAsync(controllerType, V4BulkValidation.MaxItems + 1),
             $"Bulk operations are limited to {V4BulkValidation.MaxItems} {naming.Plural} per request");
-        Rejected(await DriveBulkAsync(controllerType, 1), $"Timestamp must be set on every {naming.Singular}");
+        Rejected(await DriveBulkAsync(controllerType, 1), "Timestamp is required");
     }
 
     public static TheoryData<Type> CrudControllers()
