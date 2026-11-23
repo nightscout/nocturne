@@ -6,6 +6,7 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -477,7 +478,7 @@ public class InAppNotificationServiceTests
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.SetupGet(a => a.HttpContext).Returns(new DefaultHttpContext());
         var handler = new MealMatchActionHandler(
-            foodEntries.Object, accessor.Object, Mock.Of<ILogger<MealMatchActionHandler>>());
+            foodEntries.Object, Mock.Of<IMealMatchLinker>(), accessor.Object, Mock.Of<ILogger<MealMatchActionHandler>>());
 
         var result = await ServiceWith(handler).ExecuteActionAsync(entity.Id, "dismiss", "user-1");
 
@@ -486,6 +487,31 @@ public class InAppNotificationServiceTests
             r => r.DismissAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
         VerifyArchivedOnce(entity.Id, NotificationArchiveReason.Dismissed);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_AcceptingAMealMatchWithoutTheTreatmentsWriteScope_FailsLinksNothingAndKeepsTheNotification()
+    {
+        var entity = Owned("meal_matching.suggested_match");
+        entity.SourceId = Guid.NewGuid().ToString();
+        var linker = new Mock<IMealMatchLinker>();
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.SetupGet(a => a.HttpContext).Returns(new DefaultHttpContext());
+        var handler = new MealMatchActionHandler(
+            Mock.Of<IConnectorFoodEntryRepository>(), linker.Object, accessor.Object,
+            Mock.Of<ILogger<MealMatchActionHandler>>());
+
+        var result = await ServiceWith(handler).ExecuteActionAsync(entity.Id, "accept", "user-1");
+
+        result.Should().BeFalse();
+        linker.Verify(
+            l => l.LinkAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

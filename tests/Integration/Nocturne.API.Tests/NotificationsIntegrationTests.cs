@@ -167,7 +167,8 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Guid> SeedFoodEntryAsync(
         ConnectorFoodEntryStatus status = ConnectorFoodEntryStatus.Pending,
-        Guid? matchedCarbIntakeId = null)
+        Guid? matchedCarbIntakeId = null,
+        decimal carbs = 12)
     {
         await using var db = Fixture.CreateDbContext(Fixture.TenantId);
         var entry = new ConnectorFoodEntryEntity
@@ -177,7 +178,7 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
             ExternalEntryId = Guid.NewGuid().ToString("N"),
             ExternalFoodId = "food-1",
             ConsumedAt = DateTimeOffset.UtcNow,
-            Carbs = 12,
+            Carbs = carbs,
             Servings = 1,
             Status = status,
             MatchedCarbIntakeId = matchedCarbIntakeId,
@@ -207,14 +208,96 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
         return (stored.Status, stored.MatchedCarbIntakeId);
     }
 
-    private Task<InAppNotificationDto> CreateMealMatchAsync(Guid foodEntryId) =>
+    private Task<InAppNotificationDto> CreateMealMatchAsync(
+        Guid foodEntryId, Guid? carbIntakeId = null, decimal snapshotCarbs = 12) =>
         WithServiceAsync(s => s.CreateNotificationAsync(
             OwnerUserId,
             MealMatchType,
             "Suggested meal match",
             NotificationCategory.ActionRequired,
             sourceId: foodEntryId.ToString(),
-            actions: [new NotificationActionDto { ActionId = "dismiss", Label = "Dismiss" }]));
+            actions:
+            [
+                new NotificationActionDto { ActionId = "accept", Label = "Accept" },
+                new NotificationActionDto { ActionId = "dismiss", Label = "Dismiss" },
+            ],
+            metadata: carbIntakeId is null
+                ? null
+                : new Dictionary<string, object>
+                {
+                    ["carbIntakeId"] = carbIntakeId.Value,
+                    ["foodEntryCarbs"] = snapshotCarbs,
+                }));
+
+    private async Task<int> LinkedFoodRowsAsync(Guid carbIntakeId)
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        return await db.TreatmentFoods.AsNoTracking().CountAsync(f => f.CarbIntakeId == carbIntakeId);
+    }
+
+    [Fact]
+    public async Task ExecuteAction_AcceptingAMealMatch_LinksTheFoodEntryAndArchivesTheNotification()
+    {
+        var carbIntakeId = await SeedCarbIntakeAsync();
+        var foodEntryId = await SeedFoodEntryAsync();
+        var created = await CreateMealMatchAsync(foodEntryId, carbIntakeId);
+
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await StoredFoodEntryAsync(foodEntryId)).Should().Be((ConnectorFoodEntryStatus.Matched, carbIntakeId));
+        (await LinkedFoodRowsAsync(carbIntakeId)).Should().Be(1);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Completed);
+    }
+
+    [Fact]
+    public async Task ExecuteAction_AcceptingAMealMatch_LinksTheCarbsTheFoodEntryHasNowNotTheNotificationSnapshot()
+    {
+        var carbIntakeId = await SeedCarbIntakeAsync();
+        var foodEntryId = await SeedFoodEntryAsync(carbs: 20);
+        var created = await CreateMealMatchAsync(foodEntryId, carbIntakeId, snapshotCarbs: 12);
+
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var row = await db.TreatmentFoods.AsNoTracking().SingleAsync(f => f.CarbIntakeId == carbIntakeId);
+        row.Carbs.Should().Be(20m);
+        row.TimeOffsetMinutes.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAction_AcceptingAMealMatchWithoutTheTreatmentsWriteScope_FailsAndLeavesBoth()
+    {
+        var carbIntakeId = await SeedCarbIntakeAsync();
+        var foodEntryId = await SeedFoodEntryAsync();
+        var created = await CreateMealMatchAsync(foodEntryId, carbIntakeId);
+
+        // The service scope has no request, so the handler reads no granted scope.
+        var succeeded = await WithServiceAsync(s => s.ExecuteActionAsync(created.Id, "accept", OwnerUserId));
+
+        succeeded.Should().BeFalse();
+        (await StoredFoodEntryAsync(foodEntryId)).Should().Be((ConnectorFoodEntryStatus.Pending, (Guid?)null));
+        (await LinkedFoodRowsAsync(carbIntakeId)).Should().Be(0);
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.InAppNotifications.AsNoTracking().SingleAsync(n => n.Id == created.Id)).IsArchived.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExecuteAction_AcceptingAMealMatchAlreadyMatchedElsewhere_LeavesTheEntryAndArchivesTheStaleNotification()
+    {
+        var suggested = await SeedCarbIntakeAsync();
+        var other = await SeedCarbIntakeAsync();
+        var foodEntryId = await SeedFoodEntryAsync(ConnectorFoodEntryStatus.Matched, other);
+        var created = await CreateMealMatchAsync(foodEntryId, suggested);
+
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await StoredFoodEntryAsync(foodEntryId)).Should().Be((ConnectorFoodEntryStatus.Matched, other));
+        (await LinkedFoodRowsAsync(suggested)).Should().Be(0);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.ConditionMet);
+    }
 
     [Fact]
     public async Task ExecuteAction_DismissingAMealMatch_ResolvesTheFoodEntryAndArchivesTheNotification()

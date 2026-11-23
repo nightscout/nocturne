@@ -25,7 +25,7 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService
     : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
-    private readonly IMealMatchingService? _mealMatchingService;
+    private readonly IMealMatchLinker? _mealMatchLinker;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
     private readonly IConnectorSyncCursorStore? _cursorStore;
@@ -43,7 +43,7 @@ public class GlookoConnectorService
         IRetryDelayStrategy retryDelayStrategy,
         GlookoAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
-        IMealMatchingService? mealMatchingService = null,
+        IMealMatchLinker? mealMatchLinker = null,
         ITimezoneTimelineService? timezoneTimelineService = null,
         IDeviceClockService? deviceClockService = null,
         IConnectorSyncCursorStore? cursorStore = null,
@@ -52,7 +52,7 @@ public class GlookoConnectorService
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _mealMatchingService = mealMatchingService;
+        _mealMatchLinker = mealMatchLinker;
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
         _cursorStore = cursorStore;
@@ -869,7 +869,7 @@ public class GlookoConnectorService
             return false;
 
         if (importedEntries.Count == 0
-            || _mealMatchingService == null
+            || _mealMatchLinker == null
             || Publisher is not { IsAvailable: true } publisher)
             return true;
 
@@ -914,7 +914,7 @@ public class GlookoConnectorService
 
             try
             {
-                if (await _mealMatchingService.AcceptMatchAsync(
+                if (await _mealMatchLinker.LinkAsync(
                         entry.Id, carbIntakeId, entry.Carbs, timeOffsetMinutes: 0, cancellationToken)
                     == AcceptMatchOutcome.Linked)
                     attributedCount++;
