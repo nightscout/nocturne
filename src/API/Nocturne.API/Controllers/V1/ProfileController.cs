@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
@@ -68,7 +69,7 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile GET endpoint requested with count: {Count} from {RemoteIpAddress}",
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -408,7 +409,7 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
             spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.

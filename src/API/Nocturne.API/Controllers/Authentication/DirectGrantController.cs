@@ -90,7 +90,7 @@ public class DirectGrantController : ControllerBase
         var result = await _directGrantService.CreateAsync(
             pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             limitTo24Hours,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             createdBySubjectId: null,
             ct: HttpContext.RequestAborted);
@@ -161,7 +161,7 @@ public class DirectGrantController : ControllerBase
 
         var found = await _directGrantService.RevokeAsync(
             pinnedTenantId: null, id, auth.SubjectId.Value,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
 
@@ -174,7 +174,7 @@ public class DirectGrantController : ControllerBase
 
             found = await _directGrantService.RevokeAsync(
                 pinnedTenantId: null, id, holderId,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString(),
                 ct: HttpContext.RequestAborted);
         }

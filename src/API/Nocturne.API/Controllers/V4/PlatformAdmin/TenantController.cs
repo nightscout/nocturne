@@ -372,7 +372,7 @@ public class TenantController : ControllerBase
             case EmailConfirmation.Confirmed confirmed:
                 await auditService.LogAsync(
                     AuthAuditEventType.EmailConfirmedByOperator, subjectId, success: true,
-                    ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    ipAddress: HttpContext.GetClientAddress(),
                     userAgent: Request.Headers.UserAgent.ToString(),
                     actor: AuthAuditActor.From(HttpContext.GetAuthContext()),
                     tenantId: id);
@@ -420,7 +420,7 @@ public class TenantController : ControllerBase
 
         var issued = await loginCodeService.IssueAsync(
             dbContext, subjectId, purpose,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(HttpContext.GetAuthContext()),
             ct);

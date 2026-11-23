@@ -147,7 +147,7 @@ public class MemberRecoveryController : ControllerBase
 
         var issued = await _loginCodeService.IssueAsync(
             db, subjectId, LoginCodePurpose.Recovery,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(auth),
             ct);

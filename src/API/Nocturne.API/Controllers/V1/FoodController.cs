@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
@@ -168,7 +169,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Food by ID endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -295,7 +296,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Update food endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -391,7 +392,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Delete food endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))

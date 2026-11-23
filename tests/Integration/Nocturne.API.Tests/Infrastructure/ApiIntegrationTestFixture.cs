@@ -194,7 +194,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     /// <summary>
     /// Gives <paramref name="client"/> a client address of its own, signed with the instance key
-    /// as the web server signs the address it forwards (<c>ClientRateLimitKey</c>). Every request
+    /// as the web server signs the address it forwards (<c>ClientAddressResolver</c>). Every request
     /// otherwise arrives from loopback, one partition of the per-client rate limits, so the suite
     /// as a whole would exhaust a limit no single test comes near.
     /// </summary>

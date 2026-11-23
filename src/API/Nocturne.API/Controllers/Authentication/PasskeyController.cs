@@ -324,7 +324,7 @@ public class PasskeyController : ControllerBase
                 tenant,
                 request.Email.Trim(),
                 AuthAuditActor.From(HttpContext.GetAuthContext()),
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString());
         }
 
@@ -396,7 +396,7 @@ public class PasskeyController : ControllerBase
                 session = await _recoverySession.IssueAsync(HttpContext, code.SubjectId, ct);
                 await _recoveryCodeService.InvalidateAllAsync(code.SubjectId);
             },
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             HttpContext.RequestAborted);
 
@@ -515,7 +515,7 @@ public class PasskeyController : ControllerBase
         }
 
         var tenantId = _tenantAccessor.TenantId;
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientAddress();
         var ua = Request.Headers.UserAgent.ToString();
 
         PasskeyAssertionResult assertionResult;
@@ -620,7 +620,7 @@ public class PasskeyController : ControllerBase
         if (!verified)
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subject?.Id, success: false,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
             return Problem(detail: "Invalid username or recovery code", statusCode: 400, title: "Bad Request");
@@ -634,7 +634,7 @@ public class PasskeyController : ControllerBase
         if (untrusted > 0)
         {
             await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "recovery_code" }));
         }
@@ -642,7 +642,7 @@ public class PasskeyController : ControllerBase
         // Not a completed login: the recovery session only enrols a passkey, and the sign-in with
         // that passkey writes the success row.
         await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: false,
-            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ipAddress: HttpContext.GetClientAddress(),
             userAgent: Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(new { method = "recovery_code", passkeyEnrolmentPending = true }));
 
@@ -1099,7 +1099,7 @@ public class PasskeyController : ControllerBase
                 credResult.SubjectId,
                 new SessionContext(
                     DeviceDescription: "Invite Passkey",
-                    IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress: HttpContext.GetClientAddress(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
@@ -1279,7 +1279,7 @@ public class PasskeyController : ControllerBase
             credResult.SubjectId,
             new SessionContext(
                 DeviceDescription: "Invite Passkey",
-                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                IpAddress: HttpContext.GetClientAddress(),
                 UserAgent: Request.Headers.UserAgent.ToString()));
 
         Response.SetSessionCookies(session, _oidcOptions);

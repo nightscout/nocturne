@@ -1,39 +1,21 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text;
 using Nocturne.API.Authorization;
-using Nocturne.Core.Constants;
 
 namespace Nocturne.API.RateLimiting;
 
 /// <summary>
-/// Resolves the calling client that the address-keyed rate-limit policies partition on.
+/// Reduces the client address the address-keyed rate-limit policies count against to its partition.
 /// </summary>
 /// <remarks>
-/// The browser's address does not always reach the API: a page rendered by the SvelteKit server
-/// calls the API from its own container, so an endpoint reached through a remote function (guest
-/// code activation, TOTP sign-in) sees one address for every user of the deployment, and one
-/// person's five mistyped attempts spend everyone else's window. The address is therefore carried
-/// in <see cref="ServiceNames.Headers.ClientIp"/> and honoured only when
-/// <see cref="ServiceNames.Headers.ClientIpSignature"/> shows the sender holds the instance key:
-/// the header alone is writable by anyone the gateway admits, and the peer address is no evidence
-/// either, since browser traffic and SSR traffic arrive over the same internal network. Signing the
-/// address rather than presenting the key's digest keeps a reusable credential off user-originated
-/// requests — a captured signature buckets its own address and nothing else.
-/// <para>
-/// An unsigned request partitions on <c>Connection.RemoteIpAddress</c>, which is only as good as
-/// the edge that wrote <c>X-Forwarded-For</c> — see
-/// <see cref="Extensions.NocturneForwardedHeadersExtensions"/> for what the API consumes and what the edge
-/// must present for it to name a caller. The ceilings that bound abuse are on the policies
-/// themselves in <see cref="Extensions.ServiceRegistrationExtensions"/>.
-/// </para>
+/// Which address that is, and why a header may name it, is settled by
+/// <see cref="ClientAddressResolver"/>.
 /// <para>
 /// The partition is the client, not the address: an IPv6 address counts as its network (see
 /// <see cref="IPv6ClientPrefixLength"/>), and an IPv4-mapped address as the IPv4 address it carries,
 /// since a dual-stack socket reports an IPv4 peer in that form. The signature covers the string as
-/// presented, so the address is reduced only after it verifies. Only the partition is reduced; what
-/// audit rows and session lists record is the full address, read from the connection.
+/// presented, so the address is reduced only after it verifies. The ceilings that bound abuse are on
+/// the policies themselves in <see cref="Extensions.ServiceRegistrationExtensions"/>.
 /// </para>
 /// </remarks>
 public sealed class ClientRateLimitKey
@@ -51,21 +33,19 @@ public sealed class ClientRateLimitKey
     /// </remarks>
     internal const int IPv6ClientPrefixLength = 64;
 
-    private readonly byte[] _signingKey;
+    private readonly ClientAddressResolver _address;
 
     public ClientRateLimitKey(IConfiguration configuration)
     {
-        _signingKey = Encoding.UTF8.GetBytes(InstanceKeyDigest.ResolveKey(configuration));
+        _address = new ClientAddressResolver(configuration);
     }
 
     /// <summary>
-    /// The partition key for this request: the client of the signed end-user address when one is
-    /// presented, otherwise of the address the connection came from.
+    /// The partition key for this request: the client of the address
+    /// <see cref="ClientAddressResolver.Resolve"/> names.
     /// </summary>
     public string Resolve(HttpContext context) =>
-        (SignedClientAddress(context.Request) ?? context.Connection.RemoteIpAddress) is { } address
-            ? Client(address)
-            : Unknown;
+        _address.Resolve(context) is { } address ? Client(address) : Unknown;
 
     private static string Client(IPAddress address)
     {
@@ -78,31 +58,5 @@ public sealed class ClientRateLimitKey
         var bytes = address.GetAddressBytes();
         bytes.AsSpan(IPv6ClientPrefixLength / 8).Clear();
         return new IPNetwork(new IPAddress(bytes), IPv6ClientPrefixLength).ToString();
-    }
-
-    private IPAddress? SignedClientAddress(HttpRequest request)
-    {
-        if (_signingKey.Length == 0)
-            return null;
-
-        var presented = request.Headers[ServiceNames.Headers.ClientIp].FirstOrDefault()?.Trim();
-        if (string.IsNullOrEmpty(presented))
-            return null;
-
-        var signature = request.Headers[ServiceNames.Headers.ClientIpSignature].FirstOrDefault()?.Trim();
-        if (string.IsNullOrEmpty(signature))
-            return null;
-
-        if (!IPAddress.TryParse(presented, out var address))
-            return null;
-
-        var expected = Convert.ToHexStringLower(
-            HMACSHA256.HashData(_signingKey, Encoding.UTF8.GetBytes(presented)));
-
-        return CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(signature.ToLowerInvariant()),
-            Encoding.UTF8.GetBytes(expected))
-            ? address
-            : null;
     }
 }

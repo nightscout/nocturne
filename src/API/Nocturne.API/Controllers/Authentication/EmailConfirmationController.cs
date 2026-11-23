@@ -53,7 +53,7 @@ public class EmailConfirmationController(
 
         var sent = await links.SendEmailConfirmationAsync(
             tenant, subjectId, AuthAuditActor.From(auth),
-            HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+            HttpContext.GetClientAddress(), Request.Headers.UserAgent.ToString(), ct);
 
         return sent switch
         {
@@ -105,7 +105,7 @@ public class EmailConfirmationController(
                         is not EmailConfirmation.Confirmed)
                         throw new AddressLeftException();
                 },
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                HttpContext.GetClientAddress(),
                 Request.Headers.UserAgent.ToString(),
                 ct);
             return redeemed is null ? InvalidLink() : NoContent();

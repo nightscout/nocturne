@@ -195,7 +195,7 @@ public class GuestLinkController : ControllerBase
         [FromBody] ActivateGuestLinkRequest request,
         CancellationToken ct)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientAddress();
         var userAgent = Request.Headers.UserAgent.FirstOrDefault();
 
         var result = await _guestLinkService.ActivateAsync(request.Code, ip, userAgent, ct);

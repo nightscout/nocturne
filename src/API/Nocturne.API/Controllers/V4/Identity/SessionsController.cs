@@ -168,7 +168,7 @@ public class SessionsController : ControllerBase
         if (untrusted > 0)
         {
             await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { others = true, count = untrusted, reason = "sessions_revoked" }));
         }

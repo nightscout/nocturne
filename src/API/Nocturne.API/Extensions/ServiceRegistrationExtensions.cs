@@ -124,8 +124,8 @@ public static class ServiceRegistrationExtensions
     /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
     /// each applies. Held as one table so all of them resolve their partition through
-    /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
-    /// in exactly one place.
+    /// <see cref="ClientRateLimitKey"/>, whose address is the one <see cref="ClientAddressResolver"/>
+    /// settles.
     /// </summary>
     internal static readonly (string Policy, int PermitLimit, TimeSpan Window)[] ClientAddressPolicies =
     [
@@ -281,7 +281,7 @@ public static class ServiceRegistrationExtensions
     /// <summary>
     /// Partition key for the translation-drafts limiter: the hashed credential
     /// the request presents. Not the IP — <c>UseForwardedHeaders</c> takes
-    /// <c>RemoteIpAddress</c> from X-Forwarded-For with no trusted-proxy list,
+    /// the remote address from X-Forwarded-For with no trusted-proxy list,
     /// so the sibling per-IP policies are the wrong model to copy here.
     /// Hashing keeps no token as a dictionary key. Requests with no credential
     /// share one fixed bucket, so an anonymous flood cannot evict an editor's.
@@ -733,6 +733,7 @@ public static class ServiceRegistrationExtensions
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
         });
 
+        services.AddSingleton<ClientAddressResolver>();
         services.AddApiRateLimiting(configuration);
 
         return services;

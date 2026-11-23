@@ -138,7 +138,7 @@ public class TimeQueryController : ControllerBase
             prefix,
             regex,
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -268,7 +268,7 @@ public class TimeQueryController : ControllerBase
             regex,
             storage,
             field,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -484,7 +484,7 @@ public class TimeQueryController : ControllerBase
             prefix,
             regex,
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try

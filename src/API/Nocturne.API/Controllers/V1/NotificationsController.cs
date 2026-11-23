@@ -132,7 +132,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         // Get subject ID for authorization check (implements legacy ctx.authorization.resolveWithRequest)
         var subjectId = HttpContext?.GetSubjectIdString();
@@ -175,7 +175,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         if (notification == null)
         {
@@ -236,7 +236,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         await _notificationService.ClearAllAdminNotificationsAsync(cancellationToken);
 

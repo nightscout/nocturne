@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -162,7 +163,7 @@ public class ProfileController : BaseV3Controller<Profile>
         _logger.LogDebug(
             "V3 profile by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var profile = await _projectionService.GetProfileByIdAsync(id, cancellationToken);
@@ -271,7 +272,7 @@ public class ProfileController : BaseV3Controller<Profile>
         _logger.LogDebug(
             "V3 profile update endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -335,7 +336,7 @@ public class ProfileController : BaseV3Controller<Profile>
         _logger.LogDebug(
             "V3 profile delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);

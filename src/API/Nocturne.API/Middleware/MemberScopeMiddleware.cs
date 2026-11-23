@@ -156,7 +156,7 @@ public class MemberScopeMiddleware
             && _lastUsedClaims.TryClaim(membership.Id, membership.LastUsedAt))
         {
             var membershipId = membership.Id;
-            var ip = context.Connection.RemoteIpAddress?.ToString();
+            var ip = context.GetClientAddress();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
 
             _ = Task.Run(async () =>

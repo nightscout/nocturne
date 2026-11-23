@@ -81,7 +81,7 @@ public class PlatformAccessController(
         if (!auth.IsPlatformAdmin)
         {
             await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: false,
-                ipAddress: GetClientIp(), userAgent: GetUserAgent(),
+                ipAddress: HttpContext.GetClientAddress(), userAgent: GetUserAgent(),
                 errorMessage: "not_platform_admin",
                 detailsJson: JsonSerializer.Serialize(new { slug = tenant }));
             logger.LogWarning("Subject {SubjectId} attempted platform access to '{Slug}' without platform_admin",
@@ -129,7 +129,7 @@ public class PlatformAccessController(
         });
 
         await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: true,
-            ipAddress: GetClientIp(), userAgent: GetUserAgent(),
+            ipAddress: HttpContext.GetClientAddress(), userAgent: GetUserAgent(),
             detailsJson: JsonSerializer.Serialize(new { slug = target.Slug }),
             tenantId: target.Id);
 
@@ -140,8 +140,6 @@ public class PlatformAccessController(
         return Redirect(
             $"{Request.PublicScheme()}://{target.Slug}.{baseDomainOptions.Value.BaseDomain}/");
     }
-
-    private string? GetClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
 
     private string? GetUserAgent() => Request.Headers.UserAgent.FirstOrDefault();
 }

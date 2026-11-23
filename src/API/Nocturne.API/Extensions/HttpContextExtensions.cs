@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -42,6 +43,20 @@ internal static class AuthContextKeys
 /// </remarks>
 public static class HttpContextExtensions
 {
+    /// <summary>
+    /// The address to record for whoever made this request: what
+    /// <see cref="ClientAddressResolver"/> resolved, falling back to the connection's address for a
+    /// request that did not pass <see cref="ClientAddressMiddleware"/>. Never the unverified header.
+    /// </summary>
+    public static string? GetClientAddress(this HttpContext context) =>
+        (context.Items[ClientAddressItemKey] as IPAddress ?? context.Connection.RemoteIpAddress)
+        ?.ToString();
+
+    private const string ClientAddressItemKey = "ClientAddress";
+
+    internal static void SetClientAddress(this HttpContext context, IPAddress? address) =>
+        context.Items[ClientAddressItemKey] = address;
+
     /// <summary>
     /// Get the new-style authentication context from the request
     /// </summary>

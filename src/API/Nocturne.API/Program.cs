@@ -401,6 +401,7 @@ app.UseWhen(
     branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
+app.UseMiddleware<ClientAddressMiddleware>();
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host

@@ -107,7 +107,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     {
         _logger.LogDebug(
             "UI settings endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (_demoMode.IsEnabled)
@@ -195,7 +195,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     {
         _logger.LogDebug(
             "Saving UI settings from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (_demoMode.IsEnabled)

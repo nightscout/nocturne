@@ -99,7 +99,7 @@ public class RecoveryEmailController(
 
         var sent = await links.SendEmailConfirmationAsync(
             tenant, subjectId, AuthAuditActor.From(HttpContext.GetAuthContext()!),
-            HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+            HttpContext.GetClientAddress(), Request.Headers.UserAgent.ToString(), ct);
 
         return sent switch
         {
