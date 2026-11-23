@@ -27,6 +27,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private readonly Mock<IJwtService> _mockJwtService;
     private readonly Mock<IOAuthClientService> _mockClientService;
     private readonly Mock<ILogger<OAuthDeviceCodeService>> _mockLogger;
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
     // Deterministic test values
     private const string TestDeviceCode = "test-device-code";
@@ -81,6 +82,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             _mockClientService.Object,
             _db.ContextFactory.AsNocturneFactory(),
             new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            _time,
             _mockLogger.Object
         );
     }
@@ -112,8 +114,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             DisplayName = "Test App",
             IsKnown = false,
             RedirectUris = "[]",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = _time.GetUtcNow().UtcDateTime,
+            UpdatedAt = _time.GetUtcNow().UtcDateTime,
         });
         await db.SaveChangesAsync();
     }
@@ -140,7 +142,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             DeviceCodeHash = deviceCodeHash ?? TestDeviceCodeHash,
             UserCode = userCode ?? "ABCD1234",
             Scopes = scopes ?? new List<string> { "glucose.read" },
-            ExpiresAt = expiresAt ?? DateTime.UtcNow.AddMinutes(15),
+            ExpiresAt = expiresAt ?? _time.GetUtcNow().UtcDateTime.AddMinutes(15),
             ApprovedAt = approvedAt,
             DeniedAt = deniedAt,
             GrantId = grantId,
@@ -180,7 +182,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.NotNull(entity);
         Assert.Equal(TestClientId, entity.ClientId);
         Assert.Contains("glucose.read", entity.Scopes);
-        Assert.True(entity.ExpiresAt > DateTime.UtcNow);
+        Assert.Equal(_time.GetUtcNow().UtcDateTime.AddMinutes(30), entity.ExpiresAt);
     }
 
     [Fact]
@@ -286,7 +288,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.True(grant.ApprovedByDeviceCode);
         var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "PNDNG001");
-        Assert.NotNull(entity.ApprovedAt);
+        Assert.Equal(_time.GetUtcNow().UtcDateTime, entity.ApprovedAt);
         Assert.Equal(grant.Id, entity.GrantId);
         Assert.Equal(_testSubjectId, entity.SubjectId);
     }
@@ -333,7 +335,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Arrange
         using var db = CreateDbContext();
         await SeedDeviceCodeAsync(db, userCode: "EXPRD001",
-            expiresAt: DateTime.UtcNow.AddMinutes(-5));
+            expiresAt: _time.GetUtcNow().UtcDateTime.AddMinutes(-5));
 
         var service = CreateService(db);
 
@@ -350,7 +352,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Arrange
         using var db = CreateDbContext();
         await SeedDeviceCodeAsync(db, userCode: "APRVD001",
-            approvedAt: DateTime.UtcNow.AddMinutes(-1));
+            approvedAt: _time.GetUtcNow().UtcDateTime.AddMinutes(-1));
 
         var service = CreateService(db);
 
@@ -367,7 +369,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Arrange
         using var db = CreateDbContext();
         await SeedDeviceCodeAsync(db, userCode: "DEND0001",
-            deniedAt: DateTime.UtcNow.AddMinutes(-1));
+            deniedAt: _time.GetUtcNow().UtcDateTime.AddMinutes(-1));
 
         var service = CreateService(db);
 
@@ -400,7 +402,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Verify entity was updated
         var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "DENY0001");
-        Assert.NotNull(entity.DeniedAt);
+        Assert.Equal(_time.GetUtcNow().UtcDateTime, entity.DeniedAt);
     }
 
     [Fact]
@@ -409,7 +411,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Arrange
         using var db = CreateDbContext();
         await SeedDeviceCodeAsync(db, userCode: "DNYEX001",
-            expiresAt: DateTime.UtcNow.AddMinutes(-5));
+            expiresAt: _time.GetUtcNow().UtcDateTime.AddMinutes(-5));
 
         var service = CreateService(db);
 

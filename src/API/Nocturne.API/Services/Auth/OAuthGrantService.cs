@@ -143,7 +143,7 @@ public class OAuthGrantService : IOAuthGrantService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default) =>
-        _grants.RecordUseAsync(grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), ct);
+        _grants.RecordUseAsync(grantId, _time.GetUtcNow().UtcDateTime, new GrantPresentation(ipAddress, userAgent), ct);
 
     /// <inheritdoc />
     public async Task<OAuthGrantInfo?> UpdateGrantAsync(
