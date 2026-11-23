@@ -348,7 +348,7 @@ public class TenantController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The refusal never names the address the account holds. Returns 404 when the subject is not a
-    /// member of the tenant.
+    /// live member of the tenant, whether or not they ever were one.
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/email-confirmation")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -361,13 +361,13 @@ public class TenantController : ControllerBase
         [FromBody] AdminConfirmEmailRequest request,
         [FromServices] ISubjectService subjectService,
         [FromServices] IAuthAuditService auditService,
+        [FromServices] ITenantMemberService tenantMembers,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        var tenant = await _tenantService.GetByIdAsync(id, ct);
-        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+        if (!await tenantMembers.IsMemberAsync(subjectId, id, ct))
             return NotFound();
 
         var result = await subjectService.ConfirmEmailAsync(subjectId, request.Email);

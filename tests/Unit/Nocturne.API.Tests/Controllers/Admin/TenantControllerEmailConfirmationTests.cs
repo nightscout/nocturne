@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -32,12 +33,16 @@ public class TenantControllerEmailConfirmationTests : IDisposable
     {
         var member = new SubjectEntity { Id = _memberId, Name = "Member", IsActive = true };
         member.SetEmail(OnAccount);
-        using var seed = _db.CreateContext();
+        using var seed = _db.CreateContext(_tenantId);
         seed.Subjects.Add(member);
         seed.Subjects.Add(new SubjectEntity { Id = _noAddressMemberId, Name = "No address", IsActive = true });
         var outsider = new SubjectEntity { Id = _outsiderId, Name = "Outsider", IsActive = true };
         outsider.SetEmail("outsider@example.test");
         seed.Subjects.Add(outsider);
+        seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "acme", DisplayName = "Acme", IsActive = true });
+        seed.TenantMembers.AddRange(
+            new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _memberId },
+            new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _noAddressMemberId });
         seed.SaveChanges();
 
         _subjectService = new SubjectService(
@@ -78,7 +83,10 @@ public class TenantControllerEmailConfirmationTests : IDisposable
     private Task<IActionResult> ConfirmAsync(Guid subjectId, string email, AuthContext? auth = null, Guid? tenantId = null) =>
         Controller(auth ?? InstanceKey()).ConfirmMemberEmail(
             tenantId ?? _tenantId, subjectId, new AdminConfirmEmailRequest(email),
-            _subjectService, _audit.Object, CancellationToken.None);
+            _subjectService, _audit.Object,
+            new TenantMemberService(
+                new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+            CancellationToken.None);
 
     private async Task<SubjectEntity> RowAsync(Guid subjectId)
     {
@@ -115,14 +123,45 @@ public class TenantControllerEmailConfirmationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_member_whose_access_has_ended_answers_as_a_non_member_and_confirms_nothing()
+    {
+        await using (var db = _db.CreateContext(_tenantId))
+        {
+            await db.TenantMembers.Where(m => m.SubjectId == _memberId)
+                .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        var ended = await ConfirmAsync(_memberId, OnAccount);
+        var nonMember = await ConfirmAsync(_outsiderId, "outsider@example.test");
+
+        ended.Should().BeOfType<NotFoundResult>();
+        nonMember.Should().BeOfType<NotFoundResult>();
+        (await ConfirmedAtAsync(_memberId)).Should().BeNull();
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.EmailConfirmedByOperator, It.IsAny<Guid?>(), It.IsAny<bool>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(),
+            It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_member_whose_access_ends_later_is_confirmed()
+    {
+        await using (var db = _db.CreateContext(_tenantId))
+        {
+            await db.TenantMembers.Where(m => m.SubjectId == _memberId)
+                .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, DateTime.UtcNow.AddDays(1)));
+        }
+
+        var result = await ConfirmAsync(_memberId, OnAccount);
+
+        result.Should().BeOfType<OkObjectResult>();
+        (await ConfirmedAtAsync(_memberId)).Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task An_unknown_tenant_answers_404()
     {
-        var unknown = Guid.CreateVersion7();
-        _tenantService
-            .Setup(s => s.GetByIdAsync(unknown, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TenantDetailDto?)null);
-
-        var result = await ConfirmAsync(_memberId, OnAccount, tenantId: unknown);
+        var result = await ConfirmAsync(_memberId, OnAccount, tenantId: Guid.CreateVersion7());
 
         result.Should().BeOfType<NotFoundResult>();
     }

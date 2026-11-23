@@ -171,6 +171,63 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         regenerate.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task A_session_whose_member_lost_access_after_it_began_cannot_enrol_a_passkey()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddMinutes(-1));
+
+        var response = await PostAsync(
+            "/api/auth/passkey/register/complete",
+            new { attestationResponseJson = "{}", challengeToken = "challenge" },
+            session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        await using var db = await TenantDbAsync();
+        (await db.LoginCodes.AsNoTracking()
+            .SingleAsync(c => c.SubjectId == arranged.EmailMemberId && c.Purpose == LoginCodePurpose.RecoverySession))
+            .ConsumedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_session_whose_member_lost_access_after_it_began_cannot_link_a_provider()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddMinutes(-1));
+
+        var response = await CallbackAsync(session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location!.OriginalString.Should().StartWith("/auth/error");
+        _factory.Oidc.Verify(s => s.HandleRecoveryLinkCallbackAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_session_whose_member_keeps_access_until_later_can_still_link_a_provider()
+    {
+        await using var arranged = await ArrangeAsync(Site.Private);
+        var session = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.RecoverySession);
+        await SetAccessEndsAtAsync(arranged.EmailMemberId, DateTime.UtcNow.AddDays(1));
+        _factory.Oidc
+            .Setup(s => s.HandleRecoveryLinkCallbackAsync("code", RecoveryState, RecoveryState, arranged.EmailMemberId))
+            .ReturnsAsync(OidcLinkResult.Succeeded(Guid.CreateVersion7(), "/", _providerId));
+
+        var response = await CallbackAsync(session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location!.OriginalString.Should().StartWith($"/api/auth/oidc/login?provider={_providerId}");
+    }
+
+    private async Task SetAccessEndsAtAsync(Guid subjectId, DateTime accessEndsAt)
+    {
+        await using var db = await TenantDbAsync();
+        await db.TenantMembers.Where(m => m.SubjectId == subjectId)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, accessEndsAt));
+    }
+
     #endregion
 
     #region The anonymous recovery endpoints are admitted on a private site and in recovery mode

@@ -43,7 +43,7 @@ public class OidcControllerLoginCallbackTests
             new Mock<ISubjectService>().Object,
             _auditService.Object,
             new Mock<ITenantMemberService>().Object,
-            new RecoverySession(new Mock<INocturneDbContextFactory>().Object, new Mock<ILoginCodeService>().Object, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
+            new RecoverySession(new Mock<INocturneDbContextFactory>().Object, new Mock<ILoginCodeService>().Object, new Mock<ITenantMemberService>().Object, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcController>.Instance);

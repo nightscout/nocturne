@@ -93,8 +93,10 @@ public class PasskeyControllerTests : IDisposable
         // Login codes are tenant-scoped, so the session's contexts are on the request's tenant, as
         // the request pipeline hands them out.
         _recoverySession = new RecoverySession(
-            new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), _loginCodes, oidcOptions,
-            NullLogger<RecoverySession>.Instance);
+            new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), _loginCodes,
+            new TenantMemberService(
+                new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), AccountLinkRoutes.Off), TimeProvider.System),
+            oidcOptions, NullLogger<RecoverySession>.Instance);
 
         _tenantService = new Mock<ITenantService>();
 
@@ -817,7 +819,7 @@ public class PasskeyControllerTests : IDisposable
             new SignInCompletion(_totpService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
                 _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
             _trustedDevices.Object, _recoveryCodeService.Object,
-            new RecoverySession(failingContexts.Object, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
+            new RecoverySession(failingContexts.Object, _loginCodes, Mock.Of<ITenantMemberService>(), Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(failingContexts.Object, AccountLinkRoutes.Off), new TenantRepository(failingContexts.Object), new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off),

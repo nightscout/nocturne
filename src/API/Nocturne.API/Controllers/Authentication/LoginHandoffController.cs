@@ -83,7 +83,7 @@ public class LoginHandoffController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
         var redeemed = await _loginCodeService.RedeemAsync(
             db, request.Code, [LoginCodePurpose.Login],
-            admits: (code, token) => _tenantMembers.IsMemberAsync(code.SubjectId, tenantId, token),
+            admits: LoginCodeAdmission.LiveMemberOf(_tenantMembers, tenantId),
             withSpend: null, ipAddress, userAgent, ct);
 
         if (redeemed is null)
