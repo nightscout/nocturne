@@ -100,12 +100,9 @@ public class OAuthTokenServiceTests : IDisposable
                 It.IsAny<Guid>(),
                 It.IsAny<Guid>(),
                 It.IsAny<IEnumerable<string>>(),
-                It.IsAny<string>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, bool limitTo24Hours, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
                     LimitTo24Hours = limitTo24Hours,
@@ -322,9 +319,6 @@ public class OAuthTokenServiceTests : IDisposable
             _testClientEntityId,
             _testSubjectId,
             It.IsAny<IEnumerable<string>>(),
-            It.IsAny<string>(),
-            It.IsAny<string?>(),
-            It.IsAny<bool>(),
             It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -351,6 +345,7 @@ public class OAuthTokenServiceTests : IDisposable
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
             new GrantRevocationService(guestSessionCache),
+            new GrantConsentService(Mock.Of<ILogger<GrantConsentService>>()),
             TimeProvider.System,
             Mock.Of<ILogger<OAuthGrantService>>());
 

@@ -21,7 +21,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// <summary>
 /// Approving or denying a device code on PostgreSQL under the runtime role and Row Level Security:
 /// a code deleted after it was read answers as no longer pending, and of overlapping decisions on
-/// one code exactly one is stored.
+/// one code exactly one is stored. A decision that loses leaves the grant as it found it.
 /// </summary>
 [Trait("Category", "Integration")]
 public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgresTests.Database database)
@@ -50,24 +50,6 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     {
         public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
             ValueTask.FromResult(create(scope));
-    }
-
-    /// <summary>Runs <paramref name="beforeDecision"/> once a decision has read its code and before it stores the decision.</summary>
-    private sealed class StageableRepository(INocturneDbContextFactory contexts, Func<Guid, Task> beforeDecision)
-        : OAuthTokenRepository(contexts)
-    {
-        public override async Task<bool> ApproveDeviceCodeAsync(
-            Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct)
-        {
-            await beforeDecision(id);
-            return await base.ApproveDeviceCodeAsync(id, subjectId, grantId, now, ct);
-        }
-
-        public override async Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct)
-        {
-            await beforeDecision(id);
-            return await base.DenyDeviceCodeAsync(id, now, ct);
-        }
     }
 
     /// <summary>Runs <paramref name="before"/> once, just before the first statement that writes a device code, however it is issued.</summary>
@@ -110,7 +92,7 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
                 : [new TenantConnectionInterceptor(), staged])
             .Options) { TenantId = tenant };
 
-    private sealed record Seeded(Guid Tenant, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Client, Guid Grant, Guid Subject, Guid OtherSubject, string UserCode, Factory Contexts);
 
     private async Task<Seeded> SeedPendingCodeAsync()
     {
@@ -152,39 +134,52 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
 
         var contexts = new Factory(t => Context(t), tenant);
         await new OAuthTokenRepository(contexts).StoreDeviceCodeAsync(
-            new NewDeviceCode(ClientId, $"device-code-hash-{tenant:N}", userCode, ["glucose.read"], DateTime.UtcNow.AddMinutes(15), 5),
+            new NewDeviceCode(ClientId, $"device-code-hash-{tenant:N}", userCode, [Scope.GlucoseRead, Scope.TreatmentsRead], DateTime.UtcNow.AddMinutes(15), 5),
             CancellationToken.None);
-        return new Seeded(tenant, grant, subject, otherSubject, userCode, contexts);
+        return new Seeded(tenant, client, grant, subject, otherSubject, userCode, contexts);
     }
 
-    private static OAuthDeviceCodeService ServiceOver(IOAuthTokenRepository tokens, Guid grant)
+    private static OAuthDeviceCodeService ServiceOver(Factory contexts, Seeded seeded)
     {
         var clients = new Mock<IOAuthClientService>();
         clients.Setup(c => c.GetClientAsync(ClientId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OAuthClientInfo { Id = Guid.CreateVersion7(), ClientId = ClientId, DisplayName = "App" });
-        var grants = new Mock<IOAuthGrantService>();
-        grants.Setup(g => g.CreateOrUpdateGrantAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OAuthGrantInfo { Id = grant, ClientId = ClientId });
+            .ReturnsAsync(new OAuthClientInfo { Id = seeded.Client, ClientId = ClientId, DisplayName = "App" });
         return new OAuthDeviceCodeService(
-            tokens,
+            new OAuthTokenRepository(contexts),
             Mock.Of<IJwtService>(),
             clients.Object,
-            grants.Object,
+            contexts,
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
             NullLogger<OAuthDeviceCodeService>.Instance);
     }
 
-    private static StageableRepository BothReadFirst(Factory contexts)
+    private Factory ApprovedByARivalFirst(Seeded seeded, Guid codeId)
+    {
+        var rival = new OAuthTokenRepository(seeded.Contexts);
+        return new Factory(
+            tenant => Context(tenant, new BeforeDecisionWrite(() =>
+                rival.ApproveDeviceCodeAsync(codeId, seeded.OtherSubject, seeded.Grant, DateTime.UtcNow, CancellationToken.None))),
+            seeded.Tenant);
+    }
+
+    private Factory BothReachTheDecisionWrite(Seeded seeded)
     {
         var arrived = 0;
-        var bothRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        return new StageableRepository(contexts, _ =>
-        {
-            if (Interlocked.Increment(ref arrived) == 2)
-                bothRead.SetResult();
-            return bothRead.Task.WaitAsync(BarrierTimeout);
-        });
+        var bothArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        return new Factory(
+            tenant => Context(tenant, new BeforeDecisionWrite(() =>
+            {
+                if (Interlocked.Increment(ref arrived) == 2)
+                    bothArrived.SetResult();
+                return bothArrived.Task.WaitAsync(BarrierTimeout);
+            })),
+            seeded.Tenant);
+    }
+
+    private async Task<List<OAuthGrantEntity>> GrantsAsync(Seeded seeded)
+    {
+        await using var db = Context(seeded.Tenant);
+        return await db.OAuthGrants.AsNoTracking().Where(g => g.ClientEntityId == seeded.Client).ToListAsync();
     }
 
     private static Task<DeviceCodeRecord?> StoredAsync(Seeded seeded) =>
@@ -200,11 +195,26 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
             seeded.Tenant);
 
-        var approved = await ServiceOver(new OAuthTokenRepository(approving), seeded.Grant)
-            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess);
+        var approved = await ServiceOver(approving, seeded)
+            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
 
         approved.Should().BeFalse();
         (await StoredAsync(seeded)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ApprovingACodeDeletedAfterItWasReadCreatesNoGrant()
+    {
+        var seeded = await SeedPendingCodeAsync();
+        var deleter = new OAuthTokenRepository(seeded.Contexts);
+        var codeId = (await StoredAsync(seeded))!.Id;
+        var approving = new Factory(
+            tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
+            seeded.Tenant);
+
+        await ServiceOver(approving, seeded).ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
+
+        (await GrantsAsync(seeded)).Should().ContainSingle().Which.Id.Should().Be(seeded.Grant);
     }
 
     [Fact]
@@ -217,38 +227,105 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             tenant => Context(tenant, new BeforeDecisionWrite(() => deleter.DeleteDeviceCodeAsync(codeId, CancellationToken.None))),
             seeded.Tenant);
 
-        var denied = await ServiceOver(new OAuthTokenRepository(denying), seeded.Grant).DenyDeviceCodeAsync(seeded.UserCode);
+        var denied = await ServiceOver(denying, seeded).DenyDeviceCodeAsync(seeded.UserCode);
 
         denied.Should().BeFalse();
         (await StoredAsync(seeded)).Should().BeNull();
     }
 
     [Fact]
-    public async Task OfTwoApprovalsOfOneCodeThatReadItPendingExactlyOneIsStored()
+    public async Task AnApprovalThatLosesToARivalCreatesNoGrant()
     {
         var seeded = await SeedPendingCodeAsync();
-        var tokens = BothReadFirst(seeded.Contexts);
+        var codeId = (await StoredAsync(seeded))!.Id;
+
+        var approved = await ServiceOver(ApprovedByARivalFirst(seeded, codeId), seeded)
+            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
+
+        approved.Should().BeFalse();
+        (await GrantsAsync(seeded)).Should().ContainSingle().Which.Id.Should().Be(seeded.Grant);
+        (await StoredAsync(seeded))!.GrantId.Should().Be(seeded.Grant, "the rival's approval stands");
+    }
+
+    [Fact]
+    public async Task AnApprovalThatLosesToARivalDoesNotWidenTheGrantTheApproverHolds()
+    {
+        var seeded = await SeedPendingCodeAsync();
+        var codeId = (await StoredAsync(seeded))!.Id;
+
+        var approved = await ServiceOver(ApprovedByARivalFirst(seeded, codeId), seeded)
+            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess);
+
+        approved.Should().BeFalse();
+        var grant = (await GrantsAsync(seeded)).Should().ContainSingle().Subject;
+        grant.Id.Should().Be(seeded.Grant);
+        grant.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
+        grant.ApprovedByDeviceCode.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AnApprovalThatWinsWidensTheGrantTheApproverHoldsAndLinksItToTheCode()
+    {
+        var seeded = await SeedPendingCodeAsync();
+
+        var approved = await ServiceOver(seeded.Contexts, seeded)
+            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess);
+
+        approved.Should().BeTrue();
+        var grant = (await GrantsAsync(seeded)).Should().ContainSingle().Subject;
+        grant.Id.Should().Be(seeded.Grant);
+        grant.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
+        var stored = await StoredAsync(seeded);
+        stored!.GrantId.Should().Be(grant.Id);
+        stored.SubjectId.Should().Be(seeded.Subject);
+    }
+
+    [Fact]
+    public async Task AnApprovalThatWinsCreatesTheGrantOfAnApproverWithNoneAndLinksItToTheCode()
+    {
+        var seeded = await SeedPendingCodeAsync();
+
+        var approved = await ServiceOver(seeded.Contexts, seeded)
+            .ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess);
+
+        approved.Should().BeTrue();
+        var created = (await GrantsAsync(seeded)).Should().ContainSingle(g => g.SubjectId == seeded.OtherSubject).Subject;
+        created.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
+        (await StoredAsync(seeded))!.GrantId.Should().Be(created.Id);
+    }
+
+    [Fact]
+    public async Task OfTwoApprovalsOfOneCodeThatReadItPendingExactlyOneIsStoredAndOnlyItsGrantIsWritten()
+    {
+        var seeded = await SeedPendingCodeAsync();
+        var contexts = BothReachTheDecisionWrite(seeded);
 
         var approvals = await Task.WhenAll(
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess)),
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess)));
+            Task.Run(() => ServiceOver(contexts, seeded).ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess)),
+            Task.Run(() => ServiceOver(contexts, seeded).ApproveDeviceCodeAsync(seeded.UserCode, seeded.OtherSubject, FullAccess)));
 
         approvals.Count(a => a).Should().Be(1);
+        var subjectWon = approvals[0];
         var stored = await StoredAsync(seeded);
         stored!.ApprovedAt.Should().NotBeNull();
-        stored.GrantId.Should().Be(seeded.Grant);
-        stored.SubjectId.Should().Be(approvals[0] ? seeded.Subject : seeded.OtherSubject, "the stored approver is the one whose approval succeeded");
+        stored.SubjectId.Should().Be(subjectWon ? seeded.Subject : seeded.OtherSubject, "the stored approver is the one whose approval succeeded");
+
+        var grants = await GrantsAsync(seeded);
+        grants.Should().HaveCount(subjectWon ? 1 : 2, "the loser's grant is not written");
+        grants.Should().ContainSingle(g => g.Id == stored.GrantId);
+        grants.Single(g => g.Id == seeded.Grant).Scopes.Should().BeEquivalentTo(
+            subjectWon ? [Scope.GlucoseRead, Scope.TreatmentsRead] : [Scope.GlucoseRead]);
     }
 
     [Fact]
     public async Task OfTwoDenialsOfOneCodeThatReadItPendingExactlyOneIsStored()
     {
         var seeded = await SeedPendingCodeAsync();
-        var tokens = BothReadFirst(seeded.Contexts);
+        var contexts = BothReachTheDecisionWrite(seeded);
 
         var denials = await Task.WhenAll(
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).DenyDeviceCodeAsync(seeded.UserCode)),
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).DenyDeviceCodeAsync(seeded.UserCode)));
+            Task.Run(() => ServiceOver(contexts, seeded).DenyDeviceCodeAsync(seeded.UserCode)),
+            Task.Run(() => ServiceOver(contexts, seeded).DenyDeviceCodeAsync(seeded.UserCode)));
 
         denials.Count(d => d).Should().Be(1);
         (await StoredAsync(seeded))!.DeniedAt.Should().NotBeNull();
@@ -258,14 +335,18 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
     public async Task OfAnApprovalAndADenialOfOneCodeThatReadItPendingExactlyOneIsStored()
     {
         var seeded = await SeedPendingCodeAsync();
-        var tokens = BothReadFirst(seeded.Contexts);
+        var contexts = BothReachTheDecisionWrite(seeded);
 
         var decisions = await Task.WhenAll(
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess)),
-            Task.Run(() => ServiceOver(tokens, seeded.Grant).DenyDeviceCodeAsync(seeded.UserCode)));
+            Task.Run(() => ServiceOver(contexts, seeded).ApproveDeviceCodeAsync(seeded.UserCode, seeded.Subject, FullAccess)),
+            Task.Run(() => ServiceOver(contexts, seeded).DenyDeviceCodeAsync(seeded.UserCode)));
 
         decisions.Count(d => d).Should().Be(1);
         var stored = await StoredAsync(seeded);
         (stored!.ApprovedAt.HasValue ^ stored.DeniedAt.HasValue).Should().BeTrue("the code holds one decision, not both");
+        var grant = (await GrantsAsync(seeded)).Should().ContainSingle().Subject;
+        grant.Scopes.Should().BeEquivalentTo(
+            decisions[0] ? [Scope.GlucoseRead, Scope.TreatmentsRead] : [Scope.GlucoseRead],
+            "a denied code leaves the grant the approver held");
     }
 }
