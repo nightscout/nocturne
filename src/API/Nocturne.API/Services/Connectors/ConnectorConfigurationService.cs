@@ -187,18 +187,37 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The documents are bound over the instance's own settings (<c>CONNECT_{NAME}_*</c>), as every
-    /// tenant's connector is, so a secret or a record sink the instance turns on counts.
-    /// </remarks>
-    public async Task<IReadOnlyList<string>> GetDelegatedRefusalsAsync(
+    public async Task<IReadOnlyList<string>> GetGuardedRefusalsAsync(
         string connectorName,
         JsonDocument configuration,
         CancellationToken ct = default)
     {
+        if (await GuardStateAsync(connectorName, ct) is not var (baseline, stored, holdsStoredSecret))
+            return [DelegatedConfigurationGuard.WholeConfiguration];
+
+        return DelegatedConfigurationGuard.RefusedKeys(baseline, stored, configuration, holdsStoredSecret);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetGuardedKeysAsync(string connectorName, CancellationToken ct = default)
+    {
+        if (await GuardStateAsync(connectorName, ct) is not var (baseline, stored, holdsStoredSecret))
+            return [];
+
+        return DelegatedConfigurationGuard.LockedKeys(baseline, stored, holdsStoredSecret);
+    }
+
+    /// <summary>
+    /// What <see cref="DelegatedConfigurationGuard"/> judges a save against, or null for an unknown
+    /// connector. The documents are bound over the instance's own settings (<c>CONNECT_{NAME}_*</c>),
+    /// as every tenant's connector is, so a secret or a record sink the instance turns on counts.
+    /// </summary>
+    private async Task<(BaseConnectorConfiguration Baseline, JsonDocument? Stored, bool HoldsStoredSecret)?> GuardStateAsync(
+        string connectorName, CancellationToken ct)
+    {
         var configType = FindConfigurationType(connectorName, _logger);
         if (configType is null || Activator.CreateInstance(configType) is not BaseConnectorConfiguration baseline)
-            return [DelegatedConfigurationGuard.WholeConfiguration];
+            return null;
 
         var bindingName = configType.GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName ?? connectorName;
         _configuration.BindConnectorConfiguration(baseline, bindingName);
@@ -206,8 +225,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         var entity = await _configurations.FindAsync(connectorName, ct);
         var stored = entity is null ? null : JsonDocument.Parse(entity.ConfigurationJson);
         var holdsStoredSecret = entity is not null && !string.IsNullOrEmpty(entity.SecretsJson) && entity.SecretsJson != "{}";
-
-        return DelegatedConfigurationGuard.RefusedKeys(baseline, stored, configuration, holdsStoredSecret);
+        return (baseline, stored, holdsStoredSecret);
     }
 
     /// <inheritdoc />
@@ -215,15 +233,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         Dictionary<string, string> secrets,
         string? modifiedBy,
-        CredentialMaker? maker,
+        ConnectorSecretSaver? saver,
         CancellationToken ct = default)
     {
         var entity = await StoreSecretsAsync(connectorName, secrets, modifiedBy, ct);
         InvalidateCaches(entity);
 
-        // When saving Nightscout connector secrets that include an API secret,
-        // create a DirectGrant with the SHA-1 hash so existing uploaders keep working.
-        var result = await TryCreateLegacyGrantAsync(connectorName, secrets, maker, ct);
+        var result = await TryCreateLegacyGrantAsync(connectorName, secrets, saver, ct);
 
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
@@ -291,14 +307,15 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// When a Nightscout connector's API secret is saved, creates a DirectGrant with the
     /// SHA-1 hash of the secret so that legacy uploaders authenticated via the old
     /// <c>api-secret</c> header continue to work without reconfiguration. The grant is a device
-    /// credential of <paramref name="maker"/>, and stops when their access ends. A secret a live
+    /// credential of the saver's maker, and stops when their access ends. A secret a live
     /// credential already holds is not adopted again: that credential governs, and the result says
-    /// when it stops. One that has stopped or been revoked no longer holds the secret.
+    /// when it stops. One that has stopped or been revoked no longer holds the secret. A saver who
+    /// may not adopt (<see cref="ConnectorSecretSaver.MayAdopt"/>) touches no credential at all.
     /// </summary>
     private async Task<ConnectorSecretsSaveResult> TryCreateLegacyGrantAsync(
         string connectorName,
         Dictionary<string, string> secrets,
-        CredentialMaker? maker,
+        ConnectorSecretSaver? saver,
         CancellationToken ct)
     {
         if (AdoptedSecret(connectorName, secrets) is not { } apiSecret)
@@ -306,11 +323,16 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         // Adopting a credential is a person's decision, made by saving it from the connector page;
         // a job that writes the connector's secrets on its own does not hand out a working key.
-        if (maker is null)
+        if (saver is null)
         {
             _logger.LogWarning("Not adopting the Nightscout API secret: no authenticated subject saved it");
             return new ConnectorSecretsSaveResult();
         }
+
+        if (!saver.MayAdopt)
+            return new ConnectorSecretsSaveResult { NotAdopted = true };
+
+        var maker = saver.Maker;
 
         // SHA-1 is required here: the Nightscout `api-secret` protocol hashes the secret
         // with SHA-1, so legacy clients (xDrip, etc.) send that hash and we must match it.

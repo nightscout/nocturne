@@ -63,7 +63,7 @@ public class GoogleHealthGenericWriteTests
 
         AssertGrantRefusal(result);
         service.Verify(s => s.SaveSecretsAsync(
-            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class GoogleHealthGenericWriteTests
 
         result.Should().BeOfType<OkObjectResult>();
         service.Verify(s => s.SaveSecretsAsync(
-            "Dexcom", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()), Times.Once);
+            "Dexcom", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

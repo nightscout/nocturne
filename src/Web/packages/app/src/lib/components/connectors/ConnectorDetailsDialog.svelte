@@ -19,7 +19,7 @@
   import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
   import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -55,8 +55,8 @@
     onSyncComplete,
   }: Props = $props();
 
-  const canManage = $derived(
-    canChangeTenantSettings(
+  const canSync = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -404,7 +404,7 @@
           </div>
         {/if}
 
-        {#if canManage && (selectedConnector.isHealthy || selectedConnector.state === ConnectorState.Configured) && selectedConnector.state !== ConnectorState.Offline && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
+        {#if canSync && (selectedConnector.isHealthy || selectedConnector.state === ConnectorState.Configured) && selectedConnector.state !== ConnectorState.Offline && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
           <Separator />
 
           <div class="@container space-y-3">

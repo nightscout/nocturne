@@ -47,6 +47,8 @@
     showEnvVarHints?: boolean;
     /** Names the save, for a form whose save also starts something. The save is then the form's one large action. */
     saveLabel?: string;
+    /** The keys the viewer may not change, as the API reports them (`lockedKeys`). */
+    lockedKeys?: readonly string[];
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -58,6 +60,7 @@
     hasSecrets = false,
     showEnvVarHints = true,
     saveLabel,
+    lockedKeys = [],
     onSave,
   }: Props = $props();
 
@@ -323,7 +326,7 @@
             <Label>{meta.label}</Label>
             {#if hasUnsavedChanges(propName)}
               <Badge variant="default">Unsaved</Badge>
-            {:else if hasUserOverride(propName)}
+            {:else if hasUserOverride(propName) && !lockedKeys.includes(propName)}
               <Badge variant="secondary">Modified</Badge>
               <Button
                 variant="ghost"
@@ -347,17 +350,24 @@
         <Switch
           class="shrink-0"
           checked={Boolean(getPropertyValue(propName))}
+          disabled={lockedKeys.includes(propName)}
+          aria-describedby={lockedKeys.includes(propName) ? `${propName}-locked` : undefined}
           onCheckedChange={(checked: boolean) =>
             setPropertyValue(propName, checked)}
         />
       </div>
+      {#if lockedKeys.includes(propName)}
+        <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
+          Only members who can manage this site's settings can turn this on.
+        </p>
+      {/if}
     {:else if propSchema.enum}
       <!-- Enum: Select -->
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
           <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
+        {:else if hasUserOverride(propName) && !lockedKeys.includes(propName)}
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
@@ -397,7 +407,7 @@
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
           <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
+        {:else if hasUserOverride(propName) && !lockedKeys.includes(propName)}
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
@@ -448,7 +458,7 @@
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
           <Badge variant="default">Unsaved</Badge>
-        {:else if hasUserOverride(propName)}
+        {:else if hasUserOverride(propName) && !lockedKeys.includes(propName)}
           <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
@@ -469,9 +479,16 @@
         minlength={propSchema.minLength}
         maxlength={propSchema.maxLength}
         pattern={propSchema.pattern}
+        disabled={lockedKeys.includes(propName)}
+        aria-describedby={lockedKeys.includes(propName) ? `${propName}-locked` : undefined}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
           setPropertyValue(propName, e.currentTarget.value)}
       />
+      {#if lockedKeys.includes(propName)}
+        <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
+          Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it.
+        </p>
+      {/if}
       {#if meta.description}
         <p class="text-sm text-muted-foreground">{meta.description}</p>
       {/if}

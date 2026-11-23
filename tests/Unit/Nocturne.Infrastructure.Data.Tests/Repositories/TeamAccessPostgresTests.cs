@@ -382,7 +382,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
 
     [Theory]
     [InlineData(RoleSeeds.Caretaker, new[] { Scope.GlucoseRead, Scope.TreatmentsReadWrite, Scope.AlertsReadWrite }, null)]
+    [InlineData(RoleSeeds.Caretaker, new[] { Scope.GlucoseRead, Scope.ConnectorsReadWrite }, null)]
     [InlineData(RoleSeeds.Caretaker, new[] { Scope.GlucoseReadWrite }, TeamAccessRefusal.RoleWiderThanLink)]
+    [InlineData(RoleSeeds.Clinician, new[] { Scope.GlucoseRead, Scope.ConnectorsReadWrite }, TeamAccessRefusal.RoleWiderThanLink)]
     [InlineData(RoleSeeds.Viewer, new[] { Scope.GlucoseRead, Scope.ReportsRead }, null)]
     [InlineData(RoleSeeds.Viewer, new[] { Scope.GlucoseRead, Scope.HeartRateRead }, TeamAccessRefusal.RoleWiderThanLink)]
     [InlineData(RoleSeeds.Clinician, new[] { Scope.TreatmentsRead }, null)]
@@ -397,6 +399,21 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var role = await RoleAsync(site, permissions);
 
         (await ApproveAsync(token, owner, Grant(site, role))).Refusal.Should().Be(refusal);
+    }
+
+    [Fact]
+    public async Task A_link_that_suggests_caretaker_gives_the_sites_caretaker_which_sets_up_data_sources()
+    {
+        var (team, manager) = await TeamAsync();
+        var owner = await NewSubjectAsync();
+        var site = await NewSiteAsync();
+        var (token, _) = await LinkAsync(team, manager, RoleSeeds.Caretaker);
+        var caretaker = site.Roles[RoleSeeds.Caretaker];
+        (await Members().GetRoleAsync(site.Id, caretaker, default))!.Permissions.Should().Contain(Scope.ConnectorsReadWrite);
+
+        (await ApproveAsync(token, owner, Grant(site, caretaker))).Refusal.Should().BeNull();
+
+        (await AccessCountAsync(team)).Should().Be(1);
     }
 
     [Fact]
@@ -499,6 +516,22 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
 
         (await Members().DeleteRoleAsync(site.Id, role, default)).Should().Be(RoleChangeOutcome.Changed);
+    }
+
+    [Fact]
+    public async Task An_owner_may_give_a_role_a_team_holds_connector_setup()
+    {
+        var (team, manager) = await TeamAsync();
+        var owner = await NewSubjectAsync();
+        var site = await NewSiteAsync();
+        var (token, _) = await LinkAsync(team, manager);
+        var role = await RoleAsync(site, Scope.GlucoseRead);
+        var slug = (await Members().GetRoleAsync(site.Id, role, default))!.Slug;
+        (await ApproveAsync(token, owner, Grant(site, role))).Refusal.Should().BeNull();
+
+        (await Members().UpdateRoleAsync(site.Id, role, new TenantRoleEdit(slug, slug, null, [Scope.GlucoseRead, Scope.ConnectorsReadWrite]), owner, Now, default))
+            .Outcome.Should().Be(RoleChangeOutcome.Changed, "setting up data sources does not run the site");
+        (await Members().GetRoleAsync(site.Id, role, default))!.Permissions.Should().Equal(Scope.GlucoseRead, Scope.ConnectorsReadWrite);
     }
 
     [Fact]

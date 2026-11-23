@@ -16,6 +16,7 @@
   import { Separator } from "#lib/components/ui/separator/index.js";
   import { DangerZoneDialog } from "#lib/components/ui/danger-zone-dialog/index.js";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -44,6 +45,12 @@
 
   const canManage = $derived(
     canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -130,7 +137,7 @@
   }
 </script>
 
-{#if canManage && (hasExistingConfig || hasData)}
+{#if canSetUp && (hasExistingConfig || hasData)}
   <Separator class="my-6" />
 
   <Card variant="destructive">
@@ -178,6 +185,15 @@
             <p class="text-sm text-muted-foreground">
               Permanently delete all data synced by this connector.
             </p>
+            {#if !canManage}
+              <p
+                id="connector-delete-data-reason"
+                class="text-sm text-muted-foreground"
+                data-testid="connector-delete-data-reason"
+              >
+                Only members who can manage this site's settings can delete synced data.
+              </p>
+            {/if}
             {#if dataSummary}
               <div
                 class="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap"
@@ -195,7 +211,8 @@
           <Button
             class="shrink-0"
             variant="destructive"
-            disabled={!hasData}
+            disabled={!hasData || !canManage}
+            aria-describedby={canManage ? undefined : "connector-delete-data-reason"}
             onclick={() => {
               deleteDataResult = null;
               allowReimport = false;

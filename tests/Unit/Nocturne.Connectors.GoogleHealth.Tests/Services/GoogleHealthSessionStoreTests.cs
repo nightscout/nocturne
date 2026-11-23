@@ -78,8 +78,8 @@ public class GoogleHealthSessionStoreTests : IDisposable
         configurations.Setup(service => service.GetSecretsAsync("GoogleHealth", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new Dictionary<string, string>(secrets));
         configurations.Setup(service => service.SaveSecretsAsync(
-                "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Models.Authorization.CredentialMaker?, CancellationToken>((_, values, _, _, _) => secrets = values)
+                "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?, CancellationToken>((_, values, _, _, _) => secrets = values)
             .ReturnsAsync(new Nocturne.Core.Contracts.Connectors.ConnectorSecretsSaveResult());
         configurations.Setup(service => service.SaveRuntimeSecretsAsync(
                 "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))

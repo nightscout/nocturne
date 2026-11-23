@@ -132,7 +132,6 @@ public class ConnectorConfigurationScopeTests
     [Theory]
     [InlineData(RoleSeeds.Viewer)]
     [InlineData(RoleSeeds.Clinician)]
-    [InlineData(RoleSeeds.Caretaker)]
     public void SeedRoleWithoutTenantSettings_IsDeniedTheWholeConnectorSurface(string role)
     {
         var scopes = SeedRoleScopes(role);
@@ -146,6 +145,28 @@ public class ConnectorConfigurationScopeTests
                 .Should().BeOfType<ScopeForbiddenResult>(
                     $"the {role} role holds no tenant.settings, so it must not reach "
                     + $"{controller.Name}.{action.Name}");
+        }
+    }
+
+    [Fact]
+    public void Caretaker_SetsUpDataSourcesAndReachesNoOtherConnectorSetting()
+    {
+        var scopes = SeedRoleScopes(RoleSeeds.Caretaker);
+
+        scopes.Should().NotContain(Scope.TenantSettings);
+        scopes.Should().NotContain(Scope.FullAccess);
+
+        foreach (var (controller, action) in ConnectorScopedActions())
+        {
+            Evaluate(controller, action, authenticated: true, scopes)
+                .Should().BeNull($"a caretaker sets up data sources, so it must reach {controller.Name}.{action.Name}");
+        }
+
+        foreach (var (controller, action) in TenantSettingsActions().Append(TenantSettingsRead()))
+        {
+            Evaluate(controller, action, authenticated: true, scopes)
+                .Should().BeOfType<ScopeForbiddenResult>(
+                    $"a caretaker holds no tenant.settings, so it must not reach {controller.Name}.{action.Name}");
         }
     }
 
@@ -221,7 +242,7 @@ public class ConnectorConfigurationScopeTests
     }
 
     [Theory]
-    [MemberData(nameof(AdministeringMembershipsOnScopedCredentials))]
+    [MemberData(nameof(ConnectorSetupMembershipsOnScopedCredentials))]
     public void ConnectorsReadWriteCredential_ReachesTheConnectorScopedSurfaceAndNothingElse(
         string role, AuthType authType)
     {
@@ -276,8 +297,8 @@ public class ConnectorConfigurationScopeTests
     [Theory]
     [InlineData(RoleSeeds.Viewer)]
     [InlineData(RoleSeeds.Clinician)]
-    [InlineData(RoleSeeds.Caretaker)]
-    public void ConnectorsReadWriteCredential_OnAMembershipWithoutTenantSettings_IsDenied(string role)
+    [InlineData(RoleSeeds.Denied)]
+    public void ConnectorsReadWriteCredential_OnAMembershipWithoutConnectorSetup_IsDenied(string role)
     {
         var scopes = ScopedCredentialScopes(role, AuthType.OAuthAccessToken, Scope.ConnectorsReadWrite);
 
@@ -290,10 +311,16 @@ public class ConnectorConfigurationScopeTests
         }
     }
 
-    public static TheoryData<string, AuthType> AdministeringMembershipsOnScopedCredentials()
+    public static TheoryData<string, AuthType> AdministeringMembershipsOnScopedCredentials() =>
+        MembershipsOnScopedCredentials(RoleSeeds.Owner, RoleSeeds.Admin);
+
+    public static TheoryData<string, AuthType> ConnectorSetupMembershipsOnScopedCredentials() =>
+        MembershipsOnScopedCredentials(RoleSeeds.Owner, RoleSeeds.Admin, RoleSeeds.Caretaker);
+
+    private static TheoryData<string, AuthType> MembershipsOnScopedCredentials(params string[] roles)
     {
         var data = new TheoryData<string, AuthType>();
-        foreach (var role in new[] { RoleSeeds.Owner, RoleSeeds.Admin })
+        foreach (var role in roles)
             foreach (var authType in ScopedCredentialTypes)
                 data.Add(role, authType);
         return data;

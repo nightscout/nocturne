@@ -46,6 +46,15 @@ describe("satisfiesScope", () => {
     expect(satisfiesScope(["device.notify"], "alerts.acknowledge")).toBe(false);
   });
 
+  it("accepts tenant.settings for both connector scopes", () => {
+    expect(satisfiesScope(["tenant.settings"], "connectors.readwrite")).toBe(true);
+    expect(satisfiesScope(["tenant.settings"], "connectors.read")).toBe(true);
+  });
+
+  it("does not accept connectors.readwrite for tenant.settings", () => {
+    expect(satisfiesScope(["connectors.readwrite"], "tenant.settings")).toBe(false);
+  });
+
   it("refuses everything on an empty grant", () => {
     expect(satisfiesScope([], "glucose.read")).toBe(false);
   });

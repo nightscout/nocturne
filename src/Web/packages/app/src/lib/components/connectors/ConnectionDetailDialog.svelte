@@ -51,6 +51,7 @@
     windowDays,
     activeWithinMinutes,
     canManage,
+    canSetUp,
     syncing = false,
     quickSyncing = false,
     supportsManualSync = true,
@@ -63,8 +64,10 @@
     windowDays: number | undefined;
     /** Minutes without a record after which a connection that sends is no longer active. */
     activeWithinMinutes: number | undefined;
-    /** Whether the viewer may configure, sync and delete the data of connectors and of their own credentials. */
+    /** Whether the viewer may delete the data of connectors and of their own credentials. */
     canManage: boolean;
+    /** Whether the viewer may configure and sync connectors. */
+    canSetUp: boolean;
     syncing?: boolean;
     quickSyncing?: boolean;
     supportsManualSync?: boolean;
@@ -526,6 +529,12 @@
           </section>
         {/if}
 
+        {#if canSetUp && !canManage && connection?.canDeleteRecords === true}
+          <p class="text-sm text-muted-foreground" data-testid="connection-delete-reason">
+            Only members who can manage this site's settings can delete synced data.
+          </p>
+        {/if}
+
         {#if canDeleteRecords}
           <Button
             variant="outline-destructive"
@@ -537,10 +546,10 @@
           </Button>
         {/if}
 
-        {#if isConnector && connection.connectorId && (canManage || onConnectorDetails)}
+        {#if isConnector && connection.connectorId && (canSetUp || onConnectorDetails)}
           {@const connectorId = connection.connectorId}
           <div class="flex flex-wrap gap-2">
-            {#if canManage}
+            {#if canSetUp}
               <Button
                 variant="outline"
                 size="sm"
@@ -550,7 +559,7 @@
                 Configure
               </Button>
             {/if}
-            {#if canManage && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
+            {#if canSetUp && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
               <Button
                 variant="outline"
                 size="sm"

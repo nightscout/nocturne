@@ -20,7 +20,7 @@ public class ScopeDataOnlyTests
         Scope.StepCountRead, Scope.StepCountReadWrite,
         Scope.SleepRead, Scope.SleepReadWrite,
         Scope.FoodRead, Scope.FoodReadWrite,
-        Scope.ConnectorsRead,
+        Scope.ConnectorsRead, Scope.ConnectorsReadWrite,
         Scope.ReportsRead,
         Scope.TherapyRead, Scope.TherapyReadWrite,
         Scope.AlertsRead, Scope.AlertsReadWrite, Scope.AlertsAcknowledge,

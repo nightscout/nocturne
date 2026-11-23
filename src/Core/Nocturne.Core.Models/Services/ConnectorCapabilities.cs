@@ -19,8 +19,17 @@ public class ConnectorCapabilities
     /// <summary>
     /// When an API secret the caller saves on this connector stops working: the end of the caller's
     /// own access, since the secret is adopted as a device credential they made. Null for a connector
-    /// that adopts no secret, and for a caller whose access does not end.
+    /// that adopts no secret, for a caller whose access does not end, and for a caller who makes no
+    /// credential (<see cref="SavedSecretMakesNoCredential"/>).
     /// </summary>
     [JsonPropertyName("savedSecretStopsAt")]
     public DateTime? SavedSecretStopsAt { get; set; }
+
+    /// <summary>
+    /// Whether an API secret the caller saves on this connector is kept for the connector's own use
+    /// only, with no credential made from it, because the caller may not make one. False for a
+    /// connector that adopts no secret.
+    /// </summary>
+    [JsonPropertyName("savedSecretMakesNoCredential")]
+    public bool SavedSecretMakesNoCredential { get; set; }
 }

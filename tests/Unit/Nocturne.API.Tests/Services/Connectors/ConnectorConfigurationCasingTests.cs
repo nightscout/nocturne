@@ -75,7 +75,7 @@ public class ConnectorConfigurationCasingTests : IDisposable
     public async Task SaveSecretsAsync_StoresTheNameTheRouteWouldUse()
     {
         await _service.SaveSecretsAsync(
-            RegistrationName, new Dictionary<string, string> { ["refresh_token"] = "token" }, modifiedBy: null, maker: null);
+            RegistrationName, new Dictionary<string, string> { ["refresh_token"] = "token" }, modifiedBy: null, saver: null);
 
         var names = await _dbContext.ConnectorConfigurations
             .AsNoTracking()
@@ -89,7 +89,7 @@ public class ConnectorConfigurationCasingTests : IDisposable
     public async Task SaveConfigurationAsync_AfterSaveSecretsAsync_WithOtherCasing_KeepsOneRow()
     {
         await _service.SaveSecretsAsync(
-            RegistrationName, new Dictionary<string, string> { ["refresh_token"] = "token" }, modifiedBy: null, maker: null);
+            RegistrationName, new Dictionary<string, string> { ["refresh_token"] = "token" }, modifiedBy: null, saver: null);
         await _service.SaveConfigurationAsync(
             RouteName, JsonDocument.Parse("""{"enabled":true,"username":"someone"}"""));
 

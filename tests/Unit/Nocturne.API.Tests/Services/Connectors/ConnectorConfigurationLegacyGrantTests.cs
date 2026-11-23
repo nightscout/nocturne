@@ -10,6 +10,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -80,7 +81,9 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
             logger);
     }
 
-    private CredentialMaker Maker => new(_subjectId, AccessEndsAt: null);
+    private static readonly IReadOnlySet<string> OwnerScopes = new HashSet<string> { Scope.FullAccess };
+
+    private ConnectorSecretSaver Saver => new(new CredentialMaker(_subjectId, AccessEndsAt: null), OwnerScopes, HistoryClamped: false);
 
     public void Dispose()
     {
@@ -94,7 +97,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         var apiSecret = "my-nightscout-secret";
         var secrets = new Dictionary<string, string> { ["ApiSecret"] = apiSecret };
 
-        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, maker: Maker);
+        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, saver: Saver);
 
         var grant = await _dbContext.OAuthGrants
             .SingleOrDefaultAsync(g => g.TenantId == _tenantId && g.GrantType == OAuthGrantTypes.Direct);
@@ -120,7 +123,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
 
         await _service.SaveSecretsAsync(
             "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "camp-secret" }, modifiedBy: null,
-            maker: new CredentialMaker(_subjectId, accessEndsAt));
+            saver: new ConnectorSecretSaver(new CredentialMaker(_subjectId, accessEndsAt), OwnerScopes, HistoryClamped: false));
 
         var grant = await _dbContext.OAuthGrants.SingleAsync(g => g.GrantType == OAuthGrantTypes.Direct);
         grant.ExpiresAt.Should().Be(accessEndsAt);
@@ -133,8 +136,8 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         var apiSecret = "my-nightscout-secret";
         var secrets = new Dictionary<string, string> { ["ApiSecret"] = apiSecret };
 
-        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, maker: Maker);
-        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, maker: Maker);
+        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, saver: Saver);
+        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, saver: Saver);
 
         var grants = await _dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId
@@ -150,7 +153,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
     {
         var secrets = new Dictionary<string, string> { ["ApiSecret"] = "some-secret" };
 
-        await _service.SaveSecretsAsync("Dexcom", secrets, modifiedBy: null, maker: Maker);
+        await _service.SaveSecretsAsync("Dexcom", secrets, modifiedBy: null, saver: Saver);
 
         var grants = await _dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId && g.GrantType == OAuthGrantTypes.Direct)
@@ -164,7 +167,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
     {
         var secrets = new Dictionary<string, string> { ["Url"] = "https://my.nightscout.example" };
 
-        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, maker: Maker);
+        await _service.SaveSecretsAsync("Nightscout", secrets, modifiedBy: null, saver: Saver);
 
         var grants = await _dbContext.OAuthGrants
             .Where(g => g.TenantId == _tenantId && g.GrantType == OAuthGrantTypes.Direct)
@@ -176,7 +179,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
     [Fact]
     public async Task SaveSecrets_NightscoutWithNoMaker_DoesNotCreateGrant()
     {
-        await _service.SaveSecretsAsync("Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" }, modifiedBy: null, maker: null);
+        await _service.SaveSecretsAsync("Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" }, modifiedBy: null, saver: null);
 
         (await _dbContext.OAuthGrants.AnyAsync()).Should().BeFalse();
     }
@@ -186,7 +189,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
     {
         var secrets = new Dictionary<string, string> { ["apiSecret"] = "test-secret" };
 
-        await _service.SaveSecretsAsync("nightscout", secrets, modifiedBy: null, maker: Maker);
+        await _service.SaveSecretsAsync("nightscout", secrets, modifiedBy: null, saver: Saver);
 
         var grant = await _dbContext.OAuthGrants
             .SingleOrDefaultAsync(g => g.TenantId == _tenantId && g.GrantType == OAuthGrantTypes.Direct);

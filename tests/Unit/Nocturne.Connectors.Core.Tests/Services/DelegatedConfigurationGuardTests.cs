@@ -98,4 +98,35 @@ public class DelegatedConfigurationGuardTests
     {
         Refused(stored, proposed, holdsSecret: false).Contains("writeBackEnabled").Should().Be(refused);
     }
+
+    private static IReadOnlyList<string> Locked(string? stored, bool holdsSecret) =>
+        DelegatedConfigurationGuard.LockedKeys(
+            new GuardedConfig(), stored is null ? null : JsonDocument.Parse(stored), holdsSecret);
+
+    [Theory]
+    [InlineData("""{"url":"https://a.example"}""", true, new[] { "url", "writeBackEnabled" })]
+    [InlineData("""{"url":"https://a.example","writeBackEnabled":true}""", false, new[] { "url" })]
+    [InlineData("""{"url":"https://a.example"}""", false, new[] { "writeBackEnabled" })]
+    [InlineData(null, false, new[] { "writeBackEnabled" })]
+    public void LockedKeys_AreTheDestinationWhileItCarriesSomethingAndEveryRecordSinkThatIsOff(
+        string? stored, bool holdsSecret, string[] locked)
+    {
+        Locked(stored, holdsSecret).Should().BeEquivalentTo(locked);
+    }
+
+    [Theory]
+    [InlineData("""{"url":"https://a.example"}""", true)]
+    [InlineData("""{"url":"https://a.example","writeBackEnabled":true}""", false)]
+    [InlineData("""{"url":"https://a.example"}""", false)]
+    public void ChangingAnyLockedKey_IsRefused(string stored, bool holdsSecret)
+    {
+        var changed = new Dictionary<string, string>
+        {
+            ["url"] = """{"url":"https://b.example"}""",
+            ["writeBackEnabled"] = """{"url":"https://a.example","writeBackEnabled":true}""",
+        };
+
+        foreach (var key in Locked(stored, holdsSecret))
+            Refused(stored, changed[key], holdsSecret).Should().Contain(key);
+    }
 }

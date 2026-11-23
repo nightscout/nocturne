@@ -60,6 +60,7 @@
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
@@ -91,6 +92,12 @@
   const connectorStatusesQuery = getConnectorStatuses();
   const canManage = $derived(
     canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -541,7 +548,7 @@
         </Card.Description>
         <Card.Action>
           <div class="flex flex-wrap justify-end gap-2">
-            {#if canManage && hasConnector}
+            {#if canSetUp && hasConnector}
               <Button
                 variant="outline"
                 size="sm"
@@ -570,7 +577,7 @@
           <EmptyState
             art="plug"
             title="No connections"
-            body={canManage
+            body={canSetUp
               ? "Add an app or a cloud account to send data to Nocturne."
               : "Add an app to send data to Nocturne."}
           />
@@ -717,7 +724,7 @@
 
 <AddConnectionDialog
   bind:open={showAddDialog}
-  canAddCloudAccount={canManage}
+  canAddCloudAccount={canSetUp}
   signInRequiredForApps={handedOff}
   uploaderApps={servicesOverview ? (servicesOverview.uploaderApps ?? []) : undefined}
   connectors={unconfiguredConnectors}
@@ -753,6 +760,7 @@
   {windowDays}
   {activeWithinMinutes}
   {canManage}
+  {canSetUp}
   syncing={isSyncing(selectedConnection)}
   quickSyncing={!!selectedConnectorId && quickSyncingById[selectedConnectorId] === true}
   supportsManualSync={selectedConnectorCapabilities?.supportsManualSync ?? true}

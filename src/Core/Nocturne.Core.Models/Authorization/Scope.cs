@@ -289,9 +289,10 @@ public static class Scope
 
     /// <summary>
     /// The permissions that run a tenant rather than read or write its records: who gets in, what
-    /// roles mean, public sharing, settings, connectors and the audit log. A team is given data
-    /// permissions only (<see cref="IsDataOnly"/>), since a team's staff are not the site's to
-    /// choose one by one.
+    /// roles mean, public sharing, settings and the audit log. A team is given data permissions only
+    /// (<see cref="IsDataOnly"/>), since a team's staff are not the site's to choose one by one.
+    /// <see cref="ConnectorsReadWrite"/> is not among them: a camp's staff set up the data sources of
+    /// the people they look after.
     /// </summary>
     public static readonly IReadOnlySet<string> AdministrativePermissions = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -301,7 +302,6 @@ public static class Scope
         SharingManage,
         SharingGuest,
         TenantSettings,
-        ConnectorsReadWrite,
         AuditRead,
         AuditManage,
         FullAccess,

@@ -5,8 +5,9 @@ using Nocturne.Connectors.Core.Extensions;
 namespace Nocturne.Connectors.Core.Services;
 
 /// <summary>
-///     The configuration changes only a person at their own sign-in may make, because an app holding
-///     a delegated credential neither owns the stored secret nor reads the tenant's records:
+///     The configuration changes only a person at their own sign-in who may change the site's
+///     settings may make, because an app holding a delegated credential, and a member who may only set
+///     up data sources, neither owns the stored secret nor decides where the site's records go:
 ///     <list type="bullet">
 ///         <item>
 ///             a change to where the connector sends requests (<see cref="ChoosesDestination"/>)
@@ -54,15 +55,12 @@ public static class DelegatedConfigurationGuard
     public static IReadOnlyList<string> RefusedKeys(
         object baseline, JsonDocument? stored, JsonDocument proposed, bool holdsStoredSecret)
     {
-        var properties = baseline.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite)
-            .ToList();
+        var properties = Properties(baseline);
         var before = Bind(baseline, stored);
         var after = Bind(baseline, proposed);
 
-        var carries = holdsStoredSecret
-                      || properties.Any(p => IsSecret(p) && p.GetValue(before) is string { Length: > 0 })
-                      || properties.Any(p => SendsRecords(p) && (p.GetValue(before) is true || p.GetValue(after) is true));
+        var carries = Carries(properties, before, holdsStoredSecret)
+                      || properties.Any(p => SendsRecords(p) && p.GetValue(after) is true);
 
         return properties
             .Where(p =>
@@ -71,6 +69,37 @@ public static class DelegatedConfigurationGuard
             .Select(ConnectorConfigurationBinder.GetBoundKeyName)
             .ToList();
     }
+
+    /// <summary>
+    ///     The keys of <paramref name="stored"/> a guarded caller may not change, whatever they save:
+    ///     every destination while the connector carries something there, and every
+    ///     <see cref="ConnectorPropertyAttribute.SendsRecords"/> property that is off.
+    ///     <see cref="RefusedKeys"/> refuses a save that changes one of them.
+    /// </summary>
+    /// <param name="baseline">As for <see cref="RefusedKeys"/>.</param>
+    /// <param name="stored">The stored configuration, or null when there is none.</param>
+    /// <param name="holdsStoredSecret">Whether the tenant has stored a secret for the connector.</param>
+    public static IReadOnlyList<string> LockedKeys(object baseline, JsonDocument? stored, bool holdsStoredSecret)
+    {
+        var properties = Properties(baseline);
+        var before = Bind(baseline, stored);
+        var carries = Carries(properties, before, holdsStoredSecret);
+
+        return properties
+            .Where(p => (carries && ChoosesDestination(p)) || (SendsRecords(p) && p.GetValue(before) is not true))
+            .Select(ConnectorConfigurationBinder.GetBoundKeyName)
+            .ToList();
+    }
+
+    private static List<PropertyInfo> Properties(object baseline) =>
+        baseline.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
+            .ToList();
+
+    private static bool Carries(List<PropertyInfo> properties, object before, bool holdsStoredSecret) =>
+        holdsStoredSecret
+        || properties.Any(p => IsSecret(p) && p.GetValue(before) is string { Length: > 0 })
+        || properties.Any(p => SendsRecords(p) && p.GetValue(before) is true);
 
     private static bool IsSecret(PropertyInfo property) =>
         property.GetCustomAttribute<ConnectorPropertyAttribute>()?.Secret == true;

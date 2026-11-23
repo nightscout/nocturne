@@ -115,7 +115,7 @@ describe("DataSourceManageDialog", () => {
     ]);
   });
 
-  it("hides the delete control from a member without tenant.settings", async () => {
+  it("hides the delete control from a viewer", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 
     render(DataSourceManageDialog, {
@@ -126,6 +126,36 @@ describe("DataSourceManageDialog", () => {
     expect(
       page.getByRole("button", { name: "Delete data..." }).elements()
     ).toHaveLength(0);
+  });
+
+  it("tells a caretaker why the delete is not theirs, and offers no delete", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read", "treatments.readwrite", "connectors.readwrite"] };
+
+    render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30 },
+    });
+
+    await expect
+      .element(page.getByTestId("data-source-delete-reason"))
+      .toHaveTextContent("Only members who can manage this site's settings can delete synced data.");
+    expect(page.getByRole("button", { name: "Delete data..." }).elements()).toHaveLength(0);
+  });
+
+  it("gives a viewer and a settings holder no reason", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+    const viewer = render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30 },
+    });
+    await expect.element(page.getByText("Dexcom G7")).toBeVisible();
+    expect(page.getByTestId("data-source-delete-reason").elements()).toHaveLength(0);
+    viewer.unmount();
+
+    pageState.data = { effectivePermissions: ["tenant.settings"] };
+    render(DataSourceManageDialog, {
+      props: { open: true, source: dataSource, windowDays: 30 },
+    });
+    await expect.element(page.getByRole("button", { name: "Delete data..." })).toBeVisible();
+    expect(page.getByTestId("data-source-delete-reason").elements()).toHaveLength(0);
   });
 
   it("offers the delete control to a member holding tenant.settings", async () => {
