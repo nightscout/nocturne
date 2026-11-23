@@ -174,6 +174,7 @@ public static class SharedPostgres
                 Database = database,
                 Username = user,
                 Password = password,
+                IncludeErrorDetail = true,
             }.ConnectionString;
 
         public async Task BuildMigratedTemplateAsync()
