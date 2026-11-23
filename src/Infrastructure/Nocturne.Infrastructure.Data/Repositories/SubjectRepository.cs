@@ -274,23 +274,26 @@ public class SubjectRepository : ISubjectRepository
     public virtual async Task<IReadOnlyList<SubjectRecord>> ListPendingAccessRequestsAsync(CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
-        var entities = await Subjects(lease.Context)
-            .Where(s => s.ApprovalStatus == nameof(ApprovalStatus.Pending) && !s.IsSystemSubject)
+        var db = lease.Context;
+        var entities = await Subjects(db)
+            .Where(s => s.ApprovalStatus == nameof(ApprovalStatus.Pending) && !s.IsSystemSubject
+                && db.PasskeyCredentials.Any(c => c.SubjectId == s.Id))
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
         return entities.Select(e => ToRecord(e)!).ToList();
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<Guid>> FindCredentiallessSubjectIdsAsync(EnrolmentMatch match, CancellationToken ct)
+    public virtual async Task<bool> IsEnrollingSubjectAsync(Guid subjectId, EnrolmentMatch match, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var subject = db.Subjects.Where(s => s.Id == subjectId);
         var candidates = match switch
         {
-            EnrolmentMatch.Invite { Username: var username } => db.Subjects.Where(
+            EnrolmentMatch.Invite { Username: var username } => subject.Where(
                 s => s.Username == username && s.IsActive && s.ApprovalStatus != nameof(ApprovalStatus.Pending)),
-            EnrolmentMatch.AccessRequest { DisplayName: var displayName } => db.Subjects.Where(
+            EnrolmentMatch.AccessRequest { DisplayName: var displayName } => subject.Where(
                 s => s.Name == displayName && !s.IsActive && s.ApprovalStatus == nameof(ApprovalStatus.Pending)),
             _ => throw new ArgumentOutOfRangeException(nameof(match)),
         };
@@ -302,9 +305,7 @@ public class SubjectRepository : ISubjectRepository
                 && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id)
                 && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
                 && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now))
-            .OrderByDescending(s => s.Id)
-            .Select(s => s.Id)
-            .ToListAsync(ct);
+            .AnyAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -469,20 +470,6 @@ public class SubjectRepository : ISubjectRepository
         confirmation.OriginalValue = at;
         confirmation.CurrentValue = at;
         confirmation.IsModified = false;
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<bool> SetAccessRequestMessageAsync(Guid subjectId, string? message, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var entity = await db.Subjects.FirstOrDefaultAsync(s => s.Id == subjectId, ct);
-        if (entity is null)
-            return false;
-
-        entity.AccessRequestMessage = message;
-        await SaveAsync(db, ct);
-        return true;
     }
 
     /// <inheritdoc/>

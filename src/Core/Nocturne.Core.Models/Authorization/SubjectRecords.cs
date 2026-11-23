@@ -154,10 +154,8 @@ public enum RoleAssignment
 }
 
 /// <summary>
-/// Names the subject an anonymous enrolment is for. The options and complete steps of a flow
-/// share one match, so the subject the options step reuses or creates is the one the complete
-/// step re-resolves; the challenge token is not trusted for it, and an invite token is not a key
-/// for it because one invite can be accepted by several people.
+/// What an anonymous enrolment's options step creates: the kind of subject, under the name the
+/// caller typed. The complete step checks the subject its challenge was issued for against it.
 /// </summary>
 public abstract record EnrolmentMatch
 {
