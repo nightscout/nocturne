@@ -24,6 +24,7 @@ public class SystemPinnedAllowlistTests
     /// <summary>The repository reads that pin the system inside Infrastructure.</summary>
     private static readonly string[] SystemPinnedReads =
     [
+        nameof(ISubjectRepository.AnyPendingAccessRequestNamedAsync),
         nameof(ISubjectRepository.TenantHasCredentialedMemberAsync),
         nameof(ITenantMembershipRepository.ReadSetupGateAsync),
         nameof(ITenantMembershipRepository.CountSetupCredentialsAsync),
@@ -34,6 +35,7 @@ public class SystemPinnedAllowlistTests
 
     private static readonly string[] Allowed =
     [
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.AnyPendingAccessRequestNamedAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.TenantHasCredentialedMemberAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.ReadSetupGateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.CountSetupCredentialsAsync",
@@ -44,12 +46,14 @@ public class SystemPinnedAllowlistTests
     /// The members outside the module that call a <see cref="SystemPinnedReads"/> read: the anonymous auth
     /// status a share host's login page asks, the setup state asked on public-share requests, the
     /// setup gate every API request passes through, and the dev-only recovery-mode trigger reporting
-    /// what that gate reads. The scan is by name, so
+    /// what that gate reads, and the anonymous access-request step that asks whether a name is
+    /// already pending on the host's tenant. The scan is by name, so
     /// <c>IInstanceSetupState.TenantHasCredentialedMemberAsync</c>, the facade over the same pinned
     /// read, pins its callers too.
     /// </summary>
     private static readonly string[] AllowedReadCallers =
     [
+        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestOptions",
         "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.GetAuthStatus",
         "src/API/Nocturne.API/Controllers/V4/SetupController.cs: SetupController.GetSoleTenantWithoutOwnerAsync",
         "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.IsSetupCompleteAsync",

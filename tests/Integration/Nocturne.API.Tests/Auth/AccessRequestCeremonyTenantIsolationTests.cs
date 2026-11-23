@@ -25,8 +25,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// tenant's owner is told of it, sees it and can decide it.
 /// </summary>
 /// <remarks>
-/// The ceremony runs through the API's own services in a scope resolved to tenant A, as a request
-/// on A's host is. Only the WebAuthn verification is stubbed: it stores a credential through the
+/// The ceremony runs through the API's own services in a scope resolved to one tenant, as a request
+/// on that tenant's host is. Only the WebAuthn verification is stubbed: it stores a credential through the
 /// real repository, as the real one does once the attestation checks out.
 /// </remarks>
 [Collection(ApiIntegrationShards.One)]
@@ -95,13 +95,65 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         (await MembershipsOfAsync(conn, requesterId)).Should().Be(0);
     }
 
-    /// <summary>Runs the options and complete steps on tenant A's host; returns the requester.</summary>
-    private async Task<Guid> RunTheCeremonyOnTenantAAsync(string displayName, string message)
+    [Fact]
+    public async Task ANamePendingOnTenantA_RefusesThatNameOnA_AndNotOnB()
+    {
+        var displayName = $"Visitor {Guid.NewGuid():N}"[..20];
+        await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
+
+        (await AccessRequestOptionsOnAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName))
+            .Result.Should().BeOfType<ConflictObjectResult>("the request is pending on this tenant");
+        (await AccessRequestOptionsOnAsync(_tenantB, _slugB, displayName))
+            .Result.Should().BeOfType<OkObjectResult>("the request was filed on another tenant");
+    }
+
+    [Fact]
+    public async Task ANamePendingOnTenantA_RefusesThatNameOnA_WhenTheRequestRunsOnAShareHost()
+    {
+        var displayName = $"Visitor {Guid.NewGuid():N}"[..20];
+        await RunTheCeremonyOnTenantAAsync(displayName, "I am the school nurse");
+
+        (await AccessRequestOptionsOnAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName, isShare: true))
+            .Result.Should().BeOfType<ConflictObjectResult>(
+                "a share host reads as a share, which is hidden the tenant's membership requests, and the name is still pending");
+    }
+
+    private Task<Guid> RunTheCeremonyOnTenantAAsync(string displayName, string message) =>
+        RunTheCeremonyAsync(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, displayName, message);
+
+    private async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptionsOnAsync(
+        Guid tenantId, string slug, string displayName, bool isShare = false)
     {
         using var scope = Fixture.Services.CreateScope();
         var services = scope.ServiceProvider;
-        services.GetRequiredService<ITenantAccessor>().SetTenant(
-            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        services.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(tenantId, slug, "Integration", true, false));
+        if (isShare)
+        {
+            services.GetRequiredService<ICategoryReadContext>().MarkShare();
+        }
+
+        var webAuthn = new Mock<IPasskeyService>();
+        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.AccessRequest))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "challenge-token"));
+        return await ControllerOn(services, webAuthn.Object, slug)
+            .AccessRequestOptions(new AccessRequestOptionsRequest { DisplayName = displayName });
+    }
+
+    private PasskeyController ControllerOn(IServiceProvider services, IPasskeyService webAuthn, string slug)
+    {
+        var controller = ActivatorUtilities.CreateInstance<PasskeyController>(services, webAuthn);
+        var http = new DefaultHttpContext { RequestServices = services };
+        http.Request.Host = new HostString($"{slug}.{_baseDomain}");
+        controller.ControllerContext = new ControllerContext { HttpContext = http };
+        return controller;
+    }
+
+    /// <summary>Runs the options and complete steps on a tenant's host; returns the requester.</summary>
+    private async Task<Guid> RunTheCeremonyAsync(Guid tenantId, string slug, string displayName, string message)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        services.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(tenantId, slug, "Integration", true, false));
 
         var credentials = services.GetRequiredService<IPasskeyCredentialRepository>();
         Guid? enrolling = null;
@@ -126,10 +178,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
                 return new PasskeyCredentialResult(credentialId, expectedSubjectId);
             });
 
-        var controller = ActivatorUtilities.CreateInstance<PasskeyController>(services, webAuthn.Object);
-        var http = new DefaultHttpContext { RequestServices = services };
-        http.Request.Host = new HostString($"{ApiIntegrationTestFixture.TenantSlug}.{_baseDomain}");
-        controller.ControllerContext = new ControllerContext { HttpContext = http };
+        var controller = ControllerOn(services, webAuthn.Object, slug);
 
         (await controller.AccessRequestOptions(new AccessRequestOptionsRequest { DisplayName = displayName, Message = message }))
             .Result.Should().BeOfType<OkObjectResult>();

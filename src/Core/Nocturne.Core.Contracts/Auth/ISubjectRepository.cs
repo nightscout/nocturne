@@ -13,8 +13,8 @@ namespace Nocturne.Core.Contracts.Auth;
 /// <c>subject_pin</c> policy narrows them only on a context pinned to a subject. Every method runs
 /// as the scope's reader unless its remarks name a pin: a platform context where the caller has no
 /// resolved tenant, the subject pin where the caller is the subject's own connection, the setup
-/// flow's tenant pin, and the system pin for the two setup-state reads a public share host must
-/// answer, which <c>SystemPinnedAllowlistTests</c> limits to their callers.
+/// flow's tenant pin, and the system pin for the reads a public share host must answer, which
+/// <c>SystemPinnedAllowlistTests</c> limits to their callers.
 /// </remarks>
 public interface ISubjectRepository
 {
@@ -116,6 +116,18 @@ public interface ISubjectRepository
     /// it would leave an account no one can sign in to.
     /// </summary>
     Task<IReadOnlyList<SubjectRecord>> ListPendingAccessRequestsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Whether a pending access request of the kind <see cref="ListPendingAccessRequestsAsync"/>
+    /// lists is under <paramref name="name"/> and has a pending request to join
+    /// <paramref name="tenantId"/>. A request filed on another tenant does not count.
+    /// </summary>
+    /// <remarks>
+    /// System-pinned: a public-share host's visitor gets the answer a member's host gives, though a
+    /// share is hidden the tenant's membership requests, which are tenant-scoped. The caller is
+    /// pinned by <c>SystemPinnedAllowlistTests</c>.
+    /// </remarks>
+    Task<bool> AnyPendingAccessRequestNamedAsync(Guid tenantId, string name, CancellationToken ct);
 
     /// <summary>
     /// Whether <paramref name="subjectId"/> is still what an anonymous enrolment's options step left

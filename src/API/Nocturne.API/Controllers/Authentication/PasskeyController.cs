@@ -840,7 +840,6 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptions(
         [FromBody] AccessRequestOptionsRequest request)
     {
-        await using var db = await _dbContextFactory.CreateAsync();
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
@@ -856,7 +855,7 @@ public class PasskeyController : ControllerBase
         var displayName = request.DisplayName.Trim();
         var username = displayName.ToLowerInvariant().Replace(" ", "-");
 
-        if ((await _subjects.ListPendingAccessRequestsAsync(HttpContext.RequestAborted)).Any(s => s.Name == displayName))
+        if (await _subjects.AnyPendingAccessRequestNamedAsync(tenantId, displayName, HttpContext.RequestAborted))
             return Conflict(new ProblemDetails
             {
                 Detail = "A pending access request with this name already exists",
