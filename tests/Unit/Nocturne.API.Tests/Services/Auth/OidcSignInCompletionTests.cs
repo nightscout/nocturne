@@ -109,7 +109,7 @@ public class OidcSignInCompletionTests
             _subjects.Object,
             _audit.Object,
             _members.Object,
-            new RecoverySession(Mock.Of<INocturneDbContextFactory>(), Mock.Of<ILoginCodeService>(),
+            new RecoverySession(Mock.Of<INocturneDbContextFactory>(), Mock.Of<ILoginCodeService>(), Mock.Of<ITenantMemberService>(),
                 Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -28,6 +29,7 @@ namespace Nocturne.API.Services.Auth;
 public sealed class RecoverySession(
     INocturneDbContextFactory contexts,
     ILoginCodeService loginCodes,
+    ITenantMemberService tenantMembers,
     IOptions<OidcOptions> oidcOptions,
     ILogger<RecoverySession> logger)
 {
@@ -82,7 +84,9 @@ public sealed class RecoverySession(
     /// Runs <paramref name="enrol"/> for the session's member and spends the session when
     /// <paramref name="enrolled"/> accepts what it returned. Both happen in the claim's transaction:
     /// a refusal or an exception rolls the claim back, so the session stays usable, and a
-    /// concurrent second enrolment on the same session finds it spent. A write
+    /// concurrent second enrolment on the same session finds it spent. A member whose access to the
+    /// tenant has ended since the session began finds no session
+    /// (<see cref="LoginCodeAdmission.LiveMemberOf"/>). A write
     /// <paramref name="enrol"/> makes through another context commits on its own, so it must not
     /// write anything it would have to undo when it then refuses.
     /// </summary>
@@ -101,7 +105,7 @@ public sealed class RecoverySession(
         try
         {
             spent = await loginCodes.RedeemAsync(
-                db, code, Purposes, admits: null,
+                db, code, Purposes, admits: LoginCodeAdmission.LiveMemberOf(tenantMembers, db.TenantId),
                 withSpend: async (session, token) =>
                 {
                     outcome = await enrol(session.SubjectId, token);

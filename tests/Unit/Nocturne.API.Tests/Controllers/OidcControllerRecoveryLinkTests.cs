@@ -9,11 +9,13 @@ using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -79,6 +81,8 @@ public class OidcControllerRecoveryLinkTests : IDisposable
             new Mock<ITenantMemberService>().Object,
             new RecoverySession(
                 new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), _loginCodes,
+                new TenantMemberService(
+                    new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), AccountLinkRoutes.Off), TimeProvider.System),
                 Options.Create(_options), NullLogger<RecoverySession>.Instance),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }),
