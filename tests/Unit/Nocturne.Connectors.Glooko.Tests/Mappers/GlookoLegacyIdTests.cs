@@ -138,6 +138,305 @@ public class GlookoLegacyIdTests
     }
 
     [Fact]
+    public void V2FirstGuidlessFoodKeepsItsStoredIdsAndTheNextOnesAreToldApart()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods =
+            [
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 25.5 },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 25.5 },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 25.5 },
+            ],
+        };
+
+        var (_, carbs, _) = Treatments().MapBatchData(batch);
+        var entries = Treatments().MapFoodsToConnectorEntries(batch);
+
+        carbs.Select(c => c.LegacyId).First().Should().Be("glooko_4a9ba130561a4e74092a6432e1950b7f283ba7e7");
+        entries.Select(e => e.Entry.ExternalEntryId).First().Should().Be("glooko_food_639129672000000000_25.5");
+        entries.Select(e => e.Entry.ExternalEntryId).Skip(1).Should().Equal(
+            "glooko_food_639129672000000000_25.5_occurrence:1", "glooko_food_639129672000000000_25.5_occurrence:2");
+        carbs.Select(c => c.LegacyId).Should().OnlyHaveUniqueItems();
+        entries.Select(e => e.Entry.ExternalEntryId).Should().OnlyHaveUniqueItems();
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
+        Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
+    }
+
+    [Fact]
+    public void V2TwoGuidlessFoodsAtOneTimeWithEqualCarbsAreTwoCarbIntakesAndTwoFoodEntries()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods =
+            [
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = "Apple" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = "Bread" },
+            ],
+        };
+
+        var (_, carbs, _) = Treatments().MapBatchData(batch);
+        var entries = Treatments().MapFoodsToConnectorEntries(batch);
+
+        carbs.Should().HaveCount(2);
+        carbs.Sum(c => c.Carbs).Should().Be(40);
+        carbs.Select(c => c.LegacyId).Should().OnlyHaveUniqueItems();
+        entries.Select(e => e.Entry.MealName).Should().Equal("Apple", "Bread");
+        entries.Select(e => e.Entry.ExternalEntryId).Should().OnlyHaveUniqueItems();
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
+    }
+
+    [Fact]
+    public void V2FoodsWithAGuidOrADifferentTimeOrCarbsDoNotCountAsRepeats()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods =
+            [
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Guid = "food-1" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Guid = "food-2" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20 },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 21 },
+                new GlookoFood { Timestamp = "2026-04-28T10:05:00Z", PumpTimestamp = "2026-04-28T10:05:00Z", Carbs = 20 },
+            ],
+        };
+
+        var entries = Treatments().MapFoodsToConnectorEntries(batch);
+
+        entries.Select(e => e.Entry.ExternalEntryId).Should().Equal(
+            "food-1", "food-2", "glooko_food_639129672000000000_20", "glooko_food_639129672000000000_21",
+            "glooko_food_639129675000000000_20");
+        entries.Select(e => e.CarbIntakeLegacyId).Take(2).Should().Equal("glooko_food_food-1", "glooko_food_food-2");
+    }
+
+    [Fact]
+    public void V2SkippedTwinsDoNotMoveTheIdsOfTheLiveOnes()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods =
+            [
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = "A", SoftDeleted = true },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = "B" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 0, Description = "C" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = "D" },
+            ],
+        };
+
+        var (_, carbs, _) = Treatments().MapBatchData(batch);
+        var entries = Treatments().MapFoodsToConnectorEntries(batch);
+
+        entries.Select(e => e.Entry.MealName).Should().Equal("B", "D");
+        entries.Select(e => e.Entry.ExternalEntryId).Should().Equal(
+            "glooko_food_639129672000000000_20", "glooko_food_639129672000000000_20_occurrence:1");
+        carbs.Select(c => c.LegacyId).Should().OnlyHaveUniqueItems().And.HaveCount(2);
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
+        Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId).Should().Equal(carbs.Select(c => c.LegacyId));
+    }
+
+    [Fact]
+    public void V2TwinsKeepTheirLabelsWhateverOrderGlookoSendsThem()
+    {
+        GlookoFood Twin(string name, double protein) =>
+            new() { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Description = name, Protein = protein };
+
+        GlookoBatchData Batch(params GlookoFood[] foods) => new() { Foods = foods };
+
+        var apple = Twin("Apple", 1);
+        var bread = Twin("Bread", 4);
+        var sameLabelLowProtein = Twin("Bread", 2);
+
+        string[] LabelsById(GlookoBatchData batch) => [.. Treatments().MapFoodsToConnectorEntries(batch)
+            .OrderBy(e => e.Entry.ExternalEntryId, StringComparer.Ordinal)
+            .Select(e => $"{e.Entry.ExternalEntryId}={e.Entry.MealName}:{e.Entry.Protein}")];
+
+        LabelsById(Batch(apple, bread, sameLabelLowProtein)).Should().Equal(
+            LabelsById(Batch(bread, sameLabelLowProtein, apple)))
+            .And.Equal(LabelsById(Batch(sameLabelLowProtein, apple, bread)));
+        LabelsById(Batch(bread, apple)).Should().Equal(
+            "glooko_food_639129672000000000_20=Apple:1",
+            "glooko_food_639129672000000000_20_occurrence:1=Bread:4");
+    }
+
+    [Fact]
+    public void V2RepeatedGuidlessFoodsGetTheSameIdsOnEveryRun()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods = [.. Enumerable.Range(0, 3).Select(_ => new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20 })],
+        };
+
+        Treatments().MapBatchData(batch).carbs.Select(c => c.LegacyId)
+            .Should().Equal(Treatments().MapBatchData(batch).carbs.Select(c => c.LegacyId));
+        Treatments().MapFoodsToConnectorEntries(batch).Select(e => e.Entry.ExternalEntryId)
+            .Should().Equal(Treatments().MapFoodsToConnectorEntries(batch).Select(e => e.Entry.ExternalEntryId));
+    }
+
+    [Fact]
+    public void V3FirstGuidlessFoodKeepsItsStoredIdAndTheNextOnesAreToldApart()
+    {
+        var histories = new GlookoV3HistoriesResponse
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Guid = "meal-1", Timestamp = V2Time, Carbs = 60,
+                        Foods =
+                        [
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                            new GlookoV3HistoryFood { Name = "Jam", Carbs = 10 },
+                            new GlookoV3HistoryFood { Guid = "f-1", Name = "Toast", Carbs = 20 },
+                        ],
+                    },
+                },
+            ],
+        };
+
+        var entries = Treatments().MapV3HistoryMealsToConnectorEntries(histories);
+
+        entries.Select(e => e.Entry.ExternalEntryId).Should().Equal(
+            "v3meal_meal-1_Toast", "v3meal_meal-1_Toast_occurrence:1", "v3meal_meal-1_Toast_occurrence:2",
+            "v3meal_meal-1_Jam", "f-1");
+        entries.Select(e => e.CarbIntakeLegacyId).Should().OnlyContain(id => id == "glooko_v3meal_meal-1");
+        entries.Select(e => e.Entry.ExternalEntryId)
+            .Should().Equal(Treatments().MapV3HistoryMealsToConnectorEntries(histories).Select(e => e.Entry.ExternalEntryId));
+    }
+
+    [Fact]
+    public void V3FoodNamesAreComparedTrimmedBecauseTheRepositoryStoresTheIdTrimmed()
+    {
+        var histories = new GlookoV3HistoriesResponse
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Guid = "meal-1", Timestamp = V2Time, Carbs = 40,
+                        Foods =
+                        [
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                            new GlookoV3HistoryFood { Name = "Toast ", Carbs = 20 },
+                        ],
+                    },
+                },
+            ],
+        };
+
+        var ids = Treatments().MapV3HistoryMealsToConnectorEntries(histories).Select(e => e.Entry.ExternalEntryId).ToList();
+
+        ids.Should().Equal("v3meal_meal-1_Toast", "v3meal_meal-1_Toast_occurrence:1");
+        ids.Select(id => id.Trim()).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void V3AFoodWithAnEmptyGuidIsGuidlessAsInV2()
+    {
+        var histories = new GlookoV3HistoriesResponse
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Guid = "meal-1", Timestamp = V2Time, Carbs = 20,
+                        Foods = [new GlookoV3HistoryFood { Guid = "", Name = "Toast", Carbs = 20 }],
+                    },
+                },
+            ],
+        };
+
+        Treatments().MapV3HistoryMealsToConnectorEntries(histories).Single().Entry.ExternalEntryId
+            .Should().Be("v3meal_meal-1_Toast");
+    }
+
+    [Fact]
+    public void V3TwinsKeepTheirLabelsWhateverOrderGlookoSendsThem()
+    {
+        GlookoV3HistoriesResponse Meal(params GlookoV3HistoryFood[] foods) => new()
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal { Guid = "meal-1", Timestamp = V2Time, Carbs = 40, Foods = foods },
+                },
+            ],
+        };
+
+        var small = new GlookoV3HistoryFood { Name = "Toast", Carbs = 10 };
+        var large = new GlookoV3HistoryFood { Name = "Toast", Carbs = 30 };
+
+        string[] CarbsById(GlookoV3HistoriesResponse histories) => [.. Treatments().MapV3HistoryMealsToConnectorEntries(histories)
+            .OrderBy(e => e.Entry.ExternalEntryId, StringComparer.Ordinal)
+            .Select(e => $"{e.Entry.ExternalEntryId}={e.Entry.Carbs}")];
+
+        CarbsById(Meal(small, large)).Should().Equal(CarbsById(Meal(large, small)))
+            .And.Equal("v3meal_meal-1_Toast=10", "v3meal_meal-1_Toast_occurrence:1=30");
+    }
+
+    [Fact]
+    public void V3SameNamedFoodsOfDifferentMealsAreCountedPerMeal()
+    {
+        GlookoV3HistoryEntry Meal(string guid) => new()
+        {
+            Type = "meals",
+            Item = new GlookoV3HistoryMeal
+            {
+                Guid = guid, Timestamp = V2Time, Carbs = 20,
+                Foods = [new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 }],
+            },
+        };
+
+        var entries = Treatments().MapV3HistoryMealsToConnectorEntries(
+            new GlookoV3HistoriesResponse { Histories = [Meal("meal-1"), Meal("meal-2")] });
+
+        entries.Select(e => e.Entry.ExternalEntryId).Should().Equal("v3meal_meal-1_Toast", "v3meal_meal-2_Toast");
+    }
+
+    [Fact]
+    public void V3FoodEntriesNameTheLegacyIdTheirMealCarbIntakeIsStoredUnder_WhenAMealRepeatsAFood()
+    {
+        var histories = new GlookoV3HistoriesResponse
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Guid = "meal-1", Timestamp = V2Time, Carbs = 40,
+                        Foods =
+                        [
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                            new GlookoV3HistoryFood { Name = "Toast", Carbs = 20 },
+                        ],
+                    },
+                },
+            ],
+        };
+
+        var entries = Treatments().MapV3HistoryMealsToConnectorEntries(histories);
+
+        entries.Should().HaveCount(2);
+        entries.Select(e => e.Entry.ExternalEntryId).Should().OnlyHaveUniqueItems();
+        entries.Sum(e => e.Entry.Carbs).Should().Be(40m);
+        Treatments().MapV3HistoryMealsToCarbIntakes(histories).Single().Carbs.Should().Be(40);
+    }
+
+    [Fact]
     public void V3HistoryFoodEntriesNameTheLegacyIdTheirMealCarbIntakeIsStoredUnder()
     {
         var histories = new GlookoV3HistoriesResponse
