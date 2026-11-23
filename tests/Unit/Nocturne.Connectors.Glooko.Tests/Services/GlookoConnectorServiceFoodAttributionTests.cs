@@ -67,26 +67,50 @@ public class GlookoConnectorServiceFoodAttributionTests
         harness.MealMatching.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SyncDataAsync_AttributesAFoodToItsStoredCarbIntakeWhetherOrNotGlookoGaveItAGuid(
+        bool useV3Api, bool guidless)
+    {
+        var harness = new Harness(useV3Api, guidless);
+        var service = harness.Service();
+
+        await harness.SyncAsync(service, carbIntakes: true);
+
+        harness.Store.Stored.Keys.Count(key => key.Type == nameof(CarbIntake)).Should().Be(1);
+        harness.MealMatching.Verify(
+            m => m.AcceptMatchAsync(
+                harness.FoodEntryId, harness.StoredCarbIntake.Id, 12m, 0, It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.MealMatching.VerifyNoOtherCalls();
+    }
+
     private sealed class Harness
     {
         private readonly DateTime _from = DateTime.UtcNow.AddDays(-3);
-        private string _externalEntryId = string.Empty;
+        private readonly bool _useV3Api;
+        private readonly bool _guidless;
 
-        public Harness()
+        public Harness(bool useV3Api = false, bool guidless = false)
         {
+            _useV3Api = useV3Api;
+            _guidless = guidless;
             Metadata
                 .Setup(m => m.PublishConnectorFoodEntriesAsync(
                     It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<string>(),
                     It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IEnumerable<ConnectorFoodEntryImport> imports, string _, WriteOrigin _, CancellationToken _) =>
                 {
-                    _externalEntryId = imports.Single().ExternalEntryId;
+                    var externalEntryId = imports.Single().ExternalEntryId.Trim();
                     return
                     [
                         new ConnectorFoodEntry
                         {
                             Id = FoodEntryId,
-                            ExternalEntryId = _externalEntryId,
+                            ExternalEntryId = externalEntryId,
                             Carbs = 12m,
                             Status = ConnectorFoodEntryStatus.Pending,
                         },
@@ -110,11 +134,12 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         private IConnectorPublisher Publisher { get; }
 
-        public CarbIntake StoredCarbIntake => (CarbIntake)Store.Stored[(nameof(CarbIntake), $"glooko_food_{_externalEntryId}")];
+        public CarbIntake StoredCarbIntake =>
+            (CarbIntake)Store.Stored.Single(stored => stored.Key.Type == nameof(CarbIntake)).Value;
 
         public RecordingGlookoConnectorService Service() =>
             GlookoSyncHarness.Service(
-                new GlookoEndpointHandler(), publisher: Publisher, mealMatchingService: MealMatching.Object);
+                new GlookoEndpointHandler(withHistoryMeals: _useV3Api, withGuidlessFoods: _guidless), publisher: Publisher, mealMatchingService: MealMatching.Object);
 
         public Task<SyncResult> SyncAsync(RecordingGlookoConnectorService service, bool carbIntakes)
         {
@@ -123,7 +148,7 @@ public class GlookoConnectorServiceFoodAttributionTests
                 DataTypes = [.. OtherTypes, SyncDataType.Food, .. carbIntakes ? [SyncDataType.CarbIntake] : Array.Empty<SyncDataType>()],
                 From = _from,
             };
-            return service.SyncDataAsync(request, GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+            return service.SyncDataAsync(request, GlookoSyncHarness.Config(_useV3Api), CancellationToken.None);
         }
     }
 }
