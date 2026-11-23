@@ -73,6 +73,23 @@ public class UniqueIndexDeduplicationGuardTests
         UniqueIndexCreations(up).Select(x => x.Table).Should().Equal("notes");
     }
 
+    /// <summary>
+    /// <c>revoked_at</c> is how <c>oauth_grants</c> soft-deletes, so revoking the losers is a cleanup
+    /// there and nowhere else.
+    /// </summary>
+    [Fact]
+    public void TheGuardSeesARevokedAtCleanupOnOauthGrantsAndOnNoOtherTable()
+    {
+        const string rank = """
+            WITH ranked AS (SELECT id, row_number() OVER (PARTITION BY tenant_id, client_id, subject_id ORDER BY created_at DESC) AS rn FROM TABLE)
+            UPDATE TABLE g SET revoked_at = now() FROM ranked WHERE g.id = ranked.id AND ranked.rn > 1;
+            ConcurrentIndexBuilder.BuildUnique(migrationBuilder, "ix_x", "ON TABLE (tenant_id, client_id, subject_id)");
+            """;
+
+        UndeduplicatedTablesIn(rank.Replace("TABLE", "oauth_grants")).Should().BeEmpty();
+        UndeduplicatedTablesIn(rank.Replace("TABLE", "oauth_refresh_tokens")).Should().Equal("oauth_refresh_tokens");
+    }
+
     [Fact]
     public void AWidenedPrimaryKeyMigrationBuildsNoUniqueIndexItDoesNotPromote()
     {
@@ -122,9 +139,11 @@ public class UniqueIndexDeduplicationGuardTests
     /// Tables the migration makes unique without an earlier cleanup, ignoring tables it creates
     /// itself — those hold no rows yet, so a cleanup there would be dead code.
     /// </summary>
-    private static IReadOnlyList<string> UndeduplicatedTables(string file)
+    private static IReadOnlyList<string> UndeduplicatedTables(string file) =>
+        UndeduplicatedTablesIn(MigrationSourceFiles.UpBody(file));
+
+    private static IReadOnlyList<string> UndeduplicatedTablesIn(string up)
     {
-        var up = MigrationSourceFiles.UpBody(file);
         var live = MigrationSourceFiles.WithCommentsBlanked(up);
         var created = TablesCreatedIn(live);
 
@@ -237,6 +256,11 @@ public class UniqueIndexDeduplicationGuardTests
     private static readonly Regex RankedDuplicates = new(
         @"row_number\s*\(\s*\)\s*over\s*\(\s*partition\s+by\b", Sql);
 
+    /// <summary>
+    /// A soft delete or a delete. <c>oauth_grants</c> has no <c>deleted_at</c>: a revoked grant is
+    /// its soft-deleted one, so <c>revoked_at</c> counts there and for no other table.
+    /// </summary>
     private static readonly Regex RemovesRows = new(
-        @"\bupdate\s+\S+\s+set\s+deleted_at\b|\bdelete\s+from\s+\S+", Sql);
+        @"\bupdate\s+\S+\s+set\s+deleted_at\b|\bdelete\s+from\s+\S+"
+        + @"|\bupdate\s+oauth_grants(?:\s+(?:as\s+)?\w+)?\s+set\s+revoked_at\b", Sql);
 }

@@ -3627,6 +3627,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_oauth_grants_tenant_token_hash")
                         .HasFilter("token_hash IS NOT NULL");
 
+                    b.HasIndex("TenantId", "ClientEntityId", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_oauth_grants_tenant_client_subject_active")
+                        .HasFilter("grant_type = 'app' AND revoked_at IS NULL");
+
                     b.ToTable("oauth_grants");
                 });
 
