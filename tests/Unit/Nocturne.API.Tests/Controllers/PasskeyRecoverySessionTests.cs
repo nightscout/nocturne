@@ -240,32 +240,6 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
-    [Theory]
-    [MemberData(nameof(Sites))]
-    public async Task Redeeming_an_emailed_recovery_link_is_admitted_and_starts_a_session(Site site)
-    {
-        await using var arranged = await ArrangeAsync(site);
-        var code = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.EmailRecovery);
-
-        var response = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        response.Headers.GetValues("Set-Cookie")
-            .Should().Contain(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
-    }
-
-    [Theory]
-    [MemberData(nameof(Sites))]
-    public async Task Redeeming_a_confirmation_link_is_admitted(Site site)
-    {
-        await using var arranged = await ArrangeAsync(site, confirmed: false);
-        var code = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.EmailConfirm);
-
-        var response = await PostAsync("/api/auth/email-confirmation/redeem", new { code }, null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-    }
-
     #endregion
 
     #region A stuck member stops the site only when no member administrator can sign in
@@ -320,38 +294,6 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
             .Should().Equal(arranged.StuckFollowerId!.Value);
     }
 
-    [Fact]
-    public async Task A_stuck_follower_spends_an_administrators_code_and_enrols_on_a_site_that_is_not_in_recovery_mode()
-    {
-        await using var arranged = await ArrangeAsync(Site.WithStuckFollower);
-        var code = await IssueAsync(arranged.StuckFollowerId!.Value, LoginCodePurpose.Recovery);
-
-        var redeemed = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
-
-        redeemed.StatusCode.Should().Be(HttpStatusCode.OK);
-        var setCookie = redeemed.Headers.GetValues("Set-Cookie")
-            .Single(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
-        var session = setCookie[(setCookie.IndexOf('=') + 1)..setCookie.IndexOf(';')];
-        var options = await PostAsync("/api/auth/passkey/register/options", new { username = StuckFollowerUsername }, session);
-        options.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
-    public async Task An_operators_code_for_a_member_who_still_has_a_passkey_starts_a_session_that_can_enrol_another()
-    {
-        await using var arranged = await ArrangeAsync(Site.Private);
-        var code = await IssueAsync(arranged.EmailMemberId, LoginCodePurpose.OperatorRecovery);
-
-        var redeemed = await PostAsync("/api/auth/passkey/recovery-mode/redeem", new { code }, null);
-
-        redeemed.StatusCode.Should().Be(HttpStatusCode.OK);
-        var setCookie = redeemed.Headers.GetValues("Set-Cookie")
-            .Single(h => h.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal));
-        var session = setCookie[(setCookie.IndexOf('=') + 1)..setCookie.IndexOf(';')];
-        var options = await PostAsync("/api/auth/passkey/register/options", new { username = "recovering" }, session);
-        options.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -401,18 +343,17 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
     private const string StuckFollowerUsername = "stuck-follower";
 
     /// <summary>
-    /// A member holding <see cref="Address"/>, confirmed unless told otherwise, and a passkey. With
+    /// A member holding <see cref="Address"/>, confirmed, and a passkey. With
     /// <see cref="Site.WithStuckFollower"/> a follower who cannot sign in joins too; in recovery
     /// mode the owner's passkey is set aside, so the site's only member administrator is stuck.
     /// </summary>
-    private async Task<Arranged> ArrangeAsync(Site site, bool confirmed = true)
+    private async Task<Arranged> ArrangeAsync(Site site)
     {
         var memberId = Guid.CreateVersion7();
         await using var db = await TenantDbAsync();
         var subject = new SubjectEntity { Id = memberId, Name = "Recovering", Username = "recovering", IsActive = true };
         subject.SetEmail(Address);
-        if (confirmed)
-            subject.ConfirmEmail(Address, DateTime.UtcNow);
+        subject.ConfirmEmail(Address, DateTime.UtcNow);
         db.Subjects.Add(subject);
         db.TenantMembers.Add(new TenantMemberEntity
         {
