@@ -5159,8 +5159,6 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -27255,6 +27253,7 @@ msgstr ""
 msgid "The second date must be on or after the first date."
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 msgid "Compare with"
 msgstr ""
@@ -32205,6 +32204,7 @@ msgstr ""
 msgid "How far one unit of insulin lowers glucose."
 msgstr ""
 
+#: src/lib/components/alerts/holdText.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
@@ -33861,10 +33861,12 @@ msgstr ""
 msgid "Target blood glucose range"
 msgstr ""
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "Target low"
 msgstr ""
 
+#: src/lib/components/alerts/alert-labels.svelte.ts
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "Target high"
 msgstr ""
@@ -37037,15 +37039,11 @@ msgstr ""
 msgid "Not ({0})"
 msgstr ""
 
-#. 0: bg(p.value ?? 0); 1: bgLabel()
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "Glucose below {0} {1}"
-msgstr ""
+#~ msgid "Glucose below {0} {1}"
+#~ msgstr ""
 
-#. 0: bg(p.value ?? 0); 1: bgLabel()
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "Glucose above {0} {1}"
-msgstr ""
+#~ msgid "Glucose above {0} {1}"
+#~ msgstr ""
 
 #. 0: bg(p.rate ?? 0); 1: bgLabel()
 #. 0: convertRateToDisplayUnits(m, glucoseUnits.current); 1: bgLabel()
@@ -47912,15 +47910,11 @@ msgstr ""
 msgid "Loop result"
 msgstr ""
 
-#. 0: forecastChip(p); 1: opSymbol(p.operator); 2: bg(p.value ?? 0); 3: bgLabel(); 4: formatMinutes(p.within_minutes ?? 0)
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "{0} {1} {2} {3} in {4}"
-msgstr ""
+#~ msgid "{0} {1} {2} {3} in {4}"
+#~ msgstr ""
 
-#. 0: opSymbol(p.operator); 1: bg(p.value ?? 0); 2: bgLabel()
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "Eventual glucose {0} {1} {2}"
-msgstr ""
+#~ msgid "Eventual glucose {0} {1} {2}"
+#~ msgstr ""
 
 #. 0: opSymbol(p.operator); 1: p.value
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
@@ -48410,4 +48404,82 @@ msgstr ""
 
 #: src/routes/(authenticated)/teams/access/+page.svelte
 msgid "Loading link..."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Offset"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "plus"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "If your profile has no target range, this condition does not know if it is true."
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Number"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Latest glucose"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A glucose condition can compare with a number or with a value such as your target, not both."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A glucose threshold cannot compare the latest glucose with itself. Choose a number or a target."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The amount added to a target or to the latest glucose is too large."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The amount added to a target or to the latest glucose must be a number."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A glucose condition compares with a value that Nocturne does not know. Choose one from the list and save again."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A glucose condition compares with a value, but no value is chosen. Choose one from the list and save again."
+msgstr ""
+
+#. 0: limitPhrase(p)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose below {0}"
+msgstr ""
+
+#. 0: limitPhrase(p)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Glucose above {0}"
+msgstr ""
+
+#. 0: forecastChip(p); 1: opSymbol(p.operator); 2: limitPhrase(p); 3: formatMinutes(p.within_minutes ?? 0)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "{0} {1} {2} in {3}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: limitPhrase(p)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Eventual glucose {0} {1}"
+msgstr ""
+
+#. 0: fact; 1: bg(offset); 2: bgLabel()
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "{0} plus {1} {2}"
+msgstr ""
+
+#. 0: fact; 1: bg(-offset); 2: bgLabel()
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "{0} minus {1} {2}"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
+msgid "Set in the rule editor"
 msgstr ""
