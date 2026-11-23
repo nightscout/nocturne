@@ -48919,6 +48919,7 @@ msgid "A link cannot suggest this role. Choose another role."
 msgstr ""
 
 #: src/lib/teams/problem-messages.svelte.ts
+#: src/lib/teams/problem-messages.svelte.ts
 msgid "The end date must be in the future. Choose a later date."
 msgstr ""
 
@@ -49813,4 +49814,16 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Nocturne did not add the passkey. To try again, select Add passkey."
+msgstr ""
+
+#: src/lib/teams/member-kind.svelte.ts
+msgid "Staff"
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Staff cannot have this role ceiling. Choose another role."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The end date that this invite gives has passed. Ask a manager of the team for a new link."
 msgstr ""
