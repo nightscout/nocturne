@@ -40,6 +40,8 @@ public interface IConnectorFoodEntryRepository
     /// and its entries are not linked to it; one a system sweep deleted is restored on its own row.
     /// Foods are reported to <c>ILegacyReadCacheInvalidation</c> after the commit when an existing
     /// one changed, since a legacy treatment is served with the name of its food.
+    /// Imports of one connector source and trimmed external entry id are one entry, written from the
+    /// first of them; the others, and the food they carry, are ignored.
     /// </remarks>
     /// <param name="imports">Imports with no connector source or no external entry id are skipped.</param>
     Task<ConnectorFoodEntryUpsert> UpsertAsync(
