@@ -140,14 +140,15 @@ public class MealMatchingService : IMealMatchingService
         return outcome;
     }
 
-    public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
+    public async Task<DismissMatchOutcome> DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
     {
-        await _foodEntryRepository.UpdateStatusAsync(
-            foodEntryId,
-            ConnectorFoodEntryStatus.Standalone,
-            ct);
+        var outcome = await _foodEntryRepository.DismissAsync(foodEntryId, ct);
 
-        _logger.LogInformation("Dismissed meal match for food entry {FoodEntryId}", foodEntryId);
+        _logger.LogInformation(
+            "Dismiss of food entry {FoodEntryId}: {Outcome}",
+            foodEntryId,
+            outcome);
+        return outcome;
     }
 
     public async Task WithdrawSuggestionAsync(string userId, Guid foodEntryId, CancellationToken ct = default)

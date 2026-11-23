@@ -538,6 +538,23 @@ public class MealMatchingServiceTests
         outcome.Should().Be(decided);
     }
 
+    [Theory]
+    [InlineData(DismissMatchOutcome.Dismissed)]
+    [InlineData(DismissMatchOutcome.AlreadyDismissed)]
+    [InlineData(DismissMatchOutcome.AlreadyResolved)]
+    [InlineData(DismissMatchOutcome.NotFound)]
+    public async Task DismissMatchAsync_ReportsWhateverTheRepositoryDecidedAboutTheClaim(DismissMatchOutcome decided)
+    {
+        var foodEntryId = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.DismissAsync(foodEntryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(decided);
+
+        var outcome = await NewService().DismissMatchAsync(foodEntryId);
+
+        outcome.Should().Be(decided);
+    }
+
     private void VerifyNothingWritten() =>
         _foodEntryRepository.Verify(
             r => r.AcceptMatchAsync(It.IsAny<Guid>(), It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
