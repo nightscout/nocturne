@@ -918,6 +918,7 @@ public class SubjectRepository : ISubjectRepository
             && !db.TeamMembers.Any(m => m.SubjectId == s.Id)
             && !db.Teams.Any(t => t.CreatedBySubjectId == s.Id)
             && !db.TeamInvites.Any(i => i.CreatedBySubjectId == s.Id)
+            && !db.TeamStaffInvites.Any(i => i.CreatedBySubjectId == s.Id)
             && !db.TeamAccessLinks.Any(l => l.CreatedBySubjectId == s.Id)
             && !db.SubjectRoles.Any(r => r.AssignedById == s.Id));
 

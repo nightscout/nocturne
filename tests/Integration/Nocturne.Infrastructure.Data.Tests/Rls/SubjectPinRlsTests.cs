@@ -27,6 +27,9 @@ public class SubjectPinRlsTests : IAsyncLifetime
     private readonly Guid _sharedTeam = Guid.CreateVersion7();
     private readonly Guid _teamOfA = Guid.CreateVersion7();
     private readonly Guid _teamOfB = Guid.CreateVersion7();
+    private readonly Guid _staffSubject = Guid.CreateVersion7();
+    private readonly Guid _staffTeam = Guid.CreateVersion7();
+    private readonly Guid[] _accesses = [Guid.CreateVersion7(), Guid.CreateVersion7()];
 
     public SubjectPinRlsTests(RlsCompletenessFixture fx) => _fx = fx;
 
@@ -79,6 +82,36 @@ public class SubjectPinRlsTests : IAsyncLifetime
             await ExecuteAsync(conn, """
                 INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'manager')
                 """, ("id", Guid.CreateVersion7()), ("team", team), ("subject", subject));
+        }
+
+        await SeedStaffTeamAsync(conn);
+    }
+
+    private async Task SeedStaffTeamAsync(NpgsqlConnection conn)
+    {
+        await ExecuteAsync(conn, """
+            INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+            VALUES (@id, @name, true, false, now(), now(), 'Approved')
+            """, ("id", _staffSubject), ("name", $"pin-{_staffSubject:N}"));
+        await ExecuteAsync(conn, "INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", _staffTeam));
+        await ExecuteAsync(conn, """
+            INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'manager')
+            """, ("id", Guid.CreateVersion7()), ("team", _staffTeam), ("subject", _subjectA));
+        var staffMember = Guid.CreateVersion7();
+        await ExecuteAsync(conn, """
+            INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'staff')
+            """, ("id", staffMember), ("team", _staffTeam), ("subject", _staffSubject));
+
+        for (var i = 0; i < _tenants.Length; i++)
+        {
+            await ExecuteAsync(conn, """
+                INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
+                VALUES (@id, @team, @tenant, false)
+                """, ("id", _accesses[i]), ("team", _staffTeam), ("tenant", _tenants[i]));
+            await ExecuteAsync(conn, """
+                INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
+                VALUES (@id, @access, @member, 'approved')
+                """, ("id", Guid.CreateVersion7()), ("access", _accesses[i]), ("member", staffMember));
         }
     }
 
@@ -160,6 +193,69 @@ public class SubjectPinRlsTests : IAsyncLifetime
         var changed = await context.Database.ExecuteSqlAsync($"UPDATE teams SET name = 'taken' WHERE id = {_teamOfB}");
 
         changed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SubjectPin_OfAStaffMember_ReadsItsTeam()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_staffSubject);
+
+        (await IdsAsync(context, "teams", "id", [_staffTeam, _teamOfA, _teamOfB])).Should().Equal(_staffTeam);
+    }
+
+    [Fact]
+    public async Task SubjectPin_OfAStaffMember_CannotChangeItsTeam()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_staffSubject);
+
+        var rename = () => context.Database.ExecuteSqlAsync($"UPDATE teams SET name = 'taken' WHERE id = {_staffTeam}");
+
+        (await rename.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+        await using var reader = await Factory().CreatePlatformAsync();
+        (await NameOfAsync(reader, _staffTeam)).Should().Be("subject-pin");
+    }
+
+    [Fact]
+    public async Task SubjectPin_OfAManager_ChangesItsTeam()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_subjectA);
+
+        var changed = await context.Database.ExecuteSqlAsync($"UPDATE teams SET name = 'subject-pin' WHERE id = {_staffTeam}");
+
+        changed.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TenantPin_SeesOnlyItsTenantsSiteStaffRows()
+    {
+        await using var context = await Factory().CreateForTenantAsync(_tenants[0]);
+
+        (await IdsAsync(context, "team_site_staff", "team_tenant_access_id", _accesses)).Should().BeEquivalentTo([_accesses[0]],
+            "the query names no tenant, so only the policy can have dropped the other site's row");
+    }
+
+    [Fact]
+    public async Task TenantPin_CannotWriteAnotherTenantsSiteStaffRow()
+    {
+        await using var context = await Factory().CreateForTenantAsync(_tenants[0]);
+
+        var insert = () => context.Database.ExecuteSqlAsync($"""
+            INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
+            SELECT {Guid.CreateVersion7()}, {_accesses[1]}, m.id, 'pending' FROM team_members m
+             WHERE m.team_id = {_staffTeam} AND m.subject_id = {_staffSubject}
+            """);
+
+        (await insert.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task Unpinned_SeesEverySiteStaffRow()
+    {
+        await using var context = await Factory().CreatePlatformAsync();
+
+        (await IdsAsync(context, "team_site_staff", "team_tenant_access_id", _accesses)).Should().BeEquivalentTo(_accesses);
     }
 
     [Fact]
@@ -275,6 +371,19 @@ public class SubjectPinRlsTests : IAsyncLifetime
         (await SubjectIdsAsync(context, "refresh_tokens", "subject_id")).Should().BeEquivalentTo(Subjects);
         (await TeamMembershipsAsync(context)).Should().BeEquivalentTo(TeamMemberships);
         (await IdsAsync(context, "teams", "id", Teams)).Should().BeEquivalentTo(Teams);
+    }
+
+    private static async Task<string?> NameOfAsync(NocturneDbContext context, Guid team)
+    {
+        string? name = null;
+        await WithConnectionAsync(context, async connection =>
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT name FROM teams WHERE id = @id";
+            AddParam(cmd, "@id", team);
+            name = (string?)await cmd.ExecuteScalarAsync();
+        });
+        return name;
     }
 
     private async Task<List<(Guid Team, Guid Subject)>> TeamMembershipsAsync(NocturneDbContext context)

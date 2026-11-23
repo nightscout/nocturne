@@ -121,7 +121,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         return (token, id!.Value);
     }
 
-    private static TeamAccessGrant Grant(Site site, params Guid[] roles) => new(site.Id, roles, false, null);
+    private static TeamAccessGrant Grant(Site site, params Guid[] roles) => new(site.Id, roles, false, null, true);
 
     /// <summary>Approves as <paramref name="approver"/>, made an owner of the grant's site first if they are not one.</summary>
     private async Task<TeamAccessApproval> ApproveAsync(string token, Guid approver, TeamAccessGrant grant, bool limited = false)
@@ -294,7 +294,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var viewerish = await RoleAsync(site, Scope.GlucoseRead);
 
         var approval = await ApproveAsync(
-            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker], viewerish], true, end));
+            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker], viewerish], true, end, true));
 
         approval.Refusal.Should().BeNull();
         await using (var db = Context())
@@ -647,13 +647,13 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
                 $"UPDATE tenant_members SET access_ends_at = {ownEnd} WHERE tenant_id = {site.Id} AND subject_id = {owner}");
         var viewer = site.Roles[RoleSeeds.Viewer];
 
-        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null), Now, default))
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now, default))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover);
-        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, ownEnd.AddSeconds(1)), Now, default))
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, ownEnd.AddSeconds(1), true), Now, default))
             .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover);
-        (await Teams(owner).ApproveAccessAsync(token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], false, ownEnd), Now, default))
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], false, ownEnd, true), Now, default))
             .Refusal.Should().Be(TeamAccessRefusal.LimitRequired);
-        (await Teams(owner).ApproveAccessAsync(token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], true, ownEnd), Now, default))
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner, limited: true), new TeamAccessGrant(site.Id, [viewer], true, ownEnd, true), Now, default))
             .Refusal.Should().BeNull();
     }
 
@@ -667,7 +667,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (retired, retiredId) = await LinkAsync(team, manager);
         await using (var db = Context())
             await db.Database.ExecuteSqlAsync($"UPDATE team_access_links SET suggested_role_slug = 'retired' WHERE id = {retiredId}");
-        var grant = new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Viewer]], false, Now.AddMinutes(-2));
+        var grant = new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Viewer]], false, Now.AddMinutes(-2), true);
 
         (await Teams().GetAccessLinkInfoAsync(passed, Now, default))!.Refusal.Should().Be(TeamAccessRefusal.SuggestedEndPassed);
         (await ApproveAsync(passed, owner, grant)).Refusal.Should().Be(TeamAccessRefusal.SuggestedEndPassed);
@@ -814,7 +814,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var end = Now.AddDays(5);
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(
-            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker]], true, end))).Refusal.Should().BeNull();
+            token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker]], true, end, true))).Refusal.Should().BeNull();
         (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
         await Teams(manager).RenameAsync(team, manager, "New name", default);
         var reader = new MemberHistoryReader(Contexts());

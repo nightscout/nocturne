@@ -22,7 +22,8 @@ public interface ITeamRepository
 
     /// <summary>
     /// The team, or null when <paramref name="callerSubjectId"/> is not a member of it. Only a manager
-    /// reads its invites, its access links and the sites it has access to.
+    /// reads its managers' subject ids, its staff, its invites, its access links and the sites it has
+    /// access to; a staff member reads its name, its managers' names and what narrows them.
     /// </summary>
     Task<TeamDetail?> GetAsync(Guid teamId, Guid callerSubjectId, DateTime now, CancellationToken ct);
 
@@ -47,6 +48,45 @@ public interface ITeamRepository
     /// invite; revoking a revoked invite succeeds.
     /// </summary>
     Task<bool> RevokeInviteAsync(Guid teamId, Guid callerSubjectId, Guid inviteId, DateTime now, CancellationToken ct);
+
+    /// <summary>Stores a staff invite and returns its id; null when the caller is not a manager.</summary>
+    Task<Guid?> CreateStaffInviteAsync(Guid teamId, Guid callerSubjectId, NewTeamStaffInvite invite, CancellationToken ct);
+
+    /// <summary>
+    /// Revokes the staff invite. False when the caller is not a manager of the team or the team has no
+    /// such invite; revoking a revoked invite succeeds.
+    /// </summary>
+    Task<bool> RevokeStaffInviteAsync(Guid teamId, Guid callerSubjectId, Guid inviteId, DateTime now, CancellationToken ct);
+
+    /// <summary>The team a staff invite is for, as <paramref name="subjectId"/> holding its token sees it.</summary>
+    Task<TeamStaffInviteInfo?> GetStaffInviteInfoAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Makes <paramref name="subjectId"/> staff of the invite's team with what the invite gives, takes
+    /// one use of the invite, and writes a <see cref="TeamSiteStaffStatus"/> row for each site the team has
+    /// access to. A subject already a member of either kind changes nothing and is told so. A manager
+    /// token is <see cref="TeamInviteRefusal.NotFound"/> here, as a staff token is to
+    /// <see cref="AcceptInviteAsync"/>. Gives no access to any site.
+    /// </summary>
+    Task<TeamInviteAcceptance> AcceptStaffInviteAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Sets what narrows the staff member <paramref name="staffSubjectId"/>. An edit that gives them
+    /// more than they held (<c>TeamStaffRules.Widens</c>) returns every approval of theirs that the
+    /// site, not the team, decides to pending. <see cref="TeamStaffChange.NotFound"/> when the caller is
+    /// not a manager of the team or the subject is not its staff, and <see cref="TeamStaffChange.EndPassed"/>
+    /// when the end at <paramref name="now"/> has passed and is not the end they already have, so a
+    /// manager can still narrow a staff member whose end has passed without moving it.
+    /// </summary>
+    Task<TeamStaffChange> UpdateStaffAsync(
+        Guid teamId, Guid callerSubjectId, Guid staffSubjectId, TeamStaffNarrowing narrowing, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Removes the staff member from the team and every site's record of them; the caller's own id means
+    /// leave. False when the subject is not staff of the team, or the caller is neither a manager of it
+    /// nor that staff member. Never refused for the last-manager rule.
+    /// </summary>
+    Task<bool> RemoveStaffAsync(Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct);
 
     /// <summary>The team an invite is for, as <paramref name="subjectId"/> holding its token sees it.</summary>
     Task<TeamInviteInfo?> GetInviteInfoAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
