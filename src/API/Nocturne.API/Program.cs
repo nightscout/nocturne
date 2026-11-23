@@ -109,9 +109,7 @@ var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
     builder.Configuration,
     builder.Environment.IsDevelopment());
 
-// Registered whether or not the pool is built, so the resolution above is observable from a test
-// host, which always runs as Testing and so never reaches the registration below.
-builder.Services.AddSingleton(postgreSqlOptions);
+builder.Services.AddPostgreSqlConfiguration(postgreSqlOptions);
 
 if (!isTesting)
 {
