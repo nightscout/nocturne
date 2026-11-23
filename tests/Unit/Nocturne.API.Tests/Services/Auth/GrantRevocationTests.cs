@@ -93,6 +93,7 @@ public class GrantRevocationTests : IDisposable
                     db.AsFactory(), new OAuthGrantRepository(db.AsFactory()),
                     _sessionCache,
                     new GrantRevocationService(_sessionCache),
+                    TimeProvider.System,
                     NullLogger<GuestLinkService>.Instance);
                 (await guestLinks.RevokeAsync(grantId, _ownerSubjectId)).Should().BeTrue();
                 break;
@@ -114,6 +115,7 @@ public class GrantRevocationTests : IDisposable
                     db.AsFactory(),
                     new Mock<IAuthAuditService>().Object,
                     new GrantRevocationService(_sessionCache),
+                    TimeProvider.System,
                     NullLogger<DirectGrantService>.Instance);
                 (await directGrants.RevokeAsync(
                     pinnedTenantId: null, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();

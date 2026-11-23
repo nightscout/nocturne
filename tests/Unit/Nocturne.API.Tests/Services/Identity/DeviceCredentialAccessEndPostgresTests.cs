@@ -198,7 +198,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             Mock.Of<ISubjectService>(),
             roles.Object,
             new DirectGrantService(
-                seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance),
+                seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance),
             new OAuthGrantRepository(seeded.Contexts),
             Mock.Of<IJwtService>(),
             new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off),
@@ -512,7 +512,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var (minted, token) = await MintTokenAsync(seeded, MakerOf(seeded, end));
 
         (await new DirectGrantService(
-                    seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance)
+                    seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance)
                 .KeepDeviceCredentialAsync(minted))
             .Should().BeTrue();
 
@@ -542,7 +542,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
     }
 
     private DirectGrantService DirectGrants(Seeded seeded) =>
-        new(seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), NullLogger<DirectGrantService>.Instance);
+        new(seeded.Contexts, Mock.Of<IAuthAuditService>(), Revocation(Sessions()), TimeProvider.System, NullLogger<DirectGrantService>.Instance);
 
     [Fact]
     public async Task AKeptCredentialStaysKeptThroughEveryLaterChangeToItsMaker()

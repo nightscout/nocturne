@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -18,6 +19,7 @@ namespace Nocturne.API.Tests.Services;
 public class GuestLinkServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestLinkService _service;
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -49,6 +51,7 @@ public class GuestLinkServiceTests : IDisposable
             _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             _sessionCache,
             new GrantRevocationService(_sessionCache),
+            _time,
             NullLogger<GuestLinkService>.Instance);
     }
 
@@ -318,6 +321,20 @@ public class GuestLinkServiceTests : IDisposable
         session!.GrantId.Should().Be(created.Info.Id);
         session.DataOwnerSubjectId.Should().Be(_dataOwnerId);
         session.Label.Should().Be("Session Test");
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_ReadsTheInjectedClock_ExpiringTheLinkAtItsStatedTime()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Clock Test", "https://example.com", Unbounded(), null);
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        created.Info.ExpiresAt.Should().Be(_time.GetUtcNow().UtcDateTime.AddHours(48));
+
+        _time.Advance(TimeSpan.FromHours(48) - TimeSpan.FromSeconds(1));
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().NotBeNull();
+
+        _time.Advance(TimeSpan.FromSeconds(1));
+        (await _service.ValidateSessionAsync(created.Info.Id)).Should().BeNull();
     }
 
     [Fact]

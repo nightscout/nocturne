@@ -131,17 +131,20 @@ public class DirectGrantService : IDirectGrantService
     private readonly INocturneDbContextFactory _contexts;
     private readonly IAuthAuditService _auditService;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TimeProvider _time;
     private readonly ILogger<DirectGrantService> _logger;
 
     public DirectGrantService(
         INocturneDbContextFactory contexts,
         IAuthAuditService auditService,
         GrantRevocationService grantRevocation,
+        TimeProvider time,
         ILogger<DirectGrantService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _auditService = auditService;
         _grantRevocation = grantRevocation;
+        _time = time;
         _logger = logger;
     }
 
@@ -276,7 +279,7 @@ public class DirectGrantService : IDirectGrantService
             return true;
         }
 
-        var outcome = await _grantRevocation.StageAsync(unit, grant, ct);
+        var outcome = await _grantRevocation.StageAsync(unit, grant, _time.GetUtcNow().UtcDateTime, ct);
         await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
         _grantRevocation.EvictSessions([grant]);
 

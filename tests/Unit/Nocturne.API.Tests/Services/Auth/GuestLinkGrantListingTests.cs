@@ -67,7 +67,7 @@ public class GuestLinkGrantListingTests : IDisposable
         var revocation = new GrantRevocationService(sessionCache);
 
         var guestLinks = await new GuestLinkService(
-                _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()), sessionCache, revocation, NullLogger<GuestLinkService>.Instance)
+                _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()), sessionCache, revocation, TimeProvider.System, NullLogger<GuestLinkService>.Instance)
             .GetGuestLinksAsync(_dataOwnerId);
 
         var grantService = new OAuthGrantService(

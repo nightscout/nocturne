@@ -151,7 +151,7 @@ public class OAuthGrantService : IOAuthGrantService
             return;
         }
 
-        var outcome = await _grantRevocation.StageAsync(unit, grant, ct);
+        var outcome = await _grantRevocation.StageAsync(unit, grant, _time.GetUtcNow().UtcDateTime, ct);
         await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
         _grantRevocation.EvictSessions([grant]);
 
