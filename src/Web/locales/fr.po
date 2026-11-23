@@ -47086,7 +47086,6 @@ msgstr ""
 msgid "The public access settings did not load."
 msgstr ""
 
-#: src/lib/components/members/LockedOutMembers.svelte
 #: src/lib/components/members/MemberCard.svelte
 msgid "This member's access lasts longer than yours."
 msgstr ""
@@ -48489,4 +48488,16 @@ msgstr ""
 
 #: ../portal/src/routes/features/+page.svelte
 msgid "One install for a household, a camp, or a community"
+msgstr ""
+
+#: src/lib/components/members/LockedOutMembers.svelte
+msgid "This member holds permissions that you do not hold. Ask an owner to create the link."
+msgstr ""
+
+#: src/lib/components/members/LockedOutMembers.svelte
+msgid "You can see the last 24 hours only. Ask an owner to create the link."
+msgstr ""
+
+#: src/lib/components/members/LockedOutMembers.svelte
+msgid "This member's access lasts longer than yours. Ask an owner to create the link."
 msgstr ""
