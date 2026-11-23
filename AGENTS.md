@@ -89,6 +89,12 @@ Where a service interface goes follows from who is on the other side of it:
 - A contract whose types live in `Core.Clinical` cannot be in `Core.Contracts`, which does not reference it. It lives
   beside its service.
 
+Caching follows the second case. `ICacheService` (`Infrastructure.Cache`) is the store, usable from any layer.
+`ITenantCache` is the host's policy over it: every key names the tenant and the reader partition, so only readers who
+see the same rows share a value. Only host code uses it; Infrastructure clears it through
+`ILegacyReadCacheInvalidation` in `Core.Contracts`, which the host implements. What a cached value may contain is
+stated on `ITenantCache`.
+
 ```csharp
 // Interface: src/Core/Nocturne.Core.Contracts/Entries/IEntryService.cs
 // Implementation: src/API/Nocturne.API/Services/Entries/EntryService.cs
