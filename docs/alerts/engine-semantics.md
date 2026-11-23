@@ -1005,9 +1005,14 @@ crate's.
 The backend's map is `ContextFactWrites`: the facts a committed write of each V4 record type
 moves, and for each fact whether every write that moves it announces itself and whether it
 also moves with the clock. Every V4 repository announces each committed write, a restore as a
-creation, through the record-changed event, and so does a data source purge. After the commit,
-outside the write's request, the backend adds the facts the write moved to its tenant's pending
-set (`AlertFactEvaluationScheduler`):
+creation, through the record-changed event, and so does a data source purge. The legacy treatment
+writes that go around the repositories announce too: a V1 or V3 delete, a source's delete and a
+find-query delete name the record types that lost rows, a reclassified treatment the types of the
+records it dropped, and a client id rekey every type it can move. Deduplication announces the record
+types whose shown copy it changed: a reconcile batch, the flag audit and each slice of a full run,
+once their changes have committed, naming no record. After the commit, outside the write's request,
+the backend adds the facts the write moved to its tenant's pending set
+(`AlertFactEvaluationScheduler`):
 
 - A moved `glucose` fact starts an evaluation at once, with every fact pending for the tenant. It
   joins only an evaluation that has not yet begun; once one has begun, a new glucose change starts
@@ -1102,8 +1107,7 @@ waits for the next reading. A wall-clock rule is evaluated by the sweep as §5.1
 
 Some writes do not announce, and their facts' rules are evaluated only by the next reading and,
 when wall-clock, by the sweep: state spans, trackers, sleep sessions, alert instances and Do
-Not Disturb are written by stores outside the V4 repositories, and deduplication re-picks which
-copy of a device event or a glucose reading reads are shown without announcing it.
+Not Disturb are written by stores outside the V4 repositories.
 
 ### 5.3 Next change
 
@@ -1172,10 +1176,12 @@ does not report it.
 
 The backend's sweep waits for it only for a wall-clock rule every fact of which (§5.2) has an
 announcing write for every write that moves it and does not move with the clock: `glucose`,
-`aps`, `uploader`, `transmitter`, `sensor_state` and `aps_determination`
+`aps`, `uploader`, `transmitter`, `sensor_state`, `aps_determination` and `device_ages`
 (`ContextFactWrites.SweepMayWaitFor`). `aps_determination` moves with an APS snapshot write, which
 announces itself; it goes stale at an instant the engine reports as a next change, so it does not
-move with the clock.
+move with the clock. `device_ages` moves with a device event written, deleted or restored, and with
+deduplication changing which copy of a site change or sensor start reads show, each of which
+announces itself (§5.2).
 `sensor_state` moves with a reading (one with no value is `no_value`) and with a device status that
 states it, whose extras write announces itself, as does a purge that deletes extras; a report's
 lapse is its `until`, which the engine reports as a next change, so it does not move with the
@@ -1201,8 +1207,6 @@ Every other wall-clock rule keeps the 30 s cadence:
   (§5.1).
 - `state_spans`, `trackers`, `sleep`, `active_alerts` and `do_not_disturb` have writes that do not
   announce (§5.2).
-- `device_ages` has one too: deduplication can re-pick the copy of a site change or sensor start
-  that reads show, moving the anchor by the match tolerance with no announcement.
 
 A held evaluation (§6.4) records its next change like any other: the value is read from the
 state the evaluation left, which is the state it found with its hold's start, and it is keyed by

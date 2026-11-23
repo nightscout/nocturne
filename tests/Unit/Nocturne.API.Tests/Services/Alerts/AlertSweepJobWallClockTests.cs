@@ -14,6 +14,7 @@ using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
@@ -649,17 +650,69 @@ public class AlertSweepJobWallClockTests
     }
 
     /// <summary>
-    /// A rule over a fact whose writes do not all announce (device ages: deduplication re-picks
-    /// device events silently), or that moves with the clock (insulin on board), is evaluated by
-    /// every sweep.
+    /// Every write that moves a site change or a sensor start announces itself, deduplication's re-picks
+    /// included, so a device-age rule waits for its next change. A re-pick that moves the anchor earlier
+    /// is evaluated when it lands, and the rule then fires at the moved anchor's bound, not the recorded one.
     /// </summary>
     [NativeTheory]
     [InlineData(AlertConditionType.SiteAge, """{"operator": ">", "value": 72}""")]
+    [InlineData(AlertConditionType.SensorAge, """{"operator": ">", "value": 3}""")]
+    public async Task A_device_age_rule_waits_for_its_next_change_and_a_re_pick_of_its_anchor_moves_it(
+        AlertConditionType type, string seventyTwoHours)
+    {
+        var fixture = new Fixture(type, seventyTwoHours) { LastReadingAt = T0 };
+        fixture.SetDeviceAnchor(type, T0);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+        fixture.Evaluations.Should().Be(1);
+        await fixture.SweepAt(T0.AddMinutes(10));
+        fixture.Evaluations.Should().Be(1, "nothing but the clock moves the rule before its next change");
+
+        fixture.SetDeviceAnchor(type, T0.AddMinutes(-20));
+        await fixture.WriteAt(T0.AddMinutes(10), DeviceEventMoves);
+        fixture.Evaluations.Should().Be(2, "the re-pick's announcement evaluates the rule that reads the anchor");
+
+        await fixture.SweepAt(T0.AddHours(72).AddMinutes(-10));
+        fixture.Evaluations.Should().Be(3, "the moved anchor's bound has passed, ahead of the first one recorded");
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
+    /// <summary>
+    /// An anchor moved later, by a new site change or a re-pick of the later copy, is evaluated when it
+    /// is announced and records the later bound, so the bound first recorded opens nothing.
+    /// </summary>
+    [NativeFact]
+    public async Task A_site_age_rule_whose_anchor_moves_later_waits_for_the_later_bound()
+    {
+        var fixture = new Fixture(AlertConditionType.SiteAge, """{"operator": ">", "value": 72}""")
+        {
+            LastReadingAt = T0, LastSiteChangeAt = T0,
+        };
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.LastSiteChangeAt = T0.AddMinutes(20);
+        await fixture.WriteAt(T0.AddMinutes(21), DeviceEventMoves);
+        fixture.Evaluations.Should().Be(2);
+
+        await fixture.SweepAt(T0.AddHours(72).AddMinutes(10));
+        fixture.Evaluations.Should().Be(2, "the next change recorded is the later anchor's bound");
+        fixture.InstancesCreated.Should().Be(0, "the site is not 72 hours old by the later anchor");
+
+        await fixture.SweepAt(T0.AddHours(72).AddMinutes(21));
+        fixture.Evaluations.Should().Be(3);
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
+    private static string[] DeviceEventMoves =>
+        [.. ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(DeviceEvent)])).Facts];
+
+    /// <summary>A rule over a fact that moves with the clock (insulin on board) is evaluated by every sweep.</summary>
+    [NativeTheory]
     [InlineData(AlertConditionType.TimeSinceLastBolus, """{"operator": "<", "minutes": 60}""")]
     public async Task A_rule_over_a_fact_the_sweep_may_not_wait_for_is_evaluated_every_sweep(
         AlertConditionType type, string payload)
     {
-        var fixture = new Fixture(type, payload) { LastReadingAt = T0, LastSiteChangeAt = T0, LastBolusAt = T0 };
+        var fixture = new Fixture(type, payload) { LastReadingAt = T0, LastBolusAt = T0 };
 
         await fixture.SweepAt(T0.AddMinutes(1));
         await fixture.SweepAt(T0.AddMinutes(1.5));
@@ -855,7 +908,17 @@ public class AlertSweepJobWallClockTests
         public double? LatestMgdl { get; set; }
         public DateTime? LastApsCycleAt { get; set; }
         public DateTime? LastSiteChangeAt { get; set; }
+        public DateTime? LastSensorStartAt { get; set; }
         public DateTime? LastBolusAt { get; set; }
+
+        /// <summary>Sets the anchor a <c>site_age</c> or <c>sensor_age</c> rule reads.</summary>
+        public void SetDeviceAnchor(AlertConditionType type, DateTime at)
+        {
+            if (type == AlertConditionType.SensorAge)
+                LastSensorStartAt = at;
+            else
+                LastSiteChangeAt = at;
+        }
 
         /// <summary>The state a device status reports, as the enricher adds it.</summary>
         public SensorStateSnapshot? ReportedSensorState { get; set; }
@@ -1041,6 +1104,7 @@ public class AlertSweepJobWallClockTests
                         LastApsCycleAt = LastApsCycleAt,
                         HasEverApsCycled = LastApsCycleAt is not null,
                         LastSiteChangeAt = LastSiteChangeAt,
+                        LastSensorStartAt = LastSensorStartAt,
                         LastBolusAt = LastBolusAt,
                         SensorState = ReportedSensorState ?? c.SensorState,
                     });

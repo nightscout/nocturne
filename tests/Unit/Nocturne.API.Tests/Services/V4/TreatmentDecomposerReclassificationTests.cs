@@ -48,6 +48,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly Mock<IStateSpanService> _stateSpans = new Mock<IStateSpanService>().AnswersBatchFormsPerSpan();
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly RecordingRecordChangeSubscriber _published = new();
     private readonly StatementRecorder _statements = new();
 
     public TreatmentDecomposerReclassificationTests()
@@ -117,7 +118,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             TempBasalTestDeps.Unscheduled(),
             _audit,
             NullLogger<TreatmentDecomposer>.Instance,
-            legacyReads: _legacyReads);
+            changes: _legacyReads.AsRecordChanges(_published));
     }
 
     private Task DecomposeAsync(Treatment treatment) => Decomposer().DecomposeOneAsync(treatment, WriteOrigin.Live);
@@ -227,6 +228,25 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
         spans[pointsAtFirst.Id].SupersededById.Should().BeNull("a live span no longer points at a deleted one");
         (await _context.MutationAuditLog.CountAsync()).Should().Be(0, "the drop is system-attributed");
         _legacyReads.Models.Should().Contain(typeof(StateSpan));
+    }
+
+    /// <summary>A dropped site change is announced, so a site-age rule waiting on it is evaluated.</summary>
+    [Theory]
+    [InlineData("Note", typeof(Nocturne.Core.Models.V4.Note))]
+    [InlineData("Site Change", typeof(Nocturne.Core.Models.V4.DeviceEvent))]
+    public async Task A_reclassification_announces_the_types_it_dropped_once_naming_no_record(string eventType, Type dropped)
+    {
+        await DecomposeAsync(new Treatment
+        {
+            Id = "aaps-1", EventType = eventType, Mills = At, Notes = "Rhys (110%,1h)", EnteredBy = "openaps://AndroidAPS",
+        });
+        _published.Batches.Clear();
+
+        await DecomposeAsync(new Treatment { Id = "aaps-1", EventType = "Correction Bolus", Mills = At, Insulin = 1 });
+
+        _published.Batches.Should().ContainSingle(batch =>
+            batch.Changes.Any(c => c.RecordType == dropped) && batch.Changes.All(c => !c.HasRecords),
+            "the dropped record is announced by type, apart from the bolus the repository announces itself");
     }
 
     [Fact]

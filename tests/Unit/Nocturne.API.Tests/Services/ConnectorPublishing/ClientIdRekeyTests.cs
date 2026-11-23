@@ -50,6 +50,7 @@ public class ClientIdRekeyTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly TreatmentPublisher _publisher;
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly RecordingRecordChangeSubscriber _published = new();
 
     public ClientIdRekeyTests()
     {
@@ -95,6 +96,11 @@ public class ClientIdRekeyTests : IDisposable
         await _publisher.PublishTreatmentsAsync([Equivalent(ObjectIdC, 12, MealAt.AddHours(3))], Source, WriteOrigin.Live);
 
         _legacyReads.Models.Should().Contain([typeof(Nocturne.Core.Models.V4.CarbIntake), typeof(StateSpan)]);
+        _published.Batches.Should().Contain(batch =>
+            batch.Changes.Any(c => c.RecordType == typeof(Nocturne.Core.Models.V4.DeviceEvent))
+            && batch.Changes.Any(c => c.RecordType == typeof(StateSpan))
+            && batch.Changes.All(c => !c.HasRecords),
+            "the re-key announces every table it may move rows in, by type");
     }
 
     [Fact]
@@ -237,7 +243,7 @@ public class ClientIdRekeyTests : IDisposable
             Mock.Of<IStateSpanService>(), ProfileActivationTestDeps.Repository(_context), ProfileActivationTestDeps.Writer(_context), Mock.Of<ITreatmentFoodService>(), new UnresolvedDevices(),
             Mock.Of<IPatientDeviceStamper>(), new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
             Mock.Of<IPatientInsulinRepository>(), TempBasalTestDeps.Unscheduled(), audit, NullLogger<TreatmentDecomposer>.Instance,
-            legacyReads: _legacyReads);
+            changes: _legacyReads.AsRecordChanges(_published));
         var service = WritingTreatmentService.Over(
             decomposer, Mock.Of<ITempBasalRepository>(), bolus, carbs, bgChecks, notes, deviceEvents, calculations);
 

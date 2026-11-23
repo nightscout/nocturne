@@ -201,8 +201,14 @@ internal static class V4RecordTables
     private static readonly Dictionary<Type, RecordType> RecordTypes =
         All.Where(t => t.Deduplication is not null).ToDictionary(t => t.Entity, t => t.Deduplication!.RecordType);
 
+    private static readonly Dictionary<RecordType, Type> ModelsByRecordType =
+        All.Where(t => t.Deduplication is not null).ToDictionary(t => t.Deduplication!.RecordType, t => t.Model);
+
     /// <summary>The deduplicated table of <paramref name="recordType"/>, or null for a value outside the enum.</summary>
     internal static DeduplicatedTable? Of(RecordType recordType) => ByRecordType.GetValueOrDefault(recordType);
+
+    /// <summary>The model type the rows linked under <paramref name="recordType"/> are served as.</summary>
+    internal static Type ModelOf(RecordType recordType) => ModelsByRecordType[recordType];
 
     /// <summary>The record type rows of <paramref name="entity"/> are linked under, or null.</summary>
     internal static RecordType? RecordTypeOf(Type entity) =>
