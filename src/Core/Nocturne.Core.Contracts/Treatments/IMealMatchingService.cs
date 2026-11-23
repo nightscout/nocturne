@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Treatments;
 
@@ -24,8 +25,12 @@ public interface IMealMatchingService
     /// <param name="carbIntakeId">The carb intake to link the food to</param>
     /// <param name="carbs">The carb amount (may be adjusted from original)</param>
     /// <param name="timeOffsetMinutes">Minutes offset from the carb intake time (0 = ate at bolus time)</param>
-    /// <returns><c>true</c> when the food entry was linked; <c>false</c> when it or the carb intake does not exist, and nothing was written.</returns>
-    Task<bool> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
+    /// <returns>
+    /// What the accept did. Only <see cref="AcceptMatchOutcome.Linked"/> wrote a row, so a caller
+    /// counting links counts that outcome alone. See <see cref="IConnectorFoodEntryRepository.AcceptMatchAsync"/>
+    /// for the others.
+    /// </returns>
+    Task<AcceptMatchOutcome> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
 
     /// <summary>
     /// Dismiss a match, marking the food entry as standalone

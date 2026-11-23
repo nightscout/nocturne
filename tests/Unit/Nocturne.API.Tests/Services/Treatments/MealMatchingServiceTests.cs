@@ -38,7 +38,6 @@ public class MealMatchingServiceTests
 
     private readonly Mock<IConnectorFoodEntryRepository> _foodEntryRepository = new();
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepository = new();
-    private readonly Mock<ITreatmentFoodService> _treatmentFoodService = new();
     private readonly Mock<IInAppNotificationService> _notificationService = new();
     private readonly Mock<IInAppNotificationRepository> _notificationRepository = new();
     private readonly Mock<IMyFitnessPalMatchingSettingsService> _settingsService = new();
@@ -68,7 +67,6 @@ public class MealMatchingServiceTests
     private MealMatchingService NewService(TimeProvider? time = null, string? tenantZoneId = null) =>
         new(_foodEntryRepository.Object,
             _carbIntakeRepository.Object,
-            _treatmentFoodService.Object,
             _notificationService.Object,
             _notificationRepository.Object,
             _settingsService.Object,
@@ -111,7 +109,6 @@ public class MealMatchingServiceTests
         return new MealMatchingService(
             _foodEntryRepository.Object,
             _carbIntakeRepository.Object,
-            _treatmentFoodService.Object,
             _notificationService.Object,
             _notificationRepository.Object,
             settings,
@@ -470,20 +467,14 @@ public class MealMatchingServiceTests
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((CarbIntake?)null);
 
-        var linked = await NewService().AcceptMatchAsync(foodEntryId, Guid.CreateVersion7(), 30, 0);
+        var outcome = await NewService().AcceptMatchAsync(foodEntryId, Guid.CreateVersion7(), 30, 0);
 
-        linked.Should().BeFalse();
-        _treatmentFoodService.Verify(
-            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        _foodEntryRepository.Verify(
-            r => r.UpdateStatusAsync(
-                It.IsAny<Guid>(), It.IsAny<ConnectorFoodEntryStatus>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        outcome.Should().Be(AcceptMatchOutcome.NotFound);
+        VerifyNothingWritten();
     }
 
     [Fact]
-    public async Task AcceptMatchAsync_WritesNothingAndReportsNotLinkedWhenTheFoodEntryDoesNotExist()
+    public async Task AcceptMatchAsync_WritesNothingWhenTheFoodEntryDoesNotExist()
     {
         _foodEntryRepository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -492,20 +483,14 @@ public class MealMatchingServiceTests
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CarbIntake { Id = Guid.CreateVersion7(), Carbs = 30 });
 
-        var linked = await NewService().AcceptMatchAsync(Guid.NewGuid(), Guid.CreateVersion7(), 30, 0);
+        var outcome = await NewService().AcceptMatchAsync(Guid.NewGuid(), Guid.CreateVersion7(), 30, 0);
 
-        linked.Should().BeFalse();
-        _treatmentFoodService.Verify(
-            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        _foodEntryRepository.Verify(
-            r => r.UpdateStatusAsync(
-                It.IsAny<Guid>(), It.IsAny<ConnectorFoodEntryStatus>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        outcome.Should().Be(AcceptMatchOutcome.NotFound);
+        VerifyNothingWritten();
     }
 
     [Fact]
-    public async Task AcceptMatchAsync_LinksTheFoodEntryAndReportsItWhenBothExist()
+    public async Task AcceptMatchAsync_HandsTheRepositoryTheRowToWriteForTheCarbIntake()
     {
         var foodEntryId = Guid.NewGuid();
         var carbIntakeId = Guid.CreateVersion7();
@@ -515,16 +500,46 @@ public class MealMatchingServiceTests
         _carbIntakeRepository
             .Setup(r => r.GetByIdAsync(carbIntakeId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CarbIntake { Id = carbIntakeId, Carbs = 30 });
+        _foodEntryRepository
+            .Setup(r => r.AcceptMatchAsync(foodEntryId, It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AcceptMatchOutcome.Linked);
 
-        var linked = await NewService().AcceptMatchAsync(foodEntryId, carbIntakeId, 30, 0);
+        var outcome = await NewService().AcceptMatchAsync(foodEntryId, carbIntakeId, 30, 15);
 
-        linked.Should().BeTrue();
-        _treatmentFoodService.Verify(
-            s => s.AddAsync(
-                It.Is<TreatmentFood>(f => f.CarbIntakeId == carbIntakeId), It.IsAny<CancellationToken>()),
-            Times.Once);
+        outcome.Should().Be(AcceptMatchOutcome.Linked);
         _foodEntryRepository.Verify(
-            r => r.UpdateStatusAsync(foodEntryId, ConnectorFoodEntryStatus.Matched, It.IsAny<CancellationToken>()),
+            r => r.AcceptMatchAsync(
+                foodEntryId,
+                It.Is<TreatmentFood>(f => f.CarbIntakeId == carbIntakeId && f.Carbs == 30 && f.TimeOffsetMinutes == 15),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    [Theory]
+    [InlineData(AcceptMatchOutcome.AlreadyLinked)]
+    [InlineData(AcceptMatchOutcome.AlreadyResolved)]
+    [InlineData(AcceptMatchOutcome.NotFound)]
+    public async Task AcceptMatchAsync_ReportsWhateverTheRepositoryDecidedAboutTheClaim(AcceptMatchOutcome decided)
+    {
+        var foodEntryId = Guid.NewGuid();
+        var carbIntakeId = Guid.CreateVersion7();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdAsync(foodEntryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Entry(foodEntryId));
+        _carbIntakeRepository
+            .Setup(r => r.GetByIdAsync(carbIntakeId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CarbIntake { Id = carbIntakeId, Carbs = 30 });
+        _foodEntryRepository
+            .Setup(r => r.AcceptMatchAsync(foodEntryId, It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(decided);
+
+        var outcome = await NewService().AcceptMatchAsync(foodEntryId, carbIntakeId, 30, 0);
+
+        outcome.Should().Be(decided);
+    }
+
+    private void VerifyNothingWritten() =>
+        _foodEntryRepository.Verify(
+            r => r.AcceptMatchAsync(It.IsAny<Guid>(), It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 }

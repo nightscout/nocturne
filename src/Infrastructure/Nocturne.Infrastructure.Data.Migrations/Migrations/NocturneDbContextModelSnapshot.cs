@@ -1591,6 +1591,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("logged_at");
 
+                    b.Property<Guid?>("MatchedCarbIntakeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("matched_carb_intake_id");
+
                     b.Property<string>("MealName")
                         .IsRequired()
                         .HasMaxLength(50)

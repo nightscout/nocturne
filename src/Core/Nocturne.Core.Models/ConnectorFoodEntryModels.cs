@@ -21,6 +21,28 @@ public enum ConnectorFoodEntryStatus
 }
 
 /// <summary>
+/// What accepting a match did to a <see cref="ConnectorFoodEntry"/> and the carb intake it was offered for.
+/// </summary>
+/// <remarks>The default is <see cref="NotFound"/>, so an outcome nobody set never reads as a link.</remarks>
+public enum AcceptMatchOutcome
+{
+    /// <summary>The food entry or the carb intake does not exist; nothing was written.</summary>
+    NotFound,
+
+    /// <summary>
+    /// The food entry is already matched to another carb intake, or was dismissed or withdrawn;
+    /// nothing was written.
+    /// </summary>
+    AlreadyResolved,
+
+    /// <summary>An earlier accept already linked the food entry to this carb intake; nothing was written.</summary>
+    AlreadyLinked,
+
+    /// <summary>The food entry was linked to the carb intake by this call.</summary>
+    Linked,
+}
+
+/// <summary>
 /// Connector-imported food entry for matching and attribution.
 /// </summary>
 /// <seealso cref="ConnectorFoodEntryStatus"/>

@@ -18,16 +18,19 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<ConnectorFoodEntryRepository> _logger;
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
+    private readonly TimeProvider _time;
 
     /// <inheritdoc cref="IConnectorFoodEntryRepository" />
     public ConnectorFoodEntryRepository(
         INocturneDbContextFactory contexts,
         ILogger<ConnectorFoodEntryRepository> logger,
-        ILegacyReadCacheInvalidation? legacyReads = null)
+        ILegacyReadCacheInvalidation? legacyReads = null,
+        TimeProvider? time = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _legacyReads = legacyReads;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -86,9 +89,72 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         if (entity != null)
         {
             entity.Status = status;
-            entity.ResolvedAt = DateTimeOffset.UtcNow;
+            entity.MatchedCarbIntakeId = null;
+            entity.ResolvedAt = _time.GetUtcNow();
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<AcceptMatchOutcome> AcceptMatchAsync(
+        Guid foodEntryId,
+        TreatmentFood treatmentFood,
+        CancellationToken ct = default)
+    {
+        if (treatmentFood.Id == Guid.Empty)
+        {
+            throw new ArgumentException("The row to write needs an id.", nameof(treatmentFood));
+        }
+
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var db = unit.Context;
+        var breakdowns = new TreatmentFoodRepository(unit);
+
+        var outcome = await unit.CommitAsync(
+            async token =>
+            {
+                var now = _time.GetUtcNow();
+                var claimed = await db.ConnectorFoodEntries
+                    .Where(e => e.Id == foodEntryId && e.Status == ConnectorFoodEntryStatus.Pending)
+                    .ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(e => e.Status, ConnectorFoodEntryStatus.Matched)
+                            .SetProperty(e => e.MatchedCarbIntakeId, treatmentFood.CarbIntakeId)
+                            .SetProperty(e => e.ResolvedAt, now)
+                            .SetProperty(e => e.SysUpdatedAt, now.UtcDateTime),
+                        token);
+
+                if (claimed == 1)
+                {
+                    await breakdowns.CreateAsync(treatmentFood, token);
+                    return AcceptMatchOutcome.Linked;
+                }
+
+                var stored = await db.ConnectorFoodEntries
+                    .AsNoTracking()
+                    .Where(e => e.Id == foodEntryId)
+                    .Select(e => new { e.Status, e.MatchedCarbIntakeId })
+                    .FirstOrDefaultAsync(token);
+
+                return stored switch
+                {
+                    null => AcceptMatchOutcome.NotFound,
+                    { Status: ConnectorFoodEntryStatus.Matched } when stored.MatchedCarbIntakeId == treatmentFood.CarbIntakeId =>
+                        AcceptMatchOutcome.AlreadyLinked,
+                    _ => AcceptMatchOutcome.AlreadyResolved,
+                };
+            },
+            async (result, token) =>
+                result == AcceptMatchOutcome.Linked
+                && await db.TreatmentFoods.AsNoTracking().AnyAsync(t => t.Id == treatmentFood.Id, token),
+            ct: ct);
+
+        if (outcome == AcceptMatchOutcome.Linked && _legacyReads is not null)
+        {
+            await _legacyReads.WrittenAsync([typeof(TreatmentFood)]);
+        }
+
+        return outcome;
     }
 
     /// <inheritdoc />
@@ -233,6 +299,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
                 if (entryEntity.Status == ConnectorFoodEntryStatus.Deleted)
                 {
                     entryEntity.Status = ConnectorFoodEntryStatus.Pending;
+                    entryEntity.MatchedCarbIntakeId = null;
                     entryEntity.ResolvedAt = null;
                     idsForMatching.Add(entryEntity.Id);
 

@@ -915,7 +915,8 @@ public class GlookoConnectorService
             try
             {
                 if (await _mealMatchingService.AcceptMatchAsync(
-                        entry.Id, carbIntakeId, entry.Carbs, timeOffsetMinutes: 0, cancellationToken))
+                        entry.Id, carbIntakeId, entry.Carbs, timeOffsetMinutes: 0, cancellationToken)
+                    == AcceptMatchOutcome.Linked)
                     attributedCount++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
