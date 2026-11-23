@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -12,6 +13,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class SystemEventRepository : ISystemEventRepository
 {
+    private const int MaxUpsertAttempts = 3;
+
     private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
@@ -142,6 +145,24 @@ public class SystemEventRepository : ISystemEventRepository
         if (events.Count == 0)
             return [];
 
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SaveBatchAsync(events, cancellationToken);
+            }
+            catch (DbUpdateException ex) when (attempt < MaxUpsertAttempts && ex.IsUniqueViolation())
+            {
+                // A concurrent upsert committed one of these keys between the read and the save, and the
+                // save wrote nothing. The next attempt reads its row and updates it.
+            }
+        }
+    }
+
+    private async Task<List<SystemEvent>> SaveBatchAsync(
+        IReadOnlyList<SystemEvent> events,
+        CancellationToken cancellationToken)
+    {
         await using var db = await _contexts.CreateAsync(cancellationToken);
 
         var originalIds = events
@@ -155,8 +176,7 @@ public class SystemEventRepository : ISystemEventRepository
                 .Where(e => originalIds.Contains(e.OriginalId))
                 .ToListAsync(cancellationToken);
         var existingByOriginalId = existingRows
-            .GroupBy(e => e.OriginalId!)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(e => e.OriginalId!);
 
         var written = new List<SystemEventEntity>(events.Count);
         foreach (var systemEvent in events)

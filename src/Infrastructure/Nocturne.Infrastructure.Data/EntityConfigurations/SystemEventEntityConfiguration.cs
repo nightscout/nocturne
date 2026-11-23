@@ -31,8 +31,10 @@ internal sealed class SystemEventEntityConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_system_events_source");
 
         entity
-            .HasIndex(e => e.OriginalId)
-            .HasDatabaseName("ix_system_events_original_id");
+            .HasIndex(nameof(ITenantScoped.TenantId), nameof(SystemEventEntity.OriginalId))
+            .IsUnique()
+            .HasDatabaseName("ix_system_events_tenant_original_id")
+            .HasFilter("original_id IS NOT NULL");
 
         NocturneDbContext.ScopeKeyToTenant(entity);
     }

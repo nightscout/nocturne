@@ -105,15 +105,13 @@ public class SystemEventRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_LeavesNoSystemEventTracked_EvenForDuplicateStoredRows()
+    public async Task BulkUpsertAsync_LeavesNoSystemEventTracked_EvenForStoredRows()
     {
-        _context.SystemEvents.AddRange(
-            SystemEventMapper.ToEntity(Event("evt-dup", "one", 1_000)),
-            SystemEventMapper.ToEntity(Event("evt-dup", "two", 1_100)));
+        _context.SystemEvents.Add(SystemEventMapper.ToEntity(Event("evt-stored", "one", 1_000)));
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 
-        await _repository.BulkUpsertAsync([Event("evt-dup", "new", 1_500), Event("evt-a", "first", 2_000)]);
+        await _repository.BulkUpsertAsync([Event("evt-stored", "new", 1_500), Event("evt-a", "first", 2_000)]);
 
         _context.ChangeTracker.Entries<SystemEventEntity>().Should().BeEmpty();
     }

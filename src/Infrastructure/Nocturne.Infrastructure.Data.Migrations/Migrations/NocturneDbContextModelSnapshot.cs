@@ -5409,15 +5409,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending()
                         .HasDatabaseName("ix_system_events_mills");
 
-                    b.HasIndex("OriginalId")
-                        .HasDatabaseName("ix_system_events_original_id");
-
                     b.HasIndex("Source")
                         .HasDatabaseName("ix_system_events_source");
 
                     b.HasIndex("Category", "Mills")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_system_events_category_timestamp");
+
+                    b.HasIndex("TenantId", "OriginalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_system_events_tenant_original_id")
+                        .HasFilter("original_id IS NOT NULL");
 
                     b.ToTable("system_events");
                 });
