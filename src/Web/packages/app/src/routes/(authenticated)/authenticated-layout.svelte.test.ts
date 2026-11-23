@@ -245,6 +245,24 @@ describe("authenticated layout", () => {
 
       expect(sidebarState()).toBe("expanded");
     });
+
+    it("remembers a toggle for a year", async () => {
+      await page.viewport(1024, 768);
+      const written: string[] = [];
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie")!;
+      vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
+        written.push(value);
+        cookie.set!.call(document, value);
+      });
+      render(AuthenticatedLayoutHarness, { props: { data: layoutData({ sidebarOpen: true }) } });
+      await expect.element(page.getByText("page content")).toBeVisible();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true }));
+
+      await vi.waitFor(() => expect(sidebarState()).toBe("collapsed"));
+      expect(written).toContain("sidebar:state=false; path=/; max-age=31536000");
+      document.cookie = "sidebar:state=; path=/; max-age=0";
+    });
   });
 
   it("loads the command palette on its first toggle", async () => {
