@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -19,10 +20,11 @@ public class CreateTempBasalRequestValidator : AbstractValidator<CreateTempBasal
         RuleFor(x => x.Timestamp).NotEqual(default(DateTimeOffset)).WithMessage("Timestamp is required");
         When(x => !x.IsCancel, () =>
         {
-            RuleFor(x => x.Device).MaximumLength(256).When(x => x.Device is not null);
-            RuleFor(x => x.App).MaximumLength(256).When(x => x.App is not null);
-            RuleFor(x => x.DataSource).MaximumLength(256).When(x => x.DataSource is not null);
-            RuleFor(x => x.SyncIdentifier).MaximumLength(256).When(x => x.SyncIdentifier is not null);
+            RuleFor(x => x.Device).MaximumLength(RecordColumnLengths.Provenance).When(x => x.Device is not null);
+            RuleFor(x => x.App).MaximumLength(RecordColumnLengths.Provenance).When(x => x.App is not null);
+            RuleFor(x => x.DataSource).MaximumLength(RecordColumnLengths.Provenance).When(x => x.DataSource is not null);
+            RuleFor(x => x.SyncIdentifier).MaximumLength(RecordColumnLengths.SyncIdentifier).When(x => x.SyncIdentifier is not null);
+            RuleFor(x => x.PumpRecordId).MaximumLength(RecordColumnLengths.PumpRecordId).When(x => x.PumpRecordId is not null);
             RuleFor(x => x.Rate).GreaterThanOrEqualTo(0).WithMessage("Rate must be >= 0");
             RuleFor(x => x.DurationMinutes).GreaterThanOrEqualTo(0).When(x => x.DurationMinutes is not null)
                 .WithMessage("DurationMinutes must be >= 0");

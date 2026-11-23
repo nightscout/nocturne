@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -43,7 +44,7 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     /// timezone re-correction can move a reading's timestamp without duplicating it.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>

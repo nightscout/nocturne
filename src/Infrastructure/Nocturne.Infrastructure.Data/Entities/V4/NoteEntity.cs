@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -51,6 +52,6 @@ public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFinge
     /// Unique identifier for synchronization across platforms and devices.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 }
