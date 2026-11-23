@@ -67,4 +67,55 @@ public class StepUpCodeAttemptsTests
 
         attempts.Begin(Guid.CreateVersion7(), Guid.CreateVersion7()).Verdict.Should().Be(StepUpAttemptVerdict.Allowed);
     }
+
+    [Fact]
+    public async Task Parallel_attempts_across_tokens_pass_exactly_the_members_allowance()
+    {
+        var attempts = new StepUpCodeAttempts(_time);
+
+        var verdicts = await RunTogether(50, _ => attempts.Begin(Guid.CreateVersion7(), _subject).Verdict);
+
+        verdicts.Count(v => v == StepUpAttemptVerdict.MemberLocked)
+            .Should().Be(50 - StepUpCodeAttempts.WrongCodesPerMember);
+        verdicts.Count(v => v is StepUpAttemptVerdict.Allowed)
+            .Should().Be(StepUpCodeAttempts.WrongCodesPerMember);
+    }
+
+    [Fact]
+    public async Task Parallel_attempts_on_one_token_pass_exactly_the_tokens_allowance()
+    {
+        var attempts = new StepUpCodeAttempts(_time);
+        var token = Guid.CreateVersion7();
+
+        var verdicts = await RunTogether(
+            StepUpCodeAttempts.WrongCodesPerToken + 1, _ => attempts.Begin(token, _subject).Verdict);
+
+        verdicts.Count(v => v == StepUpAttemptVerdict.Allowed)
+            .Should().Be(StepUpCodeAttempts.WrongCodesPerToken - 1);
+        verdicts.Count(v => v == StepUpAttemptVerdict.LastForToken).Should().Be(1);
+        verdicts.Count(v => v == StepUpAttemptVerdict.TokenSpent).Should().Be(1);
+    }
+
+    private static async Task<IReadOnlyList<T>> RunTogether<T>(int count, Func<int, T> attempt)
+    {
+        var timeout = TimeSpan.FromSeconds(30);
+        using var go = new ManualResetEventSlim();
+        using var ready = new CountdownEvent(count);
+
+        var tasks = Enumerable.Range(0, count)
+            .Select(n => Task.Factory.StartNew(
+                () =>
+                {
+                    ready.Signal();
+                    go.Wait(timeout).Should().BeTrue("the attempts start together");
+                    return attempt(n);
+                },
+                TaskCreationOptions.LongRunning))
+            .ToList();
+
+        ready.Wait(timeout).Should().BeTrue("every attempt is waiting at the gate");
+        go.Set();
+
+        return await Task.WhenAll(tasks).WaitAsync(timeout);
+    }
 }
