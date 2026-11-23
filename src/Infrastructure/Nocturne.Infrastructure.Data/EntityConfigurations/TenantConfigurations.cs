@@ -108,9 +108,22 @@ internal sealed class TenantMemberReasonEntityConfiguration : IEntityTypeConfigu
     {
         entity
             .HasOne(e => e.TenantMember)
-            .WithMany()
+            .WithMany(m => m.Reasons)
             .HasForeignKey(e => e.TenantMemberId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // No action, so deleting a team's access that a reason still names fails: whatever stops the
+        // access must take its reasons away first. ClientNoAction keeps EF from nulling a tracked
+        // reason's source to let the delete through.
+        entity
+            .HasOne(e => e.TeamAccess)
+            .WithMany()
+            .HasForeignKey(e => e.SourceId)
+            .OnDelete(DeleteBehavior.ClientNoAction);
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_tenant_member_reasons_team_source",
+            $"(kind = '{MembershipReasonKind.Team}') = (source_id IS NOT NULL)"));
 
         entity
             .HasOne(e => e.CreatedFromInvite)

@@ -65,7 +65,7 @@ public class AlertChannelNoticeTests
         SubjectUsername: null, SubjectIsActive: true, IsSystemSubject: false, IsDemoSubject: false,
         IsPlatformAdmin: false, HasConfirmedEmail: true, Roles: [], DirectPermissions: ["*"], Label: null,
         Username: null, LimitTo24Hours: false, AccessEndsAt: null, LastUsedAt: null, CreatedFromInviteId: null,
-        SysCreatedAt: Start.UtcDateTime);
+        SysCreatedAt: Start.UtcDateTime, Reasons: []);
 
     private AlertChannelNotice Notice()
     {

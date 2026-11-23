@@ -16,6 +16,9 @@ public class TenantMemberService(ITenantMembershipRepository members, TimeProvid
     public Task<bool> IsMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default) =>
         members.IsMemberAsync(tenantId, subjectId, Now, ct);
 
+    public Task<bool> IsDirectMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct) =>
+        members.IsDirectMemberAsync(tenantId, subjectId, Now, ct);
+
     public async Task<List<Guid>> GetTenantIdsForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
         [.. await members.ListTenantIdsOfSubjectAsync(subjectId, ct)];
 

@@ -207,9 +207,37 @@ public partial class TenantService : ITenantService
                     m.IsPlatformAdmin,
                     m.AccessEndsAt,
                     MembershipLiveness.HasEnded(m.AccessEndsAt, now),
-                    _linkRoute.IsConfigured && !m.IsSystemSubject && !m.IsDemoSubject ? m.HasConfirmedEmail : null))
+                    _linkRoute.IsConfigured && !m.IsSystemSubject && !m.IsDemoSubject ? m.HasConfirmedEmail : null,
+                    m.DirectReason is not null,
+                    ReasonsOf(m, now),
+                    DirectLiftsTeamLimit(m, now)))
                 .ToList());
     }
+
+    /// <summary>The reasons <paramref name="member"/> holds, leaving out a team reason whose access is not of the member's tenant.</summary>
+    private static List<TenantMemberReasonDto> ReasonsOf(TenantMemberRecord member, DateTime now) =>
+        member.HeldReasons
+            .Where(r => r.Kind == MembershipReasonKind.Direct || r.Team is not null)
+            .Select(r => new TenantMemberReasonDto(
+                r.Kind == MembershipReasonKind.Direct ? MemberReasonKind.Direct : MemberReasonKind.Team,
+                r.Team?.Id,
+                r.Team?.Name,
+                r.Roles.Select(role => new TenantMemberRoleDto(role.RoleId, role.Name, role.Slug, [.. role.Permissions])).ToList(),
+                r.DirectPermissions?.ToList(),
+                r.LimitTo24Hours,
+                r.AccessEndsAt,
+                MembershipLiveness.HasEnded(r.AccessEndsAt, now)))
+            .ToList();
+
+    /// <summary>
+    /// Whether the member's direct reason, in force, gives full history while a team reason in force
+    /// limits them to the last 24 hours.
+    /// </summary>
+    private static bool DirectLiftsTeamLimit(TenantMemberRecord member, DateTime now) =>
+        member.DirectReason is { LimitTo24Hours: false } direct
+        && !MembershipLiveness.HasEnded(direct.AccessEndsAt, now)
+        && member.HeldReasons.Any(r =>
+            r.Kind == MembershipReasonKind.Team && r.LimitTo24Hours && !MembershipLiveness.HasEnded(r.AccessEndsAt, now));
 
     public async Task<TenantDto> UpdateAsync(
         Guid id, string displayName, bool isActive, bool? allowAccessRequests = null, CancellationToken ct = default)
@@ -325,9 +353,11 @@ public partial class TenantService : ITenantService
     public Task<bool> AddMemberAsync(
         Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null,
         string? label = null, bool limitTo24Hours = false, CancellationToken ct = default) =>
-        _members.AddMemberAsync(
+        _members.AddDirectMemberAsync(
             new NewTenantMember(tenantId, subjectId, roleIds, directPermissions, label, LimitTo24Hours: limitTo24Hours)
-            { How = MembershipJoinHow.Direct, By = null }, ct);
+            { How = MembershipJoinHow.Direct, By = null },
+            _time.GetUtcNow().UtcDateTime,
+            ct);
 
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
@@ -353,6 +383,8 @@ public partial class TenantService : ITenantService
 
         if (outcome == OwnerGuardedChange.LastOwner)
             return new MemberRemovalResult(false, TenantOwnerFilter.LastOwnerRefusal);
+        if (outcome == OwnerGuardedChange.FromTeam)
+            return new MemberRemovalResult(false, MemberAccessFromTeam.Detail) { AccessFromTeam = true };
 
         _grantRevocation.EvictSessions(grants);
         return new MemberRemovalResult(true);
@@ -371,13 +403,13 @@ public partial class TenantService : ITenantService
                 if (change != OwnerGuardedChange.Changed)
                     return (change, lowered);
 
-                if (accessEndsAt is { } end)
-                {
-                    var member = await members.GetMemberAsync(tenantId, memberId, token);
-                    lowered = await MemberCreations.CapAsync(unit, member!.SubjectId, end, now, token);
-                }
-
                 await unit.Context.SaveChangesAsync(token);
+                if (accessEndsAt is not null
+                    && await members.GetMemberAsync(tenantId, memberId, token) is { AccessEndsAt: { } end } member)
+                {
+                    lowered = await MemberCreations.CapAsync(unit, member.SubjectId, end, now, token);
+                    await unit.Context.SaveChangesAsync(token);
+                }
                 return (change, lowered);
             },
             ct: ct);

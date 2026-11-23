@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { describeSubmitError } from "#lib/forms/index.js";
-  import { describeRemoteError, errorStatus } from "#lib/forms/submit-error.js";
+  import { describeRemoteError, errorStatus, type ProblemCodeMessages } from "#lib/forms/submit-error.js";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "#lib/components/ui/card/index.js";
@@ -116,7 +116,14 @@
         : "Public · last 24h",
   );
 
+  const memberProblemMessages: ProblemCodeMessages = {
+    member_access_from_team:
+      "This member has access only through a team. To change it, stop the team's access to this site.",
+    membership_request_own: "You cannot approve your own request. Ask another member to approve it.",
+  };
+
   // --- UI state ---
+
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<{ text: string; wash: boolean } | null>(null);
@@ -179,7 +186,7 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
+      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.", memberProblemMessages);
     } finally {
       isSavingMember = false;
     }
@@ -212,7 +219,7 @@
       successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.");
+      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.", memberProblemMessages);
       clearMessages();
     }
   }
@@ -340,7 +347,7 @@
                   successMessage = { text: "Member removed successfully.", wash: false };
                   clearMessages();
                 } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.", memberProblemMessages);
                   clearMessages();
                 }
               }}

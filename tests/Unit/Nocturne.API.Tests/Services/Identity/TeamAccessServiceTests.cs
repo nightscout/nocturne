@@ -51,7 +51,7 @@ public class TeamAccessServiceTests
             new TenantMemberRecord(
                 Guid.CreateVersion7(), tenantId, Caller, "Sam", null, true, false, false, false, false,
                 [new TenantMemberRoleRecord(OwnerRoleId, roleSlug, roleSlug, RoleSeeds.Permissions[roleSlug])],
-                null, null, null, limited, end, null, null, Now));
+                null, null, null, limited, end, null, null, Now, []));
 
     private void Memberships(params SubjectMembership[] memberships) =>
         _members.Setup(m => m.ListMembershipsOfSubjectAsync(Caller, Now, It.IsAny<CancellationToken>())).ReturnsAsync(memberships);

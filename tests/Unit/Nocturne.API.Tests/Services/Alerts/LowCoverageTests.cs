@@ -97,7 +97,7 @@ public class LowCoverageTests
         IsPlatformAdmin: false, HasConfirmedEmail: true,
         Roles: [new TenantMemberRoleRecord(Guid.CreateVersion7(), "Caretaker", "caretaker", ["*"])],
         DirectPermissions: null, Label: null, Username: null, LimitTo24Hours: false, AccessEndsAt: null,
-        LastUsedAt: null, CreatedFromInviteId: null, SysCreatedAt: Now);
+        LastUsedAt: null, CreatedFromInviteId: null, SysCreatedAt: Now, Reasons: []);
 
     private static async Task<bool> CoversAsync(AlertRuleRecord rule, IReadOnlyList<RustValidationIssue>? issues) =>
         LowCoverage.Covers(rule, issues, await StatesAsync(rule));

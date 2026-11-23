@@ -63,10 +63,11 @@ public class AccessRequestService(
             {
                 var added = await unit.CommitAsync(async token =>
                 {
-                    if (!await tenantMembers.AddMemberAsync(
+                    if (!await tenantMembers.AddDirectMemberAsync(
                             new NewTenantMember(
                                 tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours)
                                 { How = MembershipJoinHow.Request, By = decidedBySubjectId },
+                            time.GetUtcNow().UtcDateTime,
                             token))
                         return false;
 

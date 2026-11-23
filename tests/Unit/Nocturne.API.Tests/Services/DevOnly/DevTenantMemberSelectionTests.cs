@@ -60,5 +60,6 @@ public sealed class DevTenantMemberSelectionTests
         AccessEndsAt: null,
         LastUsedAt: null,
         CreatedFromInviteId: null,
-        SysCreatedAt: createdAt ?? DateTime.UtcNow);
+        SysCreatedAt: createdAt ?? DateTime.UtcNow,
+        Reasons: []);
 }

@@ -137,7 +137,7 @@ public sealed class RoleControllerGetRolesGateTests
             .ReturnsAsync(new TenantMemberRecord(
                 Guid.CreateVersion7(), _tenantId, caller, "Sam", null, true, false, false, false, false,
                 [new TenantMemberRoleRecord(Guid.CreateVersion7(), callerRole, callerRole, RoleSeeds.Permissions[callerRole])],
-                null, null, null, false, null, null, null, DateTime.UtcNow));
+                null, null, null, false, null, null, null, DateTime.UtcNow, []));
         var controller = BuildController(Scope.RolesManage);
         controller.HttpContext.Items["AuthContext"] = new AuthContext
         {
@@ -168,7 +168,7 @@ public sealed class RoleControllerGetRolesGateTests
             .ReturnsAsync(new TenantMemberRecord(
                 Guid.CreateVersion7(), _tenantId, caller, "Sam", null, true, false, false, false, false,
                 [new TenantMemberRoleRecord(Guid.CreateVersion7(), callerRole, callerRole, RoleSeeds.Permissions[callerRole])],
-                null, null, null, false, null, null, null, DateTime.UtcNow));
+                null, null, null, false, null, null, null, DateTime.UtcNow, []));
         var controller = BuildController(Scope.RolesManage);
         controller.HttpContext.Items["AuthContext"] = new AuthContext
         {

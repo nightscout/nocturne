@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import type { TenantMemberDto, TenantRoleDto } from "@nocturne/api-client";
+import { MemberReasonKind, type TenantMemberDto, type TenantRoleDto } from "@nocturne/api-client";
 import { formatMediumDate, formatShortDate } from "#lib/utils/formatting.js";
 import { accessEndDate, accessEndInstant } from "./access-end.js";
 import MemberCard, { type MemberChanges } from "./MemberCard.svelte";
@@ -460,5 +460,141 @@ describe("MemberCard access end", () => {
       await expect.element(page.getByRole("button", { name: "Remove member" })).toBeVisible();
       expect(page.getByText(reason).elements()).toHaveLength(0);
     });
+  });
+});
+
+describe("MemberCard reasons", () => {
+  const viewerRoleId = "88888888-8888-8888-8888-888888888888";
+  const viewer = { roleId: viewerRoleId, name: "Viewer", slug: "viewer", permissions: ["glucose.read"] };
+  const caretaker = { roleId: caretakerRoleId, name: "Caretaker", slug: "caretaker", permissions: ["glucose.read"] };
+  const rolesWithViewer: TenantRoleDto[] = [
+    ...administratorRoles,
+    role(viewerRoleId, "Viewer", ["glucose.read"], true),
+  ];
+  const teamReason = {
+    kind: MemberReasonKind.Team,
+    teamId: "99999999-9999-9999-9999-999999999999",
+    teamName: "Clinic",
+    roles: [caretaker],
+    limitTo24Hours: true,
+    hasEnded: false,
+  };
+  const directReason = { kind: MemberReasonKind.Direct, roles: [viewer], directPermissions: [], limitTo24Hours: false, hasEnded: false };
+  const base: TenantMemberDto = {
+    id: "66666666-6666-6666-6666-666666666666",
+    subjectId: "77777777-7777-7777-7777-777777777777",
+    name: "Sam",
+    roles: [viewer, caretaker],
+    directPermissions: [],
+  };
+  const teamOnly: TenantMemberDto = { ...base, roles: [caretaker], limitTo24Hours: true, hasDirect: false, reasons: [teamReason] };
+  const mixed: TenantMemberDto = {
+    ...base,
+    hasDirect: true,
+    reasons: [directReason, teamReason],
+    directLiftsTeamLimit: true,
+  };
+  const fromTeam = "This member has access only through a team. To change it, stop the team's access to this site.";
+  const lifted = "This member's direct access has no 24-hour limit, so the 24-hour limit of the team does not apply.";
+
+  function propsFor(member: TenantMemberDto, extra: Record<string, unknown> = {}) {
+    return {
+      member,
+      roles: rolesWithViewer,
+      canEditRoles: true,
+      canManage: true,
+      isExpanded: false,
+      isSaving: false,
+      onToggleExpand: () => {},
+      onSave: (_changes: MemberChanges) => {},
+      onRemove: () => {},
+      ...extra,
+    };
+  }
+
+  it("shows no reason lines for a member who holds only direct access", async () => {
+    render(MemberCard, propsFor({
+      ...base, roles: [viewer], hasDirect: true, reasons: [directReason], directLiftsTeamLimit: false,
+    }));
+
+    await expect.element(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Remove member" })).toBeVisible();
+    expect(page.getByRole("list", { name: "Reasons for access" }).elements()).toHaveLength(0);
+    expect(page.getByText(fromTeam).elements()).toHaveLength(0);
+    expect(page.getByText(lifted).elements()).toHaveLength(0);
+  });
+
+  it("names the team of a member who has access only through it, and offers no edit or removal, with the reason", async () => {
+    render(MemberCard, propsFor(teamOnly));
+
+    const reasons = page.getByRole("list", { name: "Reasons for access" });
+    await expect.element(reasons).toHaveTextContent("Staff of the team Clinic");
+    await expect.element(reasons).toHaveTextContent("Caretaker");
+    await expect.element(reasons).toHaveTextContent("Last 24 hours only");
+    expect(reasons.getByText("Direct access").elements()).toHaveLength(0);
+    await expect.element(page.getByText(fromTeam)).toBeVisible();
+    await expect.element(page.getByRole("group", { name: "Sam" })).toHaveAccessibleDescription(fromTeam);
+    expect(page.getByRole("button", { name: "Edit" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Remove member" }).elements()).toHaveLength(0);
+  });
+
+  it("is described by both sentences when the member outlasts the viewer and has access only through a team", async () => {
+    render(MemberCard, propsFor({ ...teamOnly, outlastsCaller: true }));
+
+    await expect.element(page.getByRole("group", { name: "Sam" }))
+      .toHaveAccessibleDescription(`This member's access lasts longer than yours. ${fromTeam}`);
+  });
+
+  it("shows no reason for the missing actions to a viewer who cannot manage members", async () => {
+    render(MemberCard, propsFor(teamOnly, { canEditRoles: false, canManage: false }));
+
+    await expect.element(page.getByText("Staff of the team Clinic")).toBeVisible();
+    expect(page.getByText(fromTeam).elements()).toHaveLength(0);
+  });
+
+  it("shows a line for each reason of a mixed member, and says the direct access lifts the team's limit", async () => {
+    render(MemberCard, propsFor(mixed));
+
+    const lines = page.getByRole("list", { name: "Reasons for access" }).getByRole("listitem");
+    expect(lines.elements()).toHaveLength(2);
+    await expect.element(lines.nth(0)).toHaveTextContent("Direct access");
+    await expect.element(lines.nth(0)).toHaveTextContent("(Viewer)");
+    expect(lines.nth(0).element().textContent).not.toContain("Last 24 hours only");
+    await expect.element(lines.nth(1)).toHaveTextContent("Staff of the team Clinic");
+    await expect.element(lines.nth(1)).toHaveTextContent("(Caretaker)");
+    await expect.element(lines.nth(1)).toHaveTextContent("Last 24 hours only");
+    await expect.element(page.getByText(lifted)).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Remove member" })).toBeVisible();
+    expect(page.getByText(fromTeam).elements()).toHaveLength(0);
+  });
+
+  it("starts the editor of a mixed member from the direct access only", async () => {
+    const onSave = vi.fn();
+    const props = propsFor(mixed, { onSave });
+    const screen = render(MemberCard, props);
+    await page.getByRole("button", { name: "Edit" }).click();
+    await screen.rerender({ ...props, isExpanded: true });
+
+    await expect.element(page.getByRole("checkbox", { name: "Viewer" })).toBeChecked();
+    await expect.element(page.getByRole("checkbox", { name: "Caretaker" })).not.toBeChecked();
+    await expect.element(page.getByRole("checkbox", { name: "Only last 24 hours" })).not.toBeChecked();
+
+    await page.getByRole("checkbox", { name: "Caretaker" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      access: { roleIds: [viewerRoleId, caretakerRoleId], permissions: [] },
+    }));
+  });
+
+  it("shows the end of a reason that has one", async () => {
+    const day = today(getLocalTimeZone()).add({ days: 10 }).toString();
+    render(MemberCard, propsFor({
+      ...mixed,
+      reasons: [directReason, { ...teamReason, accessEndsAt: accessEndInstant(day) }],
+    }));
+
+    await expect.element(page.getByRole("list", { name: "Reasons for access" }).getByRole("listitem").nth(1))
+      .toHaveTextContent(`Until ${formatShortDate(accessEndDate(accessEndInstant(day)), true)}`);
   });
 });

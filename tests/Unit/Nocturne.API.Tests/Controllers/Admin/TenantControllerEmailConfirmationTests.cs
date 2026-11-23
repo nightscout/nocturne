@@ -62,7 +62,7 @@ public class TenantControllerEmailConfirmationTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private static TenantMemberDto Member(Guid subjectId) => new(
-        Guid.CreateVersion7(), subjectId, "Member", false, [], null, null, false, null, DateTime.UtcNow, false, null, false, null);
+        Guid.CreateVersion7(), subjectId, "Member", false, [], null, null, false, null, DateTime.UtcNow, false, null, false, null, true, [], false);
 
     private TenantController Controller(AuthContext auth) => new(_tenantService.Object, Mock.Of<ITenantRoleService>())
     {

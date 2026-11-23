@@ -580,7 +580,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     {
         _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
         _tenantMemberService
-            .Setup(s => s.IsMemberAsync(_callerSubjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .Setup(s => s.IsDirectMemberAsync(_callerSubjectId, _tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(alreadyMember);
 
         var controller = BuildController();

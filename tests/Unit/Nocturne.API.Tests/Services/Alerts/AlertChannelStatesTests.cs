@@ -41,7 +41,7 @@ public class AlertChannelStatesTests
                 SubjectUsername: null, SubjectIsActive: true, IsSystemSubject: false, IsDemoSubject: false,
                 IsPlatformAdmin: false, HasConfirmedEmail: true, Roles: [], DirectPermissions: permissions,
                 Label: null, Username: null, LimitTo24Hours: false, AccessEndsAt: null, LastUsedAt: null,
-                CreatedFromInviteId: null, SysCreatedAt: Now),
+                CreatedFromInviteId: null, SysCreatedAt: Now, Reasons: []),
         ]);
 
         return await AlertChannelStates.LoadAsync(

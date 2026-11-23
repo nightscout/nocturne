@@ -121,6 +121,9 @@ public class MembershipRequestController(
             id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(),
             accessEndsAt, HttpContext.IsCallerHistoryClamped(), ct);
 
+        if (result.Code is { } code)
+            return this.ProblemWithCode(code, result.Error, StatusCodes.Status403Forbidden);
+
         if (!result.Success)
             return BadRequest(result);
 

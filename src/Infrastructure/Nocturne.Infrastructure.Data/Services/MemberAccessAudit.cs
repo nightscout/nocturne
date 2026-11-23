@@ -15,6 +15,9 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
     public static readonly MemberAccessSource System = new(ActorSubjectId: null);
 }
 
+/// <summary>The team whose access to the site a member's reason comes from, by the name it has when the row is written.</summary>
+internal sealed record MemberAccessTeam(Guid Id, string Name);
+
 /// <summary>
 /// The one writer of the <c>auth_audit_log</c> rows that record a change to what a member can read:
 /// the membership starting and ending, the roles they hold, their direct permissions, their 24-hour
@@ -74,6 +77,7 @@ internal static class MemberAccessAudit
         [MembershipJoinHow.Direct] = "direct",
         [MembershipJoinHow.Setup] = "setup",
         [MembershipJoinHow.System] = "system",
+        [MembershipJoinHow.Team] = "team",
     };
 
     /// <summary>The <c>how</c> each way of leaving is stored as.</summary>
@@ -84,15 +88,18 @@ internal static class MemberAccessAudit
         [MembershipEndHow.AccountDeleted] = "account_deleted",
         [MembershipEndHow.Replaced] = "replaced",
         [MembershipEndHow.System] = "system",
+        [MembershipEndHow.Team] = "team",
     };
 
     /// <summary>
-    /// Stages the <see cref="AuthAuditEventType.MemberJoined"/> row of a membership being added, naming
-    /// <paramref name="how"/>, the invite and <paramref name="by"/> when there is one.
+    /// Stages the <see cref="AuthAuditEventType.MemberJoined"/> row of a membership or one of its reasons
+    /// being added, naming <paramref name="how"/>, the invite and <paramref name="by"/> when there is one,
+    /// and <paramref name="team"/> for a team's reason: its id on the row, its name in the details for
+    /// when the team is gone.
     /// </summary>
     public static void StageJoined(
         NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipJoinHow how, Guid? inviteId, Guid? by,
-        MemberAccessSource? source)
+        MemberAccessTeam? team, MemberAccessSource? source)
     {
         var details = new Dictionary<string, object?>
         {
@@ -103,27 +110,36 @@ internal static class MemberAccessAudit
             details[InviteKey] = invite.ToString();
         if (by is { } responsible)
             details[ByKey] = responsible.ToString();
+        if (team is not null)
+            details[TeamAudit.NameKey] = team.Name;
 
-        Add(db, AuthAuditEventType.MemberJoined, tenantId, subjectId, details, source);
+        Add(db, AuthAuditEventType.MemberJoined, tenantId, team?.Id, subjectId, details, source);
     }
 
     /// <summary>
-    /// Stages the <see cref="AuthAuditEventType.MemberRemoved"/> row of a membership being removed. A
-    /// removal whose actor is the member is recorded as <see cref="MembershipEndHow.Left"/>.
+    /// Stages the <see cref="AuthAuditEventType.MemberRemoved"/> row of a membership or one of its reasons
+    /// being removed, naming <paramref name="team"/> as <see cref="StageJoined"/> does. A removal
+    /// whose actor is the member is recorded as <see cref="MembershipEndHow.Left"/>; a team's
+    /// reason ending never is, since its writer names how and its actor itself.
     /// </summary>
     public static void StageRemoved(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipEndHow how, MemberAccessSource? source)
+        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipEndHow how, MemberAccessTeam? team,
+        MemberAccessSource? source)
     {
         var actor = source is not null ? source.ActorSubjectId
             : db.AuditContext is { IsSystem: false } audit ? audit.SubjectId : null;
         if (how == MembershipEndHow.Removed && actor == subjectId)
             how = MembershipEndHow.Left;
 
-        Add(db, AuthAuditEventType.MemberRemoved, tenantId, subjectId, new Dictionary<string, object?>
+        var details = new Dictionary<string, object?>
         {
             [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             [HowKey] = RemovedHow[how],
-        }, source);
+        };
+        if (team is not null)
+            details[TeamAudit.NameKey] = team.Name;
+
+        Add(db, AuthAuditEventType.MemberRemoved, tenantId, team?.Id, subjectId, details, source);
     }
 
     /// <summary>Stages a row for each role slug in <paramref name="removed"/>, then each in <paramref name="added"/>.</summary>
@@ -286,5 +302,10 @@ internal static class MemberAccessAudit
     private static void Add(
         NocturneDbContext db, string eventType, Guid? tenantId, Guid? targetSubjectId,
         Dictionary<string, object?> details, MemberAccessSource? source) =>
-        AuthAuditRows.Stage(db, eventType, tenantId, teamId: null, targetSubjectId, details, source);
+        Add(db, eventType, tenantId, teamId: null, targetSubjectId, details, source);
+
+    private static void Add(
+        NocturneDbContext db, string eventType, Guid? tenantId, Guid? teamId, Guid? targetSubjectId,
+        Dictionary<string, object?> details, MemberAccessSource? source) =>
+        AuthAuditRows.Stage(db, eventType, tenantId, teamId, targetSubjectId, details, source);
 }
