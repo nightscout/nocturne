@@ -227,7 +227,15 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             .ToListAsync(ct));
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link and device credential
+    /// <paramref name="createdBySubjectId"/> made that is live at <paramref name="now"/> and expires
+    /// later or never, and stages a <c>guest_link_capped</c> or <c>device_credential_capped</c> audit row
+    /// for each. A grant that expires sooner is left alone, and so is one whose revocation is already
+    /// staged on the unit. Stages on the caller's unit of work and does not save.
+    /// </summary>
+    /// <returns>The grants it lowered, for the caller to evict their sessions once the unit commits.</returns>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
     public virtual async Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
         Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct)
     {

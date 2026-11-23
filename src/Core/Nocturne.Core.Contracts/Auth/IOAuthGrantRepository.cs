@@ -112,18 +112,6 @@ public interface IOAuthGrantRepository
         Guid createdBySubjectId, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link and device credential
-    /// <paramref name="createdBySubjectId"/> made that is live at <paramref name="now"/> and expires
-    /// later or never, and stages a <c>guest_link_capped</c> or <c>device_credential_capped</c> audit row
-    /// for each. A grant that expires sooner is left alone, and so is one whose revocation is already
-    /// staged on the unit. Stages on the caller's unit of work and does not save.
-    /// </summary>
-    /// <returns>The grants it lowered, for the caller to evict their sessions once the unit commits.</returns>
-    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
-    Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
-        Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct);
-
-    /// <summary>
     /// Removes the expiry and the maker's stamp of device credential <paramref name="grantId"/>, an
     /// unrevoked direct grant a member made for the tenant's device subject, and stages a
     /// <c>device_credential_kept</c> audit row naming that member. With the stamp gone no later end

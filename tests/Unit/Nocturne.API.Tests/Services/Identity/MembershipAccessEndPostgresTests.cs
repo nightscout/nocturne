@@ -13,9 +13,13 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
@@ -413,6 +417,46 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         details.RootElement.GetProperty("expires_at").GetDateTime().ToUniversalTime().Should().Be(end);
         details.RootElement.GetProperty("kind").GetString().Should().Be("tenant");
     }
+
+    [Fact]
+    public async Task SettingAnEndDateCapsAGuestLinkAndAnAlertChannelTheMemberMade()
+    {
+        var seeded = await SeedAsync("cap-both", accessEndsAt: null);
+        var owner = await NewSubjectAsync(seeded, "cap-both-owner");
+        var link = await GuestLinkAsync(seeded, seeded.Guest, owner, Now.UtcDateTime.AddHours(48));
+        var rule = await SaveRuleWithChannelAsync(seeded, addedBy: seeded.Guest);
+        var end = Now.UtcDateTime.AddDays(1);
+
+        (await SetEndAsync(seeded, Sessions(), end)).Should().Be(OwnerGuardedChange.Changed);
+
+        (await LinkAsync(seeded, link)).ExpiresAt.Should().Be(end);
+        (await ChannelStopAsync(seeded, rule)).Should().Be(end);
+        (await MembershipRowsAsync(seeded)).Single().AccessEndsAt.Should().Be(end);
+    }
+
+    private async Task<Guid> SaveRuleWithChannelAsync(Seeded seeded, Guid addedBy)
+    {
+        List<AlertRuleChannelWrite> channels;
+        await using (var db = Context(seeded.Tenant))
+        {
+            channels = await new AlertRuleChannelWriter(Mock.Of<ISecretEncryptionService>()).ToWritesAsync(
+                [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.DiscordChannel, Destination = "123456789012345678" }],
+                addedBy, null, db, CancellationToken.None);
+        }
+
+        return await new AlertRuleRepository(seeded.Contexts, new FakeTimeProvider(Now)).CreateAsync(
+            new NewAlertRule(
+                new AlertRuleWrite(
+                    "Urgent low", null, AlertConditionType.Threshold, """{"direction":"below","value":55}""",
+                    RuleScopeClass.Low, AlertRuleSeverity.Critical, IsEnabled: true, SortOrder: 0,
+                    AllowThroughDnd: true, AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
+                channels),
+            CancellationToken.None);
+    }
+
+    private async Task<DateTime?> ChannelStopAsync(Seeded seeded, Guid ruleId) =>
+        (await new AlertRuleRepository(seeded.Contexts, new FakeTimeProvider(Now)).GetChannelsAsync([ruleId], CancellationToken.None))[ruleId]
+        .Single().StopsAt;
 
     [Fact]
     public async Task ShorteningTheEndDateCapsTheLinksAgain()
