@@ -25,6 +25,11 @@ namespace Nocturne.API.Services.Caching;
 /// <c>ct</c> bounds only the caller's own wait and its own cache I/O; a factory honours the token it captured.
 /// </para>
 /// <para>How broadly each write path clears is set out on <see cref="ClearsTenantCacheAttribute"/>.</para>
+/// <para>
+/// Only host code uses it, so it lives beside <see cref="TenantCache"/> rather than beside
+/// <see cref="Nocturne.Infrastructure.Cache.Abstractions.ICacheService"/>; Infrastructure clears it through
+/// <see cref="Nocturne.Core.Contracts.V4.ILegacyReadCacheInvalidation"/>.
+/// </para>
 /// </remarks>
 public interface ITenantCache
 {
