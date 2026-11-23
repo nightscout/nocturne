@@ -157,6 +157,34 @@ public class OAuthTokenRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task APendingDeviceCodeTakesOneDecisionAndKeepsIt()
+    {
+        var repo = Repository();
+        var approved = await repo.StoreDeviceCodeAsync(
+            new NewDeviceCode("app", "approved", "BCDFGHJK", ["glucose.read"], Now.AddMinutes(30), 5), CancellationToken.None);
+        var denied = await repo.StoreDeviceCodeAsync(
+            new NewDeviceCode("app", "denied", "MNPQRSTV", ["glucose.read"], Now.AddMinutes(30), 5), CancellationToken.None);
+
+        (await repo.ApproveDeviceCodeAsync(approved, _subject, _grant, Now, CancellationToken.None)).Should().BeTrue();
+        (await repo.DenyDeviceCodeAsync(approved, Now.AddSeconds(1), CancellationToken.None)).Should().BeFalse();
+        (await repo.ApproveDeviceCodeAsync(approved, Guid.CreateVersion7(), Guid.CreateVersion7(), Now.AddSeconds(2), CancellationToken.None))
+            .Should().BeFalse();
+        (await repo.DenyDeviceCodeAsync(denied, Now, CancellationToken.None)).Should().BeTrue();
+        (await repo.ApproveDeviceCodeAsync(denied, _subject, _grant, Now.AddSeconds(1), CancellationToken.None)).Should().BeFalse();
+        (await repo.DenyDeviceCodeAsync(denied, Now.AddSeconds(2), CancellationToken.None)).Should().BeFalse();
+
+        var approvedCode = await repo.FindDeviceCodeAsync("approved", CancellationToken.None);
+        approvedCode!.ApprovedAt.Should().Be(Now);
+        approvedCode.DeniedAt.Should().BeNull();
+        approvedCode.GrantId.Should().Be(_grant);
+        approvedCode.SubjectId.Should().Be(_subject);
+        var deniedCode = await repo.FindDeviceCodeAsync("denied", CancellationToken.None);
+        deniedCode!.DeniedAt.Should().Be(Now);
+        deniedCode.ApprovedAt.Should().BeNull();
+        deniedCode.GrantId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task APollIsRecordedAndEachBumpAddsToTheInterval()
     {
         var repo = Repository();

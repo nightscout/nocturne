@@ -241,18 +241,35 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
-    public virtual Task<bool> ApproveDeviceCodeAsync(
-        Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d =>
-        {
-            d.ApprovedAt = now;
-            d.GrantId = grantId;
-            d.SubjectId = subjectId;
-        }, ct);
+    /// <remarks>
+    /// One statement whose predicate is the pending state, so of two overlapping approvals one
+    /// matches, and a code a rival poll's refusal deleted after it was read matches none.
+    /// </remarks>
+    public virtual async Task<bool> ApproveDeviceCodeAsync(
+        Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var approved = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id && d.ApprovedAt == null && d.DeniedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.ApprovedAt, now)
+                .SetProperty(d => d.GrantId, grantId)
+                .SetProperty(d => d.SubjectId, subjectId), ct);
+        return approved == 1;
+    }
 
     /// <inheritdoc/>
-    public virtual Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d => d.DeniedAt = now, ct);
+    /// <remarks>
+    /// Conditional on the pending state, like <see cref="ApproveDeviceCodeAsync"/>.
+    /// </remarks>
+    public virtual async Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var denied = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id && d.ApprovedAt == null && d.DeniedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DeniedAt, now), ct);
+        return denied == 1;
+    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -311,19 +328,6 @@ public class OAuthTokenRepository : IOAuthTokenRepository
             .Where(c => c.ExpiresAt < cutoff)
             .ExecuteDeleteAsync(ct);
         return new ExpiredCodeDeletion(deviceCodes, authorizationCodes);
-    }
-
-    private async Task<bool> UpdateDeviceCodeAsync(Guid id, Action<OAuthDeviceCodeEntity> change, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var entity = await db.OAuthDeviceCodes.FirstOrDefaultAsync(d => d.Id == id, ct);
-        if (entity is null)
-            return false;
-
-        change(entity);
-        await SaveAsync(db, ct);
-        return true;
     }
 
     private static IQueryable<OAuthRefreshTokenEntity> TokensWithGrant(NocturneDbContext db) =>
