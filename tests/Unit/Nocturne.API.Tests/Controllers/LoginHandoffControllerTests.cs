@@ -4,16 +4,20 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -27,6 +31,7 @@ public class LoginHandoffControllerTests : IDisposable
     private readonly NocturneDbContext _auditContext;
     private readonly Mock<ISessionService> _sessionService = new();
     private readonly DefaultHttpContext _httpContext = new();
+    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
     private readonly LoginHandoffController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -42,6 +47,10 @@ public class LoginHandoffControllerTests : IDisposable
             new TenantEntity { Id = _tenantId, Slug = "acme", DisplayName = "Acme", IsActive = true },
             new TenantEntity { Id = _otherTenantId, Slug = "other", DisplayName = "Other", IsActive = true });
         _tenantContext.Subjects.Add(new SubjectEntity { Id = _memberSubjectId, Name = "Owner", IsActive = true });
+        _tenantContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _memberSubjectId,
+        });
         _tenantContext.SaveChanges();
 
         _sessionService
@@ -58,10 +67,16 @@ public class LoginHandoffControllerTests : IDisposable
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object));
 
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+
         _controller = new LoginHandoffController(
             _tenantContext.AsFactory(),
             loginCodeService,
             _sessionService.Object,
+            new TenantMemberService(
+                new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), _time),
+            tenantAccessor.Object,
             Options.Create(new OidcOptions { Cookie = new CookieSettings { Secure = true } }),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }))
         {
@@ -263,6 +278,64 @@ public class LoginHandoffControllerTests : IDisposable
         row.TargetSubjectId.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Exchange_ACodeWhoseMembershipEndedAfterItWasIssued_FailsAsARefusalAndLeavesItUnconsumed()
+    {
+        var accessEndsAt = _time.GetUtcNow().UtcDateTime.AddMinutes(2);
+        await _tenantContext.TenantMembers.Where(m => m.SubjectId == _memberSubjectId)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, accessEndsAt));
+        SeedCode();
+        _time.Advance(TimeSpan.FromMinutes(3));
+
+        var result = await InvokeAsync();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        SetCookies().Should().BeEmpty();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        (await _tenantContext.LoginCodes.AsNoTracking().SingleAsync()).ConsumedAt.Should().BeNull();
+        var row = await _auditContext.AuthAuditLog.AsNoTracking().SingleAsync();
+        row.EventType.Should().Be(AuthAuditEventType.LoginHandoffFailed);
+        row.TargetSubjectId.Should().BeNull();
+
+        await _tenantContext.LoginCodes.ExecuteDeleteAsync();
+        var unknown = await InvokeAsync();
+        DetailOf(result).Should().Be(DetailOf(unknown));
+    }
+
+    [Fact]
+    public async Task Exchange_ACodeForAMemberWhoseAccessEndsLater_StillRedeems()
+    {
+        var accessEndsAt = _time.GetUtcNow().UtcDateTime.AddMinutes(10);
+        await _tenantContext.TenantMembers.Where(m => m.SubjectId == _memberSubjectId)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, accessEndsAt));
+        SeedCode();
+        _time.Advance(TimeSpan.FromMinutes(3));
+
+        await ExchangeAsync();
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(_memberSubjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Exchange_ACodeForASubjectWhoIsNoLongerAMember_FailsAsARefusal()
+    {
+        SeedCode();
+        await _tenantContext.TenantMembers.Where(m => m.SubjectId == _memberSubjectId).ExecuteDeleteAsync();
+
+        var result = await InvokeAsync();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private void SeedCode(DateTime? expiresAt = null, LoginCodePurpose purpose = LoginCodePurpose.Login)
     {
         _tenantContext.LoginCodes.Add(new LoginCodeEntity
@@ -286,6 +359,10 @@ public class LoginHandoffControllerTests : IDisposable
         return result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<LoginHandoffResponse>().Subject;
     }
+
+    private static string? DetailOf(ActionResult<LoginHandoffResponse> result) =>
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>().Subject.Detail;
 
     private IReadOnlyList<string> SetCookies() => _httpContext.Response.Headers.SetCookie.ToArray()!;
 }

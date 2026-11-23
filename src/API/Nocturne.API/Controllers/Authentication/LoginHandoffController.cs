@@ -8,6 +8,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -34,6 +35,8 @@ public class LoginHandoffController : ControllerBase
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILoginCodeService _loginCodeService;
     private readonly ISessionService _sessionService;
+    private readonly ITenantMemberService _tenantMembers;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly OidcOptions _oidcOptions;
     private readonly BaseDomainOptions _baseDomain;
 
@@ -41,23 +44,29 @@ public class LoginHandoffController : ControllerBase
         INocturneDbContextFactory contexts,
         ILoginCodeService loginCodeService,
         ISessionService sessionService,
+        ITenantMemberService tenantMembers,
+        ITenantAccessor tenantAccessor,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _loginCodeService = loginCodeService;
         _sessionService = sessionService;
+        _tenantMembers = tenantMembers;
+        _tenantAccessor = tenantAccessor;
         _oidcOptions = oidcOptions.Value;
         _baseDomain = baseDomainOptions.Value;
     }
 
     /// <summary>
     /// Redeems a login code, issues the session cookies, and answers with where to go next.
-    /// Expired, already-redeemed, unknown and other-tenant codes all fail identically.
+    /// Expired, already-redeemed, unknown, other-tenant and no-longer-admitted codes all fail identically.
     /// </summary>
     /// <remarks>
-    /// Expired, already-redeemed, unknown and other-tenant codes all fail identically: telling a
-    /// caller which one it was would tell them which codes exist.
+    /// Expired, already-redeemed, unknown, other-tenant and no-longer-admitted codes all fail
+    /// identically: telling a caller which one it was would tell them which codes exist. A code is a
+    /// bearer link that outlives the moment it was minted, so its member must still be a live member
+    /// of the tenant (<see cref="ITenantMemberService.IsMemberAsync"/>) when it is redeemed.
     /// </remarks>
     [HttpPost]
     [EnableRateLimiting("login-handoff")]
@@ -71,8 +80,11 @@ public class LoginHandoffController : ControllerBase
         var ipAddress = HttpContext.GetClientAddress();
         var userAgent = Request.Headers.UserAgent.ToString();
 
+        var tenantId = _tenantAccessor.TenantId;
         var redeemed = await _loginCodeService.RedeemAsync(
-            db, request.Code, [LoginCodePurpose.Login], admits: null, withSpend: null, ipAddress, userAgent, ct);
+            db, request.Code, [LoginCodePurpose.Login],
+            admits: (code, token) => _tenantMembers.IsMemberAsync(code.SubjectId, tenantId, token),
+            withSpend: null, ipAddress, userAgent, ct);
 
         if (redeemed is null)
         {
