@@ -200,6 +200,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IMembershipReasonLapses, MembershipReasonLapses>();
         services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();

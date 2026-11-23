@@ -331,25 +331,17 @@ public partial class TeamRepository
 
     /// <summary>
     /// The team's access to every site, with each access's role slugs, read inside the caller's
-    /// transaction after taking each site's team access lock in ascending tenant id
-    /// (<see cref="TeamAccessLock"/>), so a stop of one of them either commits first and is not read,
-    /// or waits. A context pinned to a tenant sees only that tenant's rows, so the pin is lifted for
-    /// the reads and restored after them, both local to the transaction.
+    /// transaction after taking each site's team access lock (<see cref="LockAccessOfTeamsAsync"/>), so a
+    /// stop of one of them either commits first and is not read, or waits.
     /// </summary>
     private static async Task<IReadOnlyList<(TeamTenantAccessEntity Access, IReadOnlyList<string> RoleSlugs)>>
         AccessOfTeamAcrossSitesAsync(NocturneDbContext db, Guid teamId, CancellationToken ct)
     {
+        await LockAccessOfTeamsAsync(db, [teamId], ct);
+
         var pinned = db.TenantId != Guid.Empty && db.Database.IsNpgsql();
         if (pinned)
             await SetTenantForTransactionAsync(db, string.Empty, ct);
-
-        var sites = await db.TeamTenantAccess.AsNoTracking()
-            .Where(a => a.TeamId == teamId)
-            .Select(a => a.TenantId)
-            .OrderBy(tenantId => tenantId)
-            .ToListAsync(ct);
-        foreach (var site in sites)
-            await db.LockTeamAccessAsync(site, ct);
 
         var rows = await db.TeamTenantAccess.AsNoTracking()
             .Where(a => a.TeamId == teamId)
@@ -361,6 +353,33 @@ public partial class TeamRepository
             await SetTenantForTransactionAsync(db, db.TenantId.ToString(), ct);
 
         return rows.Select(r => (r.Access, (IReadOnlyList<string>)r.Slugs)).ToList();
+    }
+
+    /// <summary>
+    /// Takes the team access lock (<see cref="TeamAccessLock"/>) of every site any of
+    /// <paramref name="teamIds"/> has access to, in ascending tenant id, inside the caller's
+    /// transaction. The caller holds the teams' manager locks, so no approval can add a site meanwhile.
+    /// A context pinned to a tenant sees only that tenant's rows, so the pin is lifted for the read and
+    /// restored after it, both local to the transaction.
+    /// </summary>
+    internal static async Task LockAccessOfTeamsAsync(NocturneDbContext db, IReadOnlyCollection<Guid> teamIds, CancellationToken ct)
+    {
+        var pinned = db.TenantId != Guid.Empty && db.Database.IsNpgsql();
+        if (pinned)
+            await SetTenantForTransactionAsync(db, string.Empty, ct);
+
+        var sites = await db.TeamTenantAccess.AsNoTracking()
+            .Where(a => teamIds.Contains(a.TeamId))
+            .Select(a => a.TenantId)
+            .Distinct()
+            .OrderBy(tenantId => tenantId)
+            .ToListAsync(ct);
+
+        if (pinned)
+            await SetTenantForTransactionAsync(db, db.TenantId.ToString(), ct);
+
+        foreach (var site in sites)
+            await db.LockTeamAccessAsync(site, ct);
     }
 
     private static Task SetTenantForTransactionAsync(NocturneDbContext db, string tenantId, CancellationToken ct) =>

@@ -553,10 +553,10 @@ public class TenantMembershipRepositoryTests : IDisposable
         (await Members().UpdateRoleAsync(_otherTenant, created.Id, new TenantRoleEdit("x", "x", null, []), null, Now, CancellationToken.None))
             .Should().Be(new TenantRoleUpdate(RoleChangeOutcome.NotFound, null));
 
-        (await Members().DeleteRoleAsync(_tenant, created.Id, CancellationToken.None)).Should().Be(RoleChangeOutcome.Changed);
+        (await Members().DeleteRoleAsync(_tenant, created.Id, Now, CancellationToken.None)).Should().Be(RoleChangeOutcome.Changed);
         (await Members().GetRoleAsync(_tenant, created.Id, CancellationToken.None)).Should().BeNull();
         (await Members().GetMemberAsync(_tenant, member.Id, CancellationToken.None))!.Roles.Should().BeEmpty();
-        (await Members().DeleteRoleAsync(_tenant, created.Id, CancellationToken.None)).Should().Be(RoleChangeOutcome.NotFound);
+        (await Members().DeleteRoleAsync(_tenant, created.Id, Now, CancellationToken.None)).Should().Be(RoleChangeOutcome.NotFound);
     }
 
     [Fact]

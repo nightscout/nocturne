@@ -189,41 +189,54 @@ public class SubjectRepository : ISubjectRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<SubjectRecord?> FindMemberByUsernameAsync(
-        Guid tenantId, string username, bool activeOnly, DateTime now, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var live = db.TenantMembers.LiveAt(now);
-        var members = SubjectsWithRoles(db)
-            .Where(s => s.Username == username
-                && live.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id));
-        if (activeOnly)
-            members = members.Where(s => s.IsActive);
+    public virtual Task<SubjectRecord?> FindMemberByUsernameAsync(
+        Guid tenantId, string username, bool activeOnly, DateTime now, CancellationToken ct) =>
+        MembershipReasons.ReadInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
+        {
+            await using var lease = await OpenAsync(token);
+            var db = lease.Context;
+            var named = Subjects(db).Where(s => s.Username == username);
+            if (activeOnly)
+                named = named.Where(s => s.IsActive);
 
-        return ToRecord(await members.FirstOrDefaultAsync(ct));
-    }
+            var member = await db.TenantMembers.AsNoTracking()
+                .Where(inForce)
+                .Where(m => m.TenantId == tenantId && named.Any(s => s.Id == m.SubjectId))
+                .Select(m => new { m.SubjectId, m.NextReasonLapseAt })
+                .FirstOrDefaultAsync(token);
+            // Both statements run whether or not the username is a member's, so the number of round
+            // trips does not tell a caller which it was.
+            var subjectId = member?.SubjectId ?? Guid.Empty;
+            var subject = await SubjectsWithRoles(db).FirstOrDefaultAsync(s => s.Id == subjectId, token);
+            return member is null
+                ? ((SubjectRecord?)null, Guid.Empty, (DateTime?)null)
+                : (ToRecord(subject), member.SubjectId, member.NextReasonLapseAt);
+        }, ct);
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(
-        Guid tenantId, string email, DateTime now, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var live = db.TenantMembers.LiveAt(now);
-        // The query only narrows to the tenant's confirmed members; whether an address is the one
-        // named is decided by EmailAddresses.AreSame below, so no SQL comparison restates it.
-        var confirmed = await Subjects(db)
-            .ExcludeDemo()
-            .Where(OrphanedSubjectFilter.HoldsConfirmedEmail)
-            .Where(s => s.IsActive && !s.IsSystemSubject
-                && live.Any(m => m.TenantId == tenantId && m.SubjectId == s.Id))
-            .ToListAsync(ct);
-        return confirmed
-            .Where(s => EmailAddresses.AreSame(s.Email, email))
-            .Select(s => ToRecord(s)!)
-            .ToList();
-    }
+    public virtual Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(
+        Guid tenantId, string email, DateTime now, CancellationToken ct) =>
+        MembershipReasons.ReadAllInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
+        {
+            await using var lease = await OpenAsync(token);
+            var db = lease.Context;
+            var members = db.TenantMembers.AsNoTracking().Where(inForce).Where(m => m.TenantId == tenantId);
+            // The query only narrows to the tenant's confirmed members; whether an address is the one
+            // named is decided by EmailAddresses.AreSame below, so no SQL comparison restates it.
+            var confirmed = await Subjects(db)
+                .ExcludeDemo()
+                .Where(OrphanedSubjectFilter.HoldsConfirmedEmail)
+                .Where(s => s.IsActive && !s.IsSystemSubject && members.Any(m => m.SubjectId == s.Id))
+                .ToListAsync(token);
+            var named = confirmed.Where(s => EmailAddresses.AreSame(s.Email, email)).ToList();
+            var ids = named.Select(s => s.Id).ToList();
+            var rows = await members
+                .Where(m => ids.Contains(m.SubjectId))
+                .Select(m => new { m.SubjectId, m.NextReasonLapseAt })
+                .ToListAsync(token);
+            return ((IReadOnlyList<SubjectRecord>)named.Select(s => ToRecord(s)!).ToList(),
+                (IReadOnlyList<(Guid, DateTime?)>)rows.Select(r => (r.SubjectId, r.NextReasonLapseAt)).ToList());
+        }, ct);
 
     /// <inheritdoc/>
     public virtual async Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct)
@@ -510,7 +523,9 @@ public class SubjectRepository : ISubjectRepository
             // Removed here rather than by the subject's cascade so each membership leaves its removed
             // row; saved before the scrub below, which then clears that row's details like the rest.
             // The teams are staged after that save, so their rows keep their details.
+            await TeamRepository.LockAccessOfTeamsAsync(db, soleMemberOf.Select(t => t.Id).ToList(), ct);
             var memberships = await db.TenantMembers.Where(m => m.SubjectId == subjectId).ToListAsync(ct);
+            await db.LockMembershipsAsync(memberships.Select(m => (m.TenantId, m.SubjectId)), ct);
             foreach (var membership in memberships)
                 await MembershipReasons.RemoveMemberAsync(db, membership, MembershipEndHow.AccountDeleted, ct);
             await db.SaveChangesAsync(ct);
@@ -780,6 +795,7 @@ public class SubjectRepository : ISubjectRepository
 
             var now = Now;
             var moved = memberships[0];
+            await db.LockMembershipsAsync([(moved.TenantId, createdId), (moved.TenantId, holderId)], ct);
             var held = new NewTenantMember(
                 moved.TenantId, holderId, moved.MemberRoles.Select(mr => mr.TenantRoleId).ToList(),
                 moved.DirectPermissions?.ToList(), moved.Label, moved.Username, moved.LimitTo24Hours,

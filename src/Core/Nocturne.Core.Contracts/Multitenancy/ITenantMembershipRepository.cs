@@ -31,7 +31,11 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// A membership whose end date has passed is absent to every method that takes a <c>now</c>: those
 /// decide what a subject may do on a tenant, which tenants a subject has, or who receives something
 /// for a tenant. The management reads (<see cref="FindMemberAsync"/>, <see cref="GetMemberAsync"/>,
-/// <see cref="ListMembersAsync"/>), the setup gate and the owner reads still return it.
+/// <see cref="ListMembersAsync"/>), the setup gate and the owner reads still return it. So is one
+/// that still gives access a reason that has ended no longer gives, until it is narrowed; the reads
+/// that decide a request or a sign-in (<see cref="ReadSubjectMembershipAsync"/>,
+/// <see cref="GetMemberAccessAsync(Guid, Guid, DateTime, CancellationToken)"/>, <see cref="IsMemberAsync"/>
+/// and <see cref="GetMemberRoleNamesAsync"/>) narrow it themselves and return what is left.
 /// </para>
 /// </remarks>
 public interface ITenantMembershipRepository
@@ -272,9 +276,10 @@ public interface ITenantMembershipRepository
     /// <summary>
     /// Deletes the role together with every member's assignment of it, in one save. Refused with
     /// <see cref="RoleChangeOutcome.HeldByTeam"/> while a team's access gives the role, checked as
-    /// <see cref="UpdateRoleAsync"/> checks.
+    /// <see cref="UpdateRoleAsync"/> checks. Each holder's row is projected from its reasons in force
+    /// at <paramref name="now"/>.
     /// </summary>
-    Task<RoleChangeOutcome> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct);
+    Task<RoleChangeOutcome> DeleteRoleAsync(Guid tenantId, Guid roleId, DateTime now, CancellationToken ct);
 
     /// <summary>Stores the tenant's seed roles whose slugs it does not have yet.</summary>
     Task SeedRolesAsync(Guid tenantId, CancellationToken ct);

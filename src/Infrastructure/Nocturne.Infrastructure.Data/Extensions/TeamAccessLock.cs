@@ -9,13 +9,7 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// the role. Without the lock each could read before the other commits, and a team would hold a role
 /// that runs the site.
 /// <para>
-/// Every write that takes more than one of these locks takes them in one order: the site's owners lock
-/// (<see cref="TenantOwnerLock"/>), then a team's manager lock (<see cref="TeamManagerLock"/>), then
-/// sites' team access locks in ascending tenant id. An approval takes all three, so the approver's
-/// owner role, end and limit hold still from its check to its commit; a role edit takes the owners
-/// lock and this one; a team's deletion takes its manager lock and then this one for each site.
-/// Account deletion takes owners locks and then manager locks, in the same order, so no two of them
-/// can each hold what the other waits for.
+/// It is taken in the order <see cref="MembershipLock"/> states.
 /// </para>
 /// </remarks>
 internal static class TeamAccessLock

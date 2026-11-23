@@ -58,7 +58,7 @@ public partial class MembershipWriteGuardTests
     [
         "Id", "TenantId", "SubjectId", "DirectPermissions", "Label", "Username", "LimitTo24Hours", "AccessEndsAt",
         "CreatedFromInviteId", "LastUsedAt", "LastUsedIp", "LastUsedUserAgent", "TenantMemberId", "TenantRoleId",
-        "TenantMemberReasonId", "Kind", "SourceId",
+        "TenantMemberReasonId", "Kind", "SourceId", "NextReasonLapseAt",
     ];
 
     /// <summary>
