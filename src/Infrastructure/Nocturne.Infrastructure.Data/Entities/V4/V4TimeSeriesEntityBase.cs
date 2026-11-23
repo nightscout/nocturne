@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -53,7 +54,7 @@ public abstract class V4TimeSeriesEntityBase
     /// Device identifier that produced or uploaded this record
     /// </summary>
     [Column("device")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     [FitToColumn]
     public string? Device { get; set; }
 
@@ -61,7 +62,7 @@ public abstract class V4TimeSeriesEntityBase
     /// Application that uploaded this record
     /// </summary>
     [Column("app")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     [FitToColumn]
     public string? App { get; set; }
 
@@ -69,7 +70,7 @@ public abstract class V4TimeSeriesEntityBase
     /// Origin data source identifier
     /// </summary>
     [Column("data_source")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string? DataSource { get; set; }
 
     /// <inheritdoc />

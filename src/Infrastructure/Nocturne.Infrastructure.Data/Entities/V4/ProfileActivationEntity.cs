@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -28,7 +29,7 @@ public class ProfileActivationEntity
     public string Origin { get; set; } = null!;
 
     [Column("base_profile_name")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.ProfileName)]
     public string BaseProfileName { get; set; } = null!;
 
     [Column("percentage")]
@@ -62,7 +63,7 @@ public class ProfileActivationEntity
     public string? EndedBy { get; set; }
 
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     [Column("device_id")]

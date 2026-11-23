@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -76,7 +77,7 @@ public class StepCountEntity
     /// Origin data source identifier; first half of the sync-dedup key.
     /// </summary>
     [Column("data_source")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string? DataSource { get; set; }
 
     /// <inheritdoc />
@@ -89,7 +90,7 @@ public class StepCountEntity
     /// matching an existing (DataSource, SyncIdentifier) row updates it in place.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>
