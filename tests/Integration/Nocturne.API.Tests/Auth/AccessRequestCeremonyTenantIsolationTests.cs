@@ -106,15 +106,16 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         var credentials = services.GetRequiredService<IPasskeyCredentialRepository>();
         Guid? enrolling = null;
         var webAuthn = new Mock<IPasskeyService>();
-        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
-            .ReturnsAsync((Guid subjectId, string _) =>
+        webAuthn.Setup(p => p.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.AccessRequest))
+            .ReturnsAsync((Guid subjectId, string _, PasskeyRegistrationFlow _) =>
             {
                 enrolling = subjectId;
                 return new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "challenge-token");
             });
+        webAuthn.Setup(p => p.FindRegistrationChallengeSubject("challenge-token", PasskeyRegistrationFlow.AccessRequest)).Returns(() => enrolling);
         webAuthn.Setup(p => p.CompleteRegistrationAsync(
-                It.IsAny<string>(), "challenge-token", It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
-            .Returns(async (string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                It.IsAny<string>(), "challenge-token", PasskeyRegistrationFlow.AccessRequest, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .Returns(async (string _, string _, PasskeyRegistrationFlow _, Guid _, Guid expectedSubjectId, string? _) =>
             {
                 expectedSubjectId.Should().Be(enrolling!.Value);
                 var credentialId = await credentials.CreateAsync(

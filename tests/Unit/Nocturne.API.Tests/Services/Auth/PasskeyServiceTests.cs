@@ -325,23 +325,23 @@ public class PasskeyServiceTests
 
     #region Challenge token binding
 
-    [Fact]
+    [Theory]
     [Trait("Category", "Unit")]
-    public async Task CompleteRegistrationAsync_WithAChallengeForAnotherSubject_IsRejected()
+    [MemberData(nameof(EveryFlow))]
+    public async Task CompleteRegistrationAsync_WithAChallengeForAnotherSubject_IsRejected(PasskeyRegistrationFlow flow)
     {
         var service = CreateService();
-        var victimSubjectId = Guid.CreateVersion7();
+        var otherSubjectId = Guid.CreateVersion7();
 
-        // A challenge minted for the victim — as the old caller-supplied subjectId allowed.
-        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim");
+        var options = await service.GenerateRegistrationOptionsAsync(otherSubjectId, "other", flow);
 
         var act = () => service.CompleteRegistrationAsync(
-            "{}", options.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
+            "{}", options.ChallengeToken, flow, _tenantId, expectedSubjectId: _subjectId);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*not issued for the enrolling subject*");
 
-        (await _dbContext.PasskeyCredentials.AnyAsync(c => c.SubjectId == victimSubjectId))
+        (await _dbContext.PasskeyCredentials.AnyAsync(c => c.SubjectId == otherSubjectId))
             .Should().BeFalse("no credential may be stored for a subject the caller does not own");
     }
 
@@ -356,10 +356,138 @@ public class PasskeyServiceTests
         var assertion = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
 
         var act = () => service.CompleteRegistrationAsync(
-            "{}", assertion.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
+            "{}", assertion.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, _tenantId, expectedSubjectId: _subjectId);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*different ceremony*");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task FindRegistrationChallengeSubject_NamesTheSubjectARegistrationChallengeWasIssuedFor()
+    {
+        var service = CreateService();
+
+        var registration = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "testuser", PasskeyRegistrationFlow.MemberInvite);
+
+        service.FindRegistrationChallengeSubject(registration.ChallengeToken, PasskeyRegistrationFlow.MemberInvite)
+            .Should().Be(_subjectId);
+    }
+
+    public static TheoryData<PasskeyRegistrationFlow, PasskeyRegistrationFlow> EveryPairOfFlows()
+    {
+        var pairs = new TheoryData<PasskeyRegistrationFlow, PasskeyRegistrationFlow>();
+        foreach (var minted in Enum.GetValues<PasskeyRegistrationFlow>())
+            foreach (var redeemed in Enum.GetValues<PasskeyRegistrationFlow>())
+                pairs.Add(minted, redeemed);
+        return pairs;
+    }
+
+    public static TheoryData<PasskeyRegistrationFlow, PasskeyRegistrationFlow> EveryPairOfDifferentFlows()
+    {
+        var pairs = new TheoryData<PasskeyRegistrationFlow, PasskeyRegistrationFlow>();
+        foreach (var minted in Enum.GetValues<PasskeyRegistrationFlow>())
+            foreach (var redeemed in Enum.GetValues<PasskeyRegistrationFlow>().Where(f => f != minted))
+                pairs.Add(minted, redeemed);
+        return pairs;
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(EveryPairOfFlows))]
+    public async Task FindRegistrationChallengeSubject_NamesTheSubjectOnlyInTheFlowTheChallengeWasMintedFor(
+        PasskeyRegistrationFlow minted, PasskeyRegistrationFlow redeemed)
+    {
+        var service = CreateService();
+
+        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser", minted);
+
+        service.FindRegistrationChallengeSubject(registration.ChallengeToken, redeemed)
+            .Should().Be(minted == redeemed ? _subjectId : null);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(EveryPairOfDifferentFlows))]
+    public async Task CompleteRegistrationAsync_WithAChallengeMintedForAnotherFlow_IsRejected(
+        PasskeyRegistrationFlow minted, PasskeyRegistrationFlow redeemed)
+    {
+        var service = CreateService();
+
+        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser", minted);
+
+        var act = () => service.CompleteRegistrationAsync(
+            "{}", registration.ChallengeToken, redeemed, _tenantId, expectedSubjectId: _subjectId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*different flow*");
+        (await _dbContext.PasskeyCredentials.AnyAsync(c => c.SubjectId == _subjectId)).Should().BeFalse();
+    }
+
+    /// <summary>A registration challenge minted before challenges named their flow.</summary>
+    private string FlowlessRegistrationChallenge(EphemeralDataProtectionProvider provider) =>
+        provider.CreateProtector("Nocturne.Passkey.Challenge").Protect(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            OptionsJson = "{}",
+            SubjectId = (Guid?)_subjectId,
+            Purpose = "registration",
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+        }));
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(EveryFlow))]
+    public async Task ARegistrationChallengeNamingNoFlow_IsRedeemedInNoFlow(PasskeyRegistrationFlow flow)
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var service = CreateService(dataProtection: provider);
+        var token = FlowlessRegistrationChallenge(provider);
+
+        service.FindRegistrationChallengeSubject(token, flow).Should().BeNull();
+        var act = () => service.CompleteRegistrationAsync("{}", token, flow, _tenantId, expectedSubjectId: _subjectId);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*different flow*");
+    }
+
+    public static TheoryData<PasskeyRegistrationFlow> EveryFlow() => new(Enum.GetValues<PasskeyRegistrationFlow>());
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task FindRegistrationChallengeSubject_NamesNoSubjectForAnAssertionChallenge()
+    {
+        var service = CreateService();
+
+        var assertion = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+
+        service.FindRegistrationChallengeSubject(assertion.ChallengeToken, PasskeyRegistrationFlow.OwnAccount).Should().BeNull();
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("")]
+    [InlineData("not-a-token")]
+    public void FindRegistrationChallengeSubject_NamesNoSubjectForATokenThisServerDidNotIssue(string token)
+    {
+        CreateService().FindRegistrationChallengeSubject(token, PasskeyRegistrationFlow.OwnAccount).Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void FindRegistrationChallengeSubject_NamesNoSubjectForAnExpiredOrUnreadableChallenge()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var service = CreateService(dataProtection: provider);
+        var protector = provider.CreateProtector("Nocturne.Passkey.Challenge");
+        var expired = protector.Protect(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            OptionsJson = "{}",
+            SubjectId = (Guid?)_subjectId,
+            Purpose = "registration",
+            Flow = PasskeyRegistrationFlow.OwnAccount,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+        }));
+
+        service.FindRegistrationChallengeSubject(expired, PasskeyRegistrationFlow.OwnAccount).Should().BeNull();
+        service.FindRegistrationChallengeSubject(protector.Protect("not json"), PasskeyRegistrationFlow.OwnAccount).Should().BeNull();
     }
 
     [Fact]
@@ -368,7 +496,8 @@ public class PasskeyServiceTests
     {
         var service = CreateService();
 
-        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser");
+        var registration = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "testuser", PasskeyRegistrationFlow.OwnAccount);
 
         var act = () => service.CompleteAssertionAsync("{}", registration.ChallengeToken, _tenantId);
 
@@ -482,7 +611,8 @@ public class PasskeyServiceTests
     #region Helpers
 
     private PasskeyService CreateService(
-        string environmentName = "Development", string rpId = "localhost")
+        string environmentName = "Development", string rpId = "localhost",
+        IDataProtectionProvider? dataProtection = null)
     {
         // We use a mock Fido2 - it won't be called for DB-only tests.
         // For methods that call Fido2, integration tests are needed.
@@ -494,7 +624,7 @@ public class PasskeyServiceTests
         };
         var fido2 = new Fido2NetLib.Fido2(fido2Config);
 
-        var dataProtectionProvider = new EphemeralDataProtectionProvider();
+        var dataProtectionProvider = dataProtection ?? new EphemeralDataProtectionProvider();
         var fido2Options = Options.Create(fido2Config);
         var logger = NullLogger<PasskeyService>.Instance;
 

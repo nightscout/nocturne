@@ -448,7 +448,7 @@ public class SetupControllerTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         // Act
@@ -491,7 +491,7 @@ public class SetupControllerTests : IDisposable
         problem.StatusCode.Should().Be(400);
         problem.Value.Should().BeOfType<ProblemDetails>().Subject.Detail.Should().Be("This username is already taken");
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
         _dbContext.ChangeTracker.Clear();
         (await _dbContext.TenantMembers.CountAsync()).Should().Be(1, "the refusal writes no membership");
     }
@@ -527,7 +527,7 @@ public class SetupControllerTests : IDisposable
         var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
         conflict.Value.Should().BeEquivalentTo(new { error = "no_tenant_exists" });
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
     }
 
     [Fact]
@@ -546,8 +546,8 @@ public class SetupControllerTests : IDisposable
 
         Guid enrolling = default;
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
-            .Callback((Guid subjectId, string _) => enrolling = subjectId)
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
+            .Callback((Guid subjectId, string _, PasskeyRegistrationFlow _) => enrolling = subjectId)
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         var result = await _controller.OwnerOptions(
@@ -581,7 +581,7 @@ public class SetupControllerTests : IDisposable
         });
         await _dbContext.SaveChangesAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         await _controller.OwnerOptions(
@@ -823,7 +823,7 @@ public class SetupControllerTests : IDisposable
         problem.StatusCode.Should().Be(400);
         _passkeyService.Verify(
             s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), ownerSubjectId, It.IsAny<string?>()),
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), ownerSubjectId, It.IsAny<string?>()),
             Times.Once,
             "the enrolling subject comes from the server's lookup, not from the challenge token");
         _sessionService.Verify(
@@ -900,7 +900,7 @@ public class SetupControllerTests : IDisposable
         problem.StatusCode.Should().Be(400);
         _passkeyService.Verify(
             s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
             Times.Never,
             "with no subject to resolve there is nothing to enrol onto");
     }
@@ -988,7 +988,7 @@ public class SetupControllerTests : IDisposable
         // and lock the instance out permanently.
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         await _controller.OwnerOptions(
@@ -1206,7 +1206,7 @@ public class SetupControllerTests : IDisposable
     {
         _passkeyService
             .Setup(s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
             .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
         _recoveryCodeService
             .Setup(s => s.GenerateCodesAsync(subjectId))
@@ -1325,8 +1325,8 @@ public class SetupControllerTests : IDisposable
     {
         _passkeyService
             .Setup(s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
-            .ReturnsAsync((string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync((string _, string _, PasskeyRegistrationFlow _, Guid _, Guid expectedSubjectId, string? _) =>
                 expectedSubjectId == subjectId
                     ? new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId)
                     : throw new InvalidOperationException(

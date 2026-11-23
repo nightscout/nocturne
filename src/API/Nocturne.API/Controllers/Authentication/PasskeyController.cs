@@ -175,7 +175,7 @@ public class PasskeyController : ControllerBase
         }
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, request.Username);
+            subjectId.Value, request.Username, PasskeyRegistrationFlow.OwnAccount);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -198,7 +198,9 @@ public class PasskeyController : ControllerBase
     /// Two flows reach these endpoints: adding a passkey to your own account, and enrolling one
     /// under a <see cref="RecoverySession"/>. Every other enrolment has its own endpoint with its
     /// own precondition: the first owner, invite acceptance, an access request, and an account
-    /// with no sign-in method left. None of them resolve a subject here.
+    /// with no sign-in method left. None of them resolve a subject here, and none redeem a
+    /// challenge minted here: each challenge is bound to the flow that minted it
+    /// (<see cref="PasskeyRegistrationFlow"/>).
     /// </para>
     /// </remarks>
     private async Task<Guid?> ResolveRegistrationSubjectAsync()
@@ -214,8 +216,8 @@ public class PasskeyController : ControllerBase
     /// Complete passkey registration with attestation response. The challenge must have been issued for the caller's own account. Under a recovery session this is the session's one enrolment: it issues no session, and the caller then signs in with the new passkey.
     /// </summary>
     /// <remarks>
-    /// The challenge must have been issued for the subject the caller's credentials resolve to,
-    /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it. Under a
+    /// The challenge must have been issued by <see cref="RegisterOptions"/> for the subject the
+    /// caller's credentials resolve to (<see cref="PasskeyRegistrationFlow.OwnAccount"/>). Under a
     /// recovery session the enrolment spends it (<see cref="RecoverySession.EnrolAsync{T}"/>); a
     /// refused attestation leaves it usable. <see cref="PasskeyRegisterCompleteResponse.CredentialId"/>
     /// names the passkey just added, so the caller can offer to remove the older ones.
@@ -259,7 +261,7 @@ public class PasskeyController : ControllerBase
             if (signedIn)
             {
                 result = await _passkeyService.CompleteRegistrationAsync(
-                    request.AttestationResponseJson, request.ChallengeToken, tenantId,
+                    request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
                     expectedSubjectId: subjectId.Value, request.Label);
                 await _recoverySession.EndAsync(HttpContext, subjectId.Value, ct);
             }
@@ -268,7 +270,7 @@ public class PasskeyController : ControllerBase
                 var enrolment = await _recoverySession.EnrolAsync(
                     HttpContext,
                     (sessionSubjectId, _) => _passkeyService.CompleteRegistrationAsync(
-                        request.AttestationResponseJson, request.ChallengeToken, tenantId,
+                        request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
                         expectedSubjectId: sessionSubjectId, request.Label),
                     _ => true,
                     ct);
@@ -412,47 +414,34 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Returns the id of the most recently created subject matching <paramref name="match"/> that is
-    /// still part-way through an anonymous enrolment (no way to sign in, see
-    /// <see cref="ISubjectRepository.FindCredentiallessSubjectIdsAsync"/>, and no membership in any
-    /// tenant), or <see langword="null"/> when nothing matches.
+    /// Returns the subject the registration challenge <paramref name="challengeToken"/> was issued
+    /// for by <paramref name="flow"/>'s options step while it is still what that step left for
+    /// <paramref name="match"/>
+    /// (<see cref="ISubjectRepository.IsEnrollingSubjectAsync"/>) with no membership in any tenant,
+    /// or <see langword="null"/>.
     /// </summary>
     /// <remarks>
-    /// The invite and access-request options steps create the subject, so the complete step has to
-    /// re-resolve it (<see cref="EnrolmentMatch"/>).
+    /// Each options step creates its own subject and never resumes one, so the challenge it returned
+    /// is the only thing that names that subject.
     /// <para>
     /// A subject holding membership anywhere is somebody's account, not an anonymous enrolment.
-    /// Subjects are global and passkeys are stored against the subject, so scoping the membership
-    /// check to the current tenant would let a tenant claim another tenant's credential-less member
-    /// — the locked-out state recovery mode exists for — by enrolling a passkey onto them.
+    /// Subjects are global and passkeys are stored against the subject, so the membership check is
+    /// not scoped to the current tenant. It is asked through <see cref="ITenantMemberService"/>,
+    /// whose enumeration is pinned to that subject (<c>app.current_subject_id</c>) and so reads only
+    /// that subject's memberships.
     /// </para>
-    /// <para>
-    /// Hence the two steps. The candidate list comes from tables that are not tenant-scoped, so one
-    /// query answers it. The membership check is asked per candidate through
-    /// <see cref="ITenantMemberService"/>, whose enumeration is pinned to that subject
-    /// (<c>app.current_subject_id</c>) and so reads only that subject's memberships.
-    /// </para>
-    /// The preconditions mean only a half-finished enrolment can match, never an account that can
-    /// already sign in or that belongs to a tenant — so with several candidates (duplicates left by
-    /// an older build of the options step) every one of them is an empty shell and the newest, which
-    /// the caller's ceremony was minted against, wins. Walking the candidates newest-first and
-    /// taking the first with no membership is the same answer as the newest candidate satisfying
-    /// every condition at once.
     /// </remarks>
-    private async Task<Guid?> FindEnrollingSubjectIdAsync(EnrolmentMatch match)
+    private async Task<Guid?> ResolveEnrollingSubjectAsync(
+        string challengeToken, PasskeyRegistrationFlow flow, EnrolmentMatch match)
     {
-        var candidateIds = await _subjects.FindCredentiallessSubjectIdsAsync(match, HttpContext.RequestAborted);
-
-        foreach (var candidateId in candidateIds)
+        if (_passkeyService.FindRegistrationChallengeSubject(challengeToken, flow) is not { } subjectId
+            || !await _subjects.IsEnrollingSubjectAsync(subjectId, match, HttpContext.RequestAborted))
         {
-            var memberships = await _tenantMemberService.GetTenantIdsForSubjectAsync(candidateId);
-            if (memberships.Count == 0)
-            {
-                return candidateId;
-            }
+            return null;
         }
 
-        return null;
+        var memberships = await _tenantMemberService.GetTenantIdsForSubjectAsync(subjectId);
+        return memberships.Count == 0 ? subjectId : null;
     }
 
     /// <summary>
@@ -870,37 +859,24 @@ public class PasskeyController : ControllerBase
         var displayName = request.DisplayName.Trim();
         var username = displayName.ToLowerInvariant().Replace(" ", "-");
 
-        // Cancelling the OS prompt leaves the subject this step created behind. Resume that one
-        // rather than adding another under the same name: it holds no credential, so there is
-        // nothing to take over, and the complete step resolves the requestor by display name.
-        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.AccessRequest(displayName));
+        if ((await _subjects.ListPendingAccessRequestsAsync(HttpContext.RequestAborted)).Any(s => s.Name == displayName))
+            return Conflict(new ProblemDetails
+            {
+                Detail = "A pending access request with this name already exists",
+                Status = 409,
+                Title = "Conflict",
+            });
 
-        if (subjectId == null)
-        {
-            if ((await _subjects.ListPendingAccessRequestsAsync(HttpContext.RequestAborted)).Any(s => s.Name == displayName))
-                return Conflict(new ProblemDetails
-                {
-                    Detail = "A pending access request with this name already exists",
-                    Status = 409,
-                    Title = "Conflict",
-                });
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(
+                displayName,
+                Username: username,
+                IsActive: false,
+                ApprovalStatus: nameof(ApprovalStatus.Pending),
+                AccessRequestMessage: request.Message?.Trim()),
+            HttpContext.RequestAborted);
 
-            subjectId = await _subjects.CreateAsync(
-                new NewSubject(
-                    displayName,
-                    Username: username,
-                    IsActive: false,
-                    ApprovalStatus: nameof(ApprovalStatus.Pending),
-                    AccessRequestMessage: request.Message?.Trim()),
-                HttpContext.RequestAborted);
-        }
-        else
-        {
-            await _subjects.SetAccessRequestMessageAsync(subjectId.Value, request.Message?.Trim(), HttpContext.RequestAborted);
-        }
-
-        var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username);
+        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId, username, PasskeyRegistrationFlow.AccessRequest);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -916,8 +892,10 @@ public class PasskeyController : ControllerBase
     /// inactive until one approves.
     /// </summary>
     /// <remarks>
-    /// The display name is re-resolved to the pending subject the options step created rather than
-    /// trusted, so a registration challenge minted by another flow cannot be redeemed here.
+    /// The challenge must have been minted by <see cref="AccessRequestOptions"/>
+    /// (<see cref="PasskeyRegistrationFlow.AccessRequest"/>), and the subject it names must still be
+    /// inactive and pending under this display name, with no way to sign in and no membership in
+    /// any tenant. Any other challenge is refused.
     /// <para>
     /// The request is filed in a scope that reads as no one on this tenant: the ceremony is anonymous
     /// and may run on a share host, whose reader sees neither members nor requests, so read as the
@@ -955,19 +933,20 @@ public class PasskeyController : ControllerBase
             return NotFound();
 
         var displayName = request.DisplayName?.Trim();
-        var enrollingSubjectId = string.IsNullOrEmpty(displayName)
-            ? null
-            : await FindEnrollingSubjectIdAsync(new EnrolmentMatch.AccessRequest(displayName));
-
-        if (enrollingSubjectId == null)
+        if (string.IsNullOrEmpty(displayName))
             return Problem(detail: "Start the access request again", statusCode: 400, title: "Bad Request");
+
+        var enrollingSubjectId = await ResolveEnrollingSubjectAsync(
+            request.ChallengeToken, PasskeyRegistrationFlow.AccessRequest, new EnrolmentMatch.AccessRequest(displayName));
+        if (enrollingSubjectId == null)
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
 
         PasskeyCredentialResult? credResult = null;
         try
         {
             credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenant.Id,
-                expectedSubjectId: enrollingSubjectId.Value);
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.AccessRequest,
+                tenant.Id, expectedSubjectId: enrollingSubjectId.Value);
         }
         catch (InvalidOperationException ex)
         {
@@ -1046,29 +1025,14 @@ public class PasskeyController : ControllerBase
         var username = request.Username.Trim().ToLowerInvariant();
         var displayName = request.DisplayName.Trim();
 
-        // Cancelling the OS prompt leaves the subject this step created behind. Reuse that one
-        // rather than adding a second under the same username: the complete step resolves the
-        // enrolling subject by username, and it holds no credential, so there is nothing to take
-        // over.
-        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
-
-        if (subjectId == null)
-        {
-            subjectId = await _subjects.CreateAsync(
-                new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
-        }
-        else
-        {
-            await _subjects.UpdateAsync(subjectId.Value, new SubjectEdit(Name: displayName), HttpContext.RequestAborted);
-        }
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
 
         _logger.LogInformation(
             "Invite: enrolling subject {SubjectId} for invite acceptance",
             subjectId);
 
-        // Generate passkey registration options
-        var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username);
+        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId, username, PasskeyRegistrationFlow.MemberInvite);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -1082,9 +1046,10 @@ public class PasskeyController : ControllerBase
     /// Verifies attestation, accepts the invite, generates recovery codes, and issues a session.
     /// </summary>
     /// <remarks>
-    /// The username is re-resolved to the subject the options step created rather than trusted, so
-    /// a registration challenge minted by another flow cannot be redeemed here. Only a subject with
-    /// no sign-in method and no membership in any tenant can match.
+    /// The challenge must have been minted by <see cref="InviteOptions"/>
+    /// (<see cref="PasskeyRegistrationFlow.MemberInvite"/>), and the subject it names must still be
+    /// active and approved under this username, with no way to sign in and no membership in any
+    /// tenant. Any other challenge is refused.
     /// </remarks>
     [HttpPost("invite/complete")]
     [AllowAnonymous]
@@ -1106,16 +1071,17 @@ public class PasskeyController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         var username = request.Username.Trim().ToLowerInvariant();
-        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        var enrollingSubjectId = await ResolveEnrollingSubjectAsync(
+            request.ChallengeToken, PasskeyRegistrationFlow.MemberInvite, new EnrolmentMatch.Invite(username));
 
         if (enrollingSubjectId == null)
-            return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
 
         try
         {
             var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenantId,
-                expectedSubjectId: enrollingSubjectId.Value);
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.MemberInvite,
+                tenantId, expectedSubjectId: enrollingSubjectId.Value);
 
             // Accept the invite
             var acceptResult = await memberInviteService.AcceptInviteAsync(
@@ -1123,7 +1089,7 @@ public class PasskeyController : ControllerBase
             if (!acceptResult.Success)
             {
                 // A refused invite joins no one, so the passkey would leave a subject that signs in
-                // nowhere and that no later enrolment can resume.
+                // nowhere.
                 await _passkeyService.RemoveCredentialAsync(credResult.CredentialId, credResult.SubjectId, tenantId);
                 return Problem(detail: acceptResult.ErrorDescription ?? "Failed to accept invite", statusCode: 400, title: "Invite Error");
             }
@@ -1200,20 +1166,10 @@ public class PasskeyController : ControllerBase
 
         var displayName = request.DisplayName.Trim();
 
-        // As for member invites: a cancelled OS prompt leaves this subject behind, and the retry
-        // reuses it rather than adding a second under the same username.
-        var subjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
-        if (subjectId == null)
-        {
-            subjectId = await _subjects.CreateAsync(
-                new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
-        }
-        else
-        {
-            await _subjects.UpdateAsync(subjectId.Value, new SubjectEdit(Name: displayName), HttpContext.RequestAborted);
-        }
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(displayName, Username: username), HttpContext.RequestAborted);
 
-        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId.Value, username);
+        var result = await _passkeyService.GenerateRegistrationOptionsAsync(subjectId, username, PasskeyRegistrationFlow.CreationLink);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -1234,6 +1190,12 @@ public class PasskeyController : ControllerBase
     /// refusal: the page then redeems the link again for the signed-in account through
     /// <c>TenantCreationInviteController.Redeem</c>. Passkey sign-in needs a tenant, so this
     /// session is that account's way in.
+    /// <para>
+    /// The challenge must have been minted by <see cref="TenantInviteOptions"/>
+    /// (<see cref="PasskeyRegistrationFlow.CreationLink"/>), which checked the username, and the
+    /// subject it names must still be active and approved under this username, with no way to sign
+    /// in and no membership in any tenant. Any other challenge is refused.
+    /// </para>
     /// </remarks>
     [HttpPost("tenant-invite/complete")]
     [AllowAnonymous]
@@ -1251,9 +1213,10 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Username and challenge token are required", statusCode: 400, title: "Bad Request");
 
         var username = UsernameRules.Normalize(request.Username);
-        var enrollingSubjectId = await FindEnrollingSubjectIdAsync(new EnrolmentMatch.Invite(username));
+        var enrollingSubjectId = await ResolveEnrollingSubjectAsync(
+            request.ChallengeToken, PasskeyRegistrationFlow.CreationLink, new EnrolmentMatch.Invite(username));
         if (enrollingSubjectId == null)
-            return Problem(detail: "Start again from your invite link", statusCode: 400, title: "Bad Request");
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Registration Failed");
 
         var slugCheck = await _tenantService.ValidateSlugAsync(request.Slug, HttpContext.RequestAborted);
         if (!slugCheck.IsValid)
@@ -1267,8 +1230,8 @@ public class PasskeyController : ControllerBase
         try
         {
             credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, Guid.Empty,
-                expectedSubjectId: enrollingSubjectId.Value);
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.CreationLink,
+                Guid.Empty, expectedSubjectId: enrollingSubjectId.Value);
         }
         catch (InvalidOperationException ex)
         {
@@ -1543,8 +1506,8 @@ public class AccessRequestOptionsRequest
 }
 
 /// <summary>
-/// Request to complete an anonymous access request. The display name is re-resolved against the
-/// pending subject the options step created rather than trusted.
+/// Request to complete an anonymous access request. The challenge token is the one the access
+/// request options step returned; it names the subject that step created.
 /// </summary>
 public class AccessRequestCompleteRequest
 {
@@ -1561,8 +1524,8 @@ public class InviteOptionsRequest
 }
 
 /// <summary>
-/// Request to complete an invite acceptance. The username is re-resolved against the subject the
-/// options step created rather than trusted.
+/// Request to complete an invite acceptance. The challenge token is the one the invite options step
+/// returned; it names the subject that step created.
 /// </summary>
 public class InviteCompleteRequest
 {
@@ -1582,8 +1545,8 @@ public class TenantInviteOptionsRequest
 }
 
 /// <summary>
-/// Request to complete a tenant creation invite. The username is re-resolved against the subject
-/// the options step created rather than trusted.
+/// Request to complete a tenant creation invite. The challenge token is the one the tenant invite
+/// options step returned; it names the subject that step created.
 /// </summary>
 public class TenantInviteCompleteRequest
 {

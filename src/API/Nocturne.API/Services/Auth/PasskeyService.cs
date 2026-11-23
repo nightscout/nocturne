@@ -137,7 +137,7 @@ public class PasskeyService : IPasskeyService
     }
 
     public async Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(
-        Guid subjectId, string username)
+        Guid subjectId, string username, PasskeyRegistrationFlow flow)
     {
         var existingCredentials = (await _passkeys.GetCredentialIdsAsync(subjectId, CancellationToken.None))
             .Select(id => new PublicKeyCredentialDescriptor(id))
@@ -163,16 +163,16 @@ public class PasskeyService : IPasskeyService
         });
 
         var optionsJson = JsonSerializer.Serialize(options, FidoModelSerializerContext.Default.CredentialCreateOptions);
-        var challengeToken = CreateChallengeToken(optionsJson, subjectId, ChallengePurpose.Registration);
+        var challengeToken = CreateChallengeToken(optionsJson, subjectId, ChallengePurpose.Registration, flow);
 
         return new PasskeyRegistrationOptions(optionsJson, challengeToken);
     }
 
     public async Task<PasskeyCredentialResult> CompleteRegistrationAsync(
-        string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId,
-        string? label = null)
+        string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId,
+        Guid expectedSubjectId, string? label = null)
     {
-        var cookie = ReadChallengeToken(challengeToken, ChallengePurpose.Registration);
+        var cookie = ReadRegistrationChallengeToken(challengeToken, flow);
 
         // Checked before the ceremony so a challenge for the wrong subject is rejected outright.
         var subjectId = cookie.SubjectId
@@ -228,6 +228,22 @@ public class PasskeyService : IPasskeyService
             credentialId, subjectId, tenantId);
 
         return new PasskeyCredentialResult(credentialId, subjectId);
+    }
+
+    public Guid? FindRegistrationChallengeSubject(string challengeToken, PasskeyRegistrationFlow flow)
+    {
+        try
+        {
+            return ReadRegistrationChallengeToken(challengeToken, flow).SubjectId;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId)
@@ -333,13 +349,15 @@ public class PasskeyService : IPasskeyService
     public Task<int> GetCredentialCountAsync(Guid subjectId, Guid tenantId) =>
         _passkeys.CountAsync(subjectId, CancellationToken.None);
 
-    private string CreateChallengeToken(string optionsJson, Guid? subjectId, string purpose)
+    private string CreateChallengeToken(
+        string optionsJson, Guid? subjectId, string purpose, PasskeyRegistrationFlow? flow = null)
     {
         var payload = new ChallengeCookiePayload
         {
             OptionsJson = optionsJson,
             SubjectId = subjectId,
             Purpose = purpose,
+            Flow = flow,
             ExpiresAt = DateTime.UtcNow.Add(ChallengeExpiry),
         };
 
@@ -379,6 +397,20 @@ public class PasskeyService : IPasskeyService
         return payload;
     }
 
+    /// <summary>
+    /// Reads a registration challenge minted for <paramref name="flow"/>. Each flow's options step
+    /// creates or resolves a subject of its own kind, and only that flow's complete step checks
+    /// that kind, so a challenge redeems only in the flow that minted it.
+    /// </summary>
+    private ChallengeCookiePayload ReadRegistrationChallengeToken(string challengeToken, PasskeyRegistrationFlow flow)
+    {
+        var payload = ReadChallengeToken(challengeToken, ChallengePurpose.Registration);
+        if (payload.Flow != flow)
+            throw new InvalidOperationException("Registration challenge was issued for a different flow.");
+
+        return payload;
+    }
+
     private static class ChallengePurpose
     {
         public const string Registration = "registration";
@@ -390,6 +422,7 @@ public class PasskeyService : IPasskeyService
         public string OptionsJson { get; set; } = string.Empty;
         public Guid? SubjectId { get; set; }
         public string Purpose { get; set; } = string.Empty;
+        public PasskeyRegistrationFlow? Flow { get; set; }
         public DateTime ExpiresAt { get; set; }
     }
 }

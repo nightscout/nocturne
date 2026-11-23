@@ -737,6 +737,11 @@ public class MembershipRequestServiceTests : IDisposable
         {
             Id = requester, Name = "Sam Smith", IsActive = isActive, ApprovalStatus = approvalStatus,
         });
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = requester, CredentialId = Guid.CreateVersion7().ToByteArray(),
+            PublicKey = [1, 2, 3], CreatedAt = DateTime.UtcNow,
+        });
         _dbContext.MembershipRequests.Add(new MembershipRequestEntity
         {
             Id = Guid.CreateVersion7(),

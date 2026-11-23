@@ -110,20 +110,24 @@ public interface ISubjectRepository
     /// </summary>
     Task<Guid> EnsureDeviceSubjectAsync(CancellationToken ct);
 
-    /// <summary>The pending access requests, newest first, roles not read. A system subject is never one.</summary>
+    /// <summary>
+    /// The pending access requests, newest first, roles not read. A system subject is never one, and
+    /// neither is a pending subject with no passkey: its enrolment never registered one, so approving
+    /// it would leave an account no one can sign in to.
+    /// </summary>
     Task<IReadOnlyList<SubjectRecord>> ListPendingAccessRequestsAsync(CancellationToken ct);
 
     /// <summary>
-    /// The subjects part-way through an anonymous enrolment that <paramref name="match"/> names:
-    /// not a system subject, and holding no way to sign in: no passkey, no identity-provider link,
-    /// no authenticator and no unexpired session. An enrolment gives the subject to whoever names
-    /// it, and an invite enrolment signs them in without asking for a code, so a subject holding
-    /// any of these is an account, not an enrolment. Any provider link counts, not only one to an enabled provider,
-    /// for the reason <see cref="FindSetupOwnerCandidateAsync"/> gives. Newest first, by id,
-    /// which for UUID v7 ids is creation order. Membership is not consulted here; the caller asks
-    /// it per candidate under that subject's own pin.
+    /// Whether <paramref name="subjectId"/> is still what an anonymous enrolment's options step left
+    /// for <paramref name="match"/>: of the kind and under the name the match names, not a system
+    /// subject, and holding no way to sign in: no passkey, no identity-provider link, no
+    /// authenticator and no unexpired session. The complete step gives the subject a passkey, and an
+    /// invite enrolment signs it in without asking for a code, so a subject holding any of these is
+    /// an account, not an enrolment. Any provider link counts, not only one to an enabled provider,
+    /// for the reason <see cref="FindSetupOwnerCandidateAsync"/> gives. Membership is not consulted
+    /// here; the caller asks it under that subject's own pin.
     /// </summary>
-    Task<IReadOnlyList<Guid>> FindCredentiallessSubjectIdsAsync(EnrolmentMatch match, CancellationToken ct);
+    Task<bool> IsEnrollingSubjectAsync(Guid subjectId, EnrolmentMatch match, CancellationToken ct);
 
     /// <summary>
     /// Applies <paramref name="edit"/> to the subject and stamps it updated. A null member of the
@@ -155,9 +159,6 @@ public interface ISubjectRepository
     /// <see cref="SubjectEdit.EmailConfirmedAt"/>), this is the only way an address becomes confirmed.
     /// </summary>
     Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email, DateTime now, CancellationToken ct);
-
-    /// <summary>Sets, or with null clears, the message a subject submitted with its access request.</summary>
-    Task<bool> SetAccessRequestMessageAsync(Guid subjectId, string? message, CancellationToken ct);
 
     /// <summary>
     /// Deletes the subject, and in the same transaction clears its personal data from the three

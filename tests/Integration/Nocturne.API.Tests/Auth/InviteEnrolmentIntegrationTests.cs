@@ -12,14 +12,13 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
-/// An anonymous invite enrolment gives the subject it resumes to whoever holds the invite and signs
-/// them in without asking for a code, so it resumes only a subject that holds no way to sign in.
+/// An anonymous invite enrolment creates a subject of its own, so an account under the username
+/// it is given, with no passkey and no membership, is left as it was whatever else it holds.
 /// </summary>
 /// <remarks>
-/// Each account here has no passkey and no membership, so only the one thing it still holds can
-/// keep it from being resumed. The complete step, which stores the passkey and issues the session,
-/// needs a WebAuthn attestation and is not driven here; it re-resolves the subject with the same
-/// query the options step does.
+/// The complete step, which stores the passkey and issues the session, needs a WebAuthn attestation
+/// and is not driven here. Its refusal of a challenge whose subject holds a way to sign in is pinned
+/// by <c>SubjectRepositoryTests</c> and <c>PasskeyControllerTests</c>.
 /// </remarks>
 [Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
@@ -29,16 +28,7 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
         : base(fixture, output) { }
 
     [Fact]
-    public async Task An_abandoned_enrolment_is_resumed_by_an_invite_enrolment()
-    {
-        var (name, count) = await EnrolUnderTheUsernameOfAsync(heldBy: "");
-
-        name.Should().Be("Someone Else", "nothing it holds signs it in");
-        count.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task An_account_holding_an_authenticator_is_not_resumed_by_an_invite_enrolment()
+    public async Task An_account_holding_an_authenticator_is_left_as_it_was_by_an_invite_enrolment()
     {
         var (name, count) = await EnrolUnderTheUsernameOfAsync(heldBy: """
             INSERT INTO totp_credentials (id, subject_id, secret_key, created_at)
@@ -51,7 +41,7 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
 
     /// <remarks>Enabling the provider again would sign the identity in again.</remarks>
     [Fact]
-    public async Task An_account_linked_to_a_disabled_provider_is_not_resumed_by_an_invite_enrolment()
+    public async Task An_account_linked_to_a_disabled_provider_is_left_as_it_was_by_an_invite_enrolment()
     {
         var (name, count) = await EnrolUnderTheUsernameOfAsync(heldBy: """
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
@@ -65,7 +55,7 @@ public class InviteEnrolmentIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task An_account_holding_an_unexpired_session_is_not_resumed_by_an_invite_enrolment()
+    public async Task An_account_holding_an_unexpired_session_is_left_as_it_was_by_an_invite_enrolment()
     {
         var (name, count) = await EnrolUnderTheUsernameOfAsync(heldBy: """
             INSERT INTO refresh_tokens (id, token_hash, subject_id, issued_at, expires_at, created_at, updated_at)

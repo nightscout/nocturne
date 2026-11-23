@@ -458,34 +458,84 @@ public class SubjectRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AccessRequestsAreListedNewestFirstAndEnrolmentCandidatesHoldNoFactor()
+    public async Task AccessRequestsAreListedNewestFirstAndOnlyOnceTheyHoldAPasskey()
     {
-        // Explicit ids: the candidate order is by id, and v7 ids minted in one millisecond do not order.
-        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi", Id: Ordered(1)));
-        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(2)));
-        await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending", Id: Ordered(3)));
-        var withPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(4)));
-        AddPasskey(withPasskey);
-        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv", Id: Ordered(5)));
-        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv", Id: Ordered(6)));
-        await LinkAsync(linked, _provider, "ext");
-        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv", Id: Ordered(7)));
-        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
+        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi"));
+        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        var bot = await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending"));
+        await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        AddPasskey(older);
+        AddPasskey(newer);
+        AddPasskey(bot);
 
         // The pending list orders by CreatedAt, which the context stamps at save; spread them out.
         SetCreatedAt(older, Now.AddMinutes(-2));
         SetCreatedAt(newer, Now.AddMinutes(-1));
-        SetCreatedAt(withPasskey, Now);
 
         var pending = await Subjects().ListPendingAccessRequestsAsync(CancellationToken.None);
-        pending.Select(s => s.Id).Should().Equal(withPasskey, newer, older);
+        pending.Select(s => s.Id).Should().Equal(newer, older);
         pending.Should().OnlyContain(s => s.Roles.Count == 0);
-        pending.Should().Contain(s => s.Name == "Ann").And.NotContain(s => s.Name == "Bot");
+    }
 
-        (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.AccessRequest("Ann"), CancellationToken.None))
-            .Should().Equal(newer, older);
-        (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.Invite("inv"), CancellationToken.None))
-            .Should().Equal(invitee);
+    [Fact]
+    public async Task AnEnrollingSubjectIsOneOfTheKindUnderTheNameItsOptionsStepCreatedHoldingNoWayToSignIn()
+    {
+        var requester = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        var requesterWithPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        AddPasskey(requesterWithPasskey);
+        var system = await CreateAsync(new NewSubject("Ann", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending"));
+        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv"));
+        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv"));
+        await LinkAsync(linked, _provider, "ext");
+        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv"));
+        await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
+        var deactivated = await CreateAsync(new NewSubject("Inv4", Username: "inv", IsActive: false));
+        var withAuthenticator = await CreateAsync(new NewSubject("Inv5", Username: "inv"));
+        using (var db = _db.CreateContext())
+        {
+            db.TotpCredentials.Add(new TotpCredentialEntity { Id = Guid.CreateVersion7(), SubjectId = withAuthenticator, SecretKey = [0] });
+            db.SaveChanges();
+        }
+
+        var withLiveSession = await CreateAsync(new NewSubject("Inv6", Username: "inv"));
+        AddRefreshToken(withLiveSession, DateTime.UtcNow.AddDays(1));
+        var withEndedSession = await CreateAsync(new NewSubject("Inv7", Username: "inv"));
+        AddRefreshToken(withEndedSession, DateTime.UtcNow.AddDays(-1));
+
+        async Task<bool> Enrolling(Guid id, EnrolmentMatch match) =>
+            await Subjects().IsEnrollingSubjectAsync(id, match, CancellationToken.None);
+
+        (await Enrolling(requester, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeTrue();
+        (await Enrolling(requester, new EnrolmentMatch.AccessRequest("Bea"))).Should().BeFalse("another name");
+        (await Enrolling(requester, new EnrolmentMatch.Invite("ann"))).Should().BeFalse("an access request is not an invite's subject");
+        (await Enrolling(requesterWithPasskey, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeFalse("it holds a passkey");
+        (await Enrolling(system, new EnrolmentMatch.AccessRequest("Ann"))).Should().BeFalse("a system subject");
+        (await Enrolling(invitee, new EnrolmentMatch.Invite("inv"))).Should().BeTrue();
+        (await Enrolling(invitee, new EnrolmentMatch.Invite("other"))).Should().BeFalse("another username");
+        (await Enrolling(invitee, new EnrolmentMatch.AccessRequest("Inv"))).Should().BeFalse("an invite's subject is not an access request");
+        (await Enrolling(linked, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds a provider link");
+        (await Enrolling(linkedToDisabled, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("a disabled provider can be enabled again");
+        (await Enrolling(deactivated, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("an invite's subject is active");
+        (await Enrolling(withAuthenticator, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds an authenticator");
+        (await Enrolling(withLiveSession, new EnrolmentMatch.Invite("inv"))).Should().BeFalse("it holds a live session");
+        (await Enrolling(withEndedSession, new EnrolmentMatch.Invite("inv"))).Should().BeTrue("an ended session signs no one in");
+        (await Enrolling(Guid.CreateVersion7(), new EnrolmentMatch.Invite("inv"))).Should().BeFalse("no such subject");
+    }
+
+    /// <summary>
+    /// An enrolment that was abandoned leaves a subject with the username and no membership, so a
+    /// member lookup by that username still finds only the member.
+    /// </summary>
+    [Fact]
+    public async Task AnAbandonedEnrolmentUnderAMembersUsernameIsNotFoundAsAMember()
+    {
+        await CreateAsync(new NewSubject("Abandoned", Username: "sam", Id: Ordered(1)));
+        var member = await CreateAsync(new NewSubject("Sam", Username: "sam", Id: Ordered(2)));
+        AddMember(_tenant, member);
+        await CreateAsync(new NewSubject("Abandoned again", Username: "sam", Id: Ordered(3)));
+
+        (await Subjects().FindMemberByUsernameAsync(_tenant, "sam", activeOnly: true, Now, CancellationToken.None))!
+            .Id.Should().Be(member);
     }
 
     [Fact]
@@ -509,15 +559,9 @@ public class SubjectRepositoryTests : IDisposable
         profile.Should().BeEquivalentTo(new { Name = "P", Email = (string?)null, Notes = (string?)null, IsActive = false },
             "a profile edit does not change whether the subject is active");
 
-        (await Subjects().SetAccessRequestMessageAsync(id, "please", CancellationToken.None)).Should().BeTrue();
-        (await GetAsync(id)).AccessRequestMessage.Should().Be("please");
-        await Subjects().SetAccessRequestMessageAsync(id, null, CancellationToken.None);
-        (await GetAsync(id)).AccessRequestMessage.Should().BeNull();
-
         (await Subjects().UpdateAsync(Guid.CreateVersion7(), new SubjectEdit(Name: "x"), CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
         (await Subjects().UpdateAsync(Guid.CreateVersion7(), new SubjectEdit(IsActive: false), CancellationToken.None)).Should().BeOfType<SubjectChange.NotFound>();
         (await Subjects().UpdateProfileAsync(Guid.CreateVersion7(), new SubjectProfile("x", null, null), CancellationToken.None)).Should().BeNull();
-        (await Subjects().SetAccessRequestMessageAsync(Guid.CreateVersion7(), null, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]

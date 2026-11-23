@@ -187,7 +187,7 @@ public partial class SetupController : ControllerBase
             return UsernameTaken();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId, normalizedUsername);
+            subjectId, normalizedUsername, PasskeyRegistrationFlow.SetupOwner);
 
         return Ok(new SetupOwnerOptionsResponse
         {
@@ -217,8 +217,8 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(request.ChallengeToken))
             return Problem(detail: "Challenge token is required", statusCode: 400, title: "Bad Request");
 
-        // The enrolling subject is looked up here rather than taken from the challenge token, so a
-        // registration challenge minted by another flow cannot be redeemed as the first owner.
+        // The enrolling subject is looked up here rather than taken from the challenge token, and
+        // the challenge must have been minted by OwnerOptions (PasskeyRegistrationFlow.SetupOwner).
         var ownerSubjectId = await FindSetupOwnerSubjectIdAsync(tenant!, ct);
         if (ownerSubjectId == null)
             return Problem(detail: "Start setup again to create the owner account",
@@ -227,7 +227,7 @@ public partial class SetupController : ControllerBase
         try
         {
             var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenant!.Id,
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.SetupOwner, tenant!.Id,
                 expectedSubjectId: ownerSubjectId.Value);
 
             await CompleteAsOwnerAsync(credResult.SubjectId);
