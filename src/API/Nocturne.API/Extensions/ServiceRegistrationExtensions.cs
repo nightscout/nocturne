@@ -647,7 +647,9 @@ public static class ServiceRegistrationExtensions
             : configuredBaseDomain;
         var rpId = baseDomain.Split(':')[0]; // hostname without port
         var origin = $"https://{baseDomain}";
-        services.AddFido2(options =>
+        // Options only: PasskeyService builds each ceremony's relying party from them through
+        // IOptionsFactory, so no Fido2Configuration instance is shared between ceremonies.
+        services.Configure<Fido2Configuration>(options =>
         {
             options.RPID = rpId;
             options.RPName = "Nocturne";
