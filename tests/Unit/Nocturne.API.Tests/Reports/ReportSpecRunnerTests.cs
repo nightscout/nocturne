@@ -9,6 +9,7 @@ using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Services;
 using Xunit;
 using static Nocturne.API.Tests.Reports.ReportSpecValidatorTests;
 
@@ -70,6 +71,34 @@ public class ReportSpecRunnerTests
         var readLog = new ReportReadLog();
         var context = new ReportRunContext(false, scopes.ToHashSet(), services, readLog, clamped);
         return (new ReportSpecRunner(registry, new FixedTime(Now)), context, readLog, chartData);
+    }
+
+    [Theory]
+    [InlineData(false, "%", 7.0)]
+    [InlineData(true, "mmol/mol", 53.0)]
+    public async Task An_hba1c_layer_is_drawn_and_named_in_the_callers_hba1c_unit(bool mmolMol, string unit, double value)
+    {
+        var overview = new Mock<IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(It.IsAny<int>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(new EHbA1cTimelineResponse
+        {
+            Year = 2026,
+            Points = [new EHbA1cPoint { Date = "2026-10-28", EstimatedA1cPercent = 7, WeightedAverageGlucoseMgdl = 154 }],
+        });
+        var services = new ServiceCollection().AddSingleton(overview.Object).BuildServiceProvider();
+        var context = new ReportRunContext(false, new HashSet<string> { Scope.GlucoseRead }, services, new ReportReadLog(), Zone: TimeZoneInfo.Utc,
+            A1cMmolMol: mmolMol);
+        var spec = Spec("""
+            { "version": 1, "range": { "hours": 72 }, "panels": [
+              { "kind": "chart", "tracks": [ { "id": "a1c", "layers": [
+                { "id": "ehba1c", "dataset": { "name": "ehba1c" }, "mark": "line", "bindings": { "x": "day", "y": ["ehba1c"] } } ] } ] } ] }
+            """);
+
+        var layer = (await new ReportSpecRunner(Registry, new FixedTime(Now)).RunAsync(spec, context, CancellationToken.None))
+            .Panels.Single().Tracks[0].Layers[0];
+
+        layer.Unit.Should().Be(unit);
+        layer.Fields.Single(f => f.Name == "ehba1c").Unit.Should().Be(unit);
+        layer.Rows.Single()["ehba1c"].Should().Be(value);
     }
 
     [Fact]

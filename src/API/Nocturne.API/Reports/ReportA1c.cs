@@ -18,4 +18,7 @@ internal static class ReportA1c
         mmolMol ? $"{Text(percent, true)} mmol/mol" : $"{Text(percent, false)}%";
 
     public static string Unit(bool mmolMol) => mmolMol ? "mmol/mol" : "%";
+
+    /// <summary>A validated layer's unit as the caller reads it: the <see cref="ReportField.A1cUnit"/> token resolved.</summary>
+    public static string? Shown(string? unit, bool mmolMol) => unit == ReportField.A1cUnit ? Unit(mmolMol) : unit;
 }

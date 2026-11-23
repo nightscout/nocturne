@@ -74,7 +74,8 @@ internal enum ReportAggregate
 /// <param name="Unit">
 /// Its unit as printed, null for none. <c>glucose</c> stands for the tenant's display unit until
 /// <see cref="ResolveUnit"/>, and so does a leading <c>glucose/</c> (<c>glucose/U</c> for an ISF);
-/// <c>a1c</c> stands for the caller's HbA1c unit, percent or mmol/mol.
+/// <c>a1c</c> stands for the caller's HbA1c unit, percent or mmol/mol, until a resolve that knows it: the validator
+/// does not, so a validated layer keeps the token and the run writes it out (<see cref="ReportA1c.Shown"/>).
 /// </param>
 /// <param name="Description">What it is.</param>
 /// <param name="Scope">The read scope it needs beyond the dataset's own, or null.</param>
@@ -148,9 +149,9 @@ internal sealed record ReportField(
     /// <summary>Whether the field's values are glucose, or glucose per something, so written in the display unit.</summary>
     public bool InGlucoseUnit => Unit is not null && (Unit == GlucoseUnit || Unit.StartsWith(GlucoseUnit + "/", StringComparison.Ordinal));
 
-    public ReportField ResolveUnit(bool useMmol, bool a1cMmolMol = false) =>
+    public ReportField ResolveUnit(bool useMmol, bool? a1cMmolMol = null) =>
         InGlucoseUnit ? this with { Unit = (useMmol ? "mmol/L" : "mg/dL") + Unit![GlucoseUnit.Length..] }
-        : Unit == A1cUnit ? this with { Unit = a1cMmolMol ? "mmol/mol" : "%" }
+        : Unit == A1cUnit && a1cMmolMol is { } mmolMol ? this with { Unit = ReportA1c.Unit(mmolMol) }
         : this;
 }
 
