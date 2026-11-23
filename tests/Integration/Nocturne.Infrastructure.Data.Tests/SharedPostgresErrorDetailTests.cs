@@ -8,19 +8,29 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <c>Process N waits for ...</c> detail, which Npgsql redacts unless the connection asks for it.
 /// </summary>
 [Trait("Category", "Integration")]
-public class SharedPostgresErrorDetailTests
+public class SharedPostgresErrorDetailTests(SharedPostgresErrorDetailTests.Database database)
+    : IClassFixture<SharedPostgresErrorDetailTests.Database>
 {
+    public sealed class Database : IAsyncLifetime
+    {
+        public TestDatabase Created { get; private set; } = null!;
+
+        public async Task InitializeAsync() =>
+            Created = await SharedPostgres.CreateEmptyDatabaseAsync("error_detail");
+
+        public Task DisposeAsync() => Task.CompletedTask;
+    }
+
     private const string Detail = "the detail Postgres sends";
 
     [Fact]
     public async Task EveryConnectionAFixtureHandsOut_KeepsThePostgresErrorDetail()
     {
-        var database = await SharedPostgres.CreateEmptyDatabaseAsync("error_detail");
         var connectionStrings = new Dictionary<string, string>
         {
-            ["migrator"] = database.MigratorConnectionString,
-            ["app"] = database.AppConnectionString,
-            ["superuser"] = database.SuperuserConnectionString,
+            ["migrator"] = database.Created.MigratorConnectionString,
+            ["app"] = database.Created.AppConnectionString,
+            ["superuser"] = database.Created.SuperuserConnectionString,
         };
 
         foreach (var (role, connectionString) in connectionStrings)
