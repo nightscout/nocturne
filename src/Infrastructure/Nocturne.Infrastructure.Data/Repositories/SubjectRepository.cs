@@ -275,13 +275,25 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
-        var entities = await Subjects(db)
-            .Where(s => s.ApprovalStatus == nameof(ApprovalStatus.Pending) && !s.IsSystemSubject
-                && db.PasskeyCredentials.Any(c => c.SubjectId == s.Id))
+        var entities = await PendingAccessRequests(db, Subjects(db))
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
         return entities.Select(e => ToRecord(e)!).ToList();
     }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> AnyPendingAccessRequestNamedAsync(Guid tenantId, string name, CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
+        return await PendingAccessRequests(db, db.Subjects.AsNoTracking())
+            .AnyAsync(s => s.Name == name
+                && db.MembershipRequests.Any(r => r.TenantId == tenantId && r.SubjectId == s.Id
+                    && r.Status == MembershipRequestRecord.Pending), ct);
+    }
+
+    private static IQueryable<SubjectEntity> PendingAccessRequests(NocturneDbContext db, IQueryable<SubjectEntity> subjects) =>
+        subjects.Where(s => s.ApprovalStatus == nameof(ApprovalStatus.Pending) && !s.IsSystemSubject
+            && db.PasskeyCredentials.Any(c => c.SubjectId == s.Id));
 
     /// <inheritdoc/>
     public virtual async Task<bool> IsEnrollingSubjectAsync(Guid subjectId, EnrolmentMatch match, CancellationToken ct)

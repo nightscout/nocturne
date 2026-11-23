@@ -1778,16 +1778,7 @@ public class PasskeyControllerTests : IDisposable
     public async Task AccessRequestOptions_WhenTheNameHasAFinishedPendingRequest_IsAConflict()
     {
         await AllowAccessRequestsAsync();
-        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
-        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = requestorId,
-            CredentialId = Guid.CreateVersion7().ToByteArray(),
-            PublicKey = [1, 2, 3],
-            CreatedAt = DateTime.UtcNow,
-        });
-        await _dbContext.SaveChangesAsync();
+        await SeedFinishedAccessRequestAsync("Sam Smith", _tenantId);
 
         var result = await _controller.AccessRequestOptions(
             new AccessRequestOptionsRequest { DisplayName = "Sam Smith" });
@@ -1796,6 +1787,50 @@ public class PasskeyControllerTests : IDisposable
         _passkeyService.Verify(
             s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<PasskeyRegistrationFlow>()),
             Times.Never);
+    }
+
+    /// <summary>
+    /// A request a visitor filed on another tenant is not a request on this one, so the name is free
+    /// here and the visitor of this tenant learns nothing of the other.
+    /// </summary>
+    [Fact]
+    public async Task AccessRequestOptions_WhenTheNameIsPendingOnAnotherTenant_IsNotAConflict()
+    {
+        await AllowAccessRequestsAsync();
+        var otherTenantId = Guid.CreateVersion7();
+        _dbContext.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other", DisplayName = "Other" });
+        await _dbContext.SaveChangesAsync();
+        await SeedFinishedAccessRequestAsync("Sam Smith", otherTenantId);
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.AccessRequest))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        var result = await _controller.AccessRequestOptions(
+            new AccessRequestOptionsRequest { DisplayName = "Sam Smith" });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    /// <summary>A pending subject with a passkey and a pending request to join <paramref name="tenantId"/>.</summary>
+    private async Task SeedFinishedAccessRequestAsync(string displayName, Guid tenantId)
+    {
+        var requestorId = await SeedPendingAccessRequestAsync(displayName);
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = requestorId,
+            CredentialId = Guid.CreateVersion7().ToByteArray(),
+            PublicKey = [1, 2, 3],
+            CreatedAt = DateTime.UtcNow,
+        });
+        _dbContext.MembershipRequests.Add(new MembershipRequestEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = requestorId,
+            Status = Nocturne.Core.Models.Identity.MembershipRequestRecord.Pending,
+        });
+        await _dbContext.SaveChangesAsync();
     }
 
     /// <summary>The registration challenge token every enrolment test presents.</summary>
