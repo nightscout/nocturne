@@ -139,8 +139,7 @@ public class CareLinkConnectorServiceTests
     }
 
     /// <summary>
-    /// A rejected alarm publish must fail the sync and leave the dedup key unadvanced, so the next
-    /// cycle retries the same alarm instead of treating it as delivered.
+    /// A rejected alarm publish must fail the sync, and the next cycle offers the same alarm again.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_WhenAlarmPublishIsRejected_ReportsFailureAndRetriesNextSync()
@@ -170,7 +169,7 @@ public class CareLinkConnectorServiceTests
         first.Success.Should().BeFalse("an alarm that never reached the tenant is not a successful sync");
         first.Errors.Should().Contain("DeviceEvents publish failed");
         second.Errors.Should().Contain("DeviceEvents publish failed",
-            "the dedup key must not advance past an alarm that was never published");
+            "an alarm that was never published is offered again");
         second.ItemsSynced.GetValueOrDefault(SyncDataType.DeviceEvents).Should().Be(1,
             "the second cycle must attempt the same alarm again");
     }
@@ -454,11 +453,13 @@ public class CareLinkConnectorServiceTests
 
         stored.Select(k => k.Type).Distinct().Should().Contain(
             [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal), nameof(SystemEvent)]);
-        // The service remembers the last alarm it published, so the second sync skips that one system event.
-        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(
-            o => o.Key, o => o.Value * 2 - (o.Key == nameof(SystemEvent) ? 1 : 0)));
+        // The service holds no record of what it published: the second sync offers the alarm again
+        // and the store's key decides, so one event is held per alarm and per notification.
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
         store.Unkeyed.Should().BeEmpty();
         store.Stored.Keys.Should().BeEquivalentTo(stored);
+        store.Stored.Keys.Count(k => k.Type == nameof(SystemEvent)).Should().Be(2);
+        store.Stored.Values.OfType<SystemEvent>().Count(e => e.Code == "816").Should().Be(1);
     }
 
     /// <summary>Leaves only the glucose step able to publish.</summary>
