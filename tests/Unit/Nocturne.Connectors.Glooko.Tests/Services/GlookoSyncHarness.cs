@@ -44,10 +44,10 @@ internal static class GlookoSyncHarness
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null,
         TimeSpan? endpointPause = null,
-        IMealMatchingService? mealMatchingService = null,
+        IMealMatchLinker? mealMatchLinker = null,
         ILogger<GlookoConnectorService>? logger = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchingService, logger);
+            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchLinker, logger);
 }
 
 /// <summary>
@@ -127,17 +127,17 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
         IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null, TimeSpan endpointPause = default,
-        IMealMatchingService? mealMatchingService = null,
+        IMealMatchLinker? mealMatchLinker = null,
         ILogger<GlookoConnectorService>? logger = null)
         : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock,
-            endpointPause, mealMatchingService, logger)
+            endpointPause, mealMatchLinker, logger)
     {
     }
 
     private RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
         IConnectorSyncCursorStore? cursorStore, TimeProvider? clock, TimeSpan endpointPause,
-        IMealMatchingService? mealMatchingService, ILogger<GlookoConnectorService>? logger)
+        IMealMatchLinker? mealMatchLinker, ILogger<GlookoConnectorService>? logger)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
@@ -145,7 +145,7 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
             Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             publisher,
-            mealMatchingService: mealMatchingService,
+            mealMatchLinker: mealMatchLinker,
             cursorStore: cursorStore,
             timeProvider: clock,
             endpointPause: endpointPause)

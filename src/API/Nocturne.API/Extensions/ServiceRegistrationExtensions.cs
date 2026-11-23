@@ -871,6 +871,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
+        services.AddScoped<IMealMatchLinker, MealMatchLinker>();
         services.AddScoped<IMealMatchingService, MealMatchingService>();
         services.AddScoped<IMealReadService, MealReadService>();
 

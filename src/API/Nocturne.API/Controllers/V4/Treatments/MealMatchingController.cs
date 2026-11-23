@@ -41,17 +41,20 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 public class MealMatchingController : ControllerBase
 {
     private readonly IMealMatchingService _mealMatchingService;
+    private readonly IMealMatchLinker _linker;
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly IInAppNotificationService _notificationService;
     private readonly TimeProvider _time;
 
     public MealMatchingController(
         IMealMatchingService mealMatchingService,
+        IMealMatchLinker linker,
         IConnectorFoodEntryRepository foodEntryRepository,
         IInAppNotificationService notificationService,
         TimeProvider time)
     {
         _mealMatchingService = mealMatchingService;
+        _linker = linker;
         _foodEntryRepository = foodEntryRepository;
         _notificationService = notificationService;
         _time = time;
@@ -150,7 +153,7 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        var outcome = await _mealMatchingService.AcceptMatchAsync(
+        var outcome = await _linker.LinkAsync(
             request.FoodEntryId,
             request.CarbIntakeId,
             request.Carbs,

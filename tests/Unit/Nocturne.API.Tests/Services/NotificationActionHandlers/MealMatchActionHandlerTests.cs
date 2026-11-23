@@ -1,25 +1,152 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.NotificationActionHandlers;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Services.NotificationActionHandlers;
 
 /// <summary>
-/// The dismiss action on a meal match notification asks for it to be archived as dismissed once the food
-/// entry is dismissed. A food entry that is missing, or that an accept has already linked, is left as it
-/// is and the handler declines, so the orchestrator archives the stale suggestion. A caller without
-/// <see cref="Scope.FoodReadWrite"/> cannot move a food entry from the sidebar, as it cannot from the meals
-/// page, so the handler declines for it too.
+/// What each action of <see cref="MealMatchActionHandler"/> links, archives or declines, and for which scope.
 /// </summary>
 [Trait("Category", "Unit")]
 public class MealMatchActionHandlerTests
 {
     private readonly Mock<IConnectorFoodEntryRepository> _foodEntries = new();
+
+    private readonly Mock<IMealMatchLinker> _linker = new();
+
+    private static Dictionary<string, object> Suggestion(Guid carbIntakeId) => new()
+    {
+        ["carbIntakeId"] = JsonDocument.Parse($"\"{carbIntakeId}\"").RootElement.Clone(),
+        ["foodEntryCarbs"] = JsonDocument.Parse("12.5").RootElement.Clone(),
+    };
+
+    private void FoodEntryHas(Guid id, decimal carbs) =>
+        _foodEntries
+            .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorFoodEntry { Id = id, Carbs = carbs });
+
+    private void AnyFoodEntryExists() =>
+        _foodEntries
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new ConnectorFoodEntry { Id = id, Carbs = 12.5m });
+
+    private Task<NotificationActionResult> Accept(
+        string? sourceId, Dictionary<string, object>? metadata, params string[] grantedScopes)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetGrantedScopes(grantedScopes.ToHashSet());
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.SetupGet(a => a.HttpContext).Returns(httpContext);
+        return Handler(accessor.Object).HandleAsync(Guid.NewGuid(), "accept", "user-1", sourceId, metadata);
+    }
+
+    private void VerifyNothingLinked() =>
+        _linker.Verify(
+            l => l.LinkAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+    [Theory]
+    [InlineData(AcceptMatchOutcome.Linked)]
+    [InlineData(AcceptMatchOutcome.AlreadyLinked)]
+    public async Task Accept_linksTheCarbsTheFoodEntryHasNowAtTheCarbIntakeTimeAndArchivesAsCompleted(
+        AcceptMatchOutcome outcome)
+    {
+        var foodEntryId = Guid.NewGuid();
+        var carbIntakeId = Guid.NewGuid();
+        FoodEntryHas(foodEntryId, carbs: 20m);
+        _linker
+            .Setup(l => l.LinkAsync(foodEntryId, carbIntakeId, 20m, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outcome);
+
+        var result = await Accept(foodEntryId.ToString(), Suggestion(carbIntakeId), Scope.TreatmentsReadWrite);
+
+        result.Should().Be(NotificationActionResult.Completed);
+    }
+
+    [Fact]
+    public async Task Accept_withoutTheTreatmentsWriteScopeDeclinesAndLinksNothing()
+    {
+        var result = await Accept(
+            Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()), Scope.FoodReadWrite, Scope.DeviceNotify);
+
+        result.Should().Be(NotificationActionResult.NotHandled);
+        VerifyNothingLinked();
+    }
+
+    [Fact]
+    public async Task Accept_withoutARequestDeclinesAndLinksNothing()
+    {
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.SetupGet(a => a.HttpContext).Returns((HttpContext?)null);
+
+        var result = await Handler(accessor.Object)
+            .HandleAsync(Guid.NewGuid(), "accept", "user-1", Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()));
+
+        result.Should().Be(NotificationActionResult.NotHandled);
+        VerifyNothingLinked();
+    }
+
+    [Theory]
+    [InlineData("not-a-guid", true)]
+    [InlineData(null, true)]
+    [InlineData("valid", false)]
+    public async Task Accept_withoutWhatItNeedsDeclinesAndLinksNothing(string? source, bool withMetadata)
+    {
+        var sourceId = source == "valid" ? Guid.NewGuid().ToString() : source;
+        var metadata = withMetadata ? Suggestion(Guid.NewGuid()) : new Dictionary<string, object>();
+
+        var result = await Accept(sourceId, metadata, Scope.TreatmentsReadWrite);
+
+        result.Should().Be(NotificationActionResult.NotHandled);
+        VerifyNothingLinked();
+    }
+
+    [Fact]
+    public async Task Accept_declinesAndLinksNothingWhenTheFoodEntryIsMissing()
+    {
+        var result = await Accept(Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()), Scope.TreatmentsReadWrite);
+
+        result.Should().Be(NotificationActionResult.NotHandled);
+        VerifyNothingLinked();
+    }
+
+    [Fact]
+    public async Task Accept_declinesWhenTheFoodEntryOrCarbIntakeIsMissing()
+    {
+        AnyFoodEntryExists();
+        _linker
+            .Setup(l => l.LinkAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AcceptMatchOutcome.NotFound);
+
+        var result = await Accept(Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()), Scope.TreatmentsReadWrite);
+
+        result.Should().Be(NotificationActionResult.NotHandled);
+        result.Archive.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Accept_archivesTheStaleSuggestionWhenTheFoodEntryWasResolvedElsewhere()
+    {
+        AnyFoodEntryExists();
+        _linker
+            .Setup(l => l.LinkAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AcceptMatchOutcome.AlreadyResolved);
+
+        var result = await Accept(Guid.NewGuid().ToString(), Suggestion(Guid.NewGuid()), Scope.TreatmentsReadWrite);
+
+        result.Handled.Should().BeTrue();
+        result.Archive.Should().Be(NotificationArchiveReason.ConditionMet);
+    }
 
     private Task<NotificationActionResult> Dismiss(string? sourceId, params string[] grantedScopes)
     {
@@ -31,7 +158,7 @@ public class MealMatchActionHandlerTests
     }
 
     private MealMatchActionHandler Handler(IHttpContextAccessor accessor) =>
-        new(_foodEntries.Object, accessor, NullLogger<MealMatchActionHandler>.Instance);
+        new(_foodEntries.Object, _linker.Object, accessor, NullLogger<MealMatchActionHandler>.Instance);
 
     [Theory]
     [InlineData(DismissMatchOutcome.Dismissed)]

@@ -35,7 +35,8 @@ public class MealMatchingControllerDismissTests
         };
 
         return new MealMatchingController(
-            _service.Object, Mock.Of<IConnectorFoodEntryRepository>(), _notifications.Object, _time)
+            _service.Object, Mock.Of<IMealMatchLinker>(), Mock.Of<IConnectorFoodEntryRepository>(),
+            _notifications.Object, _time)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
