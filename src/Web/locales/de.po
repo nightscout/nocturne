@@ -5155,6 +5155,7 @@ msgstr "<0/> Hinzufügen"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -5495,6 +5496,7 @@ msgid "Total carbs:"
 msgstr "Gesamte Kohlenhydrate:"
 
 #. 0: m
+#. 0: m
 #. 0: snapshot.cob.toFixed(0)
 #. 0: cob.toFixed(0)
 #. 0: cob.toFixed(0)
@@ -5506,6 +5508,7 @@ msgstr "Gesamte Kohlenhydrate:"
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.fat)
 #. 0: event.grams
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
@@ -22978,6 +22981,7 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/reports/custom/workspace/ReportWorkspace.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Comparison"
@@ -30349,6 +30353,7 @@ msgid "Sensor stale"
 msgstr ""
 
 #: src/lib/components/alerts/factText.svelte.ts
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Predicted glucose"
 msgstr ""
 
@@ -37061,10 +37066,8 @@ msgstr ""
 msgid "Sensor data age {0} {1}"
 msgstr ""
 
-#. 0: opSymbol(p.operator); 1: bg(p.value ?? 0); 2: bgLabel(); 3: formatMinutes(p.within_minutes ?? 0)
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
-msgid "Predicted glucose {0} {1} {2} in {3}"
-msgstr ""
+#~ msgid "Predicted glucose {0} {1} {2} in {3}"
+#~ msgstr ""
 
 #. 0: p.from; 1: p.to
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
@@ -47810,4 +47813,105 @@ msgstr ""
 #. 0: holdSinceText(hold)
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "{0} This rule cannot open an alert until usable data comes back. After 24 hours with no usable data, Nocturne closes an open alert."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Forecast choice"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Forecast curve"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "from"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "If the loop does not send a curve that you select, the rule waits and shows the cause."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Choose a forecast curve"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Use the default forecast"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Default forecast"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "IOB forecast"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "COB forecast"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "UAM forecast"
+msgstr ""
+
+#: src/lib/components/alerts/alert-labels.svelte.ts
+msgid "Zero temp forecast"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A predicted glucose condition can use one forecast choice only: one curve, the lowest of some curves, or the highest of some curves."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A “lowest of” forecast needs at least one curve chosen."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "A “highest of” forecast needs at least one curve chosen."
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Eventual glucose"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "Carbs needed"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The glucose that the loop expects at the end of its forecast is above or below a level"
+msgstr ""
+
+#: src/lib/components/alerts/factText.svelte.ts
+msgid "The grams of carbs that the loop says are necessary to prevent a low"
+msgstr ""
+
+#: src/lib/components/alerts/holdText.svelte.ts
+msgid "Loop result"
+msgstr ""
+
+#. 0: forecastChip(p); 1: opSymbol(p.operator); 2: bg(p.value ?? 0); 3: bgLabel(); 4: formatMinutes(p.within_minutes ?? 0)
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "{0} {1} {2} {3} in {4}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: bg(p.value ?? 0); 2: bgLabel()
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Eventual glucose {0} {1} {2}"
+msgstr ""
+
+#. 0: opSymbol(p.operator); 1: p.value
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Carbs needed {0} {1} g"
+msgstr ""
+
+#. 0: formatList(p.min_of.map(forecastCurveLabel), "conjunction")
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Lowest of {0}"
+msgstr ""
+
+#. 0: formatList(p.max_of.map(forecastCurveLabel), "conjunction")
+#: src/lib/components/alerts/summarizeCondition.svelte.ts
+msgid "Highest of {0}"
 msgstr ""
