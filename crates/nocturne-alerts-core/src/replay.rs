@@ -233,9 +233,11 @@ struct Prepared<'a> {
     body: Option<Node>,
     /// The live sweep evaluates it between readings (engine-semantics.md §5.1).
     wall_clock: bool,
-    /// It reads a fact other than glucose, the time zone and the sensor's
-    /// state, which a write between readings moves. The sensor's state moves
-    /// with a reading, or through device-status writes that evaluate nothing.
+    /// It reads a fact other than glucose, the time zone, the sensor's state
+    /// and the target range, which a write between readings moves. The
+    /// sensor's state moves with a reading, or through device-status writes
+    /// that evaluate nothing; the time zone and the target range move between
+    /// readings with the clock, which evaluates nothing live.
     reads_other_facts: bool,
     reads_active_alerts: bool,
     /// When a host next has to evaluate it, or for a rule the sweep does not
@@ -256,7 +258,10 @@ impl<'a> Prepared<'a> {
             reads_other_facts: reads.iter().any(|f| {
                 !matches!(
                     f,
-                    ContextFact::Glucose | ContextFact::TimeZone | ContextFact::SensorState
+                    ContextFact::Glucose
+                        | ContextFact::TimeZone
+                        | ContextFact::SensorState
+                        | ContextFact::TargetRange
                 )
             }),
             reads_active_alerts: reads.contains(&ContextFact::ActiveAlerts),

@@ -310,14 +310,18 @@ public sealed record RustRuleResult
 /// <summary>
 /// One entry of <see cref="RustRuleResult.MetBy"/>: the leaf, its kind as its wire name, and for
 /// <c>predicted</c> the curve and offset of the point; <c>value</c> is mg/dL, or grams for
-/// <c>carbs_required</c>.
+/// <c>carbs_required</c>. For a limit from a fact, <c>limit</c> is the limit compared against,
+/// <c>limit_fact</c> the fact's wire name and <c>limit_offset</c> the rule's offset to it, absent when 0.
 /// </summary>
 public sealed record RustMetPoint(
     [property: JsonPropertyName("leaf_id"), JsonRequired] int LeafId,
     [property: JsonPropertyName("kind"), JsonRequired] string Kind,
     [property: JsonPropertyName("curve")] string? Curve,
     [property: JsonPropertyName("offset_minutes")] int? OffsetMinutes,
-    [property: JsonPropertyName("value"), JsonRequired] decimal Value);
+    [property: JsonPropertyName("value"), JsonRequired] decimal Value,
+    [property: JsonPropertyName("limit")] decimal? Limit = null,
+    [property: JsonPropertyName("limit_fact")] string? LimitFact = null,
+    [property: JsonPropertyName("limit_offset")] decimal? LimitOffset = null);
 
 /// <summary>
 /// One anchor read beyond the clock tolerance: the context field or state that held it, and how

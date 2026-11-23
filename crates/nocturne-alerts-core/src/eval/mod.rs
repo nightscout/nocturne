@@ -9,6 +9,8 @@ mod device;
 pub(crate) mod elapsed;
 pub(crate) mod glucose;
 mod insulin;
+#[cfg(test)]
+mod limit_tests;
 mod signal;
 mod spans;
 
@@ -18,9 +20,9 @@ use uuid::Uuid;
 
 use crate::clock_anomaly::ClockAnomalies;
 use crate::context::SensorContext;
-use crate::enums::{CompositeOp, ForecastCurve};
+use crate::enums::{CompositeOp, ForecastCurve, LimitFact};
 use crate::facts::ContextFact;
-use crate::model::{Margined, Node, Payload};
+use crate::model::{LiteralLimit, Node, Payload};
 use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 use crate::truth::Truth;
@@ -107,8 +109,8 @@ impl<'a> Env<'a> {
     }
 
     /// The limit `p` compares against in this environment.
-    pub(crate) fn limit(&self, p: &impl Margined) -> Decimal {
-        p.limit(self.excursion_open, self.negated)
+    pub(crate) fn limit(&self, p: &impl LiteralLimit) -> Decimal {
+        p.widened(p.literal(), self.excursion_open, self.negated)
     }
 
     /// Every anchor the evaluations in this environment read beyond the
@@ -167,14 +169,20 @@ impl Held {
     }
 }
 
-/// What a true `predicted`, `eventual_glucose` or `carbs_required` leaf met
-/// its comparison with (engine-semantics.md §3): for `predicted`, the curve
-/// and the offset of the point.
+/// What a true `predicted`, `eventual_glucose` or `carbs_required` leaf, or
+/// a true `threshold` whose limit names a fact, met its comparison with
+/// (engine-semantics.md §3): for `predicted`, the curve and the offset of
+/// the point; for a limit from a fact, the limit compared against, the
+/// fact and the rule's offset to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetPoint {
     pub curve: Option<ForecastCurve>,
     pub offset_minutes: Option<i32>,
     pub value: Decimal,
+    pub limit: Option<Decimal>,
+    pub limit_fact: Option<LimitFact>,
+    /// `None` for an offset of zero.
+    pub limit_offset: Option<Decimal>,
 }
 
 impl MetPoint {
@@ -182,7 +190,7 @@ impl MetPoint {
         Self {
             curve: Some(curve),
             offset_minutes: Some(offset_minutes),
-            value,
+            ..Self::value(value)
         }
     }
 
@@ -191,13 +199,36 @@ impl MetPoint {
             curve: None,
             offset_minutes: None,
             value,
+            limit: None,
+            limit_fact: None,
+            limit_offset: None,
         }
     }
 
-    /// `{"leaf_id", "kind", "curve"?, "offset_minutes"?, "value"}`, the value
-    /// as the exact number it prints as.
+    /// With `limit`, its fact and the offset to it when it came from one; a
+    /// literal limit is the rule's own and is not repeated.
+    pub(crate) fn against(self, limit: glucose::Effective) -> Self {
+        match limit.fact {
+            Some(fact) => Self {
+                limit: Some(limit.value),
+                limit_fact: Some(fact),
+                limit_offset: (!limit.offset.is_zero()).then_some(limit.offset),
+                ..self
+            },
+            None => self,
+        }
+    }
+
+    /// `{"leaf_id", "kind", "curve"?, "offset_minutes"?, "value", "limit"?,
+    /// "limit_fact"?, "limit_offset"?}`, each decimal as the exact number it
+    /// prints as.
     #[must_use]
     pub fn to_json(&self, leaf_id: usize, kind: crate::model::ConditionKind) -> serde_json::Value {
+        let number = |d: Decimal| {
+            d.to_string()
+                .parse::<serde_json::Number>()
+                .map_or(serde_json::Value::Null, serde_json::Value::Number)
+        };
         let mut o = serde_json::Map::new();
         o.insert("leaf_id".into(), leaf_id.into());
         o.insert("kind".into(), crate::enums::WireEnum::name(kind).into());
@@ -207,12 +238,19 @@ impl MetPoint {
         if let Some(offset) = self.offset_minutes {
             o.insert("offset_minutes".into(), offset.into());
         }
-        let value = self
-            .value
-            .to_string()
-            .parse::<serde_json::Number>()
-            .map_or(serde_json::Value::Null, serde_json::Value::Number);
-        o.insert("value".into(), value);
+        o.insert("value".into(), number(self.value));
+        if let Some(limit) = self.limit {
+            o.insert("limit".into(), number(limit));
+        }
+        if let Some(fact) = self.limit_fact {
+            o.insert(
+                "limit_fact".into(),
+                crate::enums::WireEnum::name(fact).into(),
+            );
+        }
+        if let Some(offset) = self.limit_offset {
+            o.insert("limit_offset".into(), number(offset));
+        }
         serde_json::Value::Object(o)
     }
 }
@@ -232,6 +270,7 @@ pub(crate) fn judges_determination_freshness(kind: crate::model::ConditionKind) 
 /// that names one; `None` for every other leaf.
 pub(crate) fn met_point(payload: &Payload, env: &mut Env) -> Option<MetPoint> {
     match payload {
+        Payload::Threshold(p) => glucose::threshold_met(p, env).1,
         Payload::Predicted(p) => glucose::predicted_met(p, env).1,
         Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
             determination::determined(payload, env).1

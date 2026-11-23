@@ -176,6 +176,8 @@ public sealed record ScenarioContext
     [JsonPropertyName("has_ever_aps_sensitivity")] public bool HasEverApsSensitivity { get; init; }
     /// <summary>Wire form of GlucoseBucket (<c>very_low</c> … <c>very_high</c>).</summary>
     [JsonPropertyName("glucose_bucket")] public string? GlucoseBucket { get; init; }
+    [JsonPropertyName("target_low")] public decimal? TargetLow { get; init; }
+    [JsonPropertyName("target_high")] public decimal? TargetHigh { get; init; }
     [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
     [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
     [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
@@ -341,7 +343,10 @@ public sealed record ExpectedMetPoint(
     [property: JsonPropertyName("kind")] string Kind,
     [property: JsonPropertyName("curve")] string? Curve,
     [property: JsonPropertyName("offset_minutes")] int? OffsetMinutes,
-    [property: JsonPropertyName("value")] decimal Value);
+    [property: JsonPropertyName("value")] decimal Value,
+    [property: JsonPropertyName("limit")] decimal? Limit = null,
+    [property: JsonPropertyName("limit_fact")] string? LimitFact = null,
+    [property: JsonPropertyName("limit_offset")] decimal? LimitOffset = null);
 
 public sealed record ExpectedClockAnomaly(
     [property: JsonPropertyName("fact")] string Fact,

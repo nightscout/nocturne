@@ -116,7 +116,11 @@ export type AlertPayload = Omit<GeneratedAlertPayload, "kind" | "alertType" | "s
   >;
 
 /** A met point with its enum fields as plain strings, as the payload's other enum fields are. */
-export type MetPoint = Omit<AlertMetPoint, "kind" | "curve"> & { kind?: string; curve?: string };
+export type MetPoint = Omit<AlertMetPoint, "kind" | "curve" | "limitFact"> & {
+  kind?: string;
+  curve?: string;
+  limitFact?: string;
+};
 
 export interface AlertDispatchEvent {
   deliveryId: string;

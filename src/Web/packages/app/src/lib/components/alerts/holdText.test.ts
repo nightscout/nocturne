@@ -25,6 +25,12 @@ describe("holdText", () => {
     ).toEqual(["Loop result: too old", "Glucose forecast: missing"]);
   });
 
+  it("names a rule held because the profile has no target range", () => {
+    expect(holdFactLines({ facts: [{ fact: "target_range", reason: "absent" }] })).toEqual([
+      "Target range: missing",
+    ]);
+  });
+
   it("shows a fact or reason this build does not know as the API sent it", () => {
     expect(heldFactName("sensor_mood")).toBe("sensor_mood");
     expect(heldReason("sensor_sulking")).toBe("sensor_sulking");

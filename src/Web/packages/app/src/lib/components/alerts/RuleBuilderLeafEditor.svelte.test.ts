@@ -2,7 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
-import { buildBody, defaultPayload, ForecastCurve, parseRule, SensorState, type ConditionNode } from "./types";
+import { AlertLimitFact, buildBody, defaultPayload, ForecastCurve, parseRule, SensorState, type ConditionNode } from "./types";
+import { flushSync } from "svelte";
 import { AlertConditionType } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
@@ -197,6 +198,63 @@ describe("RuleBuilderLeafEditor sensor state minutes", () => {
 
 		expect(leaf.sensor_state?.states).toEqual([SensorState.NoValue, SensorState.Error]);
 		expect(leaf.sensor_state?.for_minutes).toBeUndefined();
+	});
+});
+
+describe("RuleBuilderLeafEditor limit from a fact", () => {
+	it("compares with a target in place of a number, and stores no number", async () => {
+		const leaf = $state<ConditionNode>({ type: "threshold", threshold: { direction: "below", value: 70 } });
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByLabelText("Compare with").click();
+		await page.getByRole("option", { name: "Target low" }).click();
+		flushSync();
+
+		expect(leaf.threshold?.value_from).toEqual({ fact: AlertLimitFact.TargetLow, offset: undefined });
+		expect(leaf.threshold?.value).toBeUndefined();
+		await expect.element(page.getByRole("spinbutton", { name: "Offset" })).toBeVisible();
+		await expect
+			.element(page.getByText("If your profile has no target range, this condition does not know if it is true."))
+			.toBeVisible();
+	});
+
+	it("stores a signed offset typed in mmol/L in mg/dL", async () => {
+		glucoseUnits.current = "mmol";
+		const leaf = $state<ConditionNode>({
+			type: "eventual_glucose",
+			eventual_glucose: { operator: "<", value_from: { fact: AlertLimitFact.TargetLow } },
+		});
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByRole("spinbutton", { name: "Offset" }).fill("-1");
+
+		expect(leaf.eventual_glucose?.value_from?.offset).toBeCloseTo(-18, 0);
+		glucoseUnits.current = "mg/dl";
+	});
+
+	it("offers the latest glucose to a forecast but not to a threshold", async () => {
+		render(RuleBuilderLeafEditor, {
+			props: { node: { type: "threshold", threshold: { direction: "below", value: 70 } } },
+		});
+		await page.getByLabelText("Compare with").click();
+
+		await expect.element(page.getByRole("option", { name: "Target high" })).toBeVisible();
+		expect(page.getByRole("option", { name: "Latest glucose" }).elements()).toHaveLength(0);
+	});
+
+	it("goes back to a number and drops the fact", async () => {
+		const leaf = $state<ConditionNode>({
+			type: "predicted",
+			predicted: { operator: "<", within_minutes: 30, value_from: { fact: AlertLimitFact.LatestGlucose, offset: -30 } },
+		});
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByLabelText("Compare with").click();
+		await page.getByRole("option", { name: "Number" }).click();
+		flushSync();
+
+		expect(leaf.predicted?.value_from).toBeUndefined();
+		expect(leaf.predicted?.value).toBe(70);
 	});
 });
 

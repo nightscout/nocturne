@@ -223,6 +223,31 @@ describe("AlertCard for an alert a forecast or loop condition started", () => {
     ]);
   });
 
+  it("gives the limit first and its source second, and a fact this build does not know as it was sent", () => {
+    const card = AlertCard({
+      payload: {
+        ...payload,
+        metBy: [
+          { leafId: 0, kind: "threshold", value: 66, limit: 70, limitFact: "target_low", limitOffset: -10 },
+          { leafId: 1, kind: "threshold", value: 76, limit: 80, limitFact: "target_low" },
+          { leafId: 2, kind: "predicted", curve: "default", offsetMinutes: 15, value: 49, limit: 50, limitFact: "latest_glucose", limitOffset: -30 },
+          { leafId: 3, kind: "eventual_glucose", value: 200, limit: 180, limitFact: "target_middle" },
+          { leafId: 4, kind: "eventual_glucose", value: 220, limit: 200, limitFact: "target_high", limitOffset: 20 },
+        ],
+      },
+    });
+
+    expect(cardFields(card)).toEqual(
+      expect.arrayContaining([
+        "Glucose: 66 mg/dL, limit 70 mg/dL (target low minus 10 mg/dL)",
+        "Glucose: 76 mg/dL, limit 80 mg/dL (target low)",
+        "Forecast: 49 mg/dL in 15 minutes, limit 50 mg/dL (latest glucose minus 30 mg/dL)",
+        "Eventual glucose: 200 mg/dL, limit 180 mg/dL (target_middle)",
+        "Eventual glucose: 220 mg/dL, limit 200 mg/dL (target high plus 20 mg/dL)",
+      ]),
+    );
+  });
+
   it("shows nothing for a kind this build does not know, or with no met point", () => {
     const fields = cardFields(AlertCard({ payload }));
     const unknown = cardFields(

@@ -5,21 +5,22 @@ use chrono::TimeDelta;
 use rust_decimal::Decimal;
 
 use super::elapsed::{Elapsed, Measure};
+use super::glucose::{both, effective_limit};
 use super::{Env, Held, MetPoint};
 use crate::clock_anomaly::ClockAnchor;
 use crate::context::{ApsDetermination, SensorContext};
 use crate::facts::ContextFact;
-use crate::model::{ComparePayload, Margined, Payload};
+use crate::model::{Margined, Payload};
 use crate::truth::Truth;
 use crate::unknown::UnknownReason;
 
 type DeterminationValue = fn(&ApsDetermination) -> Option<Decimal>;
 
 /// The value a determination leaf compares.
-fn value_of(payload: &Payload) -> Option<(&ComparePayload, DeterminationValue)> {
+fn value_of(payload: &Payload) -> Option<DeterminationValue> {
     match payload {
-        Payload::EventualGlucose(p) => Some((p, |d| d.eventual_mgdl)),
-        Payload::CarbsRequired(p) => Some((p, |d| d.carbs_required_grams)),
+        Payload::EventualGlucose(_) => Some(|d| d.eventual_mgdl),
+        Payload::CarbsRequired(_) => Some(|d| d.carbs_required_grams),
         _ => None,
     }
 }
@@ -34,34 +35,54 @@ fn expiry(d: &ApsDetermination, bound: TimeDelta) -> Elapsed {
     }
 }
 
-fn unknown(reason: UnknownReason) -> (Held, Option<MetPoint>) {
-    (Held::unknown(ContextFact::ApsDetermination, reason), None)
+fn unknown(reason: UnknownReason) -> Held {
+    Held::unknown(ContextFact::ApsDetermination, reason)
 }
 
 /// A determination leaf's truth and, when it is true, the value that met its
-/// comparison. No determination, or one without the value, is absent; one
-/// older than the rule's freshness bound is stale.
+/// comparison.
 pub(super) fn determined(payload: &Payload, env: &mut Env) -> (Held, Option<MetPoint>) {
-    let Some((p, value)) = value_of(payload) else {
-        return (Truth::False.into(), None);
-    };
-    let Some(d) = env.ctx.aps_determination else {
-        return unknown(UnknownReason::Absent);
-    };
-    let stale = env.measure(expiry(&d, env.glucose_freshness));
-    let Some(actual) = value(&d) else {
-        return unknown(UnknownReason::Absent);
-    };
-    match stale {
-        Truth::True => unknown(UnknownReason::Stale),
-        Truth::Unknown => unknown(UnknownReason::AheadOfClock),
-        Truth::False => {
-            let (op, _) = p.comparison();
-            let met = op
-                .apply(actual, env.limit(p))
-                .then_some(MetPoint::value(actual));
+    match payload {
+        Payload::EventualGlucose(p) => compared(p, |d| d.eventual_mgdl, env),
+        Payload::CarbsRequired(p) => compared(p, |d| d.carbs_required_grams, env),
+        _ => (Truth::False.into(), None),
+    }
+}
+
+/// The determination's `value` against `p`'s limit: unknown when either
+/// side is.
+fn compared(
+    p: &impl Margined,
+    value: DeterminationValue,
+    env: &mut Env,
+) -> (Held, Option<MetPoint>) {
+    let actual = fresh_value(value, env);
+    match both(actual, effective_limit(p, env)) {
+        Ok((actual, limit)) => {
+            let met = p
+                .operator()
+                .apply(actual, limit.value)
+                .then(|| MetPoint::value(actual).against(limit));
             (Truth::from(met.is_some()).into(), met)
         }
+        Err(unknown) => (unknown, None),
+    }
+}
+
+/// The determination's `value` while it is fresh. No determination, or one
+/// without the value, is absent; one older than the rule's freshness bound
+/// is stale.
+fn fresh_value(value: DeterminationValue, env: &mut Env) -> Result<Decimal, Held> {
+    let d = env
+        .ctx
+        .aps_determination
+        .ok_or_else(|| unknown(UnknownReason::Absent))?;
+    let stale = env.measure(expiry(&d, env.glucose_freshness));
+    let actual = value(&d).ok_or_else(|| unknown(UnknownReason::Absent))?;
+    match stale {
+        Truth::True => Err(unknown(UnknownReason::Stale)),
+        Truth::Unknown => Err(unknown(UnknownReason::AheadOfClock)),
+        Truth::False => Ok(actual),
     }
 }
 
@@ -72,7 +93,7 @@ pub(crate) fn determination_expiry(
     ctx: &SensorContext,
     bound: TimeDelta,
 ) -> Option<Elapsed> {
-    let (_, value) = value_of(payload)?;
+    let value = value_of(payload)?;
     let d = ctx.aps_determination?;
     value(&d).map(|_| expiry(&d, bound))
 }

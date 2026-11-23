@@ -48,6 +48,7 @@ internal static class EnumManifest
             ["TrendBucket"] = WireNames<TrendBucket>(),
             ["SensorState"] = WireNames<SensorState>(),
             ["ForecastCurve"] = WireNames<ForecastCurve>(),
+            ["AlertLimitFact"] = WireNames<AlertLimitFact>(),
             ["PayloadFields"] = PayloadFields(),
         };
         var json = root.ToJsonString(new JsonSerializerOptions

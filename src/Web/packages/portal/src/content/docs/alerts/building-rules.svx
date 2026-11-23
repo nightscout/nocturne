@@ -146,7 +146,7 @@ you what the message is:
 
 | `Kind` | Meaning |
 |--------|---------|
-| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. When a forecast, eventual glucose or carbs needed condition started the alert, `MetBy` gives what made it true, each as `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). |
+| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. `MetBy` gives what made the condition true. It is there for a forecast, eventual glucose or carbs needed condition, and for a glucose condition that compares with a target. Each item has `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). A condition that compares with a target or the latest glucose also gives `Limit`, the limit it compared with. It gives `LimitFact` (`target_low`, `target_high` or `latest_glucose`) and `LimitOffset`, the amount added in mg/dL. `LimitOffset` is left out when it is 0 (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). |
 | `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
 | `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
 | `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data has been missing for 24 hours. |
@@ -292,7 +292,8 @@ right for you.
 A clear margin changes the value at which an open alert ends. It does not change
 the value at which the alert starts. You set it on one condition: open the
 condition's actions menu and select **Add a clear margin**. A condition can have
-a margin when it compares a value with a number. These are glucose, rate of
+a margin when it compares a value with a number, or with a target or the current
+glucose (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). These are glucose, rate of
 change, predicted glucose, insulin on board, carbs on board and reservoir. Pump
 battery, uploader battery, transmitter, temp basal, sensitivity, eventual glucose
 and carbs needed can also have one. Conditions about time, such as signal loss or site age, cannot have one.
@@ -379,6 +380,53 @@ restart, or after a snooze, the message does not show it.
 
 A forecast is a guess, and it changes with each loop cycle. This section explains
 what each curve is. It does not say which curve is right for you.
+
+### Compare with a target or the latest glucose
+
+A glucose, predicted glucose or eventual glucose condition usually compares with
+a number. It can compare with a value that Nocturne reads when the rule runs
+instead. In the condition, open the list next to the comparison and select one of
+these in place of **Number**:
+
+- **Target low**: the low end of the target range in your profile at that time.
+- **Target high**: the high end of the same target range.
+- **Latest glucose**: the newest CGM reading. Predicted glucose and eventual
+  glucose can use it. A glucose condition cannot, because it would compare the
+  reading with itself.
+
+You can add an amount to the value: type it in the box after **plus**, in your
+glucose units. Type a negative amount to subtract it.
+
+Two examples:
+
+- **Predicted more than 30 below the latest glucose**: a predicted glucose
+  condition "less than", **Latest glucose**, plus -30 mg/dL (about -1.7 mmol/L). Set
+  it to look 30 minutes ahead. The summary shows "Predicted glucose < latest glucose minus 30
+  mg/dL in 30 minutes".
+- **Below the target low in your profile**: a glucose condition "below",
+  **Target low**, plus 0. If your profile has a different target at night, the
+  condition uses the target that is in the profile at that time. The summary
+  shows "Glucose below target low".
+
+When the target range in your profile changes at a time of day, Nocturne uses
+the new target from the next reading after that time. A "for at least" time on a
+condition that compares with a target starts when Nocturne checks the reading. It
+does not start at the time of the reading.
+
+If your profile has no target range, a condition that uses a target does not know
+if it is true. Nocturne does not use a standard target in its place. A rule with
+**Wait** then waits and shows "Target range: missing". If the newest reading is
+too old, or the sensor is not OK, a condition that uses **Latest glucose** waits in
+the same way. A clear margin applies to the value with the amount added, as it
+applies to a number.
+
+When a condition of this type starts an alert, the alert gives the limit that it
+compared with first, then where the limit came from. For example, "limit 70 mg/dL
+(target low minus 10 mg/dL)", or "limit 80 mg/dL (target low)" with no amount
+added.
+
+This section explains what each choice does. It does not say which target, amount
+or condition is right for you. Work these out with your diabetes care team.
 
 ## Testing a rule
 

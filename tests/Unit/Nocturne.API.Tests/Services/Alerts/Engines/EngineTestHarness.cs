@@ -131,7 +131,10 @@ internal static class EngineTestHarness
                         AlertConditionTypeNames.ToWireString(m.Kind),
                         m.Curve is { } curve ? System.Text.Json.JsonSerializer.Serialize(curve).Trim('"') : null,
                         m.OffsetMinutes,
-                        m.Value))
+                        m.Value,
+                        m.Limit,
+                        m.LimitFact is { } fact ? System.Text.Json.JsonSerializer.Serialize(fact).Trim('"') : null,
+                        m.LimitOffset))
                     .ToList()
                 : null,
             Transition = CorpusWire.TransitionWire(evaluation.Transition.Type),

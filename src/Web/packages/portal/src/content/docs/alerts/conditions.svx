@@ -35,11 +35,14 @@ does not. "At least 2" means 2 counts.
 
 The latest CGM reading compared with a value: below it (`<`) or above it (`>`).
 
-- **Settings:** below or above, and a glucose value in your units.
+- **Settings:** below or above, and a glucose value in your units. In place of
+  the value it can use your target low or target high, with an amount added. See
+  [Compare with a target or the latest glucose](/docs/alerts/building-rules#compare-with-a-target-or-the-latest-glucose).
 - **Use it for:** the core low and high alerts.
 - **Good to know:** "below" and "above" are strict. A rule for "below 70" does
   not fire on a reading of exactly 70. Between readings, the last reading is
-  what the rule sees.
+  what the rule sees. A condition that uses a target waits if your profile has no
+  target range.
 
 ### Glucose bucket
 
@@ -70,7 +73,9 @@ Your loop's forecast of where glucose is heading. The condition is true if
 **any** forecast point within the next so many minutes matches.
 
 - **Settings:** a comparison (at least, more than, at most or less than), a glucose value, and how many minutes
-  ahead to look. From the actions menu you can also select which forecast curve
+  ahead to look. In place of the glucose value it can use your target low, your
+  target high or the latest glucose, with an amount added. For example, "30 below
+  the latest glucose". From the actions menu you can also select which forecast curve
   it uses (see [Forecast curves](/docs/alerts/building-rules#forecast-curves)).
 - **Use it for:** "warn me if my loop thinks I will be under 70 within the next
   30 minutes", before the low arrives.
@@ -84,7 +89,8 @@ Your loop's forecast of where glucose is heading. The condition is true if
 The glucose that your loop expects at the end of its forecast, from its newest
 result.
 
-- **Settings:** a comparison and a glucose value.
+- **Settings:** a comparison and a glucose value, or your target low, your target
+  high or the latest glucose with an amount added.
 - **Good to know:** AAPS, Trio and OpenAPS send this value. For Loop, Nocturne
   uses the last value of Loop's forecast. The newest result can be older than the
   rule's minutes until a reading counts as missing. Then the condition does not

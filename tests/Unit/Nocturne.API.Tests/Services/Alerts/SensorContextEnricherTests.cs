@@ -1111,6 +1111,98 @@ public class SensorContextEnricherTests
         enriched.GlucoseBucket.Should().Be(Nocturne.Core.Models.Alerts.GlucoseBucket.Low);
     }
 
+    private void ScheduleWithMorningTarget()
+    {
+        _activeProfileResolver.Setup(s => s.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepository.Setup(s => s.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TargetRangeSchedule
+            {
+                ProfileName = "Default",
+                Entries =
+                [
+                    new TargetRangeEntry { Time = "00:00", TimeAsSeconds = 0,     Low = 70, High = 180 },
+                    new TargetRangeEntry { Time = "06:00", TimeAsSeconds = 21600, Low = 80.5, High = 160 },
+                ],
+            });
+    }
+
+    /// <summary>
+    /// The targets a limit can name are the entry the bucket is placed with, from one lookup, so a rule
+    /// below target_low and the low bucket cannot disagree.
+    /// </summary>
+    [Fact]
+    public async Task The_targets_are_the_entry_the_bucket_is_placed_with()
+    {
+        var enricher = BuildEnricher();
+        ScheduleWithMorningTarget();
+        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+
+        var enriched = await enricher.EnrichAsOfAsync(
+            BaseContext() with { LatestValue = 75m }, new[] { bucket, belowTarget },
+            new DateTime(2026, 3, 22, 7, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        enriched.TargetLow.Should().Be(80.5m);
+        enriched.TargetHigh.Should().Be(160m);
+        enriched.GlucoseBucket.Should().Be(Nocturne.Core.Models.Alerts.GlucoseBucket.Low);
+        _targetRangeScheduleRepository.Verify(
+            s => s.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>A replayed tick reads the entry in effect at that tick, so the target moves at the boundary.</summary>
+    [Fact]
+    public async Task A_tick_reads_the_target_in_effect_then_without_a_reading()
+    {
+        var enricher = BuildEnricher();
+        ScheduleWithMorningTarget();
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+
+        var before = await enricher.EnrichAsOfAsync(
+            BaseContext(), new[] { belowTarget }, new DateTime(2026, 3, 22, 5, 59, 0, DateTimeKind.Utc), CancellationToken.None);
+        var after = await enricher.EnrichAsOfAsync(
+            BaseContext(), new[] { belowTarget }, new DateTime(2026, 3, 22, 6, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        before.TargetLow.Should().Be(70m);
+        after.TargetLow.Should().Be(80.5m);
+    }
+
+    /// <summary>
+    /// With no target range the bucket keeps its defaults and the targets stay absent: a rule that
+    /// names one waits rather than comparing with a default.
+    /// </summary>
+    [Fact]
+    public async Task No_schedule_leaves_the_targets_absent_while_the_bucket_keeps_its_defaults()
+    {
+        var enricher = BuildEnricher();
+        _activeProfileResolver.Setup(s => s.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+
+        var enriched = await enricher.EnrichAsync(
+            BaseContext() with { LatestValue = 65m }, new[] { bucket, belowTarget }, CancellationToken.None);
+
+        enriched.TargetLow.Should().BeNull();
+        enriched.TargetHigh.Should().BeNull();
+        enriched.GlucoseBucket.Should().Be(Nocturne.Core.Models.Alerts.GlucoseBucket.Low);
+    }
+
+    [Fact]
+    public async Task A_rule_that_names_no_target_reads_no_target()
+    {
+        var enricher = BuildEnricher();
+        ScheduleWithMorningTarget();
+        var literal = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+
+        var enriched = await enricher.EnrichAsync(
+            BaseContext() with { LatestValue = 65m }, new[] { literal }, CancellationToken.None);
+
+        enriched.TargetLow.Should().BeNull();
+        _targetRangeScheduleRepository.Verify(
+            s => s.GetActiveAtAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ---- scoped Do Not Disturb (ADR 0004 D5) ----
 
     [Fact]

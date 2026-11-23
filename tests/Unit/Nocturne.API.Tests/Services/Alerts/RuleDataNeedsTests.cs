@@ -28,6 +28,38 @@ public class RuleDataNeedsTests
         result.Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
+    /// <summary>
+    /// A target is read as the bucket reads its entry, at the tenant's local time; the newest reading
+    /// as a threshold reads it, through the sensor's state.
+    /// </summary>
+    [NativeFact]
+    public void A_limit_from_a_fact_needs_what_the_fact_reads()
+    {
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold,
+                """{"direction":"below","value_from":{"fact":"target_low","offset":-10}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with
+            {
+                NeedsSensorState = true,
+                NeedsTargetRange = true,
+                NeedsTenantTimeZone = true,
+            });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.EventualGlucose,
+                """{"operator":">","value_from":{"fact":"target_high"}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with
+            {
+                NeedsApsDetermination = true,
+                NeedsTargetRange = true,
+                NeedsTenantTimeZone = true,
+            });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
+                """{"operator":"<","within_minutes":30,"value_from":{"fact":"latest_glucose","offset":-30}}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true, NeedsSensorState = true });
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
+                """{"operator":"<","within_minutes":30,"value":70}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true },
+                "a literal limit reads no fact");
+    }
+
     [NativeFact]
     public void Trend_leaf_needs_only_the_sensor_state()
     {

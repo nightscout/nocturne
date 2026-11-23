@@ -2109,7 +2109,10 @@ fn an_enum_value_is_exactly_a_wire_name() {
 fn threshold_value(literal: &str) -> Option<String> {
     let payload = raw(&format!(r#"{{"direction": "below", "value": {literal}}}"#));
     match parse_payload(ConditionKind::Threshold, &payload).ok()? {
-        nocturne_alerts_core::model::Payload::Threshold(t) => Some(t.value.to_string()),
+        nocturne_alerts_core::model::Payload::Threshold(t) => match t.value {
+            nocturne_alerts_core::model::Limit::Literal(value) => Some(value.to_string()),
+            nocturne_alerts_core::model::Limit::Fact(_) => None,
+        },
         _ => None,
     }
 }

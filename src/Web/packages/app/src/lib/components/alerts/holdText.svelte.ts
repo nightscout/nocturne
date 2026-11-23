@@ -19,7 +19,8 @@ type KnownFact =
   | "do_not_disturb"
   | "time_zone"
   | "sensor_state"
-  | "aps_determination";
+  | "aps_determination"
+  | "target_range";
 
 type KnownReason = "absent" | "stale" | "ahead_of_clock" | "unrecognised" | "inexact" | "sensor_not_ok";
 
@@ -59,6 +60,8 @@ function factName(fact: KnownFact): string {
       return "Sensor state";
     case "aps_determination":
       return "Loop result";
+    case "target_range":
+      return "Target range";
     default: {
       const unhandled: never = fact;
       return unhandled;
@@ -105,6 +108,7 @@ const KNOWN_FACTS: ReadonlySet<string> = new Set<KnownFact>([
   "time_zone",
   "sensor_state",
   "aps_determination",
+  "target_range",
 ]);
 
 const KNOWN_REASONS: ReadonlySet<string> = new Set<KnownReason>([

@@ -218,6 +218,16 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// `AlertLimitFact`: the fact a glucose comparison's `value_from` names
+    /// as its limit (engine-semantics.md §3, a limit from a fact).
+    pub enum LimitFact {
+        LatestGlucose = "latest_glucose",
+        TargetLow = "target_low",
+        TargetHigh = "target_high",
+    }
+}
+
+wire_enum! {
     /// `threshold.direction`.
     pub enum ThresholdDirection {
         Above = "above",
@@ -293,6 +303,7 @@ mod tests {
             ("TrendBucket", names::<TrendBucket>()),
             ("SensorState", names::<SensorState>()),
             ("ForecastCurve", names::<ForecastCurve>()),
+            ("AlertLimitFact", names::<LimitFact>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];
         for (enum_name, ours) in tables {

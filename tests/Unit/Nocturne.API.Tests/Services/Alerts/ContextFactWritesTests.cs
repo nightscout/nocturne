@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
@@ -18,11 +19,17 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class ContextFactWritesTests
 {
-    /// <summary>Every fact some condition kind reads, as the engine names them.</summary>
+    /// <summary>
+    /// Every fact some condition kind reads, or a limit naming each fact reads, as the engine names them.
+    /// </summary>
     private static IReadOnlySet<string> EngineFacts() =>
         Enum.GetValues<AlertConditionType>()
-            .SelectMany(type => RuleTrees.Reads(new AlertRuleSnapshot(
-                Guid.NewGuid(), Guid.NewGuid(), "probe", type, "{}", AlertRuleSeverity.Info, "{}", 0,
+            .Select(type => (Type: type, Params: "{}"))
+            .Concat(Enum.GetValues<AlertLimitFact>().Select(fact => (
+                Type: AlertConditionType.Predicted,
+                Params: $$$"""{"operator":"<","within_minutes":30,"value_from":{"fact":"{{{JsonSerializer.Serialize(fact).Trim('"')}}}"}}""")))
+            .SelectMany(probe => RuleTrees.Reads(new AlertRuleSnapshot(
+                Guid.NewGuid(), Guid.NewGuid(), "probe", probe.Type, probe.Params, AlertRuleSeverity.Info, "{}", 0,
                 AutoResolveEnabled: false, AutoResolveParams: null)))
             .ToHashSet(StringComparer.Ordinal);
 
@@ -74,6 +81,18 @@ public class ContextFactWritesTests
     public void OnlyAnApsSnapshotWriteMovesTheDetermination() =>
         ContextFactWrites.MovedBy.Where(kv => kv.Value.Contains(ContextFactWrites.ApsDetermination)).Select(kv => kv.Key)
             .Should().BeEquivalentTo([typeof(ApsSnapshot)]);
+
+    /// <summary>
+    /// A target rule is evaluated by a write of each record that moves the target range: the schedule,
+    /// a profile switch, and the therapy settings that hold the time zone the entry is read at.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(TargetRangeSchedule))]
+    [InlineData(typeof(ProfileActivation))]
+    [InlineData(typeof(TherapySettings))]
+    public void EachWriteThatMovesTheTargetRangeAnnouncesIt(Type recordType) =>
+        ContextFactWrites.MovedIn(RecordsChanged.Written([recordType])).Facts
+            .Should().Contain(ContextFactWrites.TargetRange);
 
     [Fact]
     public void AnExtrasWriteMovesOnlyTheSensorState() =>

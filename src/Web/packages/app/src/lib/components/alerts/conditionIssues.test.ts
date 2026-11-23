@@ -29,6 +29,21 @@ describe("conditionIssuesMessage", () => {
 		);
 	});
 
+	it("says what is wrong with a limit from a fact", () => {
+		expect(conditionIssuesMessage(rejected(400, [issue("limit_conflict", "value_from")]))).toBe(
+			"A glucose condition can compare with a number or with a value such as your target, not both."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("self_reference", "value_from")]))).toBe(
+			"A glucose threshold cannot compare the latest glucose with itself. Choose a number or a target."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("offset_out_of_range", "offset")]))).toBe(
+			"The amount added to a target or to the latest glucose is too large."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("unknown_value", "fact")]))).toBe(
+			"A glucose condition compares with a value that Nocturne does not know. Choose one from the list and save again."
+		);
+	});
+
 	it("prefers the field-specific sentence", () => {
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("invalid_field", "alert_id")]))

@@ -209,6 +209,8 @@ internal static class RustEnvelopeMapper
             HasEverUploaderSnapshot = ctx.HasEverUploaderSnapshot,
             HasEverApsSensitivity = ctx.HasEverApsSensitivity,
             GlucoseBucket = ctx.GlucoseBucket is { } gb ? WireEnum(gb) : null,
+            TargetLow = ctx.TargetLow,
+            TargetHigh = ctx.TargetHigh,
             LastCarbAt = Utc(ctx.LastCarbAt),
             LastBolusAt = Utc(ctx.LastBolusAt),
             TenantTimeZoneId = ctx.TenantTimeZoneId is { Length: > 0 } tenantZone
@@ -251,8 +253,8 @@ internal static class RustEnvelopeMapper
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// The engine's <c>met_by</c> as typed points. An entry whose kind or curve this host has no
-    /// member for is dropped: it can only come from an engine newer than the host, and the payload
+    /// The engine's <c>met_by</c> as typed points. An entry whose kind, curve or limit fact this host
+    /// has no member for is dropped: it can only come from an engine newer than the host, and the payload
     /// member is optional.
     /// </summary>
     public static IReadOnlyList<AlertMetPoint> MetByFromWire(IReadOnlyList<RustMetPoint>? wire)
@@ -271,7 +273,16 @@ internal static class RustEnvelopeMapper
                     continue;
                 curve = known;
             }
-            points.Add(new AlertMetPoint(point.LeafId, kind, curve, point.OffsetMinutes, point.Value));
+            AlertLimitFact? limitFact = null;
+            if (point.LimitFact is { } factName)
+            {
+                if (FromWireEnum<AlertLimitFact>(factName) is not { } known)
+                    continue;
+                limitFact = known;
+            }
+            points.Add(new AlertMetPoint(
+                point.LeafId, kind, curve, point.OffsetMinutes, point.Value, point.Limit, limitFact,
+                limitFact is null ? null : point.LimitOffset));
         }
         return points;
     }
@@ -381,6 +392,8 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("has_ever_uploader_snapshot")] public bool HasEverUploaderSnapshot { get; init; }
         [JsonPropertyName("has_ever_aps_sensitivity")] public bool HasEverApsSensitivity { get; init; }
         [JsonPropertyName("glucose_bucket")] public string? GlucoseBucket { get; init; }
+        [JsonPropertyName("target_low")] public decimal? TargetLow { get; init; }
+        [JsonPropertyName("target_high")] public decimal? TargetHigh { get; init; }
         [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
         [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
         [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }

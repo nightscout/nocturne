@@ -28,6 +28,24 @@ internal readonly record struct ConditionLeaf(AlertConditionType? Kind, JsonElem
         return null;
     }
 
+    /// <summary>The fact the leaf's limit names (<c>value_from.fact</c>), or null when its limit is a number.</summary>
+    public AlertLimitFact? LimitFact()
+    {
+        if (Params.ValueKind != JsonValueKind.Object
+            || !Params.TryGetProperty("value_from", out var reference)
+            || reference.ValueKind != JsonValueKind.Object
+            || !reference.TryGetProperty("fact", out var fact)
+            || fact.ValueKind != JsonValueKind.String)
+            return null;
+        return fact.GetString() switch
+        {
+            "latest_glucose" => AlertLimitFact.LatestGlucose,
+            "target_low" => AlertLimitFact.TargetLow,
+            "target_high" => AlertLimitFact.TargetHigh,
+            _ => null,
+        };
+    }
+
     /// <summary>The operand <paramref name="name"/> when it is a string.</summary>
     public string? StringParam(string name) =>
         Params.ValueKind == JsonValueKind.Object
