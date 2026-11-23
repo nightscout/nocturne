@@ -34,10 +34,10 @@ public static class SignInOutcomeExtensions
     {
         switch (method)
         {
-            case SignInMethod.Passkey:
+            case SignInMethod.Passkey or SignInMethod.SetupPasskey:
                 response.SetLastSignInCookie(SessionCookieExtensions.SignInMethods.Passkey, providerId: null, options);
                 break;
-            case SignInMethod.Oidc:
+            case SignInMethod.Oidc or SignInMethod.SetupOidc:
                 response.SetLastSignInCookie(
                     SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), options);
                 break;
