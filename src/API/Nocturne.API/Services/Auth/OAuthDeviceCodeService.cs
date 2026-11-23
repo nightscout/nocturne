@@ -245,7 +245,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
         {
             _logger.LogWarning(
-                "Cannot approve device code {UserCode}: it was deleted before the approval was stored",
+                "Cannot approve device code {UserCode}: it is no longer pending",
                 normalized);
             return false;
         }
@@ -302,7 +302,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         if (!await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct))
         {
             _logger.LogWarning(
-                "Cannot deny device code {UserCode}: it was deleted before the denial was stored",
+                "Cannot deny device code {UserCode}: it is no longer pending",
                 normalized);
             return false;
         }
