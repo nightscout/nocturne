@@ -16,6 +16,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
 {
     private const string PriorMigration = "20261122112333_AddTenantMemberReasons";
+    private const string Backfill = "20261122120454_BackfillTenantMemberReasons";
 
     internal static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111113842");
     internal static readonly Guid OwnerRole = Guid.Parse("b1111111-1111-7111-8111-111111113842");
@@ -75,7 +76,7 @@ public class BackfillTenantMemberReasonsFixture : IAsyncLifetime
         RowsBefore = await ReadRowsAsync();
 
         await using (var context = new NocturneDbContext(Options()))
-            await context.GetService<IMigrator>().MigrateAsync();
+            await context.GetService<IMigrator>().MigrateAsync(Backfill);
 
         RowsAfter = await ReadRowsAsync();
         Reasons = await ReadReasonsAsync();

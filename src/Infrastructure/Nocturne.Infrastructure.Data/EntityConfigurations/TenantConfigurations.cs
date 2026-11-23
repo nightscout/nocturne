@@ -51,6 +51,11 @@ internal sealed class TenantMemberEntityConfiguration : IEntityTypeConfiguration
             .HasDatabaseName("ix_tenant_members_subject_id");
 
         entity
+            .HasIndex(tm => tm.NextReasonLapseAt)
+            .HasDatabaseName("ix_tenant_members_next_reason_lapse_at")
+            .HasFilter("next_reason_lapse_at IS NOT NULL");
+
+        entity
             .HasOne(tm => tm.Tenant)
             .WithMany(t => t.Members)
             .HasForeignKey(tm => tm.TenantId)

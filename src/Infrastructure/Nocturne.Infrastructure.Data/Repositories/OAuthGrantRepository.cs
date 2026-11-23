@@ -56,13 +56,22 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     private IQueryable<OAuthGrantEntity> GrantsWithClient(NocturneDbContext db) => Grants(db).Include(g => g.Client);
 
     /// <inheritdoc/>
-    public virtual async Task<AuthenticatedDirectGrant?> FindLiveDirectGrantAsync(
-        Guid tenantId, DirectGrantLookup lookup, DateTime now, CancellationToken ct)
+    public virtual Task<AuthenticatedDirectGrant?> FindLiveDirectGrantAsync(
+        Guid tenantId, DirectGrantLookup lookup, DateTime now, CancellationToken ct) =>
+        MembershipReasons.ReadInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
+        {
+            var row = await FindLiveDirectGrantRowAsync(tenantId, lookup, now, inForce, token);
+            return (row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership()),
+                row?.Grant.SubjectId ?? Guid.Empty, row?.MemberNextReasonLapseAt);
+        }, ct);
+
+    private async Task<AuthenticatedRow?> FindLiveDirectGrantRowAsync(
+        Guid tenantId, DirectGrantLookup lookup, DateTime now, Expression<Func<TenantMemberEntity, bool>> inForce,
+        CancellationToken ct)
     {
         await using var db = await OpenForTenantAsync(tenantId, ct);
         var grants = Match(PinnedGrants(db, tenantId).Where(IsLiveDirectGrant(now)).Where(g => g.Subject!.IsActive), lookup);
-        var row = await WithMembership(grants, db, tenantId, now).FirstOrDefaultAsync(ct);
-        return row is null ? null : new AuthenticatedDirectGrant(row.Grant, row.Membership());
+        return await WithMembership(grants, db, tenantId, inForce).FirstOrDefaultAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -523,14 +532,15 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     /// <summary>
     /// Pairs each grant with its subject's membership of <paramref name="tenantId"/> as a left join,
     /// so an authenticating request reads both in one statement, as the host's
-    /// <c>RequestMembership</c> does for a subject. A membership that has ended at
-    /// <paramref name="now"/> joins as none.
+    /// <c>RequestMembership</c> does for a subject. A membership that does not meet
+    /// <paramref name="inForce"/> joins as none.
     /// </summary>
     private static IQueryable<AuthenticatedRow> WithMembership(
-        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId, DateTime now) =>
+        IQueryable<OAuthGrantEntity> grants, NocturneDbContext db, Guid tenantId,
+        Expression<Func<TenantMemberEntity, bool>> inForce) =>
         grants
             .GroupJoin(
-                db.TenantMembers.AsNoTracking().LiveAt(now).Where(m => m.TenantId == tenantId),
+                db.TenantMembers.AsNoTracking().Where(inForce).Where(m => m.TenantId == tenantId),
                 g => g.SubjectId,
                 m => m.SubjectId,
                 (g, members) => new { g, members })
@@ -553,6 +563,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
                     RolePermissions = m.MemberRoles.Select(mr => mr.TenantRole.Permissions).ToList(),
                     MemberLimitTo24Hours = (bool?)m.LimitTo24Hours,
                     MemberAccessEndsAt = m.AccessEndsAt,
+                    MemberNextReasonLapseAt = m.NextReasonLapseAt,
                     MemberLastUsedAt = m.LastUsedAt,
                 });
 
@@ -570,6 +581,8 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         public bool? MemberLimitTo24Hours { get; init; }
 
         public DateTime? MemberAccessEndsAt { get; init; }
+
+        public DateTime? MemberNextReasonLapseAt { get; init; }
 
         public DateTime? MemberLastUsedAt { get; init; }
 

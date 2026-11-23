@@ -6133,6 +6133,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("limit_to_24_hours");
 
+                    b.Property<DateTime?>("NextReasonLapseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_reason_lapse_at");
+
                     b.Property<Guid>("SubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("subject_id");
@@ -6161,6 +6165,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedFromInviteId");
+
+                    b.HasIndex("NextReasonLapseAt")
+                        .HasDatabaseName("ix_tenant_members_next_reason_lapse_at")
+                        .HasFilter("next_reason_lapse_at IS NOT NULL");
 
                     b.HasIndex("SubjectId")
                         .HasDatabaseName("ix_tenant_members_subject_id");

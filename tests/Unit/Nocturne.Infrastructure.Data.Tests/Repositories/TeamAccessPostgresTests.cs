@@ -527,12 +527,12 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             .Outcome.Should().Be(RoleChangeOutcome.HeldByTeam, "not even an owner may give a team a role that runs the site");
         (await Members().UpdateRoleAsync(site.Id, role, new TenantRoleEdit(slug, slug, null, [Scope.GlucoseRead, Scope.TreatmentsRead]), owner, Now, default))
             .Outcome.Should().Be(RoleChangeOutcome.Changed);
-        (await Members().DeleteRoleAsync(site.Id, role, default)).Should().Be(RoleChangeOutcome.HeldByTeam);
+        (await Members().DeleteRoleAsync(site.Id, role, Now, default)).Should().Be(RoleChangeOutcome.HeldByTeam);
         (await Members().GetRoleAsync(site.Id, role, default)).Should().NotBeNull();
 
         (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
 
-        (await Members().DeleteRoleAsync(site.Id, role, default)).Should().Be(RoleChangeOutcome.Changed);
+        (await Members().DeleteRoleAsync(site.Id, role, Now, default)).Should().Be(RoleChangeOutcome.Changed);
     }
 
     [Fact]
@@ -838,5 +838,41 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         (await reader.GetAsync(site.Id, null, 25, 0, Now, default)).Data.Where(e => e.Team is not null).Last().Team
             .Should().Be(new MemberHistoryTeam(team, "Old name"));
         (await reader.GetAsync(Guid.NewGuid(), null, 25, 0, Now, default)).Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Deleting_an_inactive_account_and_a_role_it_holds_at_once_do_not_deadlock()
+    {
+        var (team, manager) = await TeamAsync();
+        var owner = await NewSubjectAsync("owner");
+        var site = await NewSiteAsync();
+        var (token, _) = await LinkAsync(team, manager, RoleSeeds.Viewer);
+        (await ApproveAsync(token, owner, Grant(site, site.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
+        (await Members().AddMemberAsync(new NewTenantMember(site.Id, manager, [site.Roles[RoleSeeds.Caretaker]])
+            { How = MembershipJoinHow.Direct, By = null }, default)).Should().BeTrue();
+        await using (var conn = new NpgsqlConnection(database.MigratorConnectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE subjects SET is_active = false WHERE id = @id";
+            cmd.Parameters.Add(new NpgsqlParameter("@id", manager));
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var once = new Factory(() => Context(retry: false));
+        await using var holder = Context(retry: false);
+        await using var held = await holder.Database.BeginTransactionAsync();
+        await holder.LockTeamAccessAsync(site.Id, default);
+
+        var roleDeletion = new TenantMembershipRepository(once, AccountLinkRoutes.Off)
+            .DeleteRoleAsync(site.Id, site.Roles[RoleSeeds.Caretaker], Now, default);
+        await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, roleDeletion);
+        var accountDeletion = new SubjectRepository(once, AccountLinkRoutes.Off).DeleteAsync(manager, default);
+        await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 2, roleDeletion, accountDeletion);
+        await held.RollbackAsync();
+
+        (await roleDeletion.WaitAsync(TimeSpan.FromSeconds(30))).Should().Be(RoleChangeOutcome.Changed);
+        (await accountDeletion.WaitAsync(TimeSpan.FromSeconds(30))).Should().BeOfType<SubjectChange.Changed>();
+        (await AccessCountAsync(team)).Should().Be(0);
     }
 }

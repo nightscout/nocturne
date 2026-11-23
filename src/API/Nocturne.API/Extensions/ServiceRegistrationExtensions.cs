@@ -615,6 +615,7 @@ public static class ServiceRegistrationExtensions
         services.AddScheduledJob<OAuthCodeCleanupJob>();
         services.AddScheduledJob<OAuthStepUpTokenCleanupJob>();
         services.AddScheduledJob<TrustedDeviceCleanupJob>();
+        services.AddScheduledJob<MembershipLapseJob>();
 
         services.AddHostedService<AuthorizationSeedService>();
 

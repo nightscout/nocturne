@@ -1,19 +1,30 @@
+using System.Data.Common;
+using System.Linq.Expressions;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data.Services;
 
 /// <summary>
 /// The one writer of a membership's access: it alone adds or removes a <c>tenant_members</c> row or
-/// its role links, and sets the row's direct permissions, 24-hour limit, end date and invite. Each
-/// change is made to a reason (<c>tenant_member_reasons</c>), after which the row and its role links
-/// are projected to the <see cref="MembershipSum"/> of the member's reasons, on the same context, so
-/// one save commits both.
+/// its role links, and sets the row's direct permissions, 24-hour limit, end date, next lapse and
+/// invite. Each change is made to a reason (<c>tenant_member_reasons</c>), after which the row and its
+/// role links are projected to the sum of the member's reasons in force
+/// (<see cref="MembershipSum.InForceAt"/>), on the same context, so one save commits both.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The row records when the next of its reasons lapses. From then it is due, no reader takes it as in
+/// force (<see cref="MembershipLiveness"/>), and <see cref="RecomputeAsync(NocturneDbContext, Guid, Guid, DateTime, CancellationToken)"/>
+/// projects it again: on the reads that decide a request or a sign-in (<see cref="ReadInForceAsync{T}"/>),
+/// in the sweep (<see cref="RecomputeDueAsync"/>), and at startup.
+/// </para>
 /// <para>
 /// A membership's start and end are audited here, so no way of adding or removing one goes
 /// unrecorded: <see cref="AddMember"/> stages its <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType.MemberJoined"/>
@@ -29,8 +40,13 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <para>
 /// The row matches its reasons when it holds the same set of roles, the same direct permissions
 /// exactly (null against empty, order and repeats all count, because the row stores the list as the
-/// reasons give it), the same limit and end, and the direct reason's invite. A projection that finds
-/// the row matching writes nothing.
+/// reasons give it), the same limit, end and next lapse, and the direct reason's invite. A projection
+/// that finds the row matching writes nothing.
+/// </para>
+/// <para>
+/// Every path that reads a member's reasons to change them takes the member's
+/// <see cref="MembershipLock"/> first, so it needs a transaction open on the context. Adding a member
+/// reads no reasons: the caller that checks no membership exists holds the lock from that check.
 /// </para>
 /// <para>
 /// Postgres removes a member's reasons by cascade, but removal also removes them explicitly, so a
@@ -50,36 +66,37 @@ internal static class MembershipReasons
     {
         MemberAccessAudit.StageJoined(db, member.TenantId, member.SubjectId, how, createdFromInviteId, by, source);
         db.TenantMembers.Add(member);
-        NewDirectReason(db, member.Id, direct.RoleIds, direct.DirectPermissions, direct.LimitTo24Hours,
-            direct.AccessEndsAt, createdFromInviteId);
-        Project(db, member);
+        var reason = Described(db, NewDirectReason(db, member.Id, direct.RoleIds, direct.DirectPermissions,
+            direct.LimitTo24Hours, direct.AccessEndsAt, createdFromInviteId));
+        // Its one reason is the sum at any instant, and nothing can lapse before it.
+        Write(db, member, new MembershipProjection(reason.Grant, NextReasonLapseAt: null), [reason]);
     }
 
     /// <summary>Sets the direct permissions the member's direct reason gives.</summary>
     public static async Task SetDirectPermissionsAsync(
-        NocturneDbContext db, TenantMemberEntity member, IReadOnlyList<string>? permissions, CancellationToken ct)
+        NocturneDbContext db, TenantMemberEntity member, IReadOnlyList<string>? permissions, DateTime now, CancellationToken ct)
     {
-        var direct = await DirectReasonAsync(db, member, ct);
+        var direct = await DirectReasonAsync(db, member, now, ct);
         direct.DirectPermissions = permissions?.ToList();
-        Project(db, member);
+        Project(db, member, now);
     }
 
     /// <summary>Sets whether the member's direct reason limits them to the last 24 hours.</summary>
     public static async Task SetLimitTo24HoursAsync(
-        NocturneDbContext db, TenantMemberEntity member, bool limitTo24Hours, CancellationToken ct)
+        NocturneDbContext db, TenantMemberEntity member, bool limitTo24Hours, DateTime now, CancellationToken ct)
     {
-        var direct = await DirectReasonAsync(db, member, ct);
+        var direct = await DirectReasonAsync(db, member, now, ct);
         direct.LimitTo24Hours = limitTo24Hours;
-        Project(db, member);
+        Project(db, member, now);
     }
 
     /// <summary>Sets when the member's direct reason ends.</summary>
     public static async Task SetAccessEndAsync(
-        NocturneDbContext db, TenantMemberEntity member, DateTime? accessEndsAt, CancellationToken ct)
+        NocturneDbContext db, TenantMemberEntity member, DateTime? accessEndsAt, DateTime now, CancellationToken ct)
     {
-        var direct = await DirectReasonAsync(db, member, ct);
+        var direct = await DirectReasonAsync(db, member, now, ct);
         direct.AccessEndsAt = accessEndsAt;
-        Project(db, member);
+        Project(db, member, now);
     }
 
     /// <summary>
@@ -88,13 +105,13 @@ internal static class MembershipReasons
     /// </summary>
     public static async Task ReplaceRolesAsync(
         NocturneDbContext db, TenantMemberEntity member, IReadOnlyCollection<Guid> removedRoleIds,
-        IReadOnlyCollection<Guid> addedRoleIds, CancellationToken ct)
+        IReadOnlyCollection<Guid> addedRoleIds, DateTime now, CancellationToken ct)
     {
-        var direct = await DirectReasonAsync(db, member, ct);
+        var direct = await DirectReasonAsync(db, member, now, ct);
         db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, direct.Id).Where(rr => removedRoleIds.Contains(rr.TenantRoleId)));
         foreach (var roleId in addedRoleIds)
             db.TenantMemberReasonRoles.Add(NewReasonRole(direct.Id, roleId));
-        Project(db, member);
+        Project(db, member, now);
     }
 
     /// <summary>
@@ -105,7 +122,7 @@ internal static class MembershipReasons
         NocturneDbContext db, TenantMemberEntity member, MembershipEndHow how, CancellationToken ct)
     {
         MemberAccessAudit.StageRemoved(db, member.TenantId, member.SubjectId, how, source: null);
-        await LoadAsync(db, member.Id, ct);
+        await LockAndLoadAsync(db, member, ct);
         foreach (var reason in ReasonsOf(db, member.Id))
         {
             db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, reason.Id));
@@ -120,7 +137,7 @@ internal static class MembershipReasons
     /// Takes <paramref name="roleId"/> from every reason that gives it and from every member holding
     /// it, before the role itself is removed.
     /// </summary>
-    public static async Task RemoveRoleAsync(NocturneDbContext db, Guid roleId, CancellationToken ct)
+    public static async Task RemoveRoleAsync(NocturneDbContext db, Guid roleId, DateTime now, CancellationToken ct)
     {
         var memberIds = await db.TenantMemberRoles
             .Where(mr => mr.TenantRoleId == roleId)
@@ -130,91 +147,280 @@ internal static class MembershipReasons
                 .Select(rr => rr.TenantMemberReason.TenantMemberId))
             .ToListAsync(ct);
 
-        foreach (var memberId in memberIds)
+        var members = await db.TenantMembers.Where(m => memberIds.Contains(m.Id)).ToListAsync(ct);
+        await db.LockMembershipsAsync(members.Select(m => (m.TenantId, m.SubjectId)), ct);
+        foreach (var member in members)
         {
-            var member = await db.TenantMembers.FirstAsync(m => m.Id == memberId, ct);
-            await DirectReasonAsync(db, member, ct);
-            foreach (var reason in ReasonsOf(db, memberId))
+            await DirectReasonAsync(db, member, now, ct);
+            foreach (var reason in ReasonsOf(db, member.Id))
                 db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, reason.Id).Where(rr => rr.TenantRoleId == roleId));
-            Project(db, member);
+            Project(db, member, now);
         }
     }
 
     /// <summary>
     /// Whether <paramref name="row"/>, holding <paramref name="rowRoleIds"/>, is the sum of
-    /// <paramref name="reasons"/> as the remarks define it; never when it has no reason.
+    /// <paramref name="reasons"/> in force at <paramref name="now"/> as the remarks define it; never
+    /// when it has no reason.
     /// </summary>
     internal static bool Matches(
         TenantMemberEntity row, IReadOnlyCollection<Guid> rowRoleIds,
-        IReadOnlyList<(MembershipGrant Grant, string Kind, Guid? InviteId)> reasons)
+        IReadOnlyList<(MembershipGrant Grant, string Kind, Guid? InviteId)> reasons, DateTime now)
     {
-        if (MembershipSum.Of(reasons.Select(r => r.Grant).ToList()) is not { } sum)
+        if (MembershipSum.InForceAt(reasons.Select(r => r.Grant).ToList(), now) is not { } projection)
             return false;
 
+        var sum = projection.Grant;
         return rowRoleIds.ToHashSet().SetEquals(sum.RoleIds)
             && SamePermissions(row.DirectPermissions, sum.DirectPermissions)
             && row.LimitTo24Hours == sum.LimitTo24Hours
             && row.AccessEndsAt == sum.AccessEndsAt
+            && row.NextReasonLapseAt == projection.NextReasonLapseAt
             && row.CreatedFromInviteId == DirectInvite(reasons);
     }
 
-    /// <summary>Whether the member's row is the sum of its reasons, by <see cref="Matches"/>.</summary>
-    internal static async Task<bool> MatchesAsync(NocturneDbContext db, Guid memberId, CancellationToken ct)
+    /// <summary>Whether the member's row is the sum of its reasons at <paramref name="now"/>, by <see cref="Matches"/>.</summary>
+    internal static async Task<bool> MatchesAsync(NocturneDbContext db, Guid memberId, DateTime now, CancellationToken ct)
     {
         var member = await db.TenantMembers.FirstAsync(m => m.Id == memberId, ct);
         await LoadAsync(db, memberId, ct);
         return Matches(
             member,
             LinksOf(db, memberId).Select(mr => mr.TenantRoleId).ToList(),
-            ReasonsOf(db, memberId).Select(r => Described(db, r)).ToList());
+            ReasonsOf(db, memberId).Select(r => Described(db, r)).ToList(),
+            now);
     }
 
     /// <summary>
-    /// Brings every member row and its reasons together by <see cref="AlignWithRow"/>, for the startup
-    /// check, and saves once.
+    /// <see cref="RecomputeAsync(NocturneDbContext, Guid, Guid, DateTime, CancellationToken)"/> on a
+    /// context of its own, pinned to <paramref name="tenantId"/>.
     /// </summary>
-    internal static async Task<MembershipReconciliation> ReconcileAsync(NocturneDbContext db, CancellationToken ct)
+    internal static async Task RecomputeAsync(
+        INocturneDbContextFactory contexts, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct)
     {
-        var members = await db.TenantMembers.ToListAsync(ct);
-        await db.TenantMemberRoles.LoadAsync(ct);
-        await db.TenantMemberReasons.LoadAsync(ct);
-        await db.TenantMemberReasonRoles.LoadAsync(ct);
+        await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
+        await RecomputeAsync(db, tenantId, subjectId, now, ct);
+    }
+
+    /// <summary>
+    /// Projects the membership of <paramref name="subjectId"/> on <paramref name="tenantId"/> again
+    /// from its reasons in force at <paramref name="now"/>, in a transaction on <paramref name="db"/>
+    /// under the member's lock, when the row read under the lock is due; otherwise writes nothing.
+    /// </summary>
+    /// <remarks>
+    /// No one acted, so it stages no audit row. A due row's next lapse always changes, so the save
+    /// moves its <see cref="TenantMemberEntity.SysUpdatedAt"/>, as every projection that changes a row does.
+    /// </remarks>
+    internal static Task RecomputeAsync(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct) =>
+        db.ExecuteInTransactionAsync(async token =>
+        {
+            await db.LockMembershipAsync(tenantId, subjectId, token);
+            var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, token);
+            if (member is null || !MembershipLiveness.IsDue(member.NextReasonLapseAt, now))
+                return;
+
+            await LoadAsync(db, member.Id, token);
+            Project(db, member, now);
+            await db.SaveChangesAsync(token);
+        }, ct);
+
+    /// <summary>
+    /// <see cref="ReadAllInForceAsync"/> for a read of one membership, which returns its value with the
+    /// subject and next lapse of the row it found (a null lapse when it found none).
+    /// </summary>
+    internal static Task<T> ReadInForceAsync<T>(
+        INocturneDbContextFactory? contexts, Guid tenantId, DateTime now,
+        Func<Expression<Func<TenantMemberEntity, bool>>, CancellationToken, Task<(T Value, Guid SubjectId, DateTime? NextReasonLapseAt)>> read,
+        CancellationToken ct) =>
+        ReadAllInForceAsync(contexts, tenantId, now, async (inForce, token) =>
+        {
+            var (value, subjectId, lapse) = await read(inForce, token);
+            return (value, (IReadOnlyList<(Guid, DateTime?)>)[(subjectId, lapse)]);
+        }, ct);
+
+    /// <summary>
+    /// Reads memberships of <paramref name="tenantId"/> through <paramref name="read"/>, which is given
+    /// the predicate the rows must meet and returns its value with the subject and next lapse of each
+    /// row it found. It first selects by end alone (<see cref="MembershipLiveness.IsUnended"/>); when a
+    /// row it finds is due, it recomputes each due row and reads once more, selecting only live rows
+    /// (<see cref="MembershipLiveness.IsLive"/>).
+    /// </summary>
+    /// <remarks>
+    /// For the reads that decide a request or a sign-in, so a lapse narrows a member at once rather
+    /// than shutting them out until the sweep. With no <paramref name="contexts"/> (a repository over
+    /// a caller's unit of work) nothing is recomputed, and a due row reads as absent. A recompute that
+    /// fails (<see cref="IsMembershipFailure"/>) is logged and its row also reads as absent, so the
+    /// caller is refused as a non-member rather than failed.
+    /// </remarks>
+    internal static async Task<T> ReadAllInForceAsync<T>(
+        INocturneDbContextFactory? contexts, Guid tenantId, DateTime now,
+        Func<Expression<Func<TenantMemberEntity, bool>>, CancellationToken, Task<(T Value, IReadOnlyList<(Guid SubjectId, DateTime? NextReasonLapseAt)> Rows)>> read,
+        CancellationToken ct)
+    {
+        var first = await read(MembershipLiveness.IsUnended(now), ct);
+        var due = first.Rows
+            .Where(r => MembershipLiveness.IsDue(r.NextReasonLapseAt, now))
+            .Select(r => r.SubjectId)
+            .Distinct()
+            .ToList();
+        if (due.Count == 0)
+            return first.Value;
+
+        if (contexts is not null)
+        {
+            foreach (var subjectId in due)
+                await RecomputeOrLeaveDueAsync(contexts, tenantId, subjectId, now, ct);
+        }
+
+        return (await read(MembershipLiveness.IsLive(now), ct)).Value;
+    }
+
+    private static async Task RecomputeOrLeaveDueAsync(
+        INocturneDbContextFactory contexts, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
+        try
+        {
+            await RecomputeAsync(db, tenantId, subjectId, now, ct);
+        }
+        catch (Exception ex) when (IsMembershipFailure(ex))
+        {
+            db.GetService<ILoggerFactory>().CreateLogger(typeof(MembershipReasons)).LogError(
+                ex, "Could not recompute the membership of subject {SubjectId} on tenant {TenantId} after a reason lapsed; it reads as absent.",
+                subjectId, tenantId);
+        }
+    }
+
+    /// <summary>
+    /// Recomputes every membership due at <paramref name="now"/>, each in its own transaction on a
+    /// context <paramref name="openForTenant"/> opens; one that fails (<see cref="IsMembershipFailure"/>)
+    /// is logged and the rest still run.
+    /// </summary>
+    /// <param name="openPlatform">Opens the context that finds the due rows of every tenant.</param>
+    /// <param name="openForTenant">Opens a context pinned to a tenant.</param>
+    /// <param name="now">The instant the rows are due at and projected for.</param>
+    /// <param name="logger">Logs each membership that could not be recomputed.</param>
+    /// <param name="ct">A cancellation token.</param>
+    internal static async Task<MembershipLapseSweep> RecomputeDueAsync(
+        Func<CancellationToken, ValueTask<NocturneDbContext>> openPlatform,
+        Func<Guid, CancellationToken, ValueTask<NocturneDbContext>> openForTenant,
+        DateTime now, ILogger logger, CancellationToken ct)
+    {
+        List<(Guid TenantId, Guid SubjectId)> due;
+        await using (var db = await openPlatform(ct))
+        {
+            due = (await db.TenantMembers.AsNoTracking()
+                    .Where(m => m.NextReasonLapseAt <= now)
+                    .OrderBy(m => m.TenantId)
+                    .ThenBy(m => m.SubjectId)
+                    .Select(m => new { m.TenantId, m.SubjectId })
+                    .ToListAsync(ct))
+                .Select(m => (m.TenantId, m.SubjectId))
+                .ToList();
+        }
+
+        var recomputed = 0;
+        var failed = 0;
+        foreach (var (tenantId, subjectId) in due)
+        {
+            try
+            {
+                await using var db = await openForTenant(tenantId, ct);
+                await RecomputeAsync(db, tenantId, subjectId, now, ct);
+                recomputed++;
+            }
+            catch (Exception ex) when (IsMembershipFailure(ex))
+            {
+                failed++;
+                logger.LogError(
+                    ex, "Could not recompute the membership of subject {SubjectId} on tenant {TenantId} after a reason lapsed.",
+                    subjectId, tenantId);
+            }
+        }
+
+        return new MembershipLapseSweep(recomputed, failed);
+    }
+
+    /// <summary>
+    /// What reading or writing one membership can meet that need not stop the others: the database or
+    /// the save failing, and a malformed row (a <c>jsonb</c> value that is not a list of strings fails
+    /// to read as a <see cref="JsonException"/>, a cast or a format error).
+    /// </summary>
+    internal static bool IsMembershipFailure(Exception ex) =>
+        ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException
+            or JsonException or InvalidCastException or FormatException or NotSupportedException or ArgumentException;
+
+    /// <summary>
+    /// Brings every member row and its reasons together by <see cref="AlignWithRow"/> at
+    /// <paramref name="now"/>, for the startup check: one read finds the members that do not match,
+    /// then each is aligned from what it reads in its own transaction, on a context
+    /// <paramref name="open"/> opens, under its lock.
+    /// </summary>
+    /// <remarks>
+    /// One transaction per member holds one lock at a time, however many members there are.
+    /// </remarks>
+    internal static async Task<MembershipReconciliation> ReconcileAsync(
+        Func<NocturneDbContext> open, DateTime now, CancellationToken ct)
+    {
+        List<TenantMemberEntity> apart;
+        await using (var db = open())
+        {
+            var members = await db.TenantMembers.AsNoTracking().ToListAsync(ct);
+            await db.TenantMemberRoles.LoadAsync(ct);
+            await db.TenantMemberReasons.LoadAsync(ct);
+            await db.TenantMemberReasonRoles.LoadAsync(ct);
+            apart = members.Where(m => AgreementOf(db, m, now) != RowAgreement.Matches).ToList();
+        }
 
         var adopted = 0;
         var resynced = new List<Guid>();
-        var left = new List<Guid>();
-        foreach (var member in members)
+        var reprojected = new List<Guid>();
+        foreach (var candidate in apart)
         {
-            switch (AlignWithRow(db, member))
+            await using var db = open();
+            var agreement = await db.ExecuteInTransactionAsync(async token =>
+            {
+                await db.LockMembershipAsync(candidate.TenantId, candidate.SubjectId, token);
+                var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.Id == candidate.Id, token);
+                if (member is null)
+                    return RowAgreement.Matches;
+
+                await LoadAsync(db, member.Id, token);
+                var outcome = AlignWithRow(db, member, now);
+                if (outcome != RowAgreement.Matches)
+                    await db.SaveChangesAsync(token);
+                return outcome;
+            }, ct: ct);
+
+            switch (agreement)
             {
                 case RowAgreement.Adopted:
                     adopted++;
                     break;
                 case RowAgreement.Resynced:
-                    resynced.Add(member.Id);
+                    resynced.Add(candidate.Id);
                     break;
-                case RowAgreement.Left:
-                    left.Add(member.Id);
+                case RowAgreement.Reprojected:
+                    reprojected.Add(candidate.Id);
                     break;
             }
         }
 
-        if (adopted > 0 || resynced.Count > 0)
-            await db.SaveChangesAsync(ct);
-
-        return new MembershipReconciliation(adopted, resynced, left);
+        return new MembershipReconciliation(adopted, resynced, reprojected);
     }
 
     /// <summary>
     /// The member's direct reason, after <see cref="AlignWithRow"/> has brought it into line with the
-    /// row. Loads the member's reasons and links onto the context. A re-sync is logged at warning and
-    /// writes no audit row: no access changed, only the reason had fallen behind the row.
+    /// row. Takes the member's lock and loads its reasons and links onto the context. A re-sync is
+    /// logged at warning and writes no audit row: no access changed, only the reason had fallen behind
+    /// the row.
     /// </summary>
     private static async Task<TenantMemberReasonEntity> DirectReasonAsync(
-        NocturneDbContext db, TenantMemberEntity member, CancellationToken ct)
+        NocturneDbContext db, TenantMemberEntity member, DateTime now, CancellationToken ct)
     {
-        await LoadAsync(db, member.Id, ct);
-        if (AlignWithRow(db, member) == RowAgreement.Resynced)
+        await LockAndLoadAsync(db, member, ct);
+        if (AlignWithRow(db, member, now) == RowAgreement.Resynced)
         {
             db.GetService<ILoggerFactory>().CreateLogger(typeof(MembershipReasons)).LogWarning(
                 "Re-synced the direct reason of membership {MemberId} from its row, which did not match it.", member.Id);
@@ -229,37 +435,53 @@ internal static class MembershipReasons
         Matches,
         Adopted,
         Resynced,
-        Left,
+        Reprojected,
     }
 
-    /// <summary>
-    /// Brings a member's loaded reasons into line with its row: a member with no reason is given its
-    /// direct reason from the row; a member that does not match its reasons and has only the direct
-    /// one has that reason re-synced from the row; any other member that does not match is left as it
-    /// is. Nothing on the row changes.
-    /// </summary>
-    /// <remarks>
-    /// The row wins because a build that ran after a rollback, or beside this one, wrote the row and
-    /// knew nothing of reasons, so taking the reason would bring back access someone removed. That
-    /// holds only while the direct reason is the only one a member holds.
-    /// </remarks>
-    private static RowAgreement AlignWithRow(NocturneDbContext db, TenantMemberEntity member)
+    /// <summary>What <see cref="AlignWithRow"/> does to the member, from its loaded reasons and links, changing nothing.</summary>
+    private static RowAgreement AgreementOf(NocturneDbContext db, TenantMemberEntity member, DateTime now)
     {
         var reasons = ReasonsOf(db, member.Id);
         if (reasons.Count == 0)
-        {
-            NewDirectReason(
-                db, member.Id, LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToList(),
-                member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt, member.CreatedFromInviteId);
             return RowAgreement.Adopted;
+        if (Matches(member, LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToList(),
+                reasons.Select(r => Described(db, r)).ToList(), now))
+            return RowAgreement.Matches;
+        return reasons is [{ Kind: MembershipReasonKind.Direct }] ? RowAgreement.Resynced : RowAgreement.Reprojected;
+    }
+
+    /// <summary>
+    /// Brings a member's loaded reasons and row into line: a member with no reason is given its direct
+    /// reason from the row; a member whose one reason is direct and does not match it has that reason
+    /// re-synced from the row, and nothing on the row changes but a next lapse its one reason cannot
+    /// give; any other member that does not match
+    /// has its row projected from its reasons in force at <paramref name="now"/>.
+    /// </summary>
+    /// <remarks>
+    /// The row wins over a direct reason because a build that ran after a rollback, or beside this
+    /// one, wrote the row and knew nothing of reasons, so taking the reason would bring back access
+    /// someone removed. Only this build writes a reason of another kind, and the row of a member who
+    /// holds one only through it, so for that member the reasons win.
+    /// </remarks>
+    private static RowAgreement AlignWithRow(NocturneDbContext db, TenantMemberEntity member, DateTime now)
+    {
+        var agreement = AgreementOf(db, member, now);
+        switch (agreement)
+        {
+            case RowAgreement.Matches:
+                return agreement;
+            case RowAgreement.Adopted:
+                NewDirectReason(
+                    db, member.Id, LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToList(),
+                    member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt, member.CreatedFromInviteId);
+                return agreement;
+            case RowAgreement.Reprojected:
+                Project(db, member, now);
+                return agreement;
         }
 
+        var direct = ReasonsOf(db, member.Id).Single();
         var links = LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToHashSet();
-        if (Matches(member, links, reasons.Select(r => Described(db, r)).ToList()))
-            return RowAgreement.Matches;
-        if (reasons is not [{ Kind: MembershipReasonKind.Direct } direct])
-            return RowAgreement.Left;
-
         var held = RolesOf(db, direct.Id);
         db.TenantMemberReasonRoles.RemoveRange(held.Where(rr => !links.Contains(rr.TenantRoleId)));
         db.TenantMemberReasonRoles.AddRange(links
@@ -269,19 +491,27 @@ internal static class MembershipReasons
         direct.LimitTo24Hours = member.LimitTo24Hours;
         direct.AccessEndsAt = member.AccessEndsAt;
         direct.CreatedFromInviteId = member.CreatedFromInviteId;
-        return RowAgreement.Resynced;
+        Project(db, member, now);
+        return agreement;
     }
 
     /// <summary>
-    /// Writes the row and its role links to match the member's reasons, touching nothing that
-    /// already does.
+    /// Writes the row and its role links to match the member's reasons in force at
+    /// <paramref name="now"/>, touching nothing that already does.
     /// </summary>
-    private static void Project(NocturneDbContext db, TenantMemberEntity member)
+    private static void Project(NocturneDbContext db, TenantMemberEntity member, DateTime now)
     {
         var reasons = ReasonsOf(db, member.Id).Select(r => Described(db, r)).ToList();
-        var sum = MembershipSum.Of(reasons.Select(r => r.Grant).ToList())
+        var projection = MembershipSum.InForceAt(reasons.Select(r => r.Grant).ToList(), now)
             ?? throw new InvalidOperationException($"Member {member.Id} has no reason to project.");
+        Write(db, member, projection, reasons);
+    }
 
+    private static void Write(
+        NocturneDbContext db, TenantMemberEntity member, MembershipProjection projection,
+        IReadOnlyList<(MembershipGrant Grant, string Kind, Guid? InviteId)> reasons)
+    {
+        var sum = projection.Grant;
         var links = LinksOf(db, member.Id);
         db.TenantMemberRoles.RemoveRange(links.Where(mr => !sum.RoleIds.Contains(mr.TenantRoleId)));
         foreach (var roleId in sum.RoleIds.Distinct().Where(id => links.All(mr => mr.TenantRoleId != id)))
@@ -300,14 +530,28 @@ internal static class MembershipReasons
             member.LimitTo24Hours = sum.LimitTo24Hours;
         if (member.AccessEndsAt != sum.AccessEndsAt)
             member.AccessEndsAt = sum.AccessEndsAt;
+        if (member.NextReasonLapseAt != projection.NextReasonLapseAt)
+            member.NextReasonLapseAt = projection.NextReasonLapseAt;
         if (DirectInvite(reasons) is var invite && member.CreatedFromInviteId != invite)
             member.CreatedFromInviteId = invite;
     }
 
     /// <summary>
+    /// Takes the member's lock, reads its row again unless this context has already changed it, and
+    /// loads its reasons and links (<see cref="LoadAsync"/>).
+    /// </summary>
+    private static async Task LockAndLoadAsync(NocturneDbContext db, TenantMemberEntity member, CancellationToken ct)
+    {
+        await db.LockMembershipAsync(member.TenantId, member.SubjectId, ct);
+        var entry = db.Entry(member);
+        if (entry.State == EntityState.Unchanged)
+            await entry.ReloadAsync(ct);
+        await LoadAsync(db, member.Id, ct);
+    }
+
+    /// <summary>
     /// Puts the member's reasons, their roles and the member's role links on the context, beside any
-    /// the context already tracks. A second kind of reason will need the member row locked here, so
-    /// two writers cannot each project from reasons the other is changing.
+    /// the context already tracks.
     /// </summary>
     private static async Task LoadAsync(NocturneDbContext db, Guid memberId, CancellationToken ct)
     {
@@ -369,5 +613,5 @@ internal static class MembershipReasons
 /// <summary>What <see cref="MembershipReasons.ReconcileAsync"/> did.</summary>
 /// <param name="Adopted">Members that had no reason and were given their direct reason.</param>
 /// <param name="Resynced">Members whose direct reason was re-synced from the row.</param>
-/// <param name="Left">Members that do not match their reasons and hold a reason of another kind.</param>
-internal sealed record MembershipReconciliation(int Adopted, IReadOnlyList<Guid> Resynced, IReadOnlyList<Guid> Left);
+/// <param name="Reprojected">Members that hold a reason of another kind, whose row was projected from their reasons.</param>
+internal sealed record MembershipReconciliation(int Adopted, IReadOnlyList<Guid> Resynced, IReadOnlyList<Guid> Reprojected);

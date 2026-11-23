@@ -1,6 +1,5 @@
 using System.Data.Common;
 using System.Reflection;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -390,16 +389,20 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Checks every membership row against its reasons (<see cref="MembershipReasons.ReconcileAsync"/>)
-    /// under the migrator role, after migrations, and logs what it changed or left. It never throws:
-    /// a crash at startup leaves a self-hosted instance no way out, and a membership it could not
-    /// check is checked again on the next startup.
+    /// Checks every membership row against its reasons under the migrator role, after migrations, and
+    /// logs what it changed: first it recomputes the rows due at <paramref name="now"/>
+    /// (<see cref="MembershipReasons.RecomputeDueAsync"/>), then it aligns every row with its reasons
+    /// (<see cref="MembershipReasons.ReconcileAsync"/>). It never throws: a crash at startup leaves a
+    /// self-hosted instance no way out, and a membership it could not check is checked again on the
+    /// next startup.
     /// </summary>
     /// <param name="migratorConnectionString">Connection string for the schema-owning migrator role.</param>
+    /// <param name="now">The instant the reasons in force are taken at.</param>
     /// <param name="logger">Logger for what the check changed.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     public static async Task ReconcileMembershipReasonsAsync(
         string migratorConnectionString,
+        DateTime now,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -408,34 +411,30 @@ public static class DatabaseInitializationExtensions
             await using var dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
             var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
             optionsBuilder.UseNpgsql(dataSource);
-            await using var context = new NocturneDbContext(optionsBuilder.Options);
+            NocturneDbContext Open() => new(optionsBuilder.Options);
 
-            var result = await MembershipReasons.ReconcileAsync(context, cancellationToken);
+            var sweep = await MembershipReasons.RecomputeDueAsync(
+                _ => ValueTask.FromResult(Open()), (_, _) => ValueTask.FromResult(Open()), now, logger, cancellationToken);
+            if (sweep.Recomputed > 0)
+                logger.LogInformation("Recomputed {Count} memberships whose reasons had lapsed.", sweep.Recomputed);
+
+            var result = await MembershipReasons.ReconcileAsync(Open, now, cancellationToken);
             if (result.Adopted > 0)
                 logger.LogInformation("Gave {Count} memberships with no reason their direct reason.", result.Adopted);
             if (result.Resynced.Count > 0)
                 logger.LogWarning(
                     "Re-synced the direct reason of {Count} memberships from their rows, which did not match it: {MemberIds}",
                     result.Resynced.Count, result.Resynced);
-            if (result.Left.Count > 0)
+            if (result.Reprojected.Count > 0)
                 logger.LogWarning(
-                    "Left {Count} memberships that do not match their reasons and hold a reason of another kind: {MemberIds}",
-                    result.Left.Count, result.Left);
+                    "Re-projected {Count} memberships that hold a reason of another kind from their reasons, which their rows did not match: {MemberIds}",
+                    result.Reprojected.Count, result.Reprojected);
         }
-        catch (Exception ex) when (IsMembershipCheckFailure(ex))
+        catch (Exception ex) when (MembershipReasons.IsMembershipFailure(ex))
         {
             logger.LogError(ex, "Could not check memberships against their reasons; the check runs again on the next startup.");
         }
     }
-
-    /// <summary>
-    /// What <see cref="ReconcileMembershipReasonsAsync"/> can meet: the database or the save failing,
-    /// and a malformed row when it reads every row (a <c>jsonb</c> value that is not a list of strings
-    /// fails to read as a <see cref="JsonException"/>, a cast or a format error).
-    /// </summary>
-    private static bool IsMembershipCheckFailure(Exception ex) =>
-        ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException
-            or JsonException or InvalidCastException or FormatException or NotSupportedException or ArgumentException;
 
     /// <summary>
     /// Marks any background job record still in a live state as Interrupted. A connector cursor

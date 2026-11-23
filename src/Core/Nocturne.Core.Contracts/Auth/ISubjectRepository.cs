@@ -34,15 +34,15 @@ public interface ISubjectRepository
     Task<SubjectRecord?> FindSystemSubjectAsync(string name, CancellationToken ct);
 
     /// <summary>
-    /// The subject holding a membership of <paramref name="tenantId"/> that has not ended at
-    /// <paramref name="now"/> whose username is <paramref name="username"/>, with its roles; with
+    /// The subject holding a membership of <paramref name="tenantId"/> in force at
+    /// <paramref name="now"/>, recomputed first when a reason of it has lapsed, whose username is <paramref name="username"/>, with its roles; with
     /// <paramref name="activeOnly"/>, only an active one. Null when no member matches.
     /// </summary>
     Task<SubjectRecord?> FindMemberByUsernameAsync(Guid tenantId, string username, bool activeOnly, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// The active members of <paramref name="tenantId"/> whose membership has not ended at
-    /// <paramref name="now"/>, neither system nor demo subjects, whose confirmed address is
+    /// The active members of <paramref name="tenantId"/> whose membership is in force at
+    /// <paramref name="now"/>, recomputed first when a reason of it has lapsed, neither system nor demo subjects, whose confirmed address is
     /// <paramref name="email"/> by <see cref="EmailAddresses.AreSame"/>, roles not read. One address
     /// can sit on several accounts, so there may be more than one.
     /// </summary>

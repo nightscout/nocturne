@@ -77,7 +77,17 @@ public static class DeviceSubjectFilter
         }
 
         var subjectId = Guid.CreateVersion7();
+        await db.ExecuteInTransactionAsync(async token =>
+        {
+            await db.LockMembershipAsync(tenantId, subjectId, token);
+            StageDeviceSubject(db, tenantId, subjectId);
+            await db.SaveChangesAsync(token);
+        }, ct);
+        return subjectId;
+    }
 
+    private static void StageDeviceSubject(NocturneDbContext db, Guid tenantId, Guid subjectId)
+    {
         db.Subjects.Add(new SubjectEntity
         {
             Id = subjectId,
@@ -94,8 +104,5 @@ public static class DeviceSubjectFilter
             new MembershipGrant([], [Scope.FullAccess], LimitTo24Hours: false, AccessEndsAt: null),
             createdFromInviteId: null, MembershipJoinHow.System, by: null, source: null);
         MemberAccessAudit.StagePermissions(db, tenantId, subjectId, null, [Scope.FullAccess]);
-
-        await db.SaveChangesAsync(ct);
-        return subjectId;
     }
 }

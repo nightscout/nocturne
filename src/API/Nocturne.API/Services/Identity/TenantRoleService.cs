@@ -173,7 +173,7 @@ public partial class TenantRoleService(
             }
         }
 
-        return await members.DeleteRoleAsync(tenantId, roleId, ct) switch
+        return await members.DeleteRoleAsync(tenantId, roleId, time.GetUtcNow().UtcDateTime, ct) switch
         {
             RoleChangeOutcome.Changed => new DeleteRoleResult(true, null, null),
             RoleChangeOutcome.HeldByTeam => new DeleteRoleResult(

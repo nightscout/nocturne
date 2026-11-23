@@ -76,6 +76,15 @@ public class TenantMemberEntity : ISystemTimestamped
     public DateTime? AccessEndsAt { get; set; }
 
     /// <summary>
+    /// The earliest end, in UTC, of a reason in force that ends before the membership does; null when
+    /// no reason can end first. From that instant the row still includes access the reason no longer
+    /// gives, so every access read treats it as absent until it is recomputed
+    /// (<see cref="Services.MembershipReasons.RecomputeAsync(NocturneDbContext, Guid, Guid, DateTime, CancellationToken)"/>).
+    /// </summary>
+    [Column("next_reason_lapse_at")]
+    public DateTime? NextReasonLapseAt { get; set; }
+
+    /// <summary>
     /// Identifier of the invite used to create this membership, if applicable
     /// </summary>
     [Column("created_from_invite_id")]

@@ -323,7 +323,7 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        await Repository(new TestAuditActor { SubjectId = _actor }).DeleteRoleAsync(_tenant, _viewer, CancellationToken.None);
+        await Repository(new TestAuditActor { SubjectId = _actor }).DeleteRoleAsync(_tenant, _viewer, Now, CancellationToken.None);
 
         var rows = await RowsAsync();
         rows.Select(a => a.TargetSubjectId).Should().BeEquivalentTo([(Guid?)_subject, other]);
