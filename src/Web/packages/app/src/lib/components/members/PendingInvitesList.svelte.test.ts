@@ -28,6 +28,20 @@ describe("PendingInvitesList", () => {
       .toBeVisible();
   });
 
+  it("names the member who made each invite", async () => {
+    render(PendingInvitesList, {
+      invites: [
+        { ...invite, createdByName: "Alex Carer" },
+        { ...invite, id: "44444444-4444-4444-4444-444444444444", label: "Clinic", createdByName: "Sam Owner" },
+      ],
+      onRevoke: () => {},
+      isRevoking: false,
+    });
+
+    await expect.element(page.getByText("Made by Alex Carer", { exact: false })).toBeVisible();
+    await expect.element(page.getByText("Made by Sam Owner", { exact: false })).toBeVisible();
+  });
+
   it("names the invite in the revoke button", async () => {
     render(PendingInvitesList, { invites: [invite], onRevoke: () => {}, isRevoking: false });
 

@@ -259,10 +259,10 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var invites = new MemberInviteRepository(state.Seeded.Contexts);
         var inviteId = await invites.CreateAsync(
             new NewMemberInvite(
-                tenant, state.Seeded.Guest, HashUtils.Sha256Hex(token), [state.Seeded.CaretakerRole], null, null, false,
-                Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
+                tenant, await NewOwnerAsync(state.Seeded, "exhausted-owner"), HashUtils.Sha256Hex(token),
+                [state.Seeded.CaretakerRole], null, null, false, Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
             CancellationToken.None);
-        (await invites.TryClaimUseAsync(inviteId, CancellationToken.None)).Should().BeTrue();
+        (await invites.TryClaimUseAsync(inviteId, Now.UtcDateTime, CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
         var service = new MemberInviteService(
             new TenantMembershipRepository(state.Seeded.Contexts, AccountLinkRoutes.Off),
             new StaleInviteReads(state.Seeded.Contexts),
@@ -346,6 +346,17 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
 
     private Task<Guid> NewSubjectAsync(Seeded seeded, string name) =>
         new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), CancellationToken.None);
+
+    /// <summary>An owner of the tenant, whose membership never ends: a maker whose invites stay acceptable.</summary>
+    private async Task<Guid> NewOwnerAsync(Seeded seeded, string name)
+    {
+        var owner = await NewSubjectAsync(seeded, name);
+        var members = new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off);
+        var ownerRole = (await members.FindRoleIdBySlugAsync(seeded.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
+        (await members.AddMemberAsync(new NewTenantMember(seeded.Tenant, owner, [ownerRole]) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None))
+            .Should().BeTrue();
+        return owner;
+    }
 
     private async Task<Guid> GuestLinkAsync(
         Seeded seeded, Guid createdBy, Guid dataOwner, DateTime expiresAt, GuestSessionCacheService? sessions = null)
@@ -576,11 +587,11 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var invites = new MemberInviteRepository(seeded.Contexts);
         var inviteId = await invites.CreateAsync(
             new NewMemberInvite(
-                seeded.Tenant, seeded.Guest, HashUtils.Sha256Hex(token), [seeded.CaretakerRole], null, null, false,
-                Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
+                seeded.Tenant, await NewOwnerAsync(seeded, $"owner-{Guid.NewGuid():N}"), HashUtils.Sha256Hex(token),
+                [seeded.CaretakerRole], null, null, false, Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null),
             CancellationToken.None);
         if (claimLastUse)
-            (await invites.TryClaimUseAsync(inviteId, CancellationToken.None)).Should().BeTrue();
+            (await invites.TryClaimUseAsync(inviteId, Now.UtcDateTime, CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
         return (token, link);
     }
 

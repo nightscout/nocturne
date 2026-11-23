@@ -91,6 +91,14 @@ public class MemberInviteServiceTests : IDisposable
             Name = "Acceptor User",
         });
 
+        // An invite lives only while its maker is a member in force.
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = _creatorSubjectId,
+        });
+
         // Seed a follower role for the tenant
         _followerRoleId = Guid.CreateVersion7();
         _dbContext.TenantRoles.Add(new TenantRoleEntity

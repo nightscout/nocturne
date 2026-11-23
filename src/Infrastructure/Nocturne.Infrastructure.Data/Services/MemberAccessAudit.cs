@@ -37,7 +37,9 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// one <see cref="AuthAuditEventType.DeviceCredentialCapped"/> row, and a guest link that removing the
 /// member revoked is one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row, each naming the grant
 /// under <c>grant</c> (a cap also its new expiry under <c>expires_at</c>), with the member as the
-/// target. A device credential whose expiry was removed is one
+/// target; a member invite that removing the member revoked is one
+/// <see cref="AuthAuditEventType.MemberInviteRevoked"/> row naming the invite under <c>invite</c>, with
+/// the member as the target. A device credential whose expiry was removed is one
 /// <see cref="AuthAuditEventType.DeviceCredentialKept"/> row with its maker as the target. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c> when an invite
 /// caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
@@ -196,6 +198,18 @@ internal static class MemberAccessAudit
         {
             [GrantKey] = grantId.ToString(),
             [AuthAuditKind.Key] = AuthAuditKind.Tenant,
+        }, source: null);
+
+    /// <summary>
+    /// Stages one <see cref="AuthAuditEventType.MemberInviteRevoked"/> row for a member invite the member
+    /// made, revoked because the member was removed.
+    /// </summary>
+    public static void StageMemberInviteRevoked(
+        NocturneDbContext db, Guid tenantId, Guid memberSubjectId, Guid inviteId) =>
+        Add(db, AuthAuditEventType.MemberInviteRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
+        {
+            [InviteKey] = inviteId.ToString(),
+            [AuthAuditRows.KindKey] = TenantKind,
         }, source: null);
 
     /// <summary>

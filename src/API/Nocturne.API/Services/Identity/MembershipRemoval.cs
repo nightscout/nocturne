@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
@@ -14,20 +15,23 @@ namespace Nocturne.API.Services.Identity;
 
 /// <summary>
 /// Removes a membership with what it leaves behind: its roles and their audit rows, the subject's
-/// chat links to the tenant, every live grant of the subject on it, and every live guest link the
-/// subject made, whoever the link's data owner is. A membership with an end date also stops, at
-/// once, the alert channels the subject added (<see cref="AlertChannelStops"/>) and the device
-/// credentials they made (<see cref="IOAuthGrantRepository.CapGrantsCreatedByAsync"/>); one without
-/// keeps them, as a member who never had an end date made them to last.
+/// chat links to the tenant, every live grant of the subject on it, every live guest link the
+/// subject made, whoever the link's data owner is, and every live member invite the subject made.
+/// A membership with an end date also stops, at once, the alert channels the subject added
+/// (<see cref="AlertChannelStops"/>) and the device credentials they made
+/// (<see cref="IOAuthGrantRepository.CapGrantsCreatedByAsync"/>); one without keeps them, as a
+/// member who never had an end date made them to last.
 /// </summary>
 /// <remarks>
 /// Chat identity directory rows are global and carry no membership join, so a link left behind
 /// would keep answering bot commands for the tenant; the same subject's links to tenants they still
 /// belong to survive. Grants carry no membership join either, so left live every one would work
 /// again the moment the subject joins again. A guest link's grant belongs to its data owner, so it is
-/// found by the member who made it, and each one revoked is audited, before the membership's own rows
-/// so its removed row follows them. All of it goes in one save on the caller's unit, so the
-/// pieces cannot come apart.
+/// found by the member who made it, and each one revoked is audited, as is each invite, before the
+/// membership's own rows so its removed row follows them. All of it goes in one save on the caller's
+/// unit, so the pieces cannot come apart. A membership whose end date passes is not removed, so the
+/// invites its member made are refused at accept instead (<see cref="IMemberInviteRepository.TryClaimUseAsync"/>);
+/// deleting the account removes them with the subject.
 /// </remarks>
 internal static class MembershipRemoval
 {
@@ -53,13 +57,16 @@ internal static class MembershipRemoval
         var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(member.SubjectId, now, ct);
         var before = AddedAuditRows(context);
         grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
-        var linkRows = AddedAuditRows(context).Except(before).ToList();
+        var invites = new MemberInviteRepository(unit);
+        var revokedInvites = await invites.StageRevokeLiveMadeByAsync(tenantId, member.SubjectId, now, ct);
+        var stagedRows = AddedAuditRows(context).Except(before).ToList();
 
         var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, how, ct);
         if (removal != OwnerGuardedChange.Changed)
         {
-            foreach (var row in linkRows)
+            foreach (var row in stagedRows)
                 context.Entry(row).State = EntityState.Detached;
+            invites.UnstageRevokeLiveMadeBy(revokedInvites.ToHashSet());
             return (removal, []);
         }
 

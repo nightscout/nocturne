@@ -81,6 +81,12 @@ public static class AuthAuditEventType
     public const string MemberRemoved = "member_removed";
 
     /// <summary>
+    /// Event type when removing a member revokes a member invite they made. The target is the member;
+    /// the details name the invite under <c>invite</c>.
+    /// </summary>
+    public const string MemberInviteRevoked = "member_invite_revoked";
+
+    /// <summary>
     /// Event type when a member's access end date set or moved earlier lowers the expiry of a guest
     /// link they made. The target is the member; the details name the link under <c>grant</c> and its
     /// new expiry under <c>expires_at</c> as an ISO 8601 UTC instant.

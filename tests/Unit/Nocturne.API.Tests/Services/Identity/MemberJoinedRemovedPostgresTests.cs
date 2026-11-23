@@ -371,7 +371,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         var invite = await invites.CreateAsync(
             new NewMemberInvite(s.Tenant, s.Manager, HashUtils.Sha256Hex(token), [s.CaretakerRole], null, null, false,
                 Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null), Ct);
-        (await invites.TryClaimUseAsync(invite, Ct)).Should().BeTrue();
+        (await invites.TryClaimUseAsync(invite, Now.UtcDateTime, Ct)).Should().Be(MemberInviteClaim.Claimed);
         var contexts = Contexts(s.Tenant);
         var service = new MemberInviteService(
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
