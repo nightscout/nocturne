@@ -88,6 +88,16 @@ internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfigur
     }
 }
 
+internal sealed class AlertEvaluatedReadingEntityConfiguration : IEntityTypeConfiguration<AlertEvaluatedReadingEntity>
+{
+    public void Configure(EntityTypeBuilder<AlertEvaluatedReadingEntity> entity)
+    {
+        entity.ToTable("alert_evaluated_readings");
+        entity.HasKey(e => e.TenantId);
+        entity.Property(e => e.TenantId).ValueGeneratedNever();
+    }
+}
+
 internal sealed class AlertExcursionEntityConfiguration : IEntityTypeConfiguration<AlertExcursionEntity>
 {
     public void Configure(EntityTypeBuilder<AlertExcursionEntity> entity)

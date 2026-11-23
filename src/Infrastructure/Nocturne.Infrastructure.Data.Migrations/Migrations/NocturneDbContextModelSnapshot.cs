@@ -234,6 +234,33 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("alert_deliveries", (string)null);
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertEvaluatedReadingEntity", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("EvaluatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evaluated_at");
+
+                    b.Property<double>("ReadingMgdl")
+                        .HasColumnType("double precision")
+                        .HasColumnName("reading_mgdl");
+
+                    b.Property<DateTime>("ReadingTimestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reading_timestamp");
+
+                    b.Property<double?>("ReadingTrendRate")
+                        .HasColumnType("double precision")
+                        .HasColumnName("reading_trend_rate");
+
+                    b.HasKey("TenantId");
+
+                    b.ToTable("alert_evaluated_readings", (string)null);
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertExcursionEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10762,6 +10789,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("AlertInstance");
 
                     b.Navigation("AlertRuleChannel");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertEvaluatedReadingEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertExcursionEntity", b =>

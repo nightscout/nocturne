@@ -1071,6 +1071,7 @@ public class AlertSweepJobWallClockTests
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
             services.AddSingleton<AlertEvaluationWatermark>();
             services.AddScoped<ICanonicalAlertEvaluator, CanonicalAlertEvaluator>();
+            services.AddSingleton(EvaluatedReadings.EveryNewest(canonical.Object, Time));
 
             _services = services.BuildServiceProvider();
             _sweep = new AlertSweepJob(Logger);

@@ -94,13 +94,13 @@ public sealed class AlertOrchestratorSupersededPassTests
             new ListLogger<AlertOrchestrator>());
     }
 
-    private Task PassAsync(AlertOrchestrator orchestrator, SensorGlucose reading, long readAt, params AlertRuleSnapshot[] rules) =>
+    private Task<AlertPassOutcome> PassAsync(AlertOrchestrator orchestrator, SensorGlucose reading, long readAt, params AlertRuleSnapshot[] rules) =>
         orchestrator.EvaluateRulesAsync(
             rules, rules.Select(r => r.Id).ToHashSet(), CanonicalAlertEvaluator.ContextFor(reading, default),
             readAt, CancellationToken.None);
 
     /// <summary>Starts pass A on <paramref name="older"/> and holds it in rule <see cref="First"/>'s delivery.</summary>
-    private async Task<Task> HoldPassAAsync(AlertOrchestrator orchestrator, SensorGlucose older)
+    private async Task<Task<AlertPassOutcome>> HoldPassAAsync(AlertOrchestrator orchestrator, SensorGlucose older)
     {
         var passA = PassAsync(orchestrator, older, _decisions.BeginRead().Sequence, First, Second, Third);
         await _firstDeliveryEntered.Task.WaitAsync(Guard);
@@ -119,11 +119,13 @@ public sealed class AlertOrchestratorSupersededPassTests
         var orchestrator = Orchestrator();
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
 
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second).WaitAsync(Guard);
+        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second).WaitAsync(Guard))
+            .Should().Be(AlertPassOutcome.Decided);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal(
             (First.Id, 80m), (First.Id, 52m), (Second.Id, 52m), (Third.Id, 80m));
+        (await passA).Should().Be(AlertPassOutcome.Superseded);
     }
 
     [Fact]
@@ -147,10 +149,40 @@ public sealed class AlertOrchestratorSupersededPassTests
         var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
         _engineFailsFor = (Second.Id, 52m);
 
-        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second, Third).WaitAsync(Guard);
+        (await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, First, Second, Third).WaitAsync(Guard))
+            .Should().Be(AlertPassOutcome.Failed);
         await ReleaseAsync(passA);
 
         _evaluated.Should().Equal((First.Id, 80m), (First.Id, 52m), (Third.Id, 52m), (Second.Id, 80m));
+        (await passA).Should().Be(AlertPassOutcome.Superseded, "it skipped the rule the newer pass decided, and none of its own threw");
+    }
+
+    [Fact]
+    public async Task A_pass_with_a_superseded_rule_then_a_rule_that_threw_failed()
+    {
+        var orchestrator = Orchestrator();
+        var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
+        _engineFailsFor = (Third.Id, 80m);
+
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Second).WaitAsync(Guard);
+        await ReleaseAsync(passA);
+
+        _evaluated.Should().Equal((First.Id, 80m), (Second.Id, 52m));
+        (await passA).Should().Be(AlertPassOutcome.Failed, "a rule that threw is undecided, whatever another rule's pass skipped");
+    }
+
+    [Fact]
+    public async Task A_pass_with_a_rule_that_threw_then_a_superseded_rule_failed()
+    {
+        var orchestrator = Orchestrator();
+        var passA = await HoldPassAAsync(orchestrator, Reading(0, 80));
+        _engineFailsFor = (Second.Id, 80m);
+
+        await PassAsync(orchestrator, Reading(5, 52), _decisions.BeginRead().Sequence, Third).WaitAsync(Guard);
+        await ReleaseAsync(passA);
+
+        _evaluated.Should().Equal((First.Id, 80m), (Third.Id, 52m));
+        (await passA).Should().Be(AlertPassOutcome.Failed, "a later skip does not hide the rule that threw");
     }
 
     [Fact]

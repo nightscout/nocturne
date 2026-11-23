@@ -25,6 +25,7 @@ namespace Nocturne.API.Services.Alerts;
 ///   <item>Check each enabled rule's condition for a version that cannot be evaluated (<see cref="IUnevaluableRuleNotice"/>).</item>
 ///   <item>Tell the owners of each channel of an enabled rule that does not send (<see cref="IAlertChannelNotice"/>).</item>
 ///   <item>Archive a clock-anomaly notification once no stored reading is ahead of the clock (<see cref="IClockAnomalyNotice.RefreshAsync"/>).</item>
+///   <item>Evaluate every enabled rule against a newest reading no evaluation completed for (<see cref="EvaluateLostReadingAsync"/>).</item>
 ///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="RuleTrees.ReferencesWallClock"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
@@ -33,11 +34,12 @@ namespace Nocturne.API.Services.Alerts;
 /// after it; the run then fails with the first error, and is retried after <see cref="SweepMaxBackoff"/>.
 /// An inactive tenant's row is parked for <see cref="IScheduledJob.InactiveTenantRecheck"/>.
 /// <para>
-/// The job keeps two facts per tenant in memory, <see cref="_wallClock"/> and
-/// <see cref="_usableLookbacks"/>, and neither is a write or a notification. A restart, or a run in
-/// another replica, reads each again from the database: the same wall-clock verdict, and a look back
-/// that may find a usable reading backfilled behind an unchanged newest one sooner than a kept look
-/// back would.
+/// The job keeps three facts per tenant in memory, <see cref="_wallClock"/>,
+/// <see cref="_usableLookbacks"/> and <see cref="_lostReported"/>, and none is a write or a
+/// notification. A restart, or a run in another replica, reads the first two again from the
+/// database: the same wall-clock verdict, and a look back that may find a usable reading backfilled
+/// behind an unchanged newest one sooner than a kept look back would. The third only keeps a log line
+/// to once per reading, so such a run logs once more.
 /// </para>
 /// </remarks>
 /// <seealso cref="AlertOrchestrator"/>
@@ -81,6 +83,12 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
 
     private sealed record KeptLookBack(Guid NewestId, DateTime NewestAt, UsableReading Found);
 
+    /// <summary>
+    /// Per tenant, the reading <see cref="EvaluateLostReadingAsync"/> last logged, so a reading
+    /// whose evaluation keeps failing is logged once rather than every run.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, EvaluatedReading> _lostReported = new();
+
     public string Name => JobName;
 
     public JobEnrolment Enrolment => JobEnrolment.PerTenant;
@@ -96,6 +104,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         {
             _wallClock.TryRemove(tenantId, out _);
             _usableLookbacks.TryRemove(tenantId, out _);
+            _lostReported.TryRemove(tenantId, out _);
             return JobOutcome.Resume(null, run.StartedAt + IScheduledJob.InactiveTenantRecheck);
         }
 
@@ -109,6 +118,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                      (CheckRuleConditionsAsync, "checking rule conditions"),
                      (CheckAlertChannelsAsync, "checking alert channels"),
                      (CheckClockAnomaliesAsync, "checking clock-anomaly notifications"),
+                     (EvaluateLostReadingAsync, "evaluating a reading no evaluation completed for"),
                      (EvaluateWallClockRulesAsync, "evaluating wall-clock rules"),
                      (CheckHeldRulesAsync, "checking held rules"),
                      (EvaluateAutoResolveAsync, "evaluating auto-resolve"),
@@ -136,6 +146,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     {
         private TenantAlertContext? _tenant;
         private EnabledAlertRules? _enabledRules;
+        private AlertReadingSelection? _selection;
         private (Guid ReadingId, DateTime At, ReadingTrend Trend)? _trend;
 
         public IServiceProvider Services => services;
@@ -158,6 +169,10 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
         /// <summary>The tenant's enabled rules that can be read, read once per run.</summary>
         public async Task<IReadOnlyList<AlertRuleSnapshot>> EnabledRulesAsync(CancellationToken ct) =>
             (await ReadEnabledRulesAsync(ct)).Rules;
+
+        /// <summary>The reading the tenant's alert contexts are built from (<see cref="AlertReadings"/>), read once per run.</summary>
+        public async Task<AlertReadingSelection> SelectionAsync(CancellationToken ct) =>
+            _selection ??= await AlertReadings.SelectAsync(services.GetRequiredService<ICanonicalGlucoseService>(), now, ct);
 
         /// <summary>
         /// The trend of <paramref name="reading"/>, read once per run: the snooze and wall-clock
@@ -705,6 +720,87 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     }
 
     /// <summary>
+    /// How long after a reading was stored the sweep takes its evaluation as lost. A glucose write's
+    /// evaluation starts at once, with no debounce (<see cref="AlertFactEvaluationScheduler"/>), and is
+    /// one canonical read, one enrichment and one engine call per rule, so it normally completes well
+    /// within a second; the rest leaves room for a slow delivery inside the pass. How late a lost
+    /// evaluation is then made good is bounded in docs/alerts/engine-semantics.md §5.2.
+    /// </summary>
+    internal static readonly TimeSpan LostEvaluationGrace = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The oldest arrival a reading the sweep makes good can have: the largest glucose freshness bound
+    /// a rule can have. A reading that arrived longer ago is stale to every glucose leaf, which ages a
+    /// reading from its arrival as the sweep does here (docs/alerts/engine-semantics.md §3), so its
+    /// evaluation could open nothing through glucose and would only start holds nothing started before.
+    /// </summary>
+    internal static readonly TimeSpan LostEvaluationReach = TimeSpan.FromMinutes(AlertRuleGlucoseFreshness.MaxMinutes);
+
+    /// <summary>
+    /// Evaluates every enabled rule, through <see cref="ICanonicalAlertEvaluator"/> as a glucose write
+    /// does, when the newest reading <see cref="AlertReadings"/> selects, with a value or not, is not the
+    /// one the tenant's last completed pass recorded (<see cref="IEvaluatedReadingStore"/>), was
+    /// stored at least <see cref="LostEvaluationGrace"/> ago and at most <see cref="LostEvaluationReach"/>
+    /// ago: its write's evaluation was dropped at shutdown, died with its process, threw, or left a rule
+    /// undecided (docs/alerts/engine-semantics.md §5.2).
+    /// </summary>
+    /// <remarks>
+    /// The evaluation claims the reading (<see cref="AlertEvaluationWatermark.TryClaim"/>), so in one
+    /// process it does not run while the write's own pass on the reading runs, or after one completed
+    /// within <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>. A pass of another process on the
+    /// reading that outlasts the grace is evaluated twice; the transition lock re-reads the tracker and
+    /// drops the stale decision (<see cref="ExcursionTransitionWriter"/>), so an alert opens once.
+    /// <para>
+    /// The reading's stored time and <see cref="Sweep.Now"/> are both read from the API's clock. A
+    /// stored time ahead of the sweep's clock is another process's clock running ahead, which cannot
+    /// say how long the reading has been stored, so the reading is evaluated: a second evaluation is
+    /// harmless and a missed one is not.
+    /// </para>
+    /// <para>
+    /// A tenant with no record has had no evaluation recorded since the record began, which is no
+    /// sign of a loss, so its first is logged as information. A record that names another reading is
+    /// such a sign, so it is logged as a warning. Each is logged only once the pass has run, and once per
+    /// reading.
+    /// </para>
+    /// </remarks>
+    private async Task EvaluateLostReadingAsync(Sweep sweep, CancellationToken ct)
+    {
+        if ((await sweep.EnabledRulesAsync(ct)).Count == 0) return;
+        if ((await sweep.SelectionAsync(ct)).Selected is not { } newest) return;
+
+        var stored = sweep.Now - newest.CreatedAt;
+        if (stored > LostEvaluationReach) return;
+
+        var reading = EvaluatedReading.Of(newest);
+        var recorded = await sweep.Services.GetRequiredService<IEvaluatedReadingStore>().GetAsync(ct);
+        if (recorded == reading)
+        {
+            _lostReported.TryRemove(sweep.TenantId, out _);
+            return;
+        }
+
+        if (stored >= TimeSpan.Zero && stored < LostEvaluationGrace) return;
+
+        var ran = await sweep.Services.GetRequiredService<ICanonicalAlertEvaluator>().EvaluateAsync(
+            new MovedFacts(new HashSet<string>(StringComparer.Ordinal) { ContextFactWrites.Glucose }), ct);
+        if (!ran || (_lostReported.TryGetValue(sweep.TenantId, out var reported) && reported == reading)) return;
+
+        _lostReported[sweep.TenantId] = reading;
+        if (recorded is null)
+        {
+            logger.LogInformation(
+                "The sweep evaluated every enabled rule of tenant {TenantId} against its newest reading, the one at {ReadingTimestamp}: no evaluation was recorded for the tenant before",
+                sweep.TenantId, newest.Timestamp);
+        }
+        else
+        {
+            logger.LogWarning(
+                "No evaluation of the reading at {ReadingTimestamp} was recorded as complete for tenant {TenantId}; the sweep evaluated every enabled rule against it, and does so each run until one is",
+                newest.Timestamp, sweep.TenantId);
+        }
+    }
+
+    /// <summary>
     /// <paramref name="rules"/> without each that waits for its next change and whose last
     /// evaluation, from the <paramref name="glucose"/> facts of the run's context, recorded one
     /// still ahead of the run, or none.
@@ -749,8 +845,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
     /// </remarks>
     private async Task<UsableReading> LastUsableReadingAsync(Sweep sweep, CancellationToken ct)
     {
-        var canonical = sweep.Services.GetRequiredService<ICanonicalGlucoseService>();
-        var selection = await AlertReadings.SelectAsync(canonical, sweep.Now, ct);
+        var selection = await sweep.SelectionAsync(ct);
         await sweep.Services.GetRequiredService<IClockAnomalyNotice>()
             .ReportReadingIsolatedAsync(selection, sweep.Now, logger, ct);
         var latest = selection.Selected;
@@ -768,7 +863,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
             return kept.Found;
         }
 
-        var back = await AlertReadings.LookBackAsync(canonical, latest, ct);
+        var back = await AlertReadings.LookBackAsync(sweep.Services.GetRequiredService<ICanonicalGlucoseService>(), latest, ct);
         var found = new UsableReading(back.Usable, back.At, Valueless: (latest, back));
         _usableLookbacks[sweep.TenantId] = new KeptLookBack(latest.Id, latest.Timestamp, found);
         return found;

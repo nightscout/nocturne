@@ -93,8 +93,11 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
 
     private sealed class ScopedEvaluator(RecordingEvaluator recording, ITenantAccessor tenant) : ICanonicalAlertEvaluator
     {
-        public Task EvaluateAsync(MovedFacts moved, CancellationToken ct = default) =>
-            recording.RunAsync(tenant.TenantId, moved.Facts, ct);
+        public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+        {
+            await recording.RunAsync(tenant.TenantId, moved.Facts, ct);
+            return true;
+        }
     }
 
     private static RecordsChanged Change(Type type, IReadOnlyList<IV4Record>? created = null, IReadOnlyList<IV4Record>? updated = null, IReadOnlyList<IV4Record>? deleted = null) =>

@@ -303,8 +303,8 @@ internal sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, ID
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Drops pending work and cancels running evaluations. A dropped evaluation of a wall-clock rule is
-    /// made by the sweep; any other rule is evaluated next by the tenant's next reading.
+    /// Drops pending work and cancels running evaluations. The sweep makes good a dropped evaluation of
+    /// a reading (<see cref="AlertSweepJob.LostEvaluationGrace"/>), and of a wall-clock rule.
     /// </summary>
     private void Abandon()
     {

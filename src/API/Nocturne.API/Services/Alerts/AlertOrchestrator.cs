@@ -40,7 +40,7 @@ internal sealed class AlertOrchestrator(
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
 {
-    public async Task EvaluateRulesAsync(
+    public async Task<AlertPassOutcome> EvaluateRulesAsync(
         IReadOnlyList<AlertRuleSnapshot> rules,
         IReadOnlySet<Guid> enabledRuleIds,
         SensorContext context,
@@ -48,7 +48,7 @@ internal sealed class AlertOrchestrator(
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
-        if (tenantId == Guid.Empty || rules.Count == 0) return;
+        if (tenantId == Guid.Empty || rules.Count == 0) return AlertPassOutcome.Decided;
 
         // Before the filter below, which drops a rule whose alert_state names no enabled rule:
         // a malformed alert_state names none, and its rule is still reported.
@@ -56,7 +56,7 @@ internal sealed class AlertOrchestrator(
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger, enabledRuleIds);
-        if (evaluable.Count == 0) return;
+        if (evaluable.Count == 0) return AlertPassOutcome.Decided;
 
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
         // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
@@ -64,11 +64,18 @@ internal sealed class AlertOrchestrator(
         var stamp = readAt is { } read ? AlertRuleDecisions.StampOf(enriched, read) : null;
 
         var anomalies = new Dictionary<string, ClockAnomaly>(StringComparer.Ordinal);
+        var outcome = AlertPassOutcome.Decided;
         foreach (var rule in evaluable)
         {
             try
             {
-                foreach (var anomaly in await EvaluateRuleAsync(rule, enriched, tenantId, stamp, ct))
+                if (await EvaluateRuleAsync(rule, enriched, tenantId, stamp, ct) is not { } evaluated)
+                {
+                    if (outcome == AlertPassOutcome.Decided)
+                        outcome = AlertPassOutcome.Superseded;
+                    continue;
+                }
+                foreach (var anomaly in evaluated)
                 {
                     if (!anomalies.TryGetValue(anomaly.Fact, out var seen) || seen.Ahead < anomaly.Ahead)
                         anomalies[anomaly.Fact] = anomaly;
@@ -80,12 +87,14 @@ internal sealed class AlertOrchestrator(
             }
             catch (Exception ex)
             {
+                outcome = AlertPassOutcome.Failed;
                 logger.LogError(ex, "Error evaluating alert rule {AlertRuleId} for tenant {TenantId}",
                     rule.Id, tenantId);
             }
         }
 
         await clockAnomalyNotice.ReportIsolatedAsync(enriched, anomalies.Values, logger, ct);
+        return outcome;
     }
 
     /// <remarks>
@@ -94,7 +103,8 @@ internal sealed class AlertOrchestrator(
     /// lands between them. A rule a newer context decided is skipped with nothing recorded; an
     /// evaluation that throws records nothing. Delivery runs after the section.
     /// </remarks>
-    private async Task<IReadOnlyList<ClockAnomaly>> EvaluateRuleAsync(
+    /// <returns>The clock anomalies the evaluation read, or null when a newer context had decided the rule.</returns>
+    private async Task<IReadOnlyList<ClockAnomaly>?> EvaluateRuleAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         Guid tenantId,
@@ -121,7 +131,7 @@ internal sealed class AlertOrchestrator(
             logger.LogDebug(
                 "Alert rule {AlertRuleId} of tenant {TenantId} was decided by a newer reading; this pass skips it",
                 rule.Id, tenantId);
-            return [];
+            return null;
         }
         if (evaluation.Skipped) return [];
 

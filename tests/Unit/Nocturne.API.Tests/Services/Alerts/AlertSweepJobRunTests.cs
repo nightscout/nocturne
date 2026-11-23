@@ -7,6 +7,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -126,6 +127,7 @@ public class AlertSweepJobRunTests
         await using var services = new ServiceCollection()
             .AddSingleton(_repository.Object)
             .AddSingleton(_notice.Object)
+            .AddSingleton(Mock.Of<ICanonicalGlucoseService>())
             .AddSingleton(NoHeldRules.Notice())
             .AddSingleton(Mock.Of<IClockAnomalyNotice>())
             .AddSingleton(Mock.Of<IAlertChannelNotice>())

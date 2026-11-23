@@ -421,6 +421,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "alert_condition_timers",
         "alert_condition_not_true",
         "alert_tracker_state",
+        "alert_evaluated_readings",
         "alert_rules",
         "dnd_windows",
         "tenant_alert_settings",

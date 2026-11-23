@@ -115,6 +115,7 @@ public class AlertSweepJobSnoozeTests
         services.AddSingleton<TimeProvider>(clock);
         services.AddSingleton(_repository.Object);
         services.AddSingleton(_canonical.Object);
+        services.AddSingleton(EvaluatedReadings.EveryNewest(_canonical.Object, clock));
         services.AddSingleton(enricher.Object);
         services.AddSingleton(_orchestrator.Object);
         services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
