@@ -149,6 +149,7 @@ public class TandemAuthTokenProvider(
         {
             _logger.LogError(
                 "Tandem Source login failed with HTTP {StatusCode}", (int)response.StatusCode);
+            RecordLoginAnswer(response.StatusCode);
             return (false, response.IsRetryableError());
         }
 
@@ -160,6 +161,7 @@ public class TandemAuthTokenProvider(
             // Tandem answers a rejected credential with HTTP 200 and a non-SUCCESS status in the
             // body, so this — not the status line — is the sign that retrying cannot help.
             _logger.LogError("Tandem Source login did not return SUCCESS (status: {Status})", status);
+            RecordLoginAnswer(credentialsRefused: status is not null);
             return (false, false);
         }
 

@@ -99,10 +99,48 @@ public class TandemAuthTokenProviderRetryTests
     ///     A sync that could not sign in tells the tenant what the provider learned about why, rather
     ///     than a bare "Authentication failed".
     /// </summary>
-    [Fact]
-    public async Task Sync_LoginRefused_ReportsTheProvidersSignInReason()
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task Sync_LoginRefused_ReportsTheProvidersSignInReason(HttpStatusCode refusal)
     {
-        var handler = new TandemLoginHandler { LoginStatus = HttpStatusCode.Unauthorized };
+        var result = await SyncAsync(new TandemLoginHandler { LoginStatus = refusal });
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("did not accept this sign-in");
+        result.Errors.Should().ContainSingle().Which.Should().Contain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task Sync_LoginBodyIsNotSuccess_ReportsTheProvidersSignInReason()
+    {
+        var result = await SyncAsync(new TandemLoginHandler { LoginBodyStatus = "INVALID_CREDENTIALS" });
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("did not accept this sign-in");
+        result.Errors.Should().ContainSingle().Which.Should().Contain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task Sync_LoginBodyHasNoStatus_ReportsATemporaryFailure()
+    {
+        var result = await SyncAsync(new TandemLoginHandler { LoginBodyStatus = null });
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task Sync_LoginUnavailable_ReportsATemporaryFailure()
+    {
+        var result = await SyncAsync(new TandemLoginHandler { LoginStatus = HttpStatusCode.ServiceUnavailable });
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    private static async Task<SyncResult> SyncAsync(TandemLoginHandler handler)
+    {
         using var httpClient = new HttpClient();
         using var provider = ProviderFor(handler, httpClient, TimeProvider.System);
         var service = new TandemConnectorService(
@@ -112,11 +150,7 @@ public class TandemAuthTokenProviderRetryTests
             Mock.Of<IRetryDelayStrategy>(),
             provider);
 
-        var result = await service.SyncDataAsync(new SyncRequest(), SignInConfig(3), CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Message.Should().Be(provider.SignInFailureReason);
-        result.Errors.Should().ContainSingle().Which.Should().Be(provider.SignInFailureReason);
+        return await service.SyncDataAsync(new SyncRequest(), SignInConfig(3), CancellationToken.None);
     }
 
     private static async Task<string?> AuthenticateAsync(
@@ -179,7 +213,7 @@ public class TandemAuthTokenProviderRetryTests
 
         public HttpRequestException? FailFirstLoginWith { get; init; }
         public HttpStatusCode LoginStatus { get; init; } = HttpStatusCode.OK;
-        public string LoginBodyStatus { get; init; } = "SUCCESS";
+        public string? LoginBodyStatus { get; init; } = "SUCCESS";
 
         public int LoginCalls { get; private set; }
 
@@ -203,7 +237,7 @@ public class TandemAuthTokenProviderRetryTests
                         Content = new StringContent("{\"message\":\"unauthorized\"}")
                     });
 
-                return Task.FromResult(Ok($"{{\"status\":\"{LoginBodyStatus}\"}}"));
+                return Task.FromResult(Ok(LoginBodyStatus is null ? "{}" : $"{{\"status\":\"{LoginBodyStatus}\"}}"));
             }
 
             if (url.StartsWith(Region.AuthorizationEndpoint, StringComparison.Ordinal))
