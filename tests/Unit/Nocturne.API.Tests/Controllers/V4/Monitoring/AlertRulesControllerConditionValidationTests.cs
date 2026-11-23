@@ -442,6 +442,39 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
+    [InlineData("Threshold", """{"direction": "below", "value": 70, "value_from": {"fact": "target_low"}}""", "threshold", "limit_conflict:value_from")]
+    [InlineData("Threshold", """{"direction": "below"}""", "threshold", "field_missing:value")]
+    [InlineData("Threshold", """{"direction": "above", "value_from": {"fact": "latest_glucose"}}""", "threshold", "self_reference:value_from")]
+    [InlineData("Predicted", """{"operator": "<", "within_minutes": 30, "value_from": {"fact": "latest_glucose", "offset": -1000.5}}""", "predicted", "offset_out_of_range:offset")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "target_low", "offset": "-10"}}""", "eventual_glucose", "invalid_field:offset")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "max_iob"}}""", "eventual_glucose", "unknown_value:fact")]
+    [InlineData("Iob", """{"operator": ">", "value": 2, "value_from": {"fact": "target_low"}}""", "iob", "unknown_field")]
+    [InlineData("Sustained",
+        """{"minutes": 15, "child": {"type": "threshold", "threshold": {"direction": "below", "value_from": {"fact": "target_low"}, "clear_margin": 5}}}""",
+        "sustained[0].threshold", "margin_under_sustained:clear_margin")]
+    public async Task CreateRule_rejects_an_invalid_limit_from_a_fact(
+        string type, string conditionParams, string path, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Below target",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
     [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "iob", "min_of": ["cob"]}""", "selector_conflict:min_of")]
     [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob"], "max_of": ["cob"]}""", "selector_conflict:max_of")]
     [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": []}""", "list_empty:min_of")]

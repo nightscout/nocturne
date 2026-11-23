@@ -1,0 +1,335 @@
+{
+  "schema_version": 1,
+  "scenario": "limit-from-fact-unknown",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "target_range",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-05T12:11:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 5,
+              "value": 20,
+              "limit": 30,
+              "limit_fact": "latest_glucose",
+              "limit_offset": -30
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-01-05T12:11:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "target_range",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-05T12:11:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            },
+            {
+              "fact": "target_range",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "excursion": 1,
+            "held_since": "2026-01-05T12:20:00Z"
+          },
+          "next_change_at": "2026-01-06T12:20:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "aps_determination",
+              "reason": "absent"
+            },
+            {
+              "fact": "target_range",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "sensor_state",
+              "reason": "sensor_not_ok"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "sensor_state",
+              "reason": "sensor_not_ok"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "excursion": 1,
+            "held_since": "2026-01-05T12:20:00Z"
+          },
+          "next_change_at": "2026-01-06T12:20:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "eventual_glucose",
+              "value": 300,
+              "limit": 180,
+              "limit_fact": "target_high"
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 2
+          },
+          "next_change_at": "2026-01-05T12:36:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "threshold",
+              "value": 60,
+              "limit": 80,
+              "limit_fact": "target_low"
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 3
+          },
+          "next_change_at": "2026-01-05T12:41:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 5,
+              "value": 20,
+              "limit": 30,
+              "limit_fact": "latest_glucose",
+              "limit_offset": -30
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-01-05T12:41:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "eventual_glucose",
+              "value": 300,
+              "limit": 180,
+              "limit_fact": "target_high"
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 2
+          },
+          "next_change_at": "2026-01-05T12:41:00Z"
+        }
+      ]
+    }
+  ]
+}

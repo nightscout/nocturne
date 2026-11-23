@@ -34,6 +34,7 @@ internal static class ContextFactWrites
     public const string TimeZone = "time_zone";
     public const string SensorState = "sensor_state";
     public const string ApsDetermination = "aps_determination";
+    public const string TargetRange = "target_range";
 
     /// <param name="EveryWriteAnnounces">
     /// Every write that moves the fact reaches the record-changed event. False where a store writes it
@@ -47,7 +48,7 @@ internal static class ContextFactWrites
     /// The fact changes with no write: insulin and carbs on board decay, a temp basal or a scheduled
     /// basal depletes the reservoir estimate, a forecast ages, and the tenant's calendar and the
     /// target-range schedule entry follow the local clock (a <c>glucose_bucket</c> reads
-    /// <see cref="TimeZone"/> for that reason).
+    /// <see cref="TimeZone"/> for that reason, and <see cref="TargetRange"/> is that entry).
     /// </param>
     /// <remarks>
     /// <see cref="SensorState"/> is moved by a reading (one with no value is its own state) and by a
@@ -56,6 +57,8 @@ internal static class ContextFactWrites
     /// the engine reports as a next change, so the fact does not move with the clock.
     /// <see cref="ApsDetermination"/> is moved only by an APS snapshot write, and goes stale at an
     /// instant the engine reports as a next change, so it does not move with the clock either.
+    /// <see cref="TargetRange"/> is the schedule entry in effect, which changes at a schedule boundary
+    /// with no write; the engine knows no boundary, so a rule that names a target never waits.
     /// </remarks>
     internal readonly record struct FactTrigger(bool EveryWriteAnnounces, bool MovesWithClock);
 
@@ -78,6 +81,7 @@ internal static class ContextFactWrites
         [TimeZone] = new(EveryWriteAnnounces: true, MovesWithClock: true),
         [SensorState] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [ApsDetermination] = new(EveryWriteAnnounces: true, MovesWithClock: false),
+        [TargetRange] = new(EveryWriteAnnounces: true, MovesWithClock: true),
     };
 
     /// <summary>
@@ -102,12 +106,12 @@ internal static class ContextFactWrites
         [typeof(ApsSnapshot)] = [Aps, Insulin, Carbs, Predictions, ApsDetermination],
         [typeof(UploaderSnapshot)] = [Uploader, Transmitter],
         [typeof(DeviceEvent)] = [DeviceAges, Pump],
-        [typeof(ProfileActivation)] = [StateSpans, TimeZone, Glucose, Insulin, Carbs, Pump, Predictions],
-        [typeof(TherapySettings)] = [TimeZone, Insulin, Carbs, Predictions],
+        [typeof(ProfileActivation)] = [StateSpans, TimeZone, Glucose, Insulin, Carbs, Pump, Predictions, TargetRange],
+        [typeof(TherapySettings)] = [TimeZone, Insulin, Carbs, Predictions, TargetRange],
         [typeof(BasalSchedule)] = [Insulin, Pump, Predictions],
         [typeof(CarbRatioSchedule)] = [Carbs, Predictions],
         [typeof(SensitivitySchedule)] = [Insulin, Carbs, Predictions],
-        [typeof(TargetRangeSchedule)] = [Glucose, Predictions],
+        [typeof(TargetRangeSchedule)] = [Glucose, Predictions, TargetRange],
     };
 
     /// <summary>

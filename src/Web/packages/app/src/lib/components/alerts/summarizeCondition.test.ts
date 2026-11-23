@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertWeekday, defaultPayload, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode, type PredictedCondition } from "./types";
+import { AlertLimitFact, AlertWeekday, defaultPayload, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode, type PredictedCondition } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -39,6 +39,45 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition({ type: "carbs_required", carbs_required: { operator: ">=", value: 10 } })).toBe(
 			"Carbs needed ≥ 10 g",
 		);
+	});
+
+	it("says a limit from a fact in words, with its offset", () => {
+		glucoseUnits.current = "mg/dl";
+		expect(
+			summarizeCondition({
+				type: "threshold",
+				threshold: { direction: "below", value_from: { fact: AlertLimitFact.TargetLow, offset: -10 } },
+			}),
+		).toBe("Glucose below target low minus 10 mg/dL");
+		expect(
+			summarizeCondition({
+				type: "predicted",
+				predicted: { operator: "<", within_minutes: 30, value_from: { fact: AlertLimitFact.LatestGlucose, offset: -30 } },
+			}),
+		).toBe("Predicted glucose < latest glucose minus 30 mg/dL in 30 minutes");
+		expect(
+			summarizeCondition({
+				type: "eventual_glucose",
+				eventual_glucose: { operator: ">", value_from: { fact: AlertLimitFact.TargetHigh, offset: 20 } },
+			}),
+		).toBe("Eventual glucose > target high plus 20 mg/dL");
+		expect(
+			summarizeCondition({
+				type: "threshold",
+				threshold: { direction: "above", value_from: { fact: AlertLimitFact.TargetHigh }, clear_margin: 5 },
+			}),
+		).toBe("Glucose above target high, clear margin 5 mg/dL");
+	});
+
+	it("says a limit offset in mmol/L when that is the display unit", () => {
+		glucoseUnits.current = "mmol";
+		expect(
+			summarizeCondition({
+				type: "threshold",
+				threshold: { direction: "below", value_from: { fact: AlertLimitFact.TargetLow, offset: -18 } },
+			}),
+		).toBe("Glucose below target low minus 1 mmol/L");
+		glucoseUnits.current = "mg/dl";
 	});
 
 	it("names the transmitter reading a rule compares", () => {

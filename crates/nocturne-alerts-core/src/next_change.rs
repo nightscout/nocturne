@@ -21,7 +21,7 @@ use crate::eval::determination::determination_expiry;
 use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf, first_true_between};
 use crate::eval::glucose::freshness_expiry;
 use crate::excursion::{TrackerStateKind, hysteresis_window};
-use crate::facts::{ContextFact, reads};
+use crate::facts::{ContextFact, leaf_reads};
 use crate::leaf_identity::{collect_leaves, nodes_with_paths};
 use crate::model::{Node, Payload};
 use crate::paths::AUTO_RESOLVE_ROOT;
@@ -174,7 +174,7 @@ impl Scan<'_> {
                     {
                         self.elapsed(e);
                     }
-                    if reads(payload.kind()).contains(&ContextFact::SensorState) {
+                    if leaf_reads(payload).contains(&ContextFact::SensorState) {
                         self.candidate(self.ctx.sensor_state_lapses(self.now));
                     }
                 }

@@ -11,6 +11,7 @@ import {
 	AlertComparisonOperator,
 	SensorState,
 	ForecastCurve,
+	AlertLimitFact,
 } from "@nocturne/api-client";
 import type {
 	AlertRuleResponse,
@@ -61,7 +62,7 @@ import type {
 // pinning the wire names to snake_case). Editor-only adornments live here only
 // where they don't exist on the wire — currently just `_uid`.
 
-export { TempBasalMetric, TransmitterBatteryMetric, GlucoseBucket, PumpModeState, StateSpanCategory, AlertWeekday, SensorState, ForecastCurve };
+export { TempBasalMetric, TransmitterBatteryMetric, GlucoseBucket, PumpModeState, StateSpanCategory, AlertWeekday, SensorState, ForecastCurve, AlertLimitFact };
 export type {
 	ThresholdCondition,
 	RateOfChangeCondition,
@@ -141,6 +142,34 @@ export function marginedPayload(
 	const payload = marginPayload(node);
 	if (payload && "operator" in payload && payload.operator === "==") return undefined;
 	return payload;
+}
+
+/** A condition whose limit is glucose: a number, or a value such as a target (`value_from`). */
+export type GlucoseLimitPayload = ThresholdCondition | PredictedCondition | EventualGlucoseCondition;
+
+/** Where a glucose condition's limit comes from: its number, or a fact. */
+export type LimitSource = "value" | AlertLimitFact;
+
+export function limitSource(p: GlucoseLimitPayload): LimitSource {
+	return p.value_from?.fact ?? "value";
+}
+
+export function isLimitSource(value: string): value is LimitSource {
+	return value === "value" || isStringEnumMember(AlertLimitFact, value);
+}
+
+/**
+ * Sets where the limit comes from and clears the other, since a condition takes
+ * one only. A fact keeps the offset already entered; a number starts at `fallback`.
+ */
+export function setLimitSource(p: GlucoseLimitPayload, source: LimitSource, fallback: number): void {
+	if (source === "value") {
+		p.value_from = undefined;
+		p.value = p.value ?? fallback;
+		return;
+	}
+	p.value_from = { fact: source, offset: p.value_from?.offset };
+	p.value = undefined;
 }
 
 /** How a predicted condition chooses its forecast, when it chooses one. */
@@ -654,6 +683,8 @@ function fillShownDefaults(node: ConditionNode): void {
 	const payload: unknown = Reflect.get(node, node.type);
 	if (!defaults || !isRecord(payload)) return;
 	for (const [field, value] of Object.entries(defaults)) {
+		// A limit from a fact has no number, and the server refuses both.
+		if (field === "value" && isRecord(payload.value_from)) continue;
 		if (payload[field] === undefined || payload[field] === null) payload[field] = value;
 	}
 }

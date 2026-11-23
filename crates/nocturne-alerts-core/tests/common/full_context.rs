@@ -327,6 +327,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         half_present(sensor_state()),
         half_present(prediction_curves()),
         half_present(aps_determination()),
+        (half_present(quantity()), half_present(quantity())),
     )
         .prop_map(
             |(
@@ -340,6 +341,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                 sensor_state,
                 curves,
                 determination,
+                (target_low, target_high),
             )| {
                 object(vec![
                     ("latest_value", value),
@@ -376,6 +378,8 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                     ("has_ever_uploader_snapshot", Some(uploader_snapshot.into())),
                     ("has_ever_aps_sensitivity", Some(aps_sensitivity.into())),
                     ("glucose_bucket", bucket),
+                    ("target_low", target_low),
+                    ("target_high", target_high),
                     ("last_carb_at", carb),
                     ("last_bolus_at", bolus),
                     ("tenant_time_zone_id", zone.map(Value::from)),

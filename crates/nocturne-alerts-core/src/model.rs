@@ -17,8 +17,8 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::enums::{
-    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, PumpMode,
-    RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
+    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, LimitFact,
+    PumpMode, RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
     TransmitterBatteryMetric, TrendBucket, WireEnum,
 };
 use crate::paths::{child_path, node_child_path};
@@ -81,6 +81,14 @@ pub enum Reason {
     /// A `predicted` with more than one of `curve`, `min_of` and `max_of`;
     /// the field is the second one present.
     SelectorConflict(&'static str),
+    /// A glucose comparison with both `value` and `value_from`.
+    LimitConflict,
+    /// A `value_from` `offset` beyond [`MAX_LIMIT_OFFSET`] either side of
+    /// zero.
+    OffsetOutOfRange,
+    /// A `threshold` whose `value_from` names `latest_glucose`, which
+    /// compares the reading with itself.
+    SelfReference,
 }
 
 impl Reason {
@@ -108,6 +116,9 @@ impl Reason {
             Reason::MarginPastZero => "margin_past_zero",
             Reason::MarginUnderSustained => "margin_under_sustained",
             Reason::SelectorConflict(_) => "selector_conflict",
+            Reason::LimitConflict => "limit_conflict",
+            Reason::OffsetOutOfRange => "offset_out_of_range",
+            Reason::SelfReference => "self_reference",
         }
     }
 
@@ -129,6 +140,8 @@ impl Reason {
             | Reason::MarginPastZero
             | Reason::MarginUnderSustained => Some(CLEAR_MARGIN),
             Reason::TypeMissing | Reason::UnknownKind => Some("type"),
+            Reason::LimitConflict | Reason::SelfReference => Some(VALUE_FROM),
+            Reason::OffsetOutOfRange => Some(OFFSET),
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
@@ -271,7 +284,7 @@ condition_kinds! {
     TrackerAge = "tracker_age" => TrackerAgePayload,
     TransmitterBattery = "transmitter_battery" => TransmitterBatteryPayload,
     SensorState = "sensor_state" => SensorStatePayload,
-    EventualGlucose = "eventual_glucose" => ComparePayload,
+    EventualGlucose = "eventual_glucose" => GlucoseComparePayload,
     CarbsRequired = "carbs_required" => ComparePayload,
 }
 
@@ -283,17 +296,38 @@ impl Payload {
             Payload::Threshold(p) => Some(p),
             Payload::RateOfChange(p) => Some(p),
             Payload::Predicted(p) => Some(p),
+            Payload::EventualGlucose(p) => Some(p),
             Payload::Iob(p)
             | Payload::Cob(p)
             | Payload::Reservoir(p)
             | Payload::PumpBattery(p)
             | Payload::UploaderBattery(p)
             | Payload::SensitivityRatio(p)
-            | Payload::EventualGlucose(p)
             | Payload::CarbsRequired(p) => Some(p),
             Payload::TempBasal(p) => Some(p),
             Payload::TransmitterBattery(p) => Some(p),
             _ => None,
+        }
+    }
+
+    /// The limit of a comparison whose reading is in glucose units, when it
+    /// is one: only these may name a fact as their limit.
+    #[must_use]
+    pub fn glucose_limit(&self) -> Option<&Limit> {
+        match self {
+            Payload::Threshold(p) => Some(&p.value),
+            Payload::Predicted(p) => Some(&p.value),
+            Payload::EventualGlucose(p) => Some(&p.value),
+            _ => None,
+        }
+    }
+
+    /// The fact the leaf's limit names, when it names one.
+    #[must_use]
+    pub fn limit_fact(&self) -> Option<LimitFact> {
+        match self.glucose_limit()? {
+            Limit::Fact(r) => Some(r.fact),
+            Limit::Literal(_) => None,
         }
     }
 }
@@ -687,10 +721,19 @@ impl Operand for ClearMargin {
     }
 }
 
+/// The limit a margined leaf compares against, as written.
+#[derive(Debug, Clone, Copy)]
+pub enum Bound<'a> {
+    Literal(Decimal),
+    Fact(&'a LimitRef),
+}
+
 /// A leaf that compares a reading with a limit, and takes a [`ClearMargin`].
 pub trait Margined {
-    /// The comparison as `reading <operator> limit`.
-    fn comparison(&self) -> (CmpOp, Decimal);
+    /// The operator of the comparison written `reading <operator> limit`.
+    fn operator(&self) -> CmpOp;
+
+    fn bound(&self) -> Bound<'_>;
 
     fn clear_margin(&self) -> Option<ClearMargin>;
 
@@ -699,16 +742,16 @@ pub trait Margined {
         self.clear_margin().is_some_and(|m| !m.get().is_zero())
     }
 
-    /// The limit the leaf compares against: while the rule's excursion is
-    /// `open`, moved by its margin toward the side that keeps the rule true,
-    /// which is the leaf's false side under an odd number of `not`s
-    /// (`negated`); else its plain limit.
-    fn limit(&self, open: bool, negated: bool) -> Decimal {
-        let (op, limit) = self.comparison();
+    /// The effective `limit` (a literal, or a fact plus its offset): while
+    /// the rule's excursion is `open`, moved by the margin toward the side
+    /// that keeps the rule true, which is the leaf's false side under an odd
+    /// number of `not`s (`negated`); else `limit` itself.
+    fn widened(&self, limit: Decimal, open: bool, negated: bool) -> Decimal {
         match self.clear_margin() {
             Some(margin) if open => {
                 let margin = margin.get();
-                op.widened(limit, if negated { -margin } else { margin })
+                self.operator()
+                    .widened(limit, if negated { -margin } else { margin })
             }
             _ => limit,
         }
@@ -725,7 +768,7 @@ pub trait Margined {
         let margin = self.clear_margin().map(ClearMargin::get)?;
         if !self.widens() {
             None
-        } else if self.comparison().0 == CmpOp::Eq {
+        } else if self.operator() == CmpOp::Eq {
             Some(Reason::MarginOnEquality)
         } else if self
             .largest_margin()
@@ -735,6 +778,158 @@ pub trait Margined {
         } else {
             None
         }
+    }
+}
+
+/// A margined leaf whose limit is always the number in its payload.
+pub trait LiteralLimit: Margined {
+    fn literal(&self) -> Decimal;
+}
+
+/// The payload property a glucose comparison names a fact in.
+pub const VALUE_FROM: &str = "value_from";
+
+/// The property of a `value_from` that moves the fact's value.
+pub const OFFSET: &str = "offset";
+
+/// The largest `offset` either side of zero, in mg/dL: far wider than any
+/// glucose difference, and small enough that a reading or a target plus it
+/// stays in the decimal range.
+pub const MAX_LIMIT_OFFSET: Decimal = Decimal::from_parts(1000, 0, 0, false, 0);
+
+/// A limit read from a fact (engine-semantics.md §3, a limit from a fact):
+/// the fact's value plus `offset`, zero when absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LimitRef {
+    pub fact: LimitFact,
+    pub offset: Option<Decimal>,
+}
+
+impl LimitRef {
+    #[must_use]
+    pub fn offset(&self) -> Decimal {
+        self.offset.unwrap_or(Decimal::ZERO)
+    }
+}
+
+impl Serialize for LimitRef {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = s.serialize_map(None)?;
+        map.serialize_entry("fact", &self.fact)?;
+        if let Some(offset) = self.offset {
+            map.serialize_entry(OFFSET, &ExactDecimal(offset))?;
+        }
+        map.end()
+    }
+}
+
+struct ExactDecimal(Decimal);
+
+impl Serialize for ExactDecimal {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        exact_decimal(&self.0, s)
+    }
+}
+
+/// A glucose comparison's limit: the number in `value`, or the fact in
+/// `value_from`, never both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Limit {
+    Literal(Decimal),
+    Fact(LimitRef),
+}
+
+impl Limit {
+    #[must_use]
+    pub fn bound(&self) -> Bound<'_> {
+        match self {
+            Limit::Literal(value) => Bound::Literal(*value),
+            Limit::Fact(r) => Bound::Fact(r),
+        }
+    }
+}
+
+/// As the one property it was read from, so a literal serialises as `value`
+/// always has.
+impl Serialize for Limit {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = s.serialize_map(Some(1))?;
+        match self {
+            Limit::Literal(value) => map.serialize_entry("value", &ExactDecimal(*value))?,
+            Limit::Fact(r) => map.serialize_entry(VALUE_FROM, r)?,
+        }
+        map.end()
+    }
+}
+
+/// Reads `name` and [`VALUE_FROM`] together: exactly one of them.
+impl Field for Limit {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        let literal = r.optional(name, <Decimal as Operand>::parse);
+        let reference = <Option<LimitRef> as Field>::read(r, VALUE_FROM);
+        match (literal?, reference?) {
+            (Some(_), Some(_)) => {
+                r.report(Reason::LimitConflict);
+                None
+            }
+            (Some(value), None) => Some(Limit::Literal(value)),
+            (None, Some(reference)) => Some(Limit::Fact(reference)),
+            (None, None) => {
+                r.report(Reason::FieldMissing(name));
+                None
+            }
+        }
+    }
+}
+
+impl Field for Option<LimitRef> {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        let Some(v) = r.get(name) else {
+            return Some(None);
+        };
+        let obj = match v {
+            Value::Object(_) if !within_depth(r.level) => {
+                r.report(Reason::TooDeep);
+                return None;
+            }
+            Value::Object(obj) => obj,
+            _ => {
+                r.report(Reason::InvalidField(name));
+                return None;
+            }
+        };
+        let inner = Reader {
+            obj,
+            level: r.level.saturating_add(1),
+            path: r.path,
+            issues: r.issues,
+        };
+        inner.report_unknown(|k| k == "fact" || k == OFFSET);
+        let fact = inner.required("fact", word::<LimitFact>);
+        let offset = inner.optional(OFFSET, |v, name| {
+            let offset = <Decimal as Operand>::parse(v, name)?;
+            if offset.abs() > MAX_LIMIT_OFFSET {
+                return Err(Reason::OffsetOutOfRange);
+            }
+            Ok(offset)
+        });
+        Some(Some(LimitRef {
+            fact: fact?,
+            offset: offset?,
+        }))
+    }
+}
+
+/// Holds [`VALUE_FROM`]'s place among a payload's properties, which
+/// [`Limit`] reads.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LimitSlot;
+
+impl Field for LimitSlot {
+    fn read(_: &Reader<'_>, _: &'static str) -> Option<Self> {
+        Some(Self)
     }
 }
 
@@ -905,9 +1100,13 @@ macro_rules! payload {
         );
 
         impl Margined for $name {
-            fn comparison(&self) -> (CmpOp, Decimal) {
+            fn operator(&self) -> CmpOp {
                 let $s = self;
-                $comparison
+                $comparison.0
+            }
+
+            fn bound(&self) -> Bound<'_> {
+                Bound::Literal(self.literal())
             }
 
             fn clear_margin(&self) -> Option<ClearMargin> {
@@ -921,19 +1120,73 @@ macro_rules! payload {
                 }
             )?
         }
+
+        impl LiteralLimit for $name {
+            fn literal(&self) -> Decimal {
+                let $s = self;
+                $comparison.1
+            }
+        }
+    };
+    (
+        $(#[$meta:meta])* glucose $name:ident {
+            $($(#[$a_meta:meta])* $a:ident: $at:ty,)*
+            @limit
+            $(, $(#[$b_meta:meta])* $b:ident: $bt:ty)* $(,)?
+        }
+        operator |$s:ident| $operator:expr
+        $(, check |$cp:ident, $cr:ident| $check:expr)?
+    ) => {
+        payload!(
+            $(#[$meta])* $name {
+                $($(#[$a_meta])* $a: $at,)*
+                #[serde(flatten)]
+                value: Limit,
+                #[serde(skip)]
+                value_from: LimitSlot,
+                $($(#[$b_meta])* $b: $bt,)*
+                #[serde(skip_serializing_if = "Option::is_none")]
+                clear_margin: Option<ClearMargin>,
+            }
+            check |p, r| {
+                let margin = p.margin_issue().is_none_or(|reason| r.report(reason));
+                margin $(& {
+                    let ($cp, $cr) = (p, r);
+                    $check
+                })?
+            }
+        );
+
+        impl Margined for $name {
+            fn operator(&self) -> CmpOp {
+                let $s = self;
+                $operator
+            }
+
+            fn bound(&self) -> Bound<'_> {
+                self.value.bound()
+            }
+
+            fn clear_margin(&self) -> Option<ClearMargin> {
+                self.clear_margin
+            }
+        }
     };
 }
 
 payload!(
-    margined ThresholdPayload {
+    /// A `value_from` naming `latest_glucose` compares the reading with
+    /// itself, so it is refused rather than evaluated.
+    glucose ThresholdPayload {
         direction: ThresholdDirection,
-        #[serde(serialize_with = "exact_decimal")]
-        value: Decimal,
+        @limit
     }
-    comparison |p| match p.direction {
-        ThresholdDirection::Below => (CmpOp::Lt, p.value),
-        ThresholdDirection::Above => (CmpOp::Gt, p.value),
-    }
+    operator |p| match p.direction {
+        ThresholdDirection::Below => CmpOp::Lt,
+        ThresholdDirection::Above => CmpOp::Gt,
+    },
+    check |p, r| !matches!(p.value, Limit::Fact(LimitRef { fact: LimitFact::LatestGlucose, .. }))
+        || r.report(Reason::SelfReference)
 );
 
 payload!(
@@ -1005,10 +1258,9 @@ payload!(StalenessPayload {
 payload!(
     /// At most one of `curve`, `min_of` and `max_of` selects the series it
     /// reads (engine-semantics.md §3); none reads `default`.
-    margined PredictedPayload {
+    glucose PredictedPayload {
         operator: CmpOp,
-        #[serde(serialize_with = "exact_decimal")]
-        value: Decimal,
+        @limit,
         within_minutes: PositiveMinutes,
         #[serde(skip_serializing_if = "Option::is_none")]
         curve: Option<ForecastCurve>,
@@ -1017,7 +1269,7 @@ payload!(
         #[serde(skip_serializing_if = "Option::is_none")]
         max_of: Option<Vec<ForecastCurve>>,
     }
-    comparison |p| (p.operator, p.value),
+    operator |p| p.operator,
     check |p, r| p.selector_conflict().is_none_or(|field| r.report(Reason::SelectorConflict(field)))
 );
 
@@ -1079,13 +1331,22 @@ payload!(
 
 payload!(
     /// `{operator, value, clear_margin?}`: iob, cob, reservoir, pump_battery,
-    /// uploader_battery, sensitivity_ratio.
+    /// uploader_battery, sensitivity_ratio, carbs_required.
     margined ComparePayload {
         operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
         value: Decimal,
     }
     comparison |p| (p.operator, p.value)
+);
+
+payload!(
+    /// `{operator, value | value_from, clear_margin?}`: eventual_glucose.
+    glucose GlucoseComparePayload {
+        operator: CmpOp,
+        @limit
+    }
+    operator |p| p.operator
 );
 
 payload!(

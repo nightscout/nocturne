@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "name": "limit-from-fact-each-fact",
+  "description": "a glucose comparison's limit names a fact: threshold below target_low and above target_high, predicted below latest_glucose, eventual_glucose below target_low; each decides against the fact's value in its tick's context, and a true one names the limit and its fact in met_by",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value_from": {
+          "fact": "target_high"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "within_minutes": 30,
+        "value_from": {
+          "fact": "latest_glucose"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "eventual_glucose",
+      "condition_params": {
+        "operator": "<",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 90,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 95
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 100
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 105
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:00:00Z",
+          "eventual_mgdl": 110
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 75,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 74
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 72
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 70
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:05:00Z",
+          "eventual_mgdl": 70
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 190,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 195
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 200
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 205
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:10:00Z",
+          "eventual_mgdl": 210
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

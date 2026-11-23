@@ -37,6 +37,7 @@ public sealed record DataNeedsSet(
     bool NeedsPumpModes,
     bool NeedsSensorState,
     bool NeedsApsDetermination,
+    bool NeedsTargetRange,
     IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans,
     IReadOnlySet<Guid> ReferencedTrackerDefinitions)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
@@ -49,7 +50,7 @@ public sealed record DataNeedsSet(
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false,
             false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false,
             new HashSet<(StateSpanCategory, string?)>(),
             new HashSet<Guid>());
 }
@@ -94,6 +95,19 @@ public static class RuleDataNeeds
     {
         if (leaf.Kind is not { } kind) return;
         ApplyLeaf(kind, b);
+
+        // A limit from a fact reads that fact: a target as the bucket does, through the schedule at
+        // the tenant's local time, and the newest reading through the sensor's state.
+        switch (leaf.LimitFact())
+        {
+            case AlertLimitFact.TargetLow or AlertLimitFact.TargetHigh:
+                b.TargetRange = true;
+                b.TenantTimeZone = true;
+                break;
+            case AlertLimitFact.LatestGlucose:
+                b.SensorState = true;
+                break;
+        }
 
         // state_span_active and tracker_age select which span or tracker the enricher fetches.
         switch (kind)
@@ -204,6 +218,7 @@ public static class RuleDataNeeds
         public bool PumpModes;
         public bool SensorState;
         public bool ApsDetermination;
+        public bool TargetRange;
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
         public readonly HashSet<Guid> TrackerDefinitionIds = new();
 
@@ -212,6 +227,7 @@ public static class RuleDataNeeds
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
                 SensitivityRatio,
                 GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpModes, SensorState, ApsDetermination,
+                TargetRange,
                 StateSpans,
                 TrackerDefinitionIds);
     }

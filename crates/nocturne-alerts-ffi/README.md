@@ -267,6 +267,27 @@ The point is the first, in offset order, that satisfied the comparison, from the
 supplied the lowest or highest value for `min_of`/`max_of`. `value` is mg/dL, or grams for
 `carbs_required`. Additive, so `schema_version` stays 1.
 
+### A limit from a fact
+
+`threshold`, `predicted` and `eventual_glucose` take exactly one of `value` and
+`value_from: {"fact": "latest_glucose" | "target_low" | "target_high", "offset"?: <mg/dL>}`
+(`docs/alerts/engine-semantics.md` §3, a limit from a fact). The context gains `target_low` and
+`target_high` (mg/dL, optional), the ends of the profile's target range at `now`; an absent one
+leaves a leaf that names it unknown by `target_range`, reason `absent`. New reason codes:
+`limit_conflict` (both, on `value_from`), `offset_out_of_range` (more than 1000 either side of 0, on
+`offset`) and `self_reference` (a `threshold` against `latest_glucose`, on `value_from`); neither
+member is `field_missing` on `value`. A true `threshold` whose limit names a fact joins `met_by`,
+and every entry whose limit names a fact carries `limit` (the effective limit compared against),
+`limit_fact` and `limit_offset` (the rule's offset to the fact, absent when 0):
+
+```jsonc
+{ "leaf_id": 0, "kind": "threshold", "value": 66, "limit": 70, "limit_fact": "target_low", "limit_offset": -10 }
+```
+
+An engine from before it reads `value_from` as an `unknown_field` and returns the malformed-body
+error, so a host running it skips the rule; it ignores `target_low` and `target_high` in the
+context. A rule with `value` reads as it always has. Additive, so `schema_version` stays 1.
+
 ### Next change
 
 `result.next_change_at` (RFC 3339, on the 100 ns tick grid) is the earliest

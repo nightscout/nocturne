@@ -69,6 +69,17 @@ describe("parseAlertDispatchEvent", () => {
     ]);
   });
 
+  it("reads the limit a condition compared with and the fact it came from", () => {
+    const parsed = parse({
+      metBy: [{ leafId: 0, kind: "threshold", value: 66, limit: 70, limitFact: "target_low", limitOffset: -10 }, { kind: "threshold", value: 76, limit: "80", limitFact: 1, limitOffset: "x" }],
+    });
+
+    expect(parsed?.payload.metBy?.[0]).toMatchObject({ limit: 70, limitFact: "target_low", limitOffset: -10 });
+    expect(parsed?.payload.metBy?.[1]?.limitOffset).toBeUndefined();
+    expect(parsed?.payload.metBy?.[1]?.limit).toBeUndefined();
+    expect(parsed?.payload.metBy?.[1]?.limitFact).toBeUndefined();
+  });
+
   it("delivers a payload with a field this build does not know", () => {
     expect(parse({ batteryLevel: 40 })).toBeDefined();
   });

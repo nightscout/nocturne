@@ -20,6 +20,7 @@
     alertStateLabel,
     forecastCurveLabel,
     glucoseBucketLabel,
+    limitSourceLabel,
     pumpModeLabel,
     rateDirectionLabel,
     sensorStateLabel,
@@ -49,9 +50,14 @@
     AlertWeekday,
     SensorState,
     ForecastCurve,
+    AlertLimitFact,
     curveChoice,
     setCurveChoice,
     type CurveChoice,
+    type GlucoseLimitPayload,
+    isLimitSource,
+    limitSource,
+    setLimitSource,
   } from "./types";
   import { AlertComparisonOperator } from "@nocturne/api-client";
 
@@ -162,6 +168,17 @@
     }
   }
 
+  /** A threshold compares the latest glucose, so it cannot compare with it again. */
+  const THRESHOLD_LIMIT_FACTS: readonly AlertLimitFact[] = [
+    AlertLimitFact.TargetLow,
+    AlertLimitFact.TargetHigh,
+  ];
+  const LIMIT_FACTS: readonly AlertLimitFact[] = [
+    AlertLimitFact.TargetLow,
+    AlertLimitFact.TargetHigh,
+    AlertLimitFact.LatestGlucose,
+  ];
+
   function isCurveChoice(value: string): value is CurveChoice {
     return value === "curve" || value === "min_of" || value === "max_of";
   }
@@ -237,6 +254,68 @@
   node's payload via the discriminator and binds back through the same key, so
   Svelte 5's deep-proxy state propagates the mutation up the tree.
 -->
+{#snippet glucoseLimit(p: GlucoseLimitPayload, facts: readonly AlertLimitFact[])}
+  {@const source = limitSource(p)}
+  <Select.Root
+    type="single"
+    value={source}
+    onValueChange={(v) => {
+      if (isLimitSource(v)) setLimitSource(p, v, 70);
+    }}
+  >
+    <Select.Trigger size="sm" class="w-32" aria-label="Compare with">
+      {limitSourceLabel(source)}
+    </Select.Trigger>
+    <Select.Content>
+      <Select.Item value="value" label={limitSourceLabel("value")} />
+      {#each facts as fact (fact)}
+        <Select.Item value={fact} label={limitSourceLabel(fact)} />
+      {/each}
+    </Select.Content>
+  </Select.Root>
+  {#if p.value_from}
+    {@const reference = p.value_from}
+    <span class="text-xs text-muted-foreground">plus</span>
+    <Input
+      type="number"
+      aria-label="Offset"
+      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
+      size="sm"
+      class="w-20 text-right tabular-nums"
+      value={bg(reference.offset ?? 0)}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        reference.offset = convertFromDisplayUnits(
+          parseNumber(e.currentTarget.value, bg(reference.offset ?? 0)),
+          glucoseUnits.current,
+        );
+      }}
+    />
+  {:else}
+    <Input
+      type="number"
+      aria-label="Value"
+      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
+      size="sm"
+      class="w-20 text-right tabular-nums"
+      value={bg(p.value ?? 0)}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        p.value = convertFromDisplayUnits(
+          parseNumber(e.currentTarget.value, bg(p.value ?? 0)),
+          glucoseUnits.current,
+        );
+      }}
+    />
+  {/if}
+{/snippet}
+
+{#snippet targetNote(p: GlucoseLimitPayload)}
+  {#if p.value_from && p.value_from.fact !== AlertLimitFact.LatestGlucose}
+    <span class="w-full text-xs text-muted-foreground">
+      If your profile has no target range, this condition does not know if it is true.
+    </span>
+  {/if}
+{/snippet}
+
 <div class="flex flex-wrap items-center gap-1.5">
   {#if node.type === "threshold" && node.threshold}
     <Select.Root
@@ -254,22 +333,9 @@
         <Select.Item value="above" label="above" />
       </Select.Content>
     </Select.Root>
-    <Input
-      type="number"
-      aria-label="Value"
-      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      size="sm"
-      class="w-20 text-right tabular-nums"
-      value={bg(node.threshold.value ?? 0)}
-      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-        if (node.threshold)
-          node.threshold.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0)),
-            glucoseUnits.current,
-          );
-      }}
-    />
+    {@render glucoseLimit(node.threshold, THRESHOLD_LIMIT_FACTS)}
     <span class="text-xs text-muted-foreground">{bgLabel()}</span>
+    {@render targetNote(node.threshold)}
   {:else if node.type === "predicted" && node.predicted}
     <Select.Root
       type="single"
@@ -287,21 +353,7 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    <Input
-      type="number"
-      aria-label="Value"
-      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      size="sm"
-      class="w-20 text-right tabular-nums"
-      value={bg(node.predicted.value ?? 0)}
-      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-        if (node.predicted)
-          node.predicted.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0)),
-            glucoseUnits.current,
-          );
-      }}
-    />
+    {@render glucoseLimit(node.predicted, LIMIT_FACTS)}
     <span class="text-xs text-muted-foreground">{bgLabel()} within</span>
     <Input
       type="number"
@@ -382,6 +434,7 @@
         If the loop does not send a curve that you select, the rule waits and shows the cause.
       </span>
     {/if}
+    {@render targetNote(predicted)}
   {:else if node.type === "eventual_glucose" && node.eventual_glucose}
     {@const eventual = node.eventual_glucose}
     <Select.Root
@@ -400,21 +453,9 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    <Input
-      type="number"
-      aria-label="Value"
-      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      size="sm"
-      class="w-20 text-right tabular-nums"
-      value={bg(eventual.value ?? 0)}
-      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-        eventual.value = convertFromDisplayUnits(
-          parseNumber(e.currentTarget.value, bg(eventual.value ?? 0)),
-          glucoseUnits.current,
-        );
-      }}
-    />
+    {@render glucoseLimit(eventual, LIMIT_FACTS)}
     <span class="text-xs text-muted-foreground">{bgLabel()}</span>
+    {@render targetNote(eventual)}
   {:else if node.type === "rate_of_change" && node.rate_of_change}
     <Select.Root
       type="single"

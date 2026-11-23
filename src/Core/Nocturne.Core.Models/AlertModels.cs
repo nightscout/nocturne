@@ -218,6 +218,17 @@ public record SensorContext
     /// </summary>
     public GlucoseBucket? GlucoseBucket { get; init; }
 
+    /// <summary>
+    /// The low end of the profile's target range in effect at the evaluation instant, in mg/dL: the
+    /// entry <see cref="GlucoseBucket"/> is placed with. Null when the profile has no target range,
+    /// where the bucket falls back to its defaults and this never does
+    /// (docs/alerts/engine-semantics.md §4).
+    /// </summary>
+    public decimal? TargetLow { get; init; }
+
+    /// <summary>The high end of the range <see cref="TargetLow"/> is the low end of.</summary>
+    public decimal? TargetHigh { get; init; }
+
     /// <summary>Timestamp of the latest carb-bearing treatment, or null when none observed.</summary>
     [ReplayFact("time_since_last_carb_minutes", Scope.TreatmentsRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastCarbAt { get; init; }
@@ -323,16 +334,20 @@ public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? 
 // ----- Condition parameter records (deserialized from JSONB) -----
 
 /// <summary>
-/// Threshold-based alert condition. Triggers when glucose crosses <paramref name="Value"/> in the specified <paramref name="Direction"/>.
+/// Threshold-based alert condition. Triggers when glucose crosses its limit in the specified <paramref name="Direction"/>.
 /// </summary>
 /// <param name="Direction">Comparison direction: "above" or "below".</param>
-/// <param name="Value">Glucose threshold in mg/dL.</param>
+/// <param name="Value">Glucose threshold in mg/dL; exactly one of it and <paramref name="ValueFrom"/>.</param>
 /// <param name="ClearMargin">How far past its limit the condition stays true while the rule's alert
 /// is open, in the unit of its value; absent or 0 for none (docs/alerts/engine-semantics.md §3).</param>
+/// <param name="ValueFrom">The fact whose value, plus its offset, is the limit (docs/alerts/engine-semantics.md
+/// §3, a limit from a fact). Never <see cref="AlertLimitFact.LatestGlucose"/>, which would compare the
+/// reading with itself.</param>
 public record ThresholdCondition(
     string Direction,
-    decimal Value,
-    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+    decimal? Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
 
 /// <summary>
 /// Rate-of-change alert condition. Triggers when glucose change rate exceeds <paramref name="Rate"/> in the specified <paramref name="Direction"/>.
@@ -384,20 +399,22 @@ public record StalenessCondition(string Operator, int Value);
 /// <see cref="ForecastCurve.Default"/> (docs/alerts/engine-semantics.md §3, forecast curves).
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
-/// <param name="Value">Glucose value in mg/dL to compare against.</param>
+/// <param name="Value">Glucose value in mg/dL to compare against; exactly one of it and <paramref name="ValueFrom"/>.</param>
 /// <param name="WithinMinutes">Forecast horizon in minutes.</param>
 /// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, for every point.</param>
 /// <param name="Curve">One named series.</param>
 /// <param name="MinOf">The lowest of these series at each offset they all have.</param>
 /// <param name="MaxOf">The highest of these series at each offset they all have.</param>
+/// <param name="ValueFrom">As <see cref="ThresholdCondition.ValueFrom"/>; any of the facts.</param>
 public record PredictedCondition(
     string Operator,
-    decimal Value,
+    decimal? Value,
     [property: JsonPropertyName("within_minutes")] int WithinMinutes,
     [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
     [property: JsonPropertyName("curve")] ForecastCurve? Curve = null,
     [property: JsonPropertyName("min_of")] List<ForecastCurve>? MinOf = null,
-    [property: JsonPropertyName("max_of")] List<ForecastCurve>? MaxOf = null);
+    [property: JsonPropertyName("max_of")] List<ForecastCurve>? MaxOf = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
 
 /// <summary>
 /// The glucose the loop's newest determination expected at the end of its forecast, in mg/dL,
@@ -405,10 +422,12 @@ public record PredictedCondition(
 /// rule's glucose freshness bound.
 /// </summary>
 /// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+/// <param name="ValueFrom">As <see cref="PredictedCondition.ValueFrom"/>.</param>
 public record EventualGlucoseCondition(
     string Operator,
-    decimal Value,
-    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+    decimal? Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
 
 /// <summary>
 /// The carbohydrate the loop's newest determination said it needed, in grams, compared with

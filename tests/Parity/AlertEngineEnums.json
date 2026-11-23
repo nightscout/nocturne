@@ -119,6 +119,11 @@
     "uam",
     "zt"
   ],
+  "AlertLimitFact": [
+    "latest_glucose",
+    "target_low",
+    "target_high"
+  ],
   "PayloadFields": {
     "alert_state": [
       "alert_id",
@@ -149,7 +154,8 @@
     "eventual_glucose": [
       "clear_margin",
       "operator",
-      "value"
+      "value",
+      "value_from"
     ],
     "glucose_bucket": [
       "buckets"
@@ -181,6 +187,7 @@
       "min_of",
       "operator",
       "value",
+      "value_from",
       "within_minutes"
     ],
     "pump_battery": [
@@ -253,7 +260,8 @@
     "threshold": [
       "clear_margin",
       "direction",
-      "value"
+      "value",
+      "value_from"
     ],
     "time_of_day": [
       "from",

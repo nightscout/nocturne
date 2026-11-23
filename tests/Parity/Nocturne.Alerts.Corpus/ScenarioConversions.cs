@@ -107,6 +107,8 @@ public static class ScenarioConversions
             HasEverUploaderSnapshot = ctx.HasEverUploaderSnapshot,
             HasEverApsSensitivity = ctx.HasEverApsSensitivity,
             GlucoseBucket = ParseWireEnum<GlucoseBucket>(ctx.GlucoseBucket),
+            TargetLow = ctx.TargetLow,
+            TargetHigh = ctx.TargetHigh,
             LastCarbAt = Utc(ctx.LastCarbAt),
             LastBolusAt = Utc(ctx.LastBolusAt),
             TenantTimeZoneId = ctx.TenantTimeZoneId,

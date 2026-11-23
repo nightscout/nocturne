@@ -4,6 +4,7 @@
 //! per reading, or it can stay unfired for as long as no reading arrives.
 
 use crate::engine::OnUnknown;
+use crate::enums::LimitFact;
 use crate::eval::glucose::judges_freshness;
 use crate::eval::judges_determination_freshness;
 use crate::facts::RuleConditions;
@@ -57,16 +58,16 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
 }
 
 /// Whether any kind of `rule` ([`RuleConditions`]) is wall-clock sensitive,
-/// or the rule reads an unknown root as known and has a kind whose glucose
-/// fact goes stale with the clock (engine-semantics.md §5.1). A wall-clock
-/// root is true whatever its body.
+/// or the rule reads an unknown root as known and has a kind, or a limit
+/// naming `latest_glucose`, whose glucose fact goes stale with the clock
+/// (engine-semantics.md §5.1). A wall-clock root is true whatever its body.
 #[must_use]
 pub fn references_wall_clock(rule: &RuleConditions<'_>) -> bool {
     let reads_unknown = rule.on_unknown != OnUnknown::Hold;
     rule.kinds().into_iter().any(|kind| {
         is_wall_clock(kind)
             || (reads_unknown && (judges_freshness(kind) || judges_determination_freshness(kind)))
-    })
+    }) || (reads_unknown && rule.limit_facts().contains(&LimitFact::LatestGlucose))
 }
 
 #[cfg(test)]

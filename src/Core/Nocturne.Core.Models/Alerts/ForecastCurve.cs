@@ -38,17 +38,24 @@ public enum ForecastCurve
 public sealed record ApsDetermination(DateTime At, decimal? EventualMgdl, decimal? CarbsRequiredGrams);
 
 /// <summary>
-/// What a true <c>predicted</c>, <c>eventual_glucose</c> or <c>carbs_required</c> condition met its
-/// comparison with (docs/alerts/engine-semantics.md §3, met by).
+/// What a true <c>predicted</c>, <c>eventual_glucose</c> or <c>carbs_required</c> condition, or a true
+/// <c>threshold</c> whose limit names a fact, met its comparison with (docs/alerts/engine-semantics.md
+/// §3, met by).
 /// </summary>
 /// <param name="LeafId">The condition's pre-order leaf id in the rule's tree.</param>
 /// <param name="Kind">The condition's type.</param>
 /// <param name="Curve">For <c>predicted</c>, the series that supplied the point.</param>
 /// <param name="OffsetMinutes">For <c>predicted</c>, how far ahead the point is.</param>
 /// <param name="Value">The value compared: mg/dL, or grams for <c>carbs_required</c>.</param>
+/// <param name="Limit">For a limit from a fact, the limit compared against: the fact's value plus its offset.</param>
+/// <param name="LimitFact">For a limit from a fact, the fact.</param>
+/// <param name="LimitOffset">For a limit from a fact, the rule's offset to it in mg/dL; null when 0.</param>
 public sealed record AlertMetPoint(
     int LeafId,
     AlertConditionType Kind,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ForecastCurve? Curve,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? OffsetMinutes,
-    decimal Value);
+    decimal Value,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Limit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AlertLimitFact? LimitFact = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? LimitOffset = null);

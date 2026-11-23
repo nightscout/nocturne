@@ -67,8 +67,8 @@ public class AlertPayloadsMetByTests
     }
 
     /// <summary>
-    /// The engine's wire names map to the host's members; an entry of a kind or curve this host has no
-    /// member for comes from a newer engine and is dropped, not guessed at.
+    /// The engine's wire names map to the host's members; an entry of a kind, curve or limit fact this
+    /// host has no member for comes from a newer engine and is dropped, not guessed at.
     /// </summary>
     [Fact]
     public void The_engines_met_by_maps_to_typed_points()
@@ -79,11 +79,14 @@ public class AlertPayloadsMetByTests
             new RustMetPoint(1, "eventual_glucose", null, null, 75m),
             new RustMetPoint(2, "predicted", "ar2", 10, 50m),
             new RustMetPoint(3, "future_leaf", null, null, 1m),
+            new RustMetPoint(4, "threshold", null, null, 66m, 70m, "target_low", -10m),
+            new RustMetPoint(5, "threshold", null, null, 76m, 80m, "max_iob"),
         ]);
 
         points.Should().Equal(
             new AlertMetPoint(0, AlertConditionType.Predicted, ForecastCurve.Zt, 25, 62.5m),
-            new AlertMetPoint(1, AlertConditionType.EventualGlucose, null, null, 75m));
+            new AlertMetPoint(1, AlertConditionType.EventualGlucose, null, null, 75m),
+            new AlertMetPoint(4, AlertConditionType.Threshold, null, null, 66m, 70m, AlertLimitFact.TargetLow, -10m));
         RustEnvelopeMapper.MetByFromWire(null).Should().BeEmpty();
     }
 }

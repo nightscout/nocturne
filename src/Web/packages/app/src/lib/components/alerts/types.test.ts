@@ -20,6 +20,10 @@ import {
 	setCurveChoice,
 	clearCurveChoice,
 	ForecastCurve,
+	AlertLimitFact,
+	limitSource,
+	setLimitSource,
+	type ThresholdCondition,
 } from "./types";
 import { AlertConditionType, AlertRuleSeverity, ChannelType } from "@nocturne/api-client";
 import type { AlertRuleResponse } from "@nocturne/api-client";
@@ -119,6 +123,34 @@ describe("nodeFromApi / nodeToApi", () => {
 			conditionType: "threshold",
 			conditionParams: { direction: "above", value: 180 },
 		});
+	});
+});
+
+describe("a limit from a fact", () => {
+	it("reads a stored limit from a fact without giving it a number, so it saves as it was", () => {
+		const state = parseRule({
+			name: "Below target",
+			conditionType: AlertConditionType.Threshold,
+			conditionParams: { direction: "below", value_from: { fact: "target_low", offset: -10 } },
+		});
+
+		expect(buildBody(state).conditionParams).toEqual({
+			direction: "below",
+			value_from: { fact: "target_low", offset: -10 },
+		});
+	});
+
+	it("takes a number or a fact, never both", () => {
+		const p: ThresholdCondition = { direction: "below", value: 65 };
+
+		setLimitSource(p, AlertLimitFact.TargetHigh, 70);
+		expect(p).toEqual({ direction: "below", value: undefined, value_from: { fact: "target_high", offset: undefined } });
+		expect(limitSource(p)).toBe(AlertLimitFact.TargetHigh);
+
+		setLimitSource(p, "value", 70);
+		expect(p.value_from).toBeUndefined();
+		expect(p.value).toBe(70);
+		expect(limitSource(p)).toBe("value");
 	});
 });
 

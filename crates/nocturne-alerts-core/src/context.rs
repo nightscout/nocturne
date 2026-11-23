@@ -122,6 +122,12 @@ pub struct SensorContext {
     pub has_ever_uploader_snapshot: bool,
     pub has_ever_aps_sensitivity: bool,
     pub glucose_bucket: Option<GlucoseBucket>,
+    /// The low end of the profile's target range in effect at `now`, in
+    /// mg/dL: the one the host placed `glucose_bucket` with. `None` when the
+    /// profile has no target range, never a default (engine-semantics.md §4).
+    pub target_low: Option<Decimal>,
+    /// The high end of the same range.
+    pub target_high: Option<Decimal>,
     pub last_carb_at: Option<DateTime<Utc>>,
     pub last_bolus_at: Option<DateTime<Utc>>,
     pub tenant_time_zone_id: Option<String>,
@@ -284,6 +290,10 @@ struct WireContext {
     has_ever_aps_sensitivity: bool,
     #[serde(default)]
     glucose_bucket: Option<String>,
+    #[serde(default)]
+    target_low: Option<Number>,
+    #[serde(default)]
+    target_high: Option<Number>,
     #[serde(default)]
     last_carb_at: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -591,6 +601,8 @@ impl SensorContext {
             has_ever_uploader_snapshot: w.has_ever_uploader_snapshot,
             has_ever_aps_sensitivity: w.has_ever_aps_sensitivity,
             glucose_bucket: w.glucose_bucket.and_then(|s| GlucoseBucket::from_name(&s)),
+            target_low: opt_dec(w.target_low.as_ref(), "target_low")?,
+            target_high: opt_dec(w.target_high.as_ref(), "target_high")?,
             last_carb_at: opt_ts(w.last_carb_at, "last_carb_at")?,
             last_bolus_at: opt_ts(w.last_bolus_at, "last_bolus_at")?,
             tenant_time_zone_id: w.tenant_time_zone_id,

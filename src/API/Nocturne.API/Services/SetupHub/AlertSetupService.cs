@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Models.Responses;
@@ -106,10 +107,12 @@ public class AlertSetupService(
         {
             var rule = starters.GetValueOrDefault(kind);
             var start = startingPoints[kind];
-            var mgdl = rule is null ? start.Mgdl : ThresholdOf(kind, rule);
+            var mgdl = rule is null ? start.Mgdl : StoredMgdl(kind, rule);
+            var threshold = Starters[kind].Direction is not null;
             return new StarterAlertRule(
                 kind, rule?.Rule.Id, rule?.IsEnabled ?? start.IsEnabled,
-                Starters[kind].Direction is null ? null : Display(mgdl, units));
+                threshold && mgdl is { } shown ? Display(shown, units) : null,
+                SetInRuleEditor: threshold && mgdl is null);
         }).ToList();
         var thresholdsFrom = startingPoints.Values.Any(p => p.FromNightscout)
             ? AlertThresholdSource.Nightscout
@@ -140,8 +143,10 @@ public class AlertSetupService(
     /// Creates the starter rules, or updates the ones already made, with the thresholds, switches
     /// and destination given. A threshold is read in the caller's units and stored in mg/dL; one
     /// that reads the same as the stored value keeps the stored value, so a round trip through
-    /// mmol/L never moves it. A channel with a typed-in destination stops at
-    /// <paramref name="callerAccessEndsAt"/>, when the caller's access ends.
+    /// mmol/L never moves it. A changed threshold changes only the stored <c>value</c>, so a clear
+    /// margin stays. A rule the rule editor made into more than a numeric threshold keeps its
+    /// conditions and resolve condition as they are, and a threshold sent for it is ignored. A channel with a typed-in destination
+    /// stops at <paramref name="callerAccessEndsAt"/>, when the caller's access ends.
     /// </summary>
     /// <remarks>
     /// Urgent low always sounds through Do Not Disturb, and every rule does for a caregiver. Two
@@ -202,15 +207,25 @@ public class AlertSetupService(
             var rule = starters.GetValueOrDefault(kind);
 
             var enabled = asked?.IsEnabled ?? rule?.IsEnabled ?? true;
-            var stored = rule is null ? defaultMgdl : ThresholdOf(kind, rule);
-            var mgdl = direction is null || asked is null || (asked.Threshold is null && !enabled)
-                ? stored
-                : ToMgdl(kind, asked.Threshold, stored, units);
+            var stored = rule is null ? defaultMgdl : StoredMgdl(kind, rule);
             var conditionType = preset.ConditionType!.Value;
-            var conditionParams = direction is null
-                ? preset.ConditionParams!
-                : JsonSerializer.Serialize(new { direction, value = mgdl });
-            var autoResolve = preset.AutoResolve && direction is not null ? OppositeOf(direction, mgdl) : null;
+            string conditionParams;
+            string? autoResolve;
+            if (direction is null || stored is not { } storedMgdl)
+            {
+                conditionParams = rule?.Rule.ConditionParams ?? preset.ConditionParams!;
+                autoResolve = null;
+            }
+            else
+            {
+                var mgdl = asked is null || (asked.Threshold is null && !enabled)
+                    ? storedMgdl
+                    : ToMgdl(kind, asked.Threshold, storedMgdl, units);
+                conditionParams = rule is null
+                    ? JsonSerializer.Serialize(new { direction, value = mgdl })
+                    : WithValue(rule.Rule.ConditionParams, storedMgdl, mgdl);
+                autoResolve = preset.AutoResolve ? OppositeOf(direction, mgdl) : null;
+            }
 
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
@@ -237,8 +252,10 @@ public class AlertSetupService(
             // A resolve condition that is still the opposite of the stored threshold follows the new
             // one. One the owner edited or switched off in the rule editor stays as they left it.
             var resolveFollows = direction is not null
+                && autoResolve is not null
+                && stored is { } before
                 && rule.Rule.AutoResolveEnabled
-                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, stored));
+                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, before));
             await writer.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
             {
                 ConditionParams = conditionParams,
@@ -486,12 +503,37 @@ public class AlertSetupService(
         && Guid.TryParse(channel.Destination, out var subjectId)
         && subjectId != callerId;
 
-    private static decimal ThresholdOf(StarterAlertKind kind, AlertRuleRecord rule)
+    /// <summary>
+    /// A threshold starter's stored level in mg/dL, or null when the rule editor made it into something the
+    /// setup step cannot write a number back into: another root kind, a limit read from a fact (known to
+    /// this build or not), or a value that is not a number.
+    /// </summary>
+    private static decimal? StoredMgdl(StarterAlertKind kind, AlertRuleRecord rule)
     {
+        if (rule.Rule.ConditionType != Starters[kind].Preset.ConditionType)
+            return null;
         using var json = JsonDocument.Parse(rule.Rule.ConditionParams);
-        return json.RootElement.TryGetProperty("value", out var value) && value.TryGetDecimal(out var mgdl)
+        var root = json.RootElement;
+        return root.ValueKind == JsonValueKind.Object
+               && !root.TryGetProperty("value_from", out _)
+               && root.TryGetProperty("value", out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetDecimal(out var mgdl)
             ? mgdl
-            : Starters[kind].DefaultMgdl;
+            : null;
+    }
+
+    /// <summary>
+    /// <paramref name="conditionParams"/> with only <c>value</c> set to <paramref name="mgdl"/>; the
+    /// params unchanged, byte for byte, when the number did not change.
+    /// </summary>
+    private static string WithValue(string conditionParams, decimal stored, decimal mgdl)
+    {
+        if (mgdl == stored)
+            return conditionParams;
+        var node = JsonNode.Parse(conditionParams) as JsonObject ?? new JsonObject();
+        node["value"] = mgdl;
+        return node.ToJsonString();
     }
 
     private static decimal Display(decimal mgdl, string units) =>

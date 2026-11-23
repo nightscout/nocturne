@@ -25,6 +25,9 @@ const asMetBy = (value: unknown): MetPoint[] | undefined =>
           curve: asString(field(p, "curve")),
           offsetMinutes: asNumber(field(p, "offsetMinutes")),
           value: asNumber(field(p, "value")),
+          limit: asNumber(field(p, "limit")),
+          limitFact: asString(field(p, "limitFact")),
+          limitOffset: asNumber(field(p, "limitOffset")),
         }))
     : undefined;
 

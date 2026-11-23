@@ -4,9 +4,9 @@
 use serde_json::Value;
 
 use crate::engine::{OnUnknown, Rule, WireRule, parse_auto_resolve};
-use crate::enums::{WireEnum, wire_enum};
+use crate::enums::{LimitFact, WireEnum, wire_enum};
 use crate::leaf_identity::collect_leaves;
-use crate::model::{ConditionKind, Node, parse_payload};
+use crate::model::{ConditionKind, Node, Payload, parse_payload};
 
 wire_enum! {
     /// A group of [`SensorContext`](crate::context::SensorContext) fields
@@ -31,6 +31,7 @@ wire_enum! {
         TimeZone = "time_zone",
         SensorState = "sensor_state",
         ApsDetermination = "aps_determination",
+        TargetRange = "target_range",
     }
 }
 
@@ -72,6 +73,27 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
     }
 }
 
+/// The facts a limit naming `fact` reads (engine-semantics.md §3, a limit
+/// from a fact): `latest_glucose` the reading as `threshold` reads it.
+#[must_use]
+pub fn limit_reads(fact: LimitFact) -> &'static [ContextFact] {
+    match fact {
+        LimitFact::LatestGlucose => &[ContextFact::Glucose, ContextFact::SensorState],
+        LimitFact::TargetLow | LimitFact::TargetHigh => &[ContextFact::TargetRange],
+    }
+}
+
+/// The facts a leaf reads: its kind's, and those of the fact its limit names.
+#[must_use]
+pub fn leaf_reads(payload: &Payload) -> Vec<ContextFact> {
+    let limit = payload.limit_fact().map_or(&[][..], limit_reads);
+    ContextFact::ALL
+        .iter()
+        .copied()
+        .filter(|fact| reads(payload.kind()).contains(fact) || limit.contains(fact))
+        .collect()
+}
+
 /// A stored rule's condition trees, as [`WireRule`] carries them.
 ///
 /// The root kind is `condition_type`, exactly a kind's wire name; anything
@@ -107,9 +129,26 @@ impl<'a> RuleConditions<'a> {
     }
 
     pub(crate) fn kinds(&self) -> Vec<ConditionKind> {
-        let Some(root) = ConditionKind::from_wire(self.condition_type) else {
-            return Vec::new();
-        };
+        self.trees().map_or_else(Vec::new, |(root, trees)| {
+            let leaves = trees.iter().flat_map(leaf_kinds);
+            std::iter::once(root).chain(leaves).collect()
+        })
+    }
+
+    /// The facts the limits of the rule's leaves name.
+    pub(crate) fn limit_facts(&self) -> Vec<LimitFact> {
+        self.trees().map_or_else(Vec::new, |(_, trees)| {
+            trees
+                .iter()
+                .flat_map(collect_leaves)
+                .filter_map(|leaf| leaf.payload().limit_fact())
+                .collect()
+        })
+    }
+
+    /// The root kind, and the trees whose kinds count.
+    fn trees(&self) -> Option<(ConditionKind, Vec<Node>)> {
+        let root = ConditionKind::from_wire(self.condition_type)?;
         let body = parse_payload(root, self.condition_params)
             .ok()
             .map(Node::from);
@@ -117,11 +156,7 @@ impl<'a> RuleConditions<'a> {
             .auto_resolve_enabled
             .then(|| parse_auto_resolve(self.auto_resolve_params))
             .flatten();
-        let leaves = [body, auto_resolve]
-            .into_iter()
-            .flatten()
-            .flat_map(|tree| leaf_kinds(&tree));
-        std::iter::once(root).chain(leaves).collect()
+        Some((root, [body, auto_resolve].into_iter().flatten().collect()))
     }
 }
 
@@ -159,15 +194,21 @@ fn leaf_kinds(tree: &Node) -> Vec<ConditionKind> {
     collect_leaves(tree).into_iter().map(Node::kind).collect()
 }
 
-/// Every fact any kind of `rule` ([`RuleConditions`]) reads, once each, in
-/// [`ContextFact::ALL`] order.
+/// Every fact any kind of `rule` ([`RuleConditions`]) reads, and every fact
+/// a limit of its leaves names, once each, in [`ContextFact::ALL`] order.
 #[must_use]
 pub fn rule_reads(rule: &RuleConditions<'_>) -> Vec<ContextFact> {
     let kinds = rule.kinds();
+    let limits = rule.limit_facts();
     ContextFact::ALL
         .iter()
         .copied()
-        .filter(|fact| kinds.iter().any(|&kind| reads(kind).contains(fact)))
+        .filter(|fact| {
+            kinds.iter().any(|&kind| reads(kind).contains(fact))
+                || limits
+                    .iter()
+                    .any(|&limit| limit_reads(limit).contains(fact))
+        })
         .collect()
 }
 
@@ -193,12 +234,12 @@ mod tests {
         SensorStateSnapshot, StartedSpan, StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
     use crate::enums::{
-        ForecastCurve, GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket,
+        ForecastCurve, GlucoseBucket, LimitFact, PumpMode, SensorState, StateSpanCategory,
+        TrendBucket,
     };
     use crate::eval::elapsed::clock_leaf;
     use crate::eval::glucose::judges_freshness;
     use crate::eval::{Env, eval_payload};
-    use crate::model::Payload;
     use crate::sustained::TimerStore;
     use crate::truth::Truth;
     use crate::wall_clock::{is_wall_clock, references_wall_clock};
@@ -273,15 +314,35 @@ mod tests {
     }
 
     #[test]
-    fn every_fact_is_read_by_some_kind() {
+    fn every_fact_is_read_by_some_kind_or_limit() {
         for &fact in ContextFact::ALL {
             assert!(
                 ConditionKind::ALL
                     .iter()
-                    .any(|&kind| reads(kind).contains(&fact)),
-                "no kind reads {fact:?}"
+                    .any(|&kind| reads(kind).contains(&fact))
+                    || LimitFact::ALL
+                        .iter()
+                        .any(|&limit| limit_reads(limit).contains(&fact)),
+                "nothing reads {fact:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_limit_from_a_fact_adds_that_facts_reads() {
+        let below_target = json!({"direction": "below", "value_from": {"fact": "target_low"}});
+        assert_eq!(
+            body("threshold", &below_target),
+            [F::Glucose, F::SensorState, F::TargetRange]
+        );
+        let below_latest = json!({"operator": "<", "within_minutes": 30,
+            "value_from": {"fact": "latest_glucose", "offset": -30}});
+        assert_eq!(
+            body("predicted", &below_latest),
+            [F::Glucose, F::Predictions, F::SensorState]
+        );
+        let literal = json!({"operator": "<", "value": 70});
+        assert_eq!(body("eventual_glucose", &literal), [F::ApsDetermination]);
     }
 
     #[test]
@@ -515,6 +576,8 @@ mod tests {
             trend_bucket: glucose.then_some(TrendBucket::FallingFast),
             // A host derives the bucket from the reading in the tenant zone.
             glucose_bucket: (glucose && has(F::TimeZone)).then_some(GlucoseBucket::Low),
+            target_low: has(F::TargetRange).then(|| Decimal::from(80)),
+            target_high: has(F::TargetRange).then(|| Decimal::from(180)),
             predictions: if has(F::Predictions) {
                 vec![PredictedPoint {
                     offset_minutes: 10,
@@ -708,6 +771,80 @@ mod tests {
             &[F::Glucose]
         } else {
             &[]
+        }
+    }
+
+    /// For each fact a limit can name, glucose leaves whose limit names it,
+    /// true in `context(leaf_reads(..))` and not true in `context(&[])`.
+    fn limit_samples() -> Vec<Payload> {
+        [
+            (
+                "threshold",
+                json!({"direction": "below", "value_from": {"fact": "target_low"}}),
+            ),
+            (
+                "threshold",
+                json!({"direction": "below",
+                "value_from": {"fact": "target_high", "offset": -100}}),
+            ),
+            (
+                "predicted",
+                json!({"operator": "<", "within_minutes": 30,
+                "value_from": {"fact": "latest_glucose"}}),
+            ),
+            (
+                "predicted",
+                json!({"operator": "<", "within_minutes": 30,
+                "value_from": {"fact": "target_low"}}),
+            ),
+            (
+                "eventual_glucose",
+                json!({"operator": "<",
+                "value_from": {"fact": "latest_glucose", "offset": 10}}),
+            ),
+            (
+                "eventual_glucose",
+                json!({"operator": "<",
+                "value_from": {"fact": "target_high", "offset": -100}}),
+            ),
+        ]
+        .into_iter()
+        .map(|(kind, params)| {
+            let kind = ConditionKind::from_wire(kind).expect("a kind");
+            parse_payload(kind, &params).expect("limit sample parses")
+        })
+        .collect()
+    }
+
+    fn evaluate_payload(payload: &Payload, on: &[ContextFact]) -> Truth {
+        let ctx = context(on);
+        let mut timers = TimerStore::default();
+        let mut env = Env::new(now(), Uuid::nil(), &ctx, &mut timers);
+        eval_payload(payload, payload.kind().name(), &mut env)
+    }
+
+    #[test]
+    fn a_leaf_with_a_limit_from_a_fact_needs_every_fact_it_reads_and_no_other() {
+        for payload in limit_samples() {
+            let own = leaf_reads(&payload);
+            assert!(evaluate_payload(&payload, &own).is_true(), "{payload:?}");
+            assert!(!evaluate_payload(&payload, &[]).is_true(), "{payload:?}");
+            for &fact in own.iter().filter(|&&f| f != F::SensorState) {
+                let without: Vec<ContextFact> =
+                    own.iter().copied().filter(|&f| f != fact).collect();
+                assert!(
+                    evaluate_payload(&payload, &without).is_unknown(),
+                    "{payload:?} without {fact:?}"
+                );
+            }
+            for &fact in ContextFact::ALL.iter().filter(|f| !own.contains(f)) {
+                let with: Vec<ContextFact> = own.iter().copied().chain([fact]).collect();
+                assert_eq!(
+                    evaluate_payload(&payload, &with),
+                    evaluate_payload(&payload, &own),
+                    "{payload:?} moved with {fact:?}"
+                );
+            }
         }
     }
 

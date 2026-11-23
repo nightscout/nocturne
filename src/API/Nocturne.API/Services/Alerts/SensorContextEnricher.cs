@@ -245,13 +245,17 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
-        // Glucose bucket — resolve target range schedule for the active profile and apply
-        // boundaries from the matching TargetRangeEntry. Falls back to clinical defaults
-        // (54/70/140/250) when the schedule has nulls or is missing entirely.
-        if (needs.NeedsGlucoseBucket && enriched.LatestValue is { } latestValue)
+        // The target-range entry in effect places the glucose bucket and is the target_low and
+        // target_high a limit can name, so both read one lookup and cannot disagree. With no entry
+        // the bucket falls back to clinical defaults and the targets stay absent.
+        var bucketReading = needs.NeedsGlucoseBucket ? enriched.LatestValue : null;
+        if (needs.NeedsTargetRange || bucketReading is not null)
         {
-            var bucket = await ResolveGlucoseBucketAsync(latestValue, now, enriched.TenantTimeZoneId, ct);
-            enriched = enriched with { GlucoseBucket = bucket };
+            var entry = await ResolveTargetEntryAsync(now, enriched.TenantTimeZoneId, ct);
+            if (needs.NeedsTargetRange && entry is not null)
+                enriched = enriched with { TargetLow = entry.Low.ToDecimal(), TargetHigh = entry.High.ToDecimal() };
+            if (bucketReading is { } latestValue)
+                enriched = enriched with { GlucoseBucket = BucketOf(latestValue, entry) };
         }
 
         // Treatments — fetch once and project last-carb/last-bolus timestamps.
@@ -333,53 +337,50 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// Resolves the glucose bucket for <paramref name="glucoseMgdl"/> at <paramref name="at"/>
-    /// by loading the active <see cref="Nocturne.Core.Models.V4.TargetRangeSchedule"/>, finding
-    /// the entry active at the tenant's local wall-clock time, and applying
-    /// <see cref="GlucoseBucketResolver.Compute"/>. Falls back to the InRange-default bucket
-    /// assignment when no schedule exists. <paramref name="tenantTimeZoneId"/> is the IANA
-    /// (or Windows-mapped) id from <see cref="SensorContext.TenantTimeZoneId"/>; null or
-    /// unparseable falls back to treating <paramref name="at"/> as the local wall-clock — the
-    /// pre-fix behaviour, preserved so a tenant with no timezone configured doesn't lose
-    /// bucket resolution entirely.
+    /// The target-range entry in effect at <paramref name="at"/>: the active profile's
+    /// <see cref="Nocturne.Core.Models.V4.TargetRangeSchedule"/> version then, at the local time of day
+    /// in <paramref name="tenantTimeZoneId"/> (IANA or Windows-mapped, from
+    /// <see cref="SensorContext.TenantTimeZoneId"/>; null or unparseable reads as UTC). Null when the
+    /// profile has no schedule or its schedule has no entries.
     /// </summary>
-    private async Task<GlucoseBucket?> ResolveGlucoseBucketAsync(
-        decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
+    private async Task<TargetRangeEntry?> ResolveTargetEntryAsync(
+        DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
-        var atMills = at.ToMills();
-        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
+        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(at.ToMills(), ct);
         // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
             ?? (await _deps.TargetRangeSchedules.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
+        if (schedule is null)
+            return null;
 
-        // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
-        if (schedule is null || schedule.Entries.Count == 0)
-        {
-            return GlucoseBucketResolver.Compute(
-                glucoseMgdl,
-                (decimal)GlucoseConstants.TargetBottomMgdl,
-                (decimal)GlucoseConstants.TargetTopMgdl,
-                null,
-                null,
-                null);
-        }
-
-        // An unparseable tenant tz swallows to UTC (as the engine's day_of_week does) so a
-        // misconfigured tenant tz field still produces a deterministic bucket rather than no
-        // bucket at all.
         var zone = string.IsNullOrEmpty(tenantTimeZoneId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tenantTimeZoneId);
         var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(at.ToMills(), zone);
-        ScheduleEntryTime.TryEntryAt(
-            schedule.Entries, secondsFromMidnight, e => ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), out var active);
-
-        return GlucoseBucketResolver.Compute(
-            glucoseMgdl,
-            active.Low.ToDecimal(),
-            active.High.ToDecimal(),
-            active.VeryLow,
-            active.TightHigh,
-            active.VeryHigh);
+        return ScheduleEntryTime.TryEntryAt(
+            schedule.Entries, secondsFromMidnight, e => ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), out var active)
+            ? active
+            : null;
     }
+
+    /// <summary>
+    /// The bucket of <paramref name="glucoseMgdl"/> by <paramref name="entry"/>'s boundaries, or with
+    /// no entry by the consensus in-range band and clinical bucket defaults.
+    /// </summary>
+    private static GlucoseBucket BucketOf(decimal glucoseMgdl, TargetRangeEntry? entry) =>
+        entry is null
+            ? GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                GlucoseConstants.TargetBottomMgdl.ToDecimal(),
+                GlucoseConstants.TargetTopMgdl.ToDecimal(),
+                null,
+                null,
+                null)
+            : GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                entry.Low.ToDecimal(),
+                entry.High.ToDecimal(),
+                entry.VeryLow,
+                entry.TightHigh,
+                entry.VeryHigh);
 
     /// <summary>
     /// Populates the looping-related facts (APS cycle/enaction/sensitivity, pump status and
