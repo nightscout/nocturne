@@ -106,6 +106,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         var idsForMatching = new HashSet<Guid>();
 
         var batchFoodCache = new Dictionary<string, FoodEntity>(StringComparer.OrdinalIgnoreCase);
+        var batchEntryKeys = new HashSet<(string ConnectorSource, string ExternalEntryId)>();
 
         foreach (var import in imports)
         {
@@ -124,6 +125,14 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
             var connectorSource = import.ConnectorSource.Trim();
             var externalEntryId = import.ExternalEntryId.Trim();
             var externalFoodId = import.ExternalFoodId?.Trim() ?? string.Empty;
+
+            // The lookup below cannot see an entry this batch has added but not saved, so a second
+            // import of one key would insert a second row. The first import's values stand, as a
+            // caller that keys its own records by entry id keeps the first it sees.
+            if (!batchEntryKeys.Add((connectorSource, externalEntryId)))
+            {
+                continue;
+            }
 
             FoodEntity? foodEntity = null;
             if (import.Food != null && !string.IsNullOrWhiteSpace(import.Food.ExternalId))
