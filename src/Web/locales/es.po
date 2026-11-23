@@ -37878,9 +37878,7 @@ msgstr "No ({0})"
 #~ msgid "Glucose above {0} {1}"
 #~ msgstr "Glucemia superior a {0} {1}"
 
-#. 0: bg(p.rate ?? 0); 1: bgLabel()
-#. 0: convertRateToDisplayUnits(m, glucoseUnits.current); 1: bgLabel()
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
+#. 0: convertRateToDisplayUnits(mgdl, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 #, python-brace-format
 msgid "{0} {1} per minute"
@@ -42269,12 +42267,12 @@ msgstr "Hipoglucemia: por debajo de {0} {1}"
 msgid "High: above {0} {1}"
 msgstr "Hiperglucemia: por encima de {0} {1}"
 
-#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Falling fast: {0} {1} per minute"
 msgstr "Descenso rápido: {0} {1} por minuto"
 
-#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Rising fast: {0} {1} per minute"
 msgstr "Ascenso rápido: {0} {1} por minuto"

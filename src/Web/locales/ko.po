@@ -37042,9 +37042,7 @@ msgstr ""
 #~ msgid "Glucose above {0} {1}"
 #~ msgstr ""
 
-#. 0: bg(p.rate ?? 0); 1: bgLabel()
-#. 0: convertRateToDisplayUnits(m, glucoseUnits.current); 1: bgLabel()
-#: src/lib/components/alerts/summarizeCondition.svelte.ts
+#. 0: convertRateToDisplayUnits(mgdl, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "{0} {1} per minute"
 msgstr ""
@@ -41330,12 +41328,12 @@ msgstr ""
 msgid "High: above {0} {1}"
 msgstr ""
 
-#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Falling fast: {0} {1} per minute"
 msgstr ""
 
-#. 0: bg(leaf?.rate_of_change?.rate ?? 0); 1: bgLabel()
+#. 0: convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current); 1: bgLabel()
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Rising fast: {0} {1} per minute"
 msgstr ""
