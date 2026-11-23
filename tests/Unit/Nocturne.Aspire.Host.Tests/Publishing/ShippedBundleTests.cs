@@ -42,9 +42,7 @@ public class ShippedBundleTests
     {
         var grace = Text(ShippedService(bundle, "nocturne-api")["stop_grace_period"]);
 
-        grace.Should().Be(
-            $"{ApplicationConstants.Shutdown.HostTimeoutSeconds + ApplicationConstants.Shutdown.ContainerMarginSeconds}s");
-        ApplicationConstants.Shutdown.ContainerMarginSeconds.Should().BePositive();
+        grace.Should().Be(ApplicationConstants.Shutdown.ContainerStopGracePeriod);
     }
 
     [Theory]
