@@ -3,10 +3,11 @@
 //! not know (a host newer than it) degrades only that fact: an unknown bucket
 //! reads as an absent one, an active pump mode this crate cannot name keeps
 //! its entry with no mode, a state span of an unknown category is dropped, and
-//! a sensor state this crate cannot name is kept as one that is not ok, so
-//! every other leaf still evaluates.
+//! a sensor state this crate cannot name is kept as one that is not ok, a
+//! forecast curve this crate cannot name is dropped, so every other leaf
+//! still evaluates.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
@@ -15,7 +16,7 @@ use serde_json::{Map, Number, Value};
 use uuid::Uuid;
 
 use crate::enums::{
-    GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket, WireEnum,
+    ForecastCurve, GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket, WireEnum,
 };
 use crate::model::decimal_from_number;
 
@@ -60,6 +61,19 @@ pub struct PredictedPoint {
     pub mgdl: Decimal,
 }
 
+/// The newest determination of the user's loop (an oref or Loop cycle) at or
+/// before `now`: when it was made, and what it said.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApsDetermination {
+    pub at: DateTime<Utc>,
+    /// The glucose the loop expected at the end of its forecast, in mg/dL.
+    pub eventual_mgdl: Option<Decimal>,
+    /// The carbohydrate the loop said it needed, in grams. The host sends
+    /// what the loop reported, and `None` where the loop reports nothing
+    /// (engine-semantics.md §4).
+    pub carbs_required_grams: Option<Decimal>,
+}
+
 /// Pure-data snapshot of current sensor state. No clock: `now` is supplied to
 /// the engine separately.
 #[derive(Debug, Clone, Default)]
@@ -81,7 +95,12 @@ pub struct SensorContext {
     pub reservoir_is_lower_bound: bool,
     pub last_site_change_at: Option<DateTime<Utc>>,
     pub last_sensor_start_at: Option<DateTime<Utc>>,
+    /// The `default` forecast series: whatever the host has always sent.
     pub predictions: Vec<PredictedPoint>,
+    /// The named forecast curves other than `default`; a curve the host has
+    /// none of is absent.
+    pub prediction_curves: BTreeMap<ForecastCurve, Vec<PredictedPoint>>,
+    pub aps_determination: Option<ApsDetermination>,
     pub active_alerts: HashMap<Uuid, ActiveAlertSnapshot>,
     pub last_aps_cycle_at: Option<DateTime<Utc>>,
     pub last_aps_enacted_at: Option<DateTime<Utc>>,
@@ -136,6 +155,18 @@ pub struct SensorStateSnapshot {
 }
 
 impl SensorContext {
+    /// The points of the series `curve`; empty when the host sent none.
+    #[must_use]
+    pub fn prediction_series(&self, curve: ForecastCurve) -> &[PredictedPoint] {
+        match curve {
+            ForecastCurve::Default => &self.predictions,
+            named => self
+                .prediction_curves
+                .get(&named)
+                .map_or(&[], Vec::as_slice),
+        }
+    }
+
     /// The sensor's state at `now`: none when it is absent or its report has
     /// lapsed. The engine owns the lapse, so a host that evaluates late
     /// cannot keep a state its own bound has ended.
@@ -212,6 +243,10 @@ struct WireContext {
     #[serde(default)]
     predictions: Option<Vec<WirePrediction>>,
     #[serde(default)]
+    prediction_curves: Option<BTreeMap<String, Vec<WirePrediction>>>,
+    #[serde(default)]
+    aps_determination: Option<WireApsDetermination>,
+    #[serde(default)]
     active_alerts: Option<Vec<WireAlert>>,
     #[serde(default)]
     last_aps_cycle_at: Option<DateTime<Utc>>,
@@ -280,6 +315,43 @@ struct WireSensorState {
 struct WirePrediction {
     offset_minutes: i32,
     mgdl: Number,
+}
+
+#[derive(Deserialize)]
+struct WireApsDetermination {
+    at: DateTime<Utc>,
+    #[serde(default)]
+    eventual_mgdl: Option<Number>,
+    #[serde(default)]
+    carbs_required_grams: Option<Number>,
+}
+
+fn points(wire: &[WirePrediction]) -> Result<Vec<PredictedPoint>, String> {
+    wire.iter()
+        .map(|p| {
+            Ok(PredictedPoint {
+                offset_minutes: p.offset_minutes,
+                mgdl: dec(&p.mgdl, "prediction mgdl")?,
+            })
+        })
+        .collect()
+}
+
+/// The named curves of `wire`. `default` is `predictions`, so a curve of that
+/// name here is not read, nor is one this crate has no member for.
+fn named_curves(
+    wire: Option<BTreeMap<String, Vec<WirePrediction>>>,
+) -> Result<BTreeMap<ForecastCurve, Vec<PredictedPoint>>, String> {
+    let mut curves = BTreeMap::new();
+    for (name, series) in wire.unwrap_or_default() {
+        match ForecastCurve::from_name(&name) {
+            Some(ForecastCurve::Default) | None => {}
+            Some(curve) => {
+                curves.insert(curve, points(&series)?);
+            }
+        }
+    }
+    Ok(curves)
 }
 
 #[derive(Deserialize)]
@@ -455,17 +527,24 @@ impl SensorContext {
             reservoir_is_lower_bound: w.reservoir_is_lower_bound.unwrap_or(false),
             last_site_change_at: opt_ts(w.last_site_change_at, "last_site_change_at")?,
             last_sensor_start_at: opt_ts(w.last_sensor_start_at, "last_sensor_start_at")?,
-            predictions: w
-                .predictions
-                .unwrap_or_default()
-                .iter()
-                .map(|p| {
-                    Ok(PredictedPoint {
-                        offset_minutes: p.offset_minutes,
-                        mgdl: dec(&p.mgdl, "prediction mgdl")?,
+            predictions: points(&w.predictions.unwrap_or_default())?,
+            prediction_curves: named_curves(w.prediction_curves)?,
+            aps_determination: w
+                .aps_determination
+                .map(|d| {
+                    Ok::<_, String>(ApsDetermination {
+                        at: check_timestamp(d.at, "aps_determination.at")?,
+                        eventual_mgdl: opt_dec(
+                            d.eventual_mgdl.as_ref(),
+                            "aps_determination.eventual_mgdl",
+                        )?,
+                        carbs_required_grams: opt_dec(
+                            d.carbs_required_grams.as_ref(),
+                            "aps_determination.carbs_required_grams",
+                        )?,
                     })
                 })
-                .collect::<Result<Vec<_>, String>>()?,
+                .transpose()?,
             active_alerts,
             last_aps_cycle_at: opt_ts(w.last_aps_cycle_at, "last_aps_cycle_at")?,
             last_aps_enacted_at: opt_ts(w.last_aps_enacted_at, "last_aps_enacted_at")?,
@@ -552,6 +631,66 @@ mod tests {
         let with = read(json!({ "latest_value": 60, "sensor_state_v2": { "state": "error" } }));
         let without = read(json!({ "latest_value": 60 }));
         assert_eq!(format!("{with:?}"), format!("{without:?}"));
+    }
+
+    fn mgdl_at(points: &[PredictedPoint]) -> Vec<(i32, String)> {
+        points
+            .iter()
+            .map(|p| (p.offset_minutes, p.mgdl.to_string()))
+            .collect()
+    }
+
+    /// The old wire shape, one array, is the `default` series, and reads as it did.
+    #[test]
+    fn the_one_array_is_the_default_series() {
+        let ctx = read(json!({ "predictions": [{ "offset_minutes": 5, "mgdl": 80 }] }));
+        assert_eq!(
+            mgdl_at(ctx.prediction_series(ForecastCurve::Default)),
+            [(5, "80".to_owned())]
+        );
+        assert!(ctx.prediction_curves.is_empty());
+        assert!(ctx.prediction_series(ForecastCurve::Iob).is_empty());
+    }
+
+    /// `default` is `predictions`; a curve under that name in `prediction_curves`, or under a
+    /// name the crate has no member for, is not read, so it cannot reach an unnamed `predicted`.
+    #[test]
+    fn named_curves_read_beside_the_default_and_an_unknown_name_is_dropped() {
+        let ctx = read(json!({
+            "predictions": [{ "offset_minutes": 5, "mgdl": 80 }],
+            "prediction_curves": {
+                "cob": [{ "offset_minutes": 5, "mgdl": 120 }],
+                "default": [{ "offset_minutes": 5, "mgdl": 1 }],
+                "ar2": [{ "offset_minutes": 5, "mgdl": 2 }]
+            }
+        }));
+        assert_eq!(
+            mgdl_at(ctx.prediction_series(ForecastCurve::Default)),
+            [(5, "80".to_owned())]
+        );
+        assert_eq!(
+            mgdl_at(ctx.prediction_series(ForecastCurve::Cob)),
+            [(5, "120".to_owned())]
+        );
+        assert_eq!(
+            ctx.prediction_curves.keys().copied().collect::<Vec<_>>(),
+            [ForecastCurve::Cob]
+        );
+    }
+
+    #[test]
+    fn a_determination_reads_with_either_value_absent() {
+        let at = "2026-01-05T12:00:00Z";
+        assert_eq!(
+            read(json!({ "aps_determination": { "at": at, "eventual_mgdl": 95.5 } }))
+                .aps_determination,
+            Some(ApsDetermination {
+                at: at.parse().expect("an instant"),
+                eventual_mgdl: Some(Decimal::new(955, 1)),
+                carbs_required_grams: None,
+            })
+        );
+        assert_eq!(read(json!({})).aps_determination, None);
     }
 
     #[test]

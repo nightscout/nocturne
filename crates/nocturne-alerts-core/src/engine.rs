@@ -10,7 +10,8 @@ use crate::clock_anomaly::ClockAnomalies;
 use crate::context::{SensorContext, opt_ts};
 use crate::enums::{WireEnum, wire_enum};
 use crate::eval::{
-    DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, eval_node, eval_payload_unknown,
+    DEFAULT_GLUCOSE_FRESHNESS, Env, MAX_GLUCOSE_FRESHNESS_MINUTES, MetPoint, eval_node,
+    eval_payload_unknown, met_point,
 };
 use crate::excursion::{
     CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
@@ -191,6 +192,11 @@ pub struct Evaluation {
     pub unknown: UnknownFacts,
     /// Each leaf evaluated alone, indexed by leaf id, when requested.
     pub leaves: Option<Vec<Truth>>,
+    /// What each true `predicted`, `eventual_glucose` and `carbs_required`
+    /// leaf of the body under an even number of `not`s met its comparison
+    /// with, by leaf id, whether or not leaves are logged
+    /// (engine-semantics.md §3).
+    pub met_by: Vec<(usize, ConditionKind, MetPoint)>,
     pub transition: Transition,
     /// This evaluation's hold reached [`HOLD_BOUND`](crate::excursion::HOLD_BOUND):
     /// once per hold (engine-semantics.md §6.4).
@@ -250,6 +256,15 @@ impl RuleOutcome {
                         value.write(&mut leaf, "value");
                         Value::Object(leaf)
                     })
+                    .collect(),
+            );
+        }
+        if !e.met_by.is_empty() {
+            o.insert(
+                "met_by".into(),
+                e.met_by
+                    .iter()
+                    .map(|&(leaf_id, kind, point)| point.to_json(leaf_id, kind))
                     .collect(),
             );
         }
@@ -410,6 +425,7 @@ pub fn evaluate_parsed_rule(
             root: outcome.root,
             unknown: outcome.unknown,
             leaves: outcome.leaves,
+            met_by: outcome.met_by,
             transition,
             held_too_long,
             tracker: state.tracker.state(rule.id).copied(),
@@ -427,6 +443,7 @@ pub(crate) struct BodyOutcome {
     /// The facts that leave the root unknown.
     pub(crate) unknown: UnknownFacts,
     pub(crate) leaves: Option<Vec<Truth>>,
+    pub(crate) met_by: Vec<(usize, ConditionKind, MetPoint)>,
     pub(crate) clock_anomaly: ClockAnomalies,
 }
 
@@ -457,19 +474,32 @@ pub(crate) fn evaluate_body(
     // Leaves evaluate alone, at the rule's root path, each with its polarity
     // in the tree so a margined leaf logs the limit the root read;
     // a leaf touches no timers.
+    let polarized = collect_leaves_with_polarity(body);
     let leaves = log_leaves.then(|| {
-        collect_leaves_with_polarity(body)
-            .into_iter()
-            .map(|(leaf, negated)| {
+        polarized
+            .iter()
+            .map(|&(leaf, negated)| {
                 env.negated = negated;
                 eval_node(leaf, wire, &mut env)
             })
             .collect()
     });
+    // A leaf under an odd number of `not`s that is true argues against the
+    // rule, so it never names what the rule met.
+    env.negated = false;
+    let met_by = polarized
+        .iter()
+        .enumerate()
+        .filter(|&(_, &(_, negated))| !negated)
+        .filter_map(|(leaf_id, &(leaf, _))| {
+            met_point(leaf.payload(), &mut env).map(|point| (leaf_id, leaf.kind(), point))
+        })
+        .collect();
     BodyOutcome {
         root,
         unknown,
         leaves,
+        met_by,
         clock_anomaly: env.into_clock_anomaly(),
     }
 }

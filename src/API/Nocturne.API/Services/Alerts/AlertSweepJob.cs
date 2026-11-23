@@ -250,7 +250,8 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 "Dispatching excursion {ExcursionId} of rule {AlertRuleId}, which its evaluation opened without finishing its dispatch",
                 transition.ExcursionId, rule.Id);
             context ??= await OwedDispatchContextAsync(sweep, owed, rules, ct);
-            await openedHandler.HandleOpenedAsync(rule, transition.ExcursionId, context, sweep.TenantId, late: true, ct);
+            await openedHandler.HandleOpenedAsync(
+                rule, transition.ExcursionId, context, sweep.TenantId, late: true, metBy: [], ct);
         }
     }
 

@@ -47,6 +47,16 @@ public class RuleDataNeedsTests
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
+    /// <summary>The loop's determination is fetched for the two leaves that read it, and only them.</summary>
+    [NativeTheory]
+    [InlineData(AlertConditionType.EventualGlucose)]
+    [InlineData(AlertConditionType.CarbsRequired)]
+    public void A_loop_leaf_needs_the_determination_alone(AlertConditionType type)
+    {
+        RuleDataNeeds.Walk([MakeRule(type, """{"operator":">","value":10}""")])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsApsDetermination = true });
+    }
+
     [NativeFact]
     public void Iob_leaf_inside_composite_sets_iob_need()
     {

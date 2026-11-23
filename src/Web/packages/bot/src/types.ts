@@ -1,5 +1,6 @@
 import type {
   AlertAcknowledgementOutcome,
+  AlertMetPoint,
   AlertPayload as GeneratedAlertPayload,
   ChatAcknowledgeRequest,
   DirectoryCandidate as GeneratedDirectoryCandidate,
@@ -105,13 +106,17 @@ export type DirectoryCandidate = Required<GeneratedDirectoryCandidate>;
  * strings, so a member this build does not know yet still reaches the card, which degrades it.
  * The strings a card prints are present; the boundary refuses a payload without one.
  */
-export type AlertPayload = Omit<GeneratedAlertPayload, "kind" | "alertType" | "severity"> & {
+export type AlertPayload = Omit<GeneratedAlertPayload, "kind" | "alertType" | "severity" | "metBy"> & {
   kind?: string;
   alertType?: string;
   severity: string;
+  metBy?: MetPoint[];
 } & Required<
     Pick<GeneratedAlertPayload, "ruleName" | "readingTimestamp" | "excursionId" | "tenantId" | "subjectName">
   >;
+
+/** A met point with its enum fields as plain strings, as the payload's other enum fields are. */
+export type MetPoint = Omit<AlertMetPoint, "kind" | "curve"> & { kind?: string; curve?: string };
 
 export interface AlertDispatchEvent {
   deliveryId: string;

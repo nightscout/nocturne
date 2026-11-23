@@ -12,9 +12,9 @@ use uuid::Uuid;
 
 use nocturne_alerts_core::engine::OnUnknown;
 use nocturne_alerts_core::enums::{
-    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
-    SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric,
-    TrendBucket, WireEnum,
+    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, PumpMode,
+    RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
+    TransmitterBatteryMetric, TrendBucket, WireEnum,
 };
 use nocturne_alerts_core::model::{ConditionKind, Payload};
 
@@ -370,6 +370,17 @@ pub(crate) fn state_span() -> BoxedStrategy<Value> {
         .boxed()
 }
 
+/// No selector half the time, else one of `curve`, `min_of` and `max_of`.
+pub(crate) fn curve_selector() -> BoxedStrategy<Option<(&'static str, Value)>> {
+    prop_oneof![
+        3 => Just(None),
+        1 => word_value::<ForecastCurve>().prop_map(|curve| Some(("curve", curve))),
+        1 => (select(vec!["min_of", "max_of"]), words::<ForecastCurve>())
+            .prop_map(|(field, curves)| Some((field, curves))),
+    ]
+    .boxed()
+}
+
 /// A valid payload of `kind`; `child` supplies the nodes of a container.
 pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> BoxedStrategy<Value> {
     use ConditionKind as K;
@@ -396,9 +407,19 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
             .prop_map(|(m, child)| json!({ "minutes": m, "child": child }))
             .boxed(),
         K::Staleness => minutes_compare("value"),
-        K::Predicted => (word_value::<CmpOp>(), number(), minutes(1..=240))
-            .prop_map(|(operator, value, within)| {
-                json!({ "operator": operator, "value": value, "within_minutes": within })
+        K::Predicted => (
+            word_value::<CmpOp>(),
+            number(),
+            minutes(1..=240),
+            curve_selector(),
+        )
+            .prop_map(|(operator, value, within, selector)| {
+                let mut payload =
+                    json!({ "operator": operator, "value": value, "within_minutes": within });
+                if let Some((field, selected)) = selector {
+                    payload[field] = selected;
+                }
+                payload
             })
             .boxed(),
         K::Trend => word_value::<TrendBucket>()
@@ -412,7 +433,9 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
         | K::SensorAge
         | K::PumpBattery
         | K::UploaderBattery
-        | K::SensitivityRatio => compare(),
+        | K::SensitivityRatio
+        | K::EventualGlucose
+        | K::CarbsRequired => compare(),
         K::AlertState => (uuid_text(), word_value::<AlertStateKind>(), for_minutes())
             .prop_map(|(alert_id, state, for_minutes)| {
                 object(vec![

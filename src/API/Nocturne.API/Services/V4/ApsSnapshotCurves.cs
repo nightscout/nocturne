@@ -64,6 +64,22 @@ internal static class ApsSnapshotCurves
         aps.PredictedStartTimestamp ??= UploaderTimestamp.ParseUtcDateTime(command?.Timestamp);
     }
 
+    /// <summary>
+    /// The freshest OpenAPS command <paramref name="aps"/> stores (<see cref="FreshestOpenApsCommand"/>),
+    /// the one its eventual glucose was read from; null when it stores none, or a command that does
+    /// not parse, since then which one is freshest is not known.
+    /// </summary>
+    public static OpenApsSuggested? StoredFreshestCommand(ApsSnapshot aps)
+    {
+        var suggested = Parse<OpenApsSuggested>(aps.SuggestedJson);
+        var enacted = Parse<OpenApsEnacted>(aps.EnactedJson);
+        var unreadable = (suggested is null && !string.IsNullOrEmpty(aps.SuggestedJson))
+            || (enacted is null && !string.IsNullOrEmpty(aps.EnactedJson));
+        return unreadable
+            ? null
+            : FreshestOpenApsCommand(new OpenApsStatus { Suggested = suggested, Enacted = enacted });
+    }
+
     /// <summary>Fills the <c>predicted_*</c> columns <paramref name="aps"/> leaves empty from <paramref name="loop"/>.</summary>
     public static void FillColumns(ApsSnapshot aps, LoopStatus loop)
     {

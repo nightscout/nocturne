@@ -14,6 +14,15 @@
               "value": true
             }
           ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 20,
+              "value": 180
+            }
+          ],
           "transition": "opened",
           "tracker": {
             "state": "active",

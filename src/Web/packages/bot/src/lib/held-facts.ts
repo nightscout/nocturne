@@ -21,6 +21,7 @@ const FACT_NAMES: Record<string, string> = {
   do_not_disturb: "Do Not Disturb data",
   time_zone: "Time zone",
   sensor_state: "Sensor state",
+  aps_determination: "Loop result",
 };
 
 const REASONS: Record<string, string> = {

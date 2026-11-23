@@ -39,6 +39,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
+use nocturne_alerts_core::engine::{EngineState, Rule, WireRule, evaluate_rule};
 use nocturne_alerts_core::enums::{
     AlertStateKind, CmpOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection, SensorState,
     StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
@@ -472,6 +473,338 @@ family!(
     predicted_model,
     ["true:points", "false:points", "unknown:none"]
 );
+
+/// The points of the series `name` in the context's JSON: `default` is `predictions`, any other
+/// a member of `prediction_curves`. A curve under `default` there, or under a name the crate has
+/// no member for, is not a series.
+fn series<'a>(ctx: &'a Value, name: &str) -> Vec<&'a Value> {
+    let points = if name == "default" {
+        field(ctx, "predictions")
+    } else {
+        field(ctx, "prediction_curves").and_then(|curves| field(curves, name))
+    };
+    points
+        .and_then(Value::as_array)
+        .map(|points| points.iter().collect())
+        .unwrap_or_default()
+}
+
+fn offset(point: &Value) -> i64 {
+    point["offset_minutes"].as_i64().unwrap()
+}
+
+fn strings(list: &Value) -> Vec<String> {
+    list.as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// What a `predicted` leaf reads by its definition (§3): one series, or at each offset within the
+/// horizon where every listed series has a point, their lowest or highest value, with the curve
+/// that supplied it (the first listed of equal values). In offset order; `None` when a series it
+/// names has no points.
+fn selected_points(c: &Case) -> Option<Vec<(String, i64, Decimal)>> {
+    let within = whole(c, "within_minutes");
+    let (names, extreme): (Vec<String>, Option<&str>) =
+        if let Some(list) = field(&c.payload, "min_of") {
+            (strings(list), Some("min"))
+        } else if let Some(list) = field(&c.payload, "max_of") {
+            (strings(list), Some("max"))
+        } else {
+            let curve = field(&c.payload, "curve").map_or("default", |c| c.as_str().unwrap());
+            (vec![curve.to_owned()], None)
+        };
+    let all: Vec<Vec<&Value>> = names.iter().map(|n| series(&c.ctx, n)).collect();
+    if all.iter().any(Vec::is_empty) {
+        return None;
+    }
+    let Some(extreme) = extreme else {
+        let mut points: Vec<(String, i64, Decimal)> = all[0]
+            .iter()
+            .filter(|p| offset(p) <= within)
+            .map(|p| (names[0].clone(), offset(p), decimal_of(&p["mgdl"])))
+            .collect();
+        points.sort_by_key(|p| p.1);
+        return Some(points);
+    };
+    let mut offsets: Vec<i64> = all[0].iter().map(|p| offset(p)).collect();
+    offsets.sort_unstable();
+    offsets.dedup();
+    let combined = offsets
+        .into_iter()
+        .filter(|&o| o <= within && all.iter().all(|s| s.iter().any(|p| offset(p) == o)))
+        .map(|o| {
+            let mut best: Option<(String, Decimal)> = None;
+            for (name, points) in names.iter().zip(&all) {
+                for p in points.iter().filter(|p| offset(p) == o) {
+                    let v = decimal_of(&p["mgdl"]);
+                    let better = best.as_ref().is_none_or(|(_, held)| {
+                        if extreme == "min" {
+                            v < *held
+                        } else {
+                            v > *held
+                        }
+                    });
+                    if better {
+                        best = Some((name.clone(), v));
+                    }
+                }
+            }
+            let (name, v) = best.unwrap();
+            (name, o, v)
+        })
+        .collect();
+    Some(combined)
+}
+
+fn selected_model(c: &Case) -> Verdict {
+    let combined = field(&c.payload, "min_of").is_some() || field(&c.payload, "max_of").is_some();
+    let branch = if combined { "combined" } else { "one" };
+    let Some(points) = selected_points(c) else {
+        return unknown(branch);
+    };
+    let value = operand(c, "value");
+    verdict(
+        points.iter().any(|p| compare(operator(c), p.2, value)),
+        branch,
+    )
+}
+
+/// A series on a shared grid of offsets, so the listed series often meet at an offset.
+fn grid_series() -> BoxedStrategy<Value> {
+    vec(
+        (select(vec![5i64, 10, 15]), quantity())
+            .prop_map(|(offset, mgdl)| json!({ "offset_minutes": offset, "mgdl": mgdl })),
+        0..=3,
+    )
+    .prop_map(Value::from)
+    .boxed()
+}
+
+fn curve_case() -> BoxedStrategy<Case> {
+    let curves = vec(option::weighted(0.75, grid_series()), 4).prop_map(|series| {
+        object(
+            ["iob", "cob", "uam", "zt"]
+                .into_iter()
+                .zip(series)
+                .collect::<Vec<(&str, Option<Value>)>>(),
+        )
+    });
+    (
+        full_context(),
+        option::weighted(0.75, grid_series()),
+        curves,
+        (word_value::<CmpOp>(), quantity(), 1..=20i32),
+        generators::curve_selector(),
+    )
+        .prop_map(
+            |(mut ctx, default, curves, (operator, value, within), selector)| {
+                ctx["predictions"] = default.unwrap_or(Value::Null);
+                ctx["prediction_curves"] = curves;
+                let mut payload =
+                    json!({ "operator": operator, "value": value, "within_minutes": within });
+                if let Some((name, selected)) = selector {
+                    payload[name] = selected;
+                }
+                case(ctx, payload)
+            },
+        )
+        .boxed()
+}
+
+family!(
+    predicted_reads_the_series_its_selector_names_and_is_unknown_without_any_of_them,
+    ConditionKind::Predicted,
+    curve_case(),
+    selected_model,
+    [
+        "true:one",
+        "false:one",
+        "unknown:one",
+        "true:combined",
+        "false:combined",
+        "unknown:combined"
+    ]
+);
+
+fn number(d: Decimal) -> Value {
+    Value::Number(d.to_string().parse().unwrap())
+}
+
+/// The one member of `met_by` a rule whose body is the single leaf of `kind` reports, if any.
+fn met_by(kind: ConditionKind, c: &Case) -> Option<Value> {
+    let context: SensorContext = serde_json::from_value(c.ctx.clone()).expect("a context");
+    let wire: WireRule = serde_json::from_value(json!({
+        "id": Uuid::nil(),
+        "condition_type": kind.name(),
+        "condition_params": c.payload,
+        "glucose_freshness_minutes": c.freshness_minutes,
+    }))
+    .expect("a rule");
+    let rule = Rule::try_from(wire).expect("a rule");
+    let outcome = evaluate_rule(&rule, &context, base(), &mut EngineState::new(), false);
+    let mut members = outcome.to_json()["met_by"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(members.len() <= 1);
+    members.pop()
+}
+
+/// The point a true `predicted` leaf reports is the first, in offset order, of the points its
+/// definition reads that satisfies the comparison, from the curve that supplied it; a leaf that is
+/// not true reports none.
+#[test]
+fn a_true_predicted_leaf_names_the_first_point_that_met_it() {
+    TestRunner::new(Config {
+        cases: 512,
+        ..Config::default()
+    })
+    .run(&curve_case(), |c| {
+        let met = met_by(ConditionKind::Predicted, &c);
+        let value = operand(&c, "value");
+        let expected = selected_points(&c).and_then(|points| {
+            points
+                .into_iter()
+                .find(|p| compare(operator(&c), p.2, value))
+                .map(|(curve, offset, mgdl)| {
+                    json!({ "leaf_id": 0, "curve": curve, "offset_minutes": offset, "value": number(mgdl) })
+                })
+        });
+        prop_assert_eq!(
+            met.as_ref().map(|m| (m["curve"].clone(), m["offset_minutes"].clone(), decimal_of(&m["value"]))),
+            expected.as_ref().map(|e| (e["curve"].clone(), e["offset_minutes"].clone(), decimal_of(&e["value"]))),
+            "{}",
+            serde_json::to_string(&json!({ "context": c.ctx, "payload": c.payload })).unwrap()
+        );
+        if let Some(met) = met {
+            prop_assert_eq!(&met["leaf_id"], &json!(0));
+            prop_assert_eq!(&met["kind"], &json!("predicted"));
+            prop_assert!(compare(operator(&c), decimal_of(&met["value"]), value));
+        }
+        Ok(())
+    })
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// The loop's newest determination (§3): none, or none of the value, is absent; past the rule's
+/// freshness bound from when it was made it is stale, and further ahead than the tolerance its age
+/// is not known.
+fn determination_model(c: &Case, value: &str) -> Verdict {
+    let Some(d) = field(&c.ctx, "aps_determination") else {
+        return unknown("absent");
+    };
+    let Some(actual) = field(d, value).map(decimal_of) else {
+        return unknown("absent");
+    };
+    let bound = c.freshness_minutes.unwrap_or(FRESHNESS_MINUTES) * 60;
+    match passed(ago_of_instant(&d["at"])) {
+        None => unknown("ahead"),
+        Some(age) if age > bound => unknown("stale"),
+        Some(_) => verdict(compared(c, actual), "fact"),
+    }
+}
+
+/// A determination present nine times in ten, of any age around the bound, with both values
+/// present three times in four.
+fn determination_case() -> BoxedStrategy<Case> {
+    let at = prop_oneof![
+        6 => (0..=50i64).prop_map(|n| n * 30),
+        3 => select(vec![659i64, 660, 661]),
+        2 => select(vec![-1i64, -299, -300, -301, -3600]),
+    ];
+    let determination = (
+        at,
+        option::weighted(0.75, quantity()),
+        option::weighted(0.75, quantity()),
+    )
+        .prop_map(|(ago, eventual, carbs)| {
+            object(vec![
+                (
+                    "at",
+                    Some(Value::from((base() - TimeDelta::seconds(ago)).to_rfc3339())),
+                ),
+                ("eventual_mgdl", eventual),
+                ("carbs_required_grams", carbs),
+            ])
+        });
+    (
+        glucose_leaf(compare_payload()),
+        option::weighted(0.9, determination),
+    )
+        .prop_map(|(mut c, determination)| {
+            c.ctx["aps_determination"] = determination.unwrap_or(Value::Null);
+            c
+        })
+        .boxed()
+}
+
+fn eventual_glucose_model(c: &Case) -> Verdict {
+    determination_model(c, "eventual_mgdl")
+}
+
+fn carbs_required_model(c: &Case) -> Verdict {
+    determination_model(c, "carbs_required_grams")
+}
+
+family!(
+    eventual_glucose_compares_the_newest_determination_while_it_is_fresh,
+    ConditionKind::EventualGlucose,
+    determination_case(),
+    eventual_glucose_model,
+    [
+        "true:fact",
+        "false:fact",
+        "unknown:absent",
+        "unknown:stale",
+        "unknown:ahead"
+    ]
+);
+
+family!(
+    carbs_required_compares_the_newest_determination_while_it_is_fresh,
+    ConditionKind::CarbsRequired,
+    determination_case(),
+    carbs_required_model,
+    [
+        "true:fact",
+        "false:fact",
+        "unknown:absent",
+        "unknown:stale",
+        "unknown:ahead"
+    ]
+);
+
+/// A true determination leaf reports the value it compared, with no curve or offset; a leaf that
+/// is not true reports nothing.
+#[test]
+fn a_true_determination_leaf_names_its_value() {
+    for (kind, value) in [
+        (ConditionKind::EventualGlucose, "eventual_mgdl"),
+        (ConditionKind::CarbsRequired, "carbs_required_grams"),
+    ] {
+        TestRunner::new(Config {
+            cases: 256,
+            ..Config::default()
+        })
+        .run(&determination_case(), |c| {
+            let met = met_by(kind, &c);
+            let (truth, _) = determination_model(&c, value);
+            let expected = truth
+                .is_true()
+                .then(|| decimal_of(&c.ctx["aps_determination"][value]));
+            prop_assert_eq!(met.as_ref().map(|m| decimal_of(&m["value"])), expected);
+            if let Some(met) = met {
+                prop_assert_eq!(met.as_object().unwrap().len(), 3, "{}", met);
+                prop_assert_eq!(&met["kind"], &json!(kind.name()));
+            }
+            Ok(())
+        })
+        .unwrap_or_else(|e| panic!("{e}"));
+    }
+}
 
 // ---------------------------------------------------------------------------
 // data stopped
@@ -1636,6 +1969,8 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         last_site_change_at,
         last_sensor_start_at,
         predictions,
+        prediction_curves,
+        aps_determination,
         active_alerts,
         last_aps_cycle_at,
         last_aps_enacted_at,
@@ -1678,6 +2013,8 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         ("last_site_change_at", last_site_change_at.is_some()),
         ("last_sensor_start_at", last_sensor_start_at.is_some()),
         ("predictions", !predictions.is_empty()),
+        ("prediction_curves", !prediction_curves.is_empty()),
+        ("aps_determination", aps_determination.is_some()),
         ("active_alerts", !active_alerts.is_empty()),
         ("last_aps_cycle_at", last_aps_cycle_at.is_some()),
         ("last_aps_enacted_at", last_aps_enacted_at.is_some()),
@@ -1734,4 +2071,46 @@ fn the_full_context_fills_every_field_and_leaves_each_empty_as_often() {
             "{name} is filled in {count} of {SAMPLES} contexts"
         );
     }
+}
+
+/// A forecast leaf that is true under a `not` argues against the rule, so it never names what the
+/// rule met; the same leaf outside the `not` does.
+#[test]
+fn a_true_leaf_under_not_names_nothing() {
+    let ctx: SensorContext = serde_json::from_value(json!({
+        "latest_value": 60,
+        "latest_timestamp": base().to_rfc3339(),
+        "predictions": [{ "offset_minutes": 5, "mgdl": 185 }],
+    }))
+    .expect("a context");
+    let high = json!({ "type": "predicted", "predicted": { "operator": ">", "value": 180, "within_minutes": 30 } });
+    let low = json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } });
+    let met = |conditions: Value| {
+        let wire: WireRule = serde_json::from_value(json!({
+            "id": Uuid::nil(),
+            "condition_type": "composite",
+            "condition_params": { "operator": "or", "conditions": conditions },
+        }))
+        .expect("a rule");
+        let rule = Rule::try_from(wire).expect("a rule");
+        let outcome = evaluate_rule(&rule, &ctx, base(), &mut EngineState::new(), false);
+        assert!(
+            outcome
+                .evaluation
+                .as_ref()
+                .expect("evaluated")
+                .root
+                .is_true()
+        );
+        outcome.to_json()["met_by"].clone()
+    };
+
+    assert_eq!(
+        met(json!([low, { "type": "not", "not": { "child": high } }])),
+        Value::Null
+    );
+    assert_eq!(
+        met(json!([low, high])),
+        json!([{ "leaf_id": 1, "kind": "predicted", "curve": "default", "offset_minutes": 5, "value": 185 }])
+    );
 }

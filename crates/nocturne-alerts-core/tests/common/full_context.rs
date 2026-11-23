@@ -106,6 +106,44 @@ fn predictions() -> BoxedStrategy<Value> {
     .boxed()
 }
 
+pub(crate) const UNRECOGNISED_CURVE: &str = "ar2";
+
+/// Named curves, each present about half the time, now and then one under
+/// `default` or under a name the crate has no member for, which it does not
+/// read.
+fn prediction_curves() -> BoxedStrategy<Value> {
+    let names = ["iob", "cob", "uam", "zt", "default", UNRECOGNISED_CURVE];
+    vec(half_present(predictions()), names.len())
+        .prop_map(move |series| {
+            object(
+                names
+                    .iter()
+                    .copied()
+                    .zip(series)
+                    .collect::<Vec<(&str, Option<Value>)>>(),
+            )
+        })
+        .boxed()
+}
+
+/// A determination of any age around the default freshness bound, each value
+/// present about half the time.
+fn aps_determination() -> BoxedStrategy<Value> {
+    (
+        reading_at(),
+        half_present(quantity()),
+        half_present(quantity()),
+    )
+        .prop_map(|(at, eventual, carbs)| {
+            object(vec![
+                ("at", Some(at)),
+                ("eventual_mgdl", eventual),
+                ("carbs_required_grams", carbs),
+            ])
+        })
+        .boxed()
+}
+
 fn alerts() -> BoxedStrategy<Value> {
     let alert = (
         select(vec!["firing", "Firing", "resolved"]),
@@ -287,6 +325,8 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         flags,
         half_present(select(TENANT_ZONES.to_vec())),
         half_present(sensor_state()),
+        half_present(prediction_curves()),
+        half_present(aps_determination()),
     )
         .prop_map(
             |(
@@ -298,6 +338,8 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                 (aps_cycled, pump_snapshot, uploader_snapshot, aps_sensitivity, asleep),
                 zone,
                 sensor_state,
+                curves,
+                determination,
             )| {
                 object(vec![
                     ("latest_value", value),
@@ -313,6 +355,8 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                     ("last_site_change_at", site),
                     ("last_sensor_start_at", sensor),
                     ("predictions", predictions),
+                    ("prediction_curves", curves),
+                    ("aps_determination", determination),
                     ("active_alerts", alerts),
                     ("last_aps_cycle_at", cycle),
                     ("last_aps_enacted_at", enacted),

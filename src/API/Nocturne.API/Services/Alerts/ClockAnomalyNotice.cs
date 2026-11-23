@@ -261,6 +261,7 @@ internal sealed class ClockAnomalyNotice(
         ["last_sensor_start_at"] = context.LastSensorStartAt,
         ["last_carb_at"] = context.LastCarbAt,
         ["last_bolus_at"] = context.LastBolusAt,
+        ["aps_determination"] = context.ApsDetermination?.At,
         ["active_pump_suspension"] = context.ActivePumpSuspension?.StartedAt,
         ["active_override"] = context.ActiveOverride?.StartedAt,
         ["active_do_not_disturb"] = context.ActiveDoNotDisturb?.StartedAt,

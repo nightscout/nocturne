@@ -85,9 +85,23 @@ public record SensorContext
     public DateTime? LastSensorStartAt { get; init; }
 
     /// <summary>
-    /// Forward-looking glucose predictions used by the predicted condition.
+    /// The <see cref="ForecastCurve.Default"/> forecast series: whatever series the prediction
+    /// source has always returned as its main curve.
     /// </summary>
     public IReadOnlyList<PredictedGlucosePoint> Predictions { get; init; } = Array.Empty<PredictedGlucosePoint>();
+
+    /// <summary>
+    /// The named forecast curves other than <see cref="ForecastCurve.Default"/>, each as the
+    /// source returned it; a curve the source has none of is absent.
+    /// </summary>
+    public IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>> PredictionCurves { get; init; }
+        = new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>();
+
+    /// <summary>
+    /// The loop's newest determination, or null with none. Read by the <c>eventual_glucose</c> and
+    /// <c>carbs_required</c> conditions.
+    /// </summary>
+    public ApsDetermination? ApsDetermination { get; init; }
 
     /// <summary>
     /// Live state of other alerts for this tenant, keyed by alert (rule) id. Used by the alert-state condition.
@@ -365,16 +379,46 @@ public record SustainedCondition(int Minutes, ConditionNode Child);
 public record StalenessCondition(string Operator, int Value);
 
 /// <summary>
-/// Predicted glucose comparison within a forecast horizon.
+/// Predicted glucose comparison within a forecast horizon, over the series at most one of
+/// <paramref name="Curve"/>, <paramref name="MinOf"/> and <paramref name="MaxOf"/> selects; none reads
+/// <see cref="ForecastCurve.Default"/> (docs/alerts/engine-semantics.md §3, forecast curves).
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Glucose value in mg/dL to compare against.</param>
 /// <param name="WithinMinutes">Forecast horizon in minutes.</param>
 /// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, for every point.</param>
+/// <param name="Curve">One named series.</param>
+/// <param name="MinOf">The lowest of these series at each offset they all have.</param>
+/// <param name="MaxOf">The highest of these series at each offset they all have.</param>
 public record PredictedCondition(
     string Operator,
     decimal Value,
     [property: JsonPropertyName("within_minutes")] int WithinMinutes,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("curve")] ForecastCurve? Curve = null,
+    [property: JsonPropertyName("min_of")] List<ForecastCurve>? MinOf = null,
+    [property: JsonPropertyName("max_of")] List<ForecastCurve>? MaxOf = null);
+
+/// <summary>
+/// The glucose the loop's newest determination expected at the end of its forecast, in mg/dL,
+/// compared with <paramref name="Value"/>. Unknown with no determination, or one older than the
+/// rule's glucose freshness bound.
+/// </summary>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record EventualGlucoseCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+
+/// <summary>
+/// The carbohydrate the loop's newest determination said it needed, in grams, compared with
+/// <paramref name="Value"/>. Unknown as <see cref="EventualGlucoseCondition"/> is, and for a loop
+/// that does not report it.
+/// </summary>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record CarbsRequiredCondition(
+    string Operator,
+    decimal Value,
     [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
@@ -612,7 +656,7 @@ public enum TransmitterBatteryMetric
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state | eventual_glucose | carbs_required</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -651,7 +695,9 @@ public record ConditionNode(
     [property: JsonPropertyName("sleep_session_active")] SleepSessionActiveCondition? SleepSessionActive = null,
     [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null,
     [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null,
-    [property: JsonPropertyName("sensor_state")] SensorStateCondition? SensorState = null
+    [property: JsonPropertyName("sensor_state")] SensorStateCondition? SensorState = null,
+    [property: JsonPropertyName("eventual_glucose")] EventualGlucoseCondition? EventualGlucose = null,
+    [property: JsonPropertyName("carbs_required")] CarbsRequiredCondition? CarbsRequired = null
 );
 
 /// <summary>
@@ -846,6 +892,15 @@ public record AlertPayload
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<Alerts.HeldFact>? HeldFacts { get; init; }
+
+    /// <summary>
+    /// On an excursion its evaluation opened, what each true <c>predicted</c>,
+    /// <c>eventual_glucose</c> and <c>carbs_required</c> condition of the rule met its comparison
+    /// with: the forecast curve and point, or the loop's value. Absent when there is none, and on a
+    /// dispatch the sweep finishes for an evaluation that did not, which has no evaluation to read.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Alerts.AlertMetPoint>? MetBy { get; init; }
 
     /// <summary>
     /// The rule's condition type; null in the notice for a rule whose stored condition type is not

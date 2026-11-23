@@ -5,6 +5,7 @@ import { formatGlucose, timeAgo, trendArrow } from "../lib/format.js";
 import { encodeActionValue } from "../lib/action-value.js";
 import { isKnownSeverity } from "../lib/severity.js";
 import { describeHeldFacts } from "../lib/held-facts.js";
+import { describeMetBy } from "../lib/met-by.js";
 
 /**
  * Card titles per severity. Every platform gets this, including the ones with
@@ -73,6 +74,9 @@ export function AlertCard(props: {
             value={`${payload.trendRate > 0 ? "+" : ""}${payload.trendRate.toFixed(1)}/min`}
           />
         )}
+        {describeMetBy(payload.metBy, unit).map((met) => (
+          <Field key={met.key} label={met.label} value={met.value} />
+        ))}
       </Fields>
       <Actions>
         <Button id="ack_alert" value={target} style="primary">

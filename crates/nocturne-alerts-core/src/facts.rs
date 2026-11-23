@@ -30,6 +30,7 @@ wire_enum! {
         DoNotDisturb = "do_not_disturb",
         TimeZone = "time_zone",
         SensorState = "sensor_state",
+        ApsDetermination = "aps_determination",
     }
 }
 
@@ -66,6 +67,7 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
         ConditionKind::AlertState => &[F::ActiveAlerts],
         ConditionKind::DoNotDisturb => &[F::DoNotDisturb],
         ConditionKind::TimeOfDay | ConditionKind::DayOfWeek => &[F::TimeZone],
+        ConditionKind::EventualGlucose | ConditionKind::CarbsRequired => &[F::ApsDetermination],
         ConditionKind::Composite | ConditionKind::Not | ConditionKind::Sustained => &[],
     }
 }
@@ -178,7 +180,7 @@ pub fn references_any(rule: &RuleConditions<'_>, facts: &[ContextFact]) -> bool 
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     use chrono::{DateTime, Duration, Utc};
     use rust_decimal::Decimal;
@@ -187,10 +189,12 @@ mod tests {
 
     use super::*;
     use crate::context::{
-        ActiveAlertSnapshot, PredictedPoint, PumpModeSnapshot, SensorContext, SensorStateSnapshot,
-        StartedSpan, StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
+        ActiveAlertSnapshot, ApsDetermination, PredictedPoint, PumpModeSnapshot, SensorContext,
+        SensorStateSnapshot, StartedSpan, StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
     };
-    use crate::enums::{GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket};
+    use crate::enums::{
+        ForecastCurve, GlucoseBucket, PumpMode, SensorState, StateSpanCategory, TrendBucket,
+    };
     use crate::eval::elapsed::clock_leaf;
     use crate::eval::glucose::judges_freshness;
     use crate::eval::{Env, eval_payload};
@@ -519,6 +523,22 @@ mod tests {
             } else {
                 Vec::new()
             },
+            prediction_curves: if has(F::Predictions) {
+                BTreeMap::from([(
+                    ForecastCurve::Cob,
+                    vec![PredictedPoint {
+                        offset_minutes: 10,
+                        mgdl: Decimal::from(50),
+                    }],
+                )])
+            } else {
+                BTreeMap::new()
+            },
+            aps_determination: has(F::ApsDetermination).then(|| ApsDetermination {
+                at: ago(3),
+                eventual_mgdl: Some(Decimal::from(60)),
+                carbs_required_grams: Some(Decimal::from(20)),
+            }),
             iob_units: insulin.then(|| Decimal::from(3)),
             last_bolus_at: insulin.then(|| ago(30)),
             active_temp_basal: insulin.then(|| TempBasalSnapshot {
@@ -641,6 +661,8 @@ mod tests {
                 json!({"tracker_definition_id": TRACKER_ID, "operator": ">", "minutes": 15})
             }
             ConditionKind::SensorState => json!({"states": ["ok"], "for_minutes": 15}),
+            ConditionKind::EventualGlucose => json!({"operator": "<", "value": 70}),
+            ConditionKind::CarbsRequired => json!({"operator": ">", "value": 10}),
         };
         parse_payload(kind, &params).expect("sample payload parses")
     }

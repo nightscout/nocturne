@@ -187,7 +187,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         public Task HandleOpenedAsync(IServiceProvider process, Guid excursion) =>
             process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
                 Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
-                Id, late: false, CancellationToken.None);
+                Id, late: false, metBy: [], CancellationToken.None);
 
         public Task SweepAsync(IServiceProvider process, DateTimeOffset at) =>
             new AlertSweepJob(NullLogger<AlertSweepJob>.Instance).RunAsync(process, Id, at);
@@ -398,7 +398,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
 
         var dying = process.GetRequiredService<IExcursionOpenedHandler>().HandleOpenedAsync(
             tenant.Rule, excursion, new SensorContext { LatestValue = 52, LatestTimestamp = Opened, TrendRate = null, LastReadingAt = Opened },
-            tenant.Id, late: false, dies.Token);
+            tenant.Id, late: false, metBy: [], dies.Token);
         await dying.Invoking(async t => await t).Should().ThrowAsync<OperationCanceledException>();
         (await tenant.DeliveriesAsync(excursion)).Should().ContainSingle().Which.Status.Should().Be("pending");
 

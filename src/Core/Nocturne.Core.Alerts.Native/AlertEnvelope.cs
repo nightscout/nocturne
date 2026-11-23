@@ -297,7 +297,27 @@ public sealed record RustRuleResult
     /// </summary>
     [JsonPropertyName("clock_anomaly")]
     public List<RustClockAnomaly>? ClockAnomaly { get; init; }
+
+    /// <summary>
+    /// What each true <c>predicted</c>, <c>eventual_glucose</c> and <c>carbs_required</c> leaf of the
+    /// body met its comparison with (docs/alerts/engine-semantics.md §3, met by); omitted when none
+    /// did. Reported whether or not the leaf log was requested.
+    /// </summary>
+    [JsonPropertyName("met_by")]
+    public List<RustMetPoint>? MetBy { get; init; }
 }
+
+/// <summary>
+/// One entry of <see cref="RustRuleResult.MetBy"/>: the leaf, its kind as its wire name, and for
+/// <c>predicted</c> the curve and offset of the point; <c>value</c> is mg/dL, or grams for
+/// <c>carbs_required</c>.
+/// </summary>
+public sealed record RustMetPoint(
+    [property: JsonPropertyName("leaf_id"), JsonRequired] int LeafId,
+    [property: JsonPropertyName("kind"), JsonRequired] string Kind,
+    [property: JsonPropertyName("curve")] string? Curve,
+    [property: JsonPropertyName("offset_minutes")] int? OffsetMinutes,
+    [property: JsonPropertyName("value"), JsonRequired] decimal Value);
 
 /// <summary>
 /// One anchor read beyond the clock tolerance: the context field or state that held it, and how

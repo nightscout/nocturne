@@ -102,7 +102,17 @@ What a host sends (engine-semantics.md §4):
    mean no reading with a value.
 6. `sensor_state` `no_value`, with `since` the first reading with no value after
    the last one with a value and no `until`.
-7. A reported state that is not ok replaces `no_value`; a reported ok does not. `active_pump_modes` is the list of every active pump-mode span,
+7. A reported state that is not ok replaces `no_value`; a reported ok does not.
+
+`predictions` is the `default` forecast series, the one array of `{offset_minutes, mgdl}` it has
+always been. `prediction_curves` is an object from curve name (`iob`, `cob`, `uam`, `zt`) to such an
+array; a `default` key there is not read, and a name the engine has no member for is dropped
+(engine-semantics.md §4). `aps_determination` is `{ "at": ..., "eventual_mgdl": ...,
+"carbs_required_grams": ... }` or absent: the loop's newest determination at or before `now`, each
+value optional. A host sends `carbs_required_grams` `0` for an oref command without `carbsReq`, and
+nothing for a Loop determination or a command it cannot read. An engine older than these members
+ignores them, as it ignores any context field it does not know, so an unnamed `predicted` reads
+`predictions` on every engine. `active_pump_modes` is the list of every active pump-mode span,
 `[{ "mode": ..., "started_at": ... }]`: spans of different modes overlap, so a
 host sends all of them, never the one it prefers, and a `pump_state` leaf reads
 the entry for the mode it names (engine-semantics.md §3, §4). Timestamps are RFC 3339 UTC; the engine emits
@@ -168,7 +178,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
                           hysteresis_started_at?, awaiting_rearm?,
                           held_since?},
                  auto_resolved?, timer_ops[], next_change_at?,
-                 clock_anomaly? */ },
+                 clock_anomaly?, met_by? */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "not_true": {},                                     // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
@@ -189,7 +199,9 @@ reader that ignores it sees a two-valued result. An unknown root also carries
 `unknown_facts`, `[{"fact": "glucose", "reason": "stale"}]`: the context facts
 (§5.2) whose unknown reached the root through the connectives, each with its
 reason (`absent`, `stale`, `ahead_of_clock`, `unrecognised`, `inexact`,
-`sensor_not_ok`), in fact then reason order. A glucose leaf left unknown by the
+`sensor_not_ok`), in fact then reason order. A `predicted` leaf whose selected curve the context
+does not carry is unknown by `predictions`, `absent`; a stale determination by
+`aps_determination`, `stale`. A glucose leaf left unknown by the
 sensor's state is named by `sensor_state`, with `sensor_not_ok`, or
 `unrecognised` for a state the engine has no name for. It can be empty: a `sustained` run whose start is beyond the
 clock tolerance ahead names no fact.
@@ -231,6 +243,30 @@ its margin. New reason codes: `margin_negative`, `margin_on_equality`, `margin_p
 `rate_of_change` margin above its `rate`) and `margin_under_sustained` (a margin above 0 on a leaf
 anywhere under a `sustained`), each on the field `clear_margin`.
 
+### Forecast curves, the loop's determination and what met a leaf
+
+`predicted` takes at most one of `curve` (a name), `min_of` and `max_of` (a list of names) to select
+the series it reads; none reads `default`, exactly as before (`docs/alerts/engine-semantics.md` §3,
+forecast curves). `eventual_glucose` and `carbs_required` are leaves of their own over the context's
+`aps_determination`. New reason code: `selector_conflict`, on the second selector present. An
+engine from before them reads a selector as an `unknown_field` and either leaf as an
+`unknown_kind`, and returns the malformed-body error, so a host running it skips the rule.
+
+`result.met_by` lists what each true `predicted`, `eventual_glucose` and `carbs_required` leaf of
+the body met its comparison with, by leaf id. It is absent when there is none, and it does not
+depend on `include_leaves`:
+
+```jsonc
+"met_by": [
+  { "leaf_id": 0, "kind": "predicted", "curve": "cob", "offset_minutes": 20, "value": 65 },
+  { "leaf_id": 1, "kind": "carbs_required", "value": 12 }
+]
+```
+
+The point is the first, in offset order, that satisfied the comparison, from the curve that
+supplied the lowest or highest value for `min_of`/`max_of`. `value` is mg/dL, or grams for
+`carbs_required`. Additive, so `schema_version` stays 1.
+
 ### Next change
 
 `result.next_change_at` (RFC 3339, on the 100 ns tick grid) is the earliest
@@ -264,7 +300,7 @@ more than 5 minutes ahead of `now`, which the engine reads as not known
 `last_site_change_at`, `last_sensor_start_at`, `last_carb_at`, `last_bolus_at`,
 `active_alerts`, `active_pump_suspension`, `active_override`,
 `active_do_not_disturb`, `active_pump_modes`, `active_state_spans`,
-`active_trackers`, `sensor_state`), the rule's `enabled_at`, or the evaluation state that held
+`active_trackers`, `sensor_state`, `aps_determination`), the rule's `enabled_at`, or the evaluation state that held
 it (`sustained` for a timer, `hysteresis_started_at` for the tracker).
 `ahead_ms` is how far ahead of `now` it was, in whole milliseconds, the furthest
 when two instants share a name. Under `hold` such a rule is held, so a host
@@ -554,7 +590,7 @@ each, in declaration order:
 
 The names are `glucose`, `predictions`, `insulin`, `carbs`, `pump`, `aps`,
 `uploader`, `transmitter`, `state_spans`, `device_ages`, `trackers`, `sleep`,
-`active_alerts`, `do_not_disturb` and `time_zone`. A rule with no kinds reads
+`active_alerts`, `do_not_disturb`, `time_zone`, `sensor_state` and `aps_determination`. A rule with no kinds reads
 `[]`.
 
 ## References any (`nocturne_alerts_references_any`)

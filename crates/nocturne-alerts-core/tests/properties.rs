@@ -2238,3 +2238,76 @@ proptest! {
         }
     }
 }
+
+fn forecast() -> BoxedStrategy<Value> {
+    vec(
+        (0..=60i32, 40..=300i32)
+            .prop_map(|(offset, mgdl)| json!({ "offset_minutes": offset, "mgdl": mgdl })),
+        0..=4,
+    )
+    .prop_map(Value::from)
+    .boxed()
+}
+
+fn curves_and_determination() -> BoxedStrategy<(Value, Value)> {
+    (
+        vec(option::of(forecast()), 6),
+        option::of((
+            -600..=1800i64,
+            option::of(40..=300i32),
+            option::of(0..=60i32),
+        )),
+    )
+        .prop_map(|(series, determination)| {
+            let names = ["iob", "cob", "uam", "zt", "default", "ar2"];
+            let curves: Map<String, Value> = names
+                .iter()
+                .zip(series)
+                .filter_map(|(name, s)| Some(((*name).to_owned(), s?)))
+                .collect();
+            let determination = determination.map_or(Value::Null, |(ago, eventual, carbs)| {
+                json!({
+                    "at": (base() - TimeDelta::seconds(ago)).to_rfc3339(),
+                    "eventual_mgdl": eventual,
+                    "carbs_required_grams": carbs,
+                })
+            });
+            (Value::Object(curves), determination)
+        })
+        .boxed()
+}
+
+proptest! {
+    /// §3 `predicted`, §4: a rule that names no curve and reads no determination evaluates byte
+    /// for byte the same whether or not the context carries named curves and a determination, tick
+    /// after tick: only `default` (`predictions`, the old wire shape) reaches it.
+    #[test]
+    fn named_curves_and_a_determination_move_no_rule_that_does_not_name_them(
+        spec in rule_spec(),
+        predicted in (select(vec!["<", "<=", ">", ">=", "=="]), 40..=300i32, 1..=60i32),
+        ticks in skewed_ticks(),
+        forecasts in vec((forecast(), curves_and_determination()), 24),
+    ) {
+        let body = spec.wire()["condition_params"].clone();
+        let (op, value, within) = predicted;
+        let mut wire = spec.wire();
+        wire["condition_params"] = json!({ "operator": "or", "conditions": [
+            node("composite", body),
+            node("predicted", json!({ "operator": op, "value": value, "within_minutes": within })),
+        ] });
+        let rule = rule_from_wire(wire);
+        let (mut without, mut with) = (EngineState::new(), EngineState::new());
+        for (tick, (default, (curves, determination))) in ticks.iter().zip(&forecasts) {
+            let mut old = tick.context.clone();
+            old["predictions"] = default.clone();
+            let mut new = old.clone();
+            new["prediction_curves"] = curves.clone();
+            new["aps_determination"] = determination.clone();
+            let old: SensorContext = serde_json::from_value(old).unwrap();
+            let new: SensorContext = serde_json::from_value(new).unwrap();
+            let a = evaluate_rule(&rule, &old, tick.now, &mut without, true);
+            let b = evaluate_rule(&rule, &new, tick.now, &mut with, true);
+            prop_assert_eq!(a.to_json(), b.to_json());
+        }
+    }
+}

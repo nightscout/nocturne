@@ -14,6 +14,17 @@ describe("holdText", () => {
     ]);
   });
 
+  it("names a loop rule held by an old or missing result of the loop", () => {
+    expect(
+      holdFactLines({
+        facts: [
+          { fact: "aps_determination", reason: "stale" },
+          { fact: "predictions", reason: "absent" },
+        ],
+      }),
+    ).toEqual(["Loop result: too old", "Glucose forecast: missing"]);
+  });
+
   it("shows a fact or reason this build does not know as the API sent it", () => {
     expect(heldFactName("sensor_mood")).toBe("sensor_mood");
     expect(heldReason("sensor_sulking")).toBe("sensor_sulking");

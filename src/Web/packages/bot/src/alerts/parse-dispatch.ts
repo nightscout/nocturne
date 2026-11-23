@@ -1,5 +1,5 @@
 import type { HeldFact } from "@nocturne/api-client";
-import type { AlertDispatchEvent, AlertPayload } from "../types.js";
+import type { AlertDispatchEvent, AlertPayload, MetPoint } from "../types.js";
 
 const field = (source: object, name: string): unknown => (name in source ? Reflect.get(source, name) : undefined);
 
@@ -12,6 +12,20 @@ const asHeldFacts = (value: unknown): HeldFact[] | undefined =>
     ? value
         .filter((f): f is object => typeof f === "object" && f !== null)
         .map((f) => ({ fact: asString(field(f, "fact")), reason: asString(field(f, "reason")) }))
+    : undefined;
+
+/** The entries that are objects, each field read as its type or left out. */
+const asMetBy = (value: unknown): MetPoint[] | undefined =>
+  Array.isArray(value)
+    ? value
+        .filter((p): p is object => typeof p === "object" && p !== null)
+        .map((p) => ({
+          leafId: asNumber(field(p, "leafId")),
+          kind: asString(field(p, "kind")),
+          curve: asString(field(p, "curve")),
+          offsetMinutes: asNumber(field(p, "offsetMinutes")),
+          value: asNumber(field(p, "value")),
+        }))
     : undefined;
 
 /**
@@ -38,6 +52,7 @@ function parseAlertPayload(raw: unknown): AlertPayload | undefined {
     trendRate: asNumber(field(raw, "trendRate")),
     trend: asString(field(raw, "trend")),
     heldFacts: asHeldFacts(field(raw, "heldFacts")),
+    metBy: asMetBy(field(raw, "metBy")),
   };
 }
 

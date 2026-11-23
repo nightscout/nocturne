@@ -1,4 +1,4 @@
-import { GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
+import { ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
 import { isTrendBucket } from "./types";
 
 const RATE_DIRECTIONS = ["falling", "rising"] as const;
@@ -28,6 +28,23 @@ export function glucoseBucketLabel(bucket: GlucoseBucket): string {
 			return "Very high";
 		default:
 			return unknownValue(bucket);
+	}
+}
+
+export function forecastCurveLabel(curve: ForecastCurve): string {
+	switch (curve) {
+		case ForecastCurve.Default:
+			return "Default forecast";
+		case ForecastCurve.Iob:
+			return "IOB forecast";
+		case ForecastCurve.Cob:
+			return "COB forecast";
+		case ForecastCurve.Uam:
+			return "UAM forecast";
+		case ForecastCurve.Zt:
+			return "Zero temp forecast";
+		default:
+			return unknownValue(curve);
 	}
 }
 

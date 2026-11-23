@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertWeekday, defaultPayload, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode } from "./types";
+import { AlertWeekday, defaultPayload, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode, type PredictedCondition } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -16,6 +16,30 @@ describe("summarizeCondition", () => {
 		}
 	});
 
+
+	it("names the forecast curve a predicted condition reads, and none for the default", () => {
+		glucoseUnits.current = "mg/dl";
+		const forecast = (choice: Partial<PredictedCondition>): ConditionNode => ({
+			type: "predicted",
+			predicted: { operator: "<", value: 70, within_minutes: 30, ...choice },
+		});
+		expect(summarizeCondition(forecast({}))).toBe("Predicted glucose < 70 mg/dL in 30 minutes");
+		expect(summarizeCondition(forecast({ curve: ForecastCurve.Cob }))).toBe("COB forecast < 70 mg/dL in 30 minutes");
+		expect(summarizeCondition(forecast({ min_of: [ForecastCurve.Iob, ForecastCurve.Zt] }))).toBe(
+			"Lowest of IOB forecast and Zero temp forecast < 70 mg/dL in 30 minutes",
+		);
+		expect(summarizeCondition(forecast({ max_of: [ForecastCurve.Uam] }))).toBe("Highest of UAM forecast < 70 mg/dL in 30 minutes");
+	});
+
+	it("summarizes the loop's eventual glucose and the carbs it needs", () => {
+		glucoseUnits.current = "mg/dl";
+		expect(
+			summarizeCondition({ type: "eventual_glucose", eventual_glucose: { operator: "<", value: 80, clear_margin: 5 } }),
+		).toBe("Eventual glucose < 80 mg/dL, clear margin 5 mg/dL");
+		expect(summarizeCondition({ type: "carbs_required", carbs_required: { operator: ">=", value: 10 } })).toBe(
+			"Carbs needed ≥ 10 g",
+		);
+	});
 
 	it("names the transmitter reading a rule compares", () => {
 		const reading = (metric: TransmitterBatteryMetric, operator: string, value: number): ConditionNode => ({

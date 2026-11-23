@@ -70,12 +70,25 @@ Your loop's forecast of where glucose is heading. The condition is true if
 **any** forecast point within the next so many minutes matches.
 
 - **Settings:** a comparison (at least, more than, at most or less than), a glucose value, and how many minutes
-  ahead to look.
+  ahead to look. From the actions menu you can also select which forecast curve
+  it uses (see [Forecast curves](/docs/alerts/building-rules#forecast-curves)).
 - **Use it for:** "warn me if my loop thinks I will be under 70 within the next
   30 minutes", before the low arrives.
 - **Good to know:** forecasts come from loop apps that upload them, such as
-  AAPS and Trio (the oref algorithm). With no forecast the condition is never
-  true. A forecast is a guess, and it changes with every loop cycle.
+  AAPS and Trio (the oref algorithm). With no forecast, or without the curve that
+  the condition uses, the condition does not know if it is true, and the rule
+  waits. A forecast is a guess, and it changes with every loop cycle.
+
+### Eventual glucose
+
+The glucose that your loop expects at the end of its forecast, from its newest
+result.
+
+- **Settings:** a comparison and a glucose value.
+- **Good to know:** AAPS, Trio and OpenAPS send this value. For Loop, Nocturne
+  uses the last value of Loop's forecast. The newest result can be older than the
+  rule's minutes until a reading counts as missing. Then the condition does not
+  know if it is true, and the rule waits.
 
 ### Rate of change
 
@@ -160,6 +173,17 @@ Minutes since the last bolus Nocturne has on record.
 Carbs on board: how many grams your loop reports are still being absorbed.
 
 - **Settings:** a comparison and grams.
+
+### Carbs needed
+
+The grams of carbs that your loop says are necessary, from its newest result.
+
+- **Settings:** a comparison and a number of grams.
+- **Good to know:** only AAPS, Trio and OpenAPS (the oref algorithm) send this
+  value. When their result gives no number, Nocturne uses 0 g. The oref algorithm
+  gives a number only when the carbs it needs are more than its own limit. Loop does not
+  send it, so with Loop the condition does not know if it is true. As for
+  **Eventual glucose**, an old result counts as missing.
 
 ### Time since last carb
 

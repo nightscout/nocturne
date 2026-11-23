@@ -17,6 +17,7 @@ use crate::context::SensorContext;
 use crate::engine::{EngineState, Rule};
 use crate::enums::WireEnum;
 use crate::eval::clock::{local, tenant_zone, time_of_day_zone};
+use crate::eval::determination::determination_expiry;
 use crate::eval::elapsed::{ClockLeaf, Elapsed, clock_leaf, first_true_between};
 use crate::eval::glucose::freshness_expiry;
 use crate::excursion::{TrackerStateKind, hysteresis_window};
@@ -166,6 +167,10 @@ impl Scan<'_> {
                     }
                     if let Some(e) =
                         freshness_expiry(payload, self.ctx, self.glucose_freshness, self.now)
+                    {
+                        self.elapsed(e);
+                    }
+                    if let Some(e) = determination_expiry(payload, self.ctx, self.glucose_freshness)
                     {
                         self.elapsed(e);
                     }

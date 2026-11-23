@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
-import { buildBody, defaultPayload, parseRule, SensorState, type ConditionNode } from "./types";
+import { buildBody, defaultPayload, ForecastCurve, parseRule, SensorState, type ConditionNode } from "./types";
 import { AlertConditionType } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
@@ -197,5 +197,51 @@ describe("RuleBuilderLeafEditor sensor state minutes", () => {
 
 		expect(leaf.sensor_state?.states).toEqual([SensorState.NoValue, SensorState.Error]);
 		expect(leaf.sensor_state?.for_minutes).toBeUndefined();
+	});
+});
+
+describe("RuleBuilderLeafEditor forecast curve", () => {
+	const forecast = (choice: object = {}): ConditionNode => ({
+		type: "predicted",
+		predicted: { operator: "<", value: 70, within_minutes: 30, ...choice },
+	});
+
+	it("shows no curve choice for a condition that reads the default forecast", async () => {
+		render(RuleBuilderLeafEditor, { props: { node: forecast() } });
+
+		await expect.element(page.getByLabelText("Forecast choice")).not.toBeInTheDocument();
+	});
+
+	it("shows the one curve a condition reads, and says what an absent curve does", async () => {
+		render(RuleBuilderLeafEditor, { props: { node: forecast({ curve: ForecastCurve.Cob }) } });
+
+		await expect.element(page.getByLabelText("Forecast curve")).toHaveTextContent("COB forecast");
+		await expect
+			.element(page.getByText("If the loop does not send a curve that you select, the rule waits and shows the cause."))
+			.toBeVisible();
+	});
+
+	it("keeps at least one curve in a lowest-of list", async () => {
+		const leaf = forecast({ min_of: [ForecastCurve.Iob, ForecastCurve.Zt] });
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByRole("button", { name: "UAM forecast" }).click();
+		expect(leaf.predicted?.min_of).toEqual([ForecastCurve.Iob, ForecastCurve.Zt, ForecastCurve.Uam]);
+
+		await page.getByRole("button", { name: "IOB forecast" }).click();
+		await page.getByRole("button", { name: "Zero temp forecast" }).click();
+		await page.getByRole("button", { name: "UAM forecast" }).click();
+		expect(leaf.predicted?.min_of).toEqual([ForecastCurve.Uam]);
+	});
+
+	it("edits the eventual glucose in the display unit and stores mg/dL", async () => {
+		glucoseUnits.current = "mmol";
+		const leaf: ConditionNode = { type: "eventual_glucose", eventual_glucose: { operator: "<", value: 90 } };
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await page.getByRole("spinbutton", { name: "Value" }).fill("4");
+
+		expect(leaf.eventual_glucose?.value).toBeCloseTo(72, 0);
+		glucoseUnits.current = "mg/dl";
 	});
 });

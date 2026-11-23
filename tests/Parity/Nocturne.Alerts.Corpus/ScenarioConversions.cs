@@ -66,6 +66,17 @@ public static class ScenarioConversions
             LastSensorStartAt = Utc(ctx.LastSensorStartAt),
             Predictions = ctx.Predictions?.Select(p => new PredictedGlucosePoint(p.OffsetMinutes, p.Mgdl)).ToList()
                 ?? (IReadOnlyList<PredictedGlucosePoint>)Array.Empty<PredictedGlucosePoint>(),
+            PredictionCurves = (ctx.PredictionCurves ?? [])
+                .Select(kv => (Curve: TryParseWireEnum<ForecastCurve>(kv.Key), Points: kv.Value))
+                .Where(c => c.Curve is { } curve && curve != ForecastCurve.Default)
+                .ToDictionary(
+                    c => c.Curve!.Value,
+                    c => (IReadOnlyList<PredictedGlucosePoint>)c.Points
+                        .Select(p => new PredictedGlucosePoint(p.OffsetMinutes, p.Mgdl)).ToList()),
+            ApsDetermination = ctx.ApsDetermination is { } determination
+                ? new ApsDetermination(
+                    Utc(determination.At)!.Value, determination.EventualMgdl, determination.CarbsRequiredGrams)
+                : null,
             ActiveAlerts = ctx.ActiveAlerts?.ToDictionary(
                     a => a.AlertId,
                     a => new ActiveAlertSnapshot(a.State, Utc(a.TriggeredAt)!.Value, Utc(a.AcknowledgedAt)))
@@ -126,4 +137,17 @@ public static class ScenarioConversions
 
     private static TEnum? ParseWireEnum<TEnum>(string? wire) where TEnum : struct, Enum =>
         wire is null ? null : JsonSerializer.Deserialize<TEnum>($"\"{wire}\"", EnumWireOptions);
+
+    /// <summary>The member <paramref name="wire"/> names, or null for a name the host has none for.</summary>
+    private static TEnum? TryParseWireEnum<TEnum>(string wire) where TEnum : struct, Enum
+    {
+        try
+        {
+            return ParseWireEnum<TEnum>(wire);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

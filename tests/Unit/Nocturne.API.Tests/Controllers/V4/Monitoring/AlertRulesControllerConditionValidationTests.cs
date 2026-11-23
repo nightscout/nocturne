@@ -441,6 +441,53 @@ public class AlertRulesControllerConditionValidationTests
         (await db.AlertRules.CountAsync()).Should().Be(0);
     }
 
+    [NativeTheory]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "iob", "min_of": ["cob"]}""", "selector_conflict:min_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob"], "max_of": ["cob"]}""", "selector_conflict:max_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": []}""", "list_empty:min_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "ar2"}""", "unknown_value:curve")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "max_of": ["iob", "Cob"]}""", "unknown_value:max_of")]
+    public async Task CreateRule_rejects_an_invalid_curve_selection(string conditionParams, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low soon",
+            ConditionType = AlertConditionType.Predicted,
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                ["condition:predicted"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
+    [InlineData("Predicted", """{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob", "cob", "uam", "zt"]}""")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value": 80, "clear_margin": 5}""")]
+    [InlineData("CarbsRequired", """{"operator": ">=", "value": 10}""")]
+    public async Task CreateRule_saves_a_curve_selection_and_the_loop_conditions(string type, string conditionParams)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Loop",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().NotBeOfType<BadRequestObjectResult>();
+        (await db.AlertRules.CountAsync()).Should().Be(1);
+    }
+
     [NativeFact]
     public async Task CreateRule_saves_a_valid_clear_margin_as_written()
     {

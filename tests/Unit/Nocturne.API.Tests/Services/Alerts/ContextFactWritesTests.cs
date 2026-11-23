@@ -64,11 +64,16 @@ public class ContextFactWritesTests
     }
 
     [Fact]
-    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterAndTheSensorState() =>
+    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateAndTheDetermination() =>
         ContextFactWrites.Facts.Keys.Where(ContextFactWrites.SweepMayWaitFor)
             .Should().BeEquivalentTo(
                 [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter,
-                 ContextFactWrites.SensorState]);
+                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination]);
+
+    [Fact]
+    public void OnlyAnApsSnapshotWriteMovesTheDetermination() =>
+        ContextFactWrites.MovedBy.Where(kv => kv.Value.Contains(ContextFactWrites.ApsDetermination)).Select(kv => kv.Key)
+            .Should().BeEquivalentTo([typeof(ApsSnapshot)]);
 
     [Fact]
     public void AnExtrasWriteMovesOnlyTheSensorState() =>

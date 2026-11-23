@@ -17,9 +17,9 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::enums::{
-    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
-    SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric,
-    TrendBucket, WireEnum,
+    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, PumpMode,
+    RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
+    TransmitterBatteryMetric, TrendBucket, WireEnum,
 };
 use crate::paths::{child_path, node_child_path};
 
@@ -78,6 +78,9 @@ pub enum Reason {
     MarginPastZero,
     /// A `clear_margin` above zero on a leaf under a `sustained`.
     MarginUnderSustained,
+    /// A `predicted` with more than one of `curve`, `min_of` and `max_of`;
+    /// the field is the second one present.
+    SelectorConflict(&'static str),
 }
 
 impl Reason {
@@ -104,6 +107,7 @@ impl Reason {
             Reason::MarginOnEquality => "margin_on_equality",
             Reason::MarginPastZero => "margin_past_zero",
             Reason::MarginUnderSustained => "margin_under_sustained",
+            Reason::SelectorConflict(_) => "selector_conflict",
         }
     }
 
@@ -117,7 +121,8 @@ impl Reason {
             | Reason::InvalidTime(f)
             | Reason::ListEmpty(f)
             | Reason::MinutesNotPositive(f)
-            | Reason::MinutesNegative(f) => Some(f),
+            | Reason::MinutesNegative(f)
+            | Reason::SelectorConflict(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
             Reason::MarginNegative
             | Reason::MarginOnEquality
@@ -266,6 +271,8 @@ condition_kinds! {
     TrackerAge = "tracker_age" => TrackerAgePayload,
     TransmitterBattery = "transmitter_battery" => TransmitterBatteryPayload,
     SensorState = "sensor_state" => SensorStatePayload,
+    EventualGlucose = "eventual_glucose" => ComparePayload,
+    CarbsRequired = "carbs_required" => ComparePayload,
 }
 
 impl Payload {
@@ -281,7 +288,9 @@ impl Payload {
             | Payload::Reservoir(p)
             | Payload::PumpBattery(p)
             | Payload::UploaderBattery(p)
-            | Payload::SensitivityRatio(p) => Some(p),
+            | Payload::SensitivityRatio(p)
+            | Payload::EventualGlucose(p)
+            | Payload::CarbsRequired(p) => Some(p),
             Payload::TempBasal(p) => Some(p),
             Payload::TransmitterBattery(p) => Some(p),
             _ => None,
@@ -756,6 +765,7 @@ enum_operands!(
     TransmitterBatteryMetric,
     PumpMode,
     StateSpanCategory,
+    ForecastCurve,
 );
 
 operand_fields!(
@@ -779,6 +789,7 @@ operand_fields!(
     TransmitterBatteryMetric,
     PumpMode,
     StateSpanCategory,
+    ForecastCurve,
 );
 
 macro_rules! enum_lists {
@@ -792,7 +803,17 @@ macro_rules! enum_lists {
     )*};
 }
 
-enum_lists!(GlucoseBucket, DayOfWeek, SensorState);
+enum_lists!(GlucoseBucket, DayOfWeek, SensorState, ForecastCurve);
+
+/// A list that may be absent, and holds at least one member when present.
+impl Field for Option<Vec<ForecastCurve>> {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        if r.get(name).is_none() {
+            return Some(None);
+        }
+        <Vec<ForecastCurve> as Field>::read(r, name).map(Some)
+    }
+}
 
 impl Field for Box<Node> {
     fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
@@ -866,6 +887,7 @@ macro_rules! payload {
         }
         comparison |$s:ident| $comparison:expr
         $(, largest_margin |$b:ident| $largest:expr)?
+        $(, check |$cp:ident, $cr:ident| $check:expr)?
     ) => {
         payload!(
             $(#[$meta])* $name {
@@ -873,7 +895,13 @@ macro_rules! payload {
                 #[serde(skip_serializing_if = "Option::is_none")]
                 clear_margin: Option<ClearMargin>,
             }
-            check |p, r| p.margin_issue().is_none_or(|reason| r.report(reason))
+            check |p, r| {
+                let margin = p.margin_issue().is_none_or(|reason| r.report(reason));
+                margin $(& {
+                    let ($cp, $cr) = (p, r);
+                    $check
+                })?
+            }
         );
 
         impl Margined for $name {
@@ -975,14 +1003,63 @@ payload!(StalenessPayload {
 });
 
 payload!(
+    /// At most one of `curve`, `min_of` and `max_of` selects the series it
+    /// reads (engine-semantics.md §3); none reads `default`.
     margined PredictedPayload {
         operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
         value: Decimal,
         within_minutes: PositiveMinutes,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        curve: Option<ForecastCurve>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min_of: Option<Vec<ForecastCurve>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_of: Option<Vec<ForecastCurve>>,
     }
-    comparison |p| (p.operator, p.value)
+    comparison |p| (p.operator, p.value),
+    check |p, r| p.selector_conflict().is_none_or(|field| r.report(Reason::SelectorConflict(field)))
 );
+
+/// Which way a `min_of` or `max_of` combines its series.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Extreme {
+    Min,
+    Max,
+}
+
+/// The series a `predicted` leaf reads.
+#[derive(Debug, Clone, Copy)]
+pub enum CurveSelection<'a> {
+    One(ForecastCurve),
+    /// The pointwise extreme of the listed series, in the order listed.
+    Combined(Extreme, &'a [ForecastCurve]),
+}
+
+impl PredictedPayload {
+    /// The second selector present, in the order `curve`, `min_of`,
+    /// `max_of`.
+    fn selector_conflict(&self) -> Option<&'static str> {
+        [
+            ("curve", self.curve.is_some()),
+            ("min_of", self.min_of.is_some()),
+            ("max_of", self.max_of.is_some()),
+        ]
+        .into_iter()
+        .filter(|&(_, present)| present)
+        .nth(1)
+        .map(|(field, _)| field)
+    }
+
+    #[must_use]
+    pub fn selection(&self) -> CurveSelection<'_> {
+        match (&self.curve, &self.min_of, &self.max_of) {
+            (_, Some(list), _) => CurveSelection::Combined(Extreme::Min, list),
+            (_, _, Some(list)) => CurveSelection::Combined(Extreme::Max, list),
+            (curve, None, None) => CurveSelection::One(curve.unwrap_or(ForecastCurve::Default)),
+        }
+    }
+}
 
 payload!(TrendPayload {
     bucket: TrendBucket

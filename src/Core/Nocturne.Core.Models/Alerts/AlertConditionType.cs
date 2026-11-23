@@ -150,4 +150,10 @@ public enum AlertConditionType
     /// <summary>The sensor's state is one of a configured set, optionally for a sustained duration.</summary>
     [EnumMember(Value = "sensor_state"), JsonStringEnumMemberName("sensor_state")]
     SensorState,
+
+    [EnumMember(Value = "eventual_glucose"), JsonStringEnumMemberName("eventual_glucose")]
+    EventualGlucose,
+
+    [EnumMember(Value = "carbs_required"), JsonStringEnumMemberName("carbs_required")]
+    CarbsRequired,
 }
