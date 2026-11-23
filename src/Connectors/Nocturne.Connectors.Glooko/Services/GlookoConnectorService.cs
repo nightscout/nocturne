@@ -707,12 +707,12 @@ public class GlookoConnectorService
             await PublishRecordTypeAsync(result, activeTypes,
                 carbs, config, cancellationToken));
 
-        // Food attribution resolves against the carbs published above.
+        // After the carbs above, so a carb intake this batch inserts is stored when its foods are attributed.
         var foodEntryImports = batchData.Foods is { Length: > 0 }
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
         Func<string, string?> foodResolver = externalEntryId => LegacyIds.Of("food", externalEntryId);
         landed &= await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, config, result, activeTypes, cancellationToken);
+            foodEntryImports, foodResolver, config, result, activeTypes, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
         landed &= Landed(activeTypes, SyncDataType.StateSpans, stateSpans,
@@ -789,7 +789,7 @@ public class GlookoConnectorService
         await PublishRecordTypeAsync(result, activeTypes,
             manualBasalInjections, config, cancellationToken);
 
-        // Food attribution resolves against the carbs published above.
+        // After the carbs above, so a carb intake this batch inserts is stored when its foods are attributed.
         if (v3Histories is null)
         {
             RecordFetchFailure(result, SyncDataType.Food, activeTypes);
@@ -829,7 +829,7 @@ public class GlookoConnectorService
             }
 
             await PublishFoodEntriesAndAttributeAsync(
-                foodEntryImports, allCarbs, foodResolver, config, result, activeTypes, cancellationToken);
+                foodEntryImports, foodResolver, config, result, activeTypes, cancellationToken);
         }
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
@@ -857,7 +857,8 @@ public class GlookoConnectorService
     }
 
     /// <summary>
-    ///     Publishes food catalog entries and attributes them to carb intakes via the meal matching service.
+    ///     Publishes food catalog entries and attributes them to the carb intakes the store holds under
+    ///     their legacy ids, through the meal matching service.
     /// </summary>
     /// <returns>
     ///     Whether the catalog import reached the tenant, or there was nothing to import. A failed
@@ -865,7 +866,6 @@ public class GlookoConnectorService
     /// </returns>
     private async Task<bool> PublishFoodEntriesAndAttributeAsync(
         List<ConnectorFoodEntryImport> foodEntryImports,
-        List<CarbIntake> carbIntakes,
         Func<string, string?>? foodEntryToCarbLegacyId,
         GlookoConnectorConfiguration config,
         SyncResult result,
@@ -892,7 +892,8 @@ public class GlookoConnectorService
             return false;
 
         if (importedEntries.Count == 0
-            || _mealMatchingService == null || carbIntakes.Count == 0 || foodEntryToCarbLegacyId == null)
+            || _mealMatchingService == null || foodEntryToCarbLegacyId == null
+            || Publisher is not { IsAvailable: true } publisher)
             return true;
 
         var pendingEntries = importedEntries
@@ -901,29 +902,46 @@ public class GlookoConnectorService
 
         if (pendingEntries.Count == 0) return true;
 
-        var carbsByLegacyId = carbIntakes
-            .Where(ci => ci.LegacyId != null)
-            .ToDictionary(ci => ci.LegacyId!, StringComparer.OrdinalIgnoreCase);
+        var carbLegacyIdByEntry = pendingEntries
+            .Select(e => (Entry: e, LegacyId: foodEntryToCarbLegacyId(e.ExternalEntryId)))
+            .Where(e => e.LegacyId != null)
+            .ToList();
+
+        if (carbLegacyIdByEntry.Count == 0) return true;
+
+        IReadOnlyDictionary<string, Guid> storedCarbIds;
+        try
+        {
+            storedCarbIds = await publisher.Treatments.GetStoredCarbIntakeIdsAsync(
+                [.. carbLegacyIdByEntry.Select(e => e.LegacyId!).Distinct(StringComparer.Ordinal)],
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex,
+                "[{ConnectorSource}] Failed to read the stored carb intakes, so {Count} food entries are not attributed",
+                ConnectorSource, carbLegacyIdByEntry.Count);
+            return true;
+        }
 
         var attributedCount = 0;
 
-        foreach (var entry in pendingEntries)
+        foreach (var (entry, legacyId) in carbLegacyIdByEntry)
         {
-            var legacyKey = foodEntryToCarbLegacyId(entry.ExternalEntryId);
-            if (legacyKey == null || !carbsByLegacyId.TryGetValue(legacyKey, out var carbIntake))
+            if (!storedCarbIds.TryGetValue(legacyId!, out var carbIntakeId))
                 continue;
 
             try
             {
                 await _mealMatchingService.AcceptMatchAsync(
-                    entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
+                    entry.Id, carbIntakeId, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
                 attributedCount++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 _logger.LogWarning(ex,
                     "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
-                    ConnectorSource, entry.Id, carbIntake.Id);
+                    ConnectorSource, entry.Id, carbIntakeId);
             }
         }
 

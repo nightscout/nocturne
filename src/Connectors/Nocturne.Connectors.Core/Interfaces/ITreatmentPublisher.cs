@@ -73,6 +73,14 @@ public interface ITreatmentPublisher
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The stored id of each live carb intake held under one of <paramref name="legacyIds"/>, keyed by
+    /// legacy id. A legacy id no live row holds is absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(
+        IReadOnlyCollection<string> legacyIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Publishes treatments a source may already have delivered: one never stored is created, and
     /// one the source has changed since it was stored is written again. Nothing the user deleted
     /// comes back.

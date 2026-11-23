@@ -977,6 +977,9 @@ public class TandemE2eSyncTests
         public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
 
+        public Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, Guid>>(new Dictionary<string, Guid>());
+
         public Task<int?> PublishRecentTreatmentsAsync(IEnumerable<Treatment> treatments, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult<int?>(0);
 

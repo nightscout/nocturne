@@ -872,4 +872,20 @@ public class TreatmentPublisherTests
     }
 
     #endregion
+
+    [Fact]
+    public async Task GetStoredCarbIntakeIdsAsync_AnswersEachHeldLegacyIdWithItsStoredId()
+    {
+        var held = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = "glooko_food_a" };
+        _mockCarbIntakeRepository
+            .Setup(r => r.GetByLegacyIdsAsync(
+                It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "glooko_food_a", "glooko_food_b" })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([held]);
+
+        var stored = await _publisher.GetStoredCarbIntakeIdsAsync(
+            ["glooko_food_a", "glooko_food_b"], CancellationToken.None);
+
+        stored.Should().BeEquivalentTo(new Dictionary<string, Guid> { ["glooko_food_a"] = held.Id });
+    }
 }
