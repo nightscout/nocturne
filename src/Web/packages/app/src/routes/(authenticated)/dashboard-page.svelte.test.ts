@@ -8,7 +8,7 @@ import {
   WidgetPlacement,
   type FeatureSettings,
   type WidgetConfig,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
 import { transformChartData } from "@nocturne/charts/core";
 
@@ -71,11 +71,14 @@ const pageData: HarnessProps["data"] = {
   isShareHost: false,
   canViewRealtimeData: false,
   showBackupSignInPrompt: false,
+    showRecoveryEmailPrompt: false,
+    recoveryEmailHasAddress: false,
   tenantTargets: [],
   isDemo: false,
   isGuestSession: false,
   isPlatformAdmin: false,
   isPlatformAccessGrant: false,
+  isHandedOffSession: false,
   tenantSlug: "sleepy",
   baseDomain: null,
   guestExpiresAt: null,

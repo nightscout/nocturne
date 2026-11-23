@@ -50,13 +50,20 @@ public interface INocturneDbContextFactory
     /// no categories, no history clamp. The scope's audit actor is still carried.
     /// </summary>
     /// <remarks>
-    /// For an allowlist of instance-level reads that a public-share request needs answered but may
-    /// not see as a reader: whether the tenant is past setup or has an orphaned member, and its
-    /// owners. A singleton has no use for it, since its root-resolved factory already reads as no
-    /// reader. The identity tables these read (tenant_members, member_roles, tenant_roles,
-    /// subjects, passkey credentials, OIDC identities) are not tenant-scoped and carry no tenant
-    /// policy, so a tenant pin returns the same rows; this entry point keeps those reads working
-    /// if they come under one, since a share is hidden every table no category governs.
+    /// For an allowlist of reads that a public-share request needs answered but may not see as a
+    /// reader, since a share is hidden every table no category governs. A singleton has no use for
+    /// it, since its root-resolved factory already reads as no reader. Two kinds of read use it:
+    /// <list type="bullet">
+    /// <item>The setup state: whether the tenant is past setup or has an orphaned member, and its
+    /// owners. These read identity tables (tenant_members, member_roles, tenant_roles, subjects,
+    /// passkey credentials, OIDC identities) that are not tenant-scoped and carry no tenant policy,
+    /// so a tenant pin returns the same rows; the system pin keeps the reads working if they come
+    /// under one.</item>
+    /// <item>Whether a name is pending on the tenant's access requests. This reads
+    /// <c>membership_requests</c>, which is tenant-scoped and governed by no share category, so a
+    /// share reader sees none of it and only this pin returns the tenant's rows; it returns a bool,
+    /// which a visitor of the tenant's own host gets anyway.</item>
+    /// </list>
     /// <c>SystemPinnedAllowlistTests</c> pins the calling members.
     /// </remarks>
     ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default);

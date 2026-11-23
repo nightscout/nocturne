@@ -7,6 +7,7 @@
   import {
     getRule,
     getRules,
+    getSettingOptions,
     updateRule,
     deleteRule,
     testFire,
@@ -14,10 +15,12 @@
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
   import { conditionIssuesMessage } from "#lib/components/alerts/conditionIssues.svelte.js";
+  import { holdFactLines, holdSinceText } from "#lib/components/alerts/holdText.svelte.js";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import { getAlertHistory } from "#lib/api/generated/alerts.generated.remote.js";
   import { z } from "zod";
-  import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
-  import type { HistoryExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertRuleSeverity } from "@nocturne/api-client";
+  import type { HistoryExcursionResponse } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -34,6 +37,7 @@
   } from "#lib/components/ui/card/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Save from "@lucide/svelte/icons/save";
@@ -50,10 +54,13 @@
   import RuleBuilder from "#lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "#lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
+  import { isNotSending } from "#lib/components/alerts/channelState.svelte.js";
+  import AdvancedSection from "#lib/components/alerts/AdvancedSection.svelte";
   import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
   import HistoryCheck from "#lib/components/alerts/HistoryCheck.svelte";
   import OpenOnlyWarning from "#lib/components/alerts/OpenOnlyWarning.svelte";
   import { severity } from "#lib/components/alerts/severity.js";
+  import { endsLowCover, lastLowCoverMessage } from "#lib/components/alerts/lastLowCover.js";
   import {
     severityDescription,
     severityLabel,
@@ -61,6 +68,9 @@
   import {
     parseRule,
     buildBody,
+    freshnessIssue,
+    markFreshnessSaved,
+    toReplayRule,
     validateChannels,
     type RuleEditorState,
   } from "#lib/components/alerts/types.js";
@@ -73,16 +83,20 @@
   let testingSaved = $state(false);
   let testSent = $state(false);
   let error = $state<string | null>(null);
+  let confirmingDisable = $state(false);
+  let confirmingDelete = $state(false);
 
   let editor = $state<RuleEditorState>(parseRule(null));
   let seededId = $state<string | null>(null);
   let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
+  let savedEnabled = $state(true);
   const isDirty = $derived(
     savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
   );
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
   const rulesQuery = getRules();
+  const settingOptionsQuery = getSettingOptions();
   const ruleQuery = $derived(getRule(ruleId));
 
   const historyQuery = $derived(getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }));
@@ -116,23 +130,37 @@
     untrack(() => {
       editor = parseRule(rule ?? null);
       savedBody = buildBody(editor);
+      savedEnabled = editor.isEnabled;
       seededId = ruleId;
     });
   });
 
   // ---- Save ------------------------------------------------------------
 
+  const lastLowCover = $derived(endsLowCover(ruleQuery.current));
+
+  function requestSave(): void {
+    if (lastLowCover && savedEnabled && !editor.isEnabled) {
+      confirmingDisable = true;
+    } else {
+      void save();
+    }
+  }
+
   async function save(): Promise<void> {
-    const channelError = validateChannels(editor.channels);
-    if (channelError) {
-      error = channelError;
+    const issue =
+      validateChannels(editor.channels) ?? freshnessIssue(editor, settingOptionsQuery.current);
+    if (issue) {
+      error = issue;
       return;
     }
     saving = true;
     error = null;
     try {
       await updateRule({ id: ruleId, request: buildBody(editor) });
+      markFreshnessSaved(editor);
       savedBody = buildBody(editor);
+      savedEnabled = editor.isEnabled;
       toast.success("Alert saved");
     } catch (e) {
       const described = describeSubmitError(e, "Failed to save the alert rule. Try again.");
@@ -143,7 +171,6 @@
   }
 
   async function destroy(): Promise<void> {
-    if (!confirm(`Delete "${editor.name}"? This cannot be undone.`)) return;
     deleting = true;
     error = null;
     try {
@@ -221,17 +248,11 @@
   const severitySchema = z.enum(AlertRuleSeverity);
 
   function buildReplayRule() {
-    const body = buildBody(editor);
-    return {
-      id: ruleId,
-      name: body.name,
-      conditionType: body.conditionType,
-      conditionParams: body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
-      severity: body.severity,
-      allowThroughDnd: body.allowThroughDnd,
-      autoResolveEnabled: body.autoResolveEnabled,
-      autoResolveParams: body.autoResolveParams ? JSON.stringify(body.autoResolveParams) : undefined,
-    };
+    return toReplayRule(
+      editor,
+      ruleId,
+      settingOptionsQuery.current?.defaultGlucoseFreshnessMinutes,
+    );
   }
 
   // Switching smart snooze on adds no condition. With none, the engine extends only a high or
@@ -255,6 +276,9 @@
       body.conditionParams,
       body.autoResolveEnabled,
       body.autoResolveParams,
+      body.onUnknown,
+      body.glucoseFreshnessMinutes,
+      body.clearGlucoseFreshness,
     ]);
   });
 
@@ -296,7 +320,7 @@
         type="button"
         variant="outline"
         size="sm"
-        onclick={destroy}
+        onclick={() => (confirmingDelete = true)}
         disabled={deleting}
       >
         {#if deleting}
@@ -306,7 +330,7 @@
         {/if}
         Delete
       </Button>
-      <Button type="button" onclick={save} disabled={saving || loading || !isDirty}>
+      <Button type="button" onclick={requestSave} disabled={saving || loading || !isDirty}>
         {#if saving}
           <Loader2 class="h-4 w-4 mr-2 animate-spin" />
         {:else}
@@ -323,6 +347,22 @@
       role="alert"
     >
       {error}
+    </div>
+  {/if}
+
+  {#if ruleQuery.current?.hold}
+    {@const hold = ruleQuery.current.hold}
+    <div
+      class="mb-4 flex items-start gap-2 rounded-md border p-3 text-sm text-status-warning"
+      data-testid="rule-hold"
+    >
+      <Hourglass class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div>
+        <p>{holdSinceText(hold)} This rule cannot open an alert until usable data comes back. After 24 hours with no usable data, Nocturne closes an open alert.</p>
+        {#each holdFactLines(hold) as line (line)}
+          <p>{line}</p>
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -454,6 +494,7 @@
             <ChannelsSection
               bind:channels={editor.channels}
               severity={editor.severity}
+              {ruleId}
             />
             <OpenOnlyWarning channels={editor.channels} />
           </CardContent>
@@ -471,6 +512,13 @@
               firingCondition={editor.condition}
               availableRules={availableRules}
             />
+          </CardContent>
+        </Card>
+
+        <!-- Advanced -->
+        <Card data-testid="alert-advanced-card">
+          <CardContent class="pt-6">
+            <AdvancedSection bind:editor />
           </CardContent>
         </Card>
 
@@ -547,7 +595,7 @@
           <CardTitle class="text-base">Check the alert</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
-          {#if !loading && editor.condition}
+          {#if !loading && editor.condition && !freshnessIssue(editor, settingOptionsQuery.current)}
             <HistoryCheck
               compact
               rule={buildReplayRule}
@@ -575,6 +623,9 @@
             <p class="flex items-center gap-1.5 text-sm text-success" role="status">
               <Check class="size-4" aria-hidden="true" />
               Test alert sent. Make sure that it arrived.
+              {#if editor.channels.some(isNotSending)}
+                Channels that do not send did not get it.
+              {/if}
             </p>
           {:else if isDirty && !loading}
             <p class="text-sm text-muted-foreground">
@@ -666,6 +717,35 @@
     </aside>
   </div>
 </div>
+
+<ConfirmDialog
+  bind:open={confirmingDisable}
+  title={`Disable "${editor.name}"?`}
+  confirmLabel="Disable"
+  destructive
+  busy={saving}
+  onConfirm={save}
+>
+  {#snippet description()}
+    {lastLowCoverMessage}
+  {/snippet}
+</ConfirmDialog>
+
+<ConfirmDialog
+  bind:open={confirmingDelete}
+  title={`Delete "${editor.name}"?`}
+  confirmLabel="Delete"
+  busy={deleting}
+  onConfirm={destroy}
+>
+  {#snippet description()}
+    {#if lastLowCover}
+      {lastLowCoverMessage}
+    {/if}
+    This rule will stop firing immediately. Existing alert history is preserved. This action
+    cannot be undone.
+  {/snippet}
+</ConfirmDialog>
 
 <Dialog.Root bind:open={replayOpen}>
   <!-- eslint-disable-next-line shadcn/no-restyle -- the replay workbench fills the viewport; its bordered header and scrolling body pad themselves, so the dialog cannot -->

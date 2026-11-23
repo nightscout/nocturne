@@ -102,7 +102,6 @@ public class V3CacheControlTests
         var controller = new EntriesController(
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
-            Mock.Of<ICanonicalAlertEvaluator>(),
             NullLogger<EntriesController>.Instance)
         {
             ControllerContext = Context(),

@@ -288,7 +288,7 @@ public class StateSpanWriteScopeTests
     }
 
     private static void Denied(object? result) =>
-        result.Should().BeOfType<ObjectResult>()
+        result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
 
     private static StateSpansController Build(Mock<IStateSpanService> service, string[] grantedScopes)

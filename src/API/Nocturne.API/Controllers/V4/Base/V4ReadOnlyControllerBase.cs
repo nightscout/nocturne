@@ -68,6 +68,7 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
             return error;
 
         var data = (await Repository.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
+        await OnBeforeReturnAsync(data, ct);
         var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => Repository.CountAsync(from, to, device, source, ct));
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = pagination });
     }
@@ -101,6 +102,29 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     public virtual async Task<ActionResult<TModel>> GetById(Guid id, CancellationToken ct = default)
     {
         var result = await Repository.GetByIdAsync(id, ct);
-        return result is null ? NotFound() : Ok(result);
+        if (result is null)
+            return NotFound();
+
+        await OnBeforeReturnAsync([result], ct);
+        return Ok(result);
     }
+
+    /// <summary>
+    /// Hook called with the records an action is about to return, by every action of the record base
+    /// that returns records except create, which answers with the row as stored. Override to fill
+    /// fields the stored row does not carry, mutating <paramref name="records"/> in place.
+    /// </summary>
+    /// <remarks>
+    /// An override that throws fails a read action, which has nothing committed to protect. A write
+    /// action that has committed (update, bulk create, restore, bulk restore) never fails on it: it
+    /// logs a warning naming the record type and ids and answers its normal success with the stored,
+    /// unenriched records. The write is committed, so a failure would be reported for a write that
+    /// happened. Such an action runs the hook through
+    /// <see cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}.EnrichCommittedAsync"/>.
+    /// A cancelled request is not swallowed in either case.
+    /// </remarks>
+    /// <param name="records">The records the action returns.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected virtual Task OnBeforeReturnAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)
+        => Task.CompletedTask;
 }

@@ -48,7 +48,7 @@ export type NavItemId =
   | "time-spans"
   | "reports"
   | "clock"
-  | "tenants"
+  | "people"
   | "food"
   | "meals"
   | "tools"
@@ -104,6 +104,8 @@ export interface NavViewer {
   isGuestSession: boolean;
   /** Whether the viewer administers the platform. */
   isPlatformAdmin: boolean;
+  /** Whether the API refuses the viewer as the demo subject. */
+  refusedAsDemoSubject?: boolean;
   /** The viewer's granted scopes, as `page.data.effectivePermissions` carries them. */
   grantedScopes: readonly string[];
   /** How many tenants the viewer can switch between. */
@@ -214,9 +216,9 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
 
   if (viewer.tenantCount > 1) {
     items.push({
-      id: "tenants",
-      title: "Tenants",
-      href: "/tenants",
+      id: "people",
+      title: "People",
+      href: "/people",
       icon: Users,
     });
   }

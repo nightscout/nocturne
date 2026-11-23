@@ -64,8 +64,8 @@ describe("alerts", () => {
 
     const [excursion] = await eventually(async () => {
       const list = await active();
-      return list.length > 0 ? list : undefined;
-    }, { what: "an active excursion" });
+      return list[0]?.activeInstances.length ? list : undefined;
+    }, { what: "an active excursion with its alert" });
     expect(excursion!.activeInstances).toHaveLength(1);
     expect(excursion!.activeInstances[0]!.status).toBe("triggered");
 

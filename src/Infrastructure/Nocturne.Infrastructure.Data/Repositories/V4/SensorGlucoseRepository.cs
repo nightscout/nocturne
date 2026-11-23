@@ -38,12 +38,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
-        IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
+        IRecordChangePublisher? changes = null,
         IDataEventSink<Entry>? entrySink = null,
-        IGlucoseReadingBroadcaster? readingBroadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null
+        IGlucoseReadingBroadcaster? readingBroadcaster = null
     )
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
+        : base(contextFactory, auditContext, logger, changes, entrySink, linker)
     {
         _readingBroadcaster = readingBroadcaster;
     }
@@ -71,17 +70,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 .Select(t => t.LastReadingAt)
                 .FirstOrDefaultAsync(ct);
         }
-        catch (DbUpdateException ex)
-        {
-            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
-            return;
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
-            return;
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
             return;
@@ -170,17 +159,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             return models.Where(m => shown.Contains(m.Id)).ToList();
         }
         catch (OperationCanceledException) { throw; }
-        catch (DbUpdateException ex)
-        {
-            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
-            return models;
-        }
-        catch (InvalidOperationException ex)
-        {
-            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
-            return models;
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
@@ -432,9 +411,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         else if (devices is { Count: > 1 })
         {
-            // `= ANY($1)`. Custom-planned today, because nothing configures Npgsql auto-prepare;
-            // a generic plan cannot hash the array parameter and this shape has been measured at
-            // 19 s against 200 ms. Enabling auto-prepare has to account for this query.
+            // `= ANY($1)`, generic-planned once auto-prepare has run it ten times on a connection. The
+            // list is a chunk's devices, a handful, which a custom plan searches end to end as well
+            // (ArrayFilterPlans.HashedArrayLength).
             query = query.Where(e => e.Device != null && devices.Contains(e.Device));
         }
         return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
@@ -498,6 +477,28 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             .ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<GlucoseStreamArrival>> GetStreamFirstArrivalsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var streams = ctx.SensorGlucose.AsNoTracking()
+            .GroupBy(e => new { e.WriterGrantId, e.DataSource, e.Device })
+            .Select(g => new { g.Key.WriterGrantId, g.Key.DataSource, g.Key.Device, First = g.Min(e => e.SysCreatedAt) });
+        var rows = await ctx.WriteWithHistoryClampLiftedAsync(token => streams.ToListAsync(token), ct);
+        return rows.Select(r => new GlucoseStreamArrival(r.WriterGrantId, r.DataSource, r.Device, r.First)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<GlucoseStreamReading>> GetStreamReadingsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to)
+            .Select(e => new GlucoseStreamReading(e.Id, e.Timestamp, e.WriterGrantId, e.DataSource, e.Device))
+            .ToListAsync(ct);
     }
 
     /// <inheritdoc />

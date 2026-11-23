@@ -24,7 +24,7 @@ public class CredentialFailureTests
     public static TheoryData<Exception> CredentialFailures => new()
     {
         new FormatException("bad token"),
-        new InvalidOperationException("OIDC token missing subject identifier"),
+        new InvalidOperationException("token missing subject identifier"),
         new UnauthorizedAccessException(),
     };
 

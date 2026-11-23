@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "scenario": "next-change-time-of-day-wrap",
+  "ticks": [
+    {
+      "at": "2026-03-02T23:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          },
+          "next_change_at": "2026-03-03T06:00:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-03T07:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "excursion": 1,
+            "hysteresis_started_at": "2026-03-03T07:00:00Z"
+          },
+          "next_change_at": "2026-03-03T07:00:00.000000100Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-03-03T07:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "closed",
+          "close_reason": "hysteresis",
+          "tracker": {
+            "state": "idle"
+          },
+          "next_change_at": "2026-03-03T22:00:00Z"
+        }
+      ]
+    }
+  ]
+}

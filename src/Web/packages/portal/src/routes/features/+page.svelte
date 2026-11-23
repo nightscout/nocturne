@@ -14,7 +14,7 @@
         },
         {
             title: "One install, many people",
-            copy: "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's.",
+            copy: "Run a household, a camp, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's.",
         },
         {
             title: "Real-time updates",
@@ -38,7 +38,7 @@
         {
             aspect: "Who it serves",
             nightscout: "One instance per person",
-            nocturne: "One install for a household, a clinic, or a community",
+            nocturne: "One install for a household, a camp, or a community",
         },
         {
             aspect: "Getting data in",

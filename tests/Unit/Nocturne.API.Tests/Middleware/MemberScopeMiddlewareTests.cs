@@ -273,7 +273,7 @@ public class MemberScopeMiddlewareTests
         AuthType authType)
     {
         // The real web-app credential shape: no scopes at all, because SessionCookieHandler
-        // never sets them and a JWT reaching LegacyJwtHandler has no scope claim
+        // never sets them and a JWT reaching SessionBearerHandler has no scope claim
         // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
         // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
         // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,
@@ -299,26 +299,6 @@ public class MemberScopeMiddlewareTests
         grantedScopes.Should().NotContain(Scope.FullAccess);
         Scope.Satisfies(grantedScopes!, Scope.AuditManage)
             .Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task InteractiveOidcLogin_IsNotBoundedByTheProvidersProtocolScopes()
-    {
-        // OidcTokenHandler sets Scopes to the provider's configured scopes — openid/profile/email,
-        // an outbound protocol list identical for every user of that provider, not a Nocturne data
-        // grant. Normalize drops all three, so treating them as a ceiling resolved the member to
-        // nothing.
-        var context = await ResolveAsync(
-            RoleSeeds.Permissions[RoleSeeds.Caretaker],
-            ["openid", "profile", "email"],
-            AuthType.OidcToken);
-
-        var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().Contain(Scope.GlucoseRead);
-        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
-        // The IdP's protocol scopes are not Nocturne scopes and must not be published.
-        grantedScopes.Should().NotContain("openid");
-        grantedScopes.Should().NotContain("profile");
     }
 
     [Fact]
@@ -586,6 +566,42 @@ public class MemberScopeMiddlewareTests
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]
     [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.LegacyJwt)]
+    public async Task EndedMember_GetsNothingFromTheMembershipOnEveryCredentialHeldToIt(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(-1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetPermissionTrie()!.Check("api:entries:read").Should().BeFalse();
+        context.GetGrantedScopes().Should().NotContain(Scope.FullAccess);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership.Should().BeNull(
+            "an ended membership reads as no membership, which AuthenticationMiddleware refuses");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task MemberWhoseEndIsStillAhead_ResolvesTheirRole(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], accessEndsAt: MembershipNow.AddSeconds(1));
+
+        var context = await ResolveAsync(db, subjectId, [Scope.GlucoseRead], authType);
+
+        context.GetGrantedScopes().Should().Contain(Scope.GlucoseRead);
+        RequestMembership.Of(context, subjectId, TestDatabaseSeeder.TenantId)!.Membership!.Access.AccessEndsAt
+            .Should().NotBeNull("the request carries the caller's end as its access ceiling");
+    }
+
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
     public async Task ClampedFollower_IsHistoryClampedOnBothCarriers(AuthType authType)
     {
         using var db = TestDbContextFactory.CreateSqlite();
@@ -673,11 +689,12 @@ public class MemberScopeMiddlewareTests
         services.AddSingleton(db.ContextFactory);
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         await using var provider = services.BuildServiceProvider();
 
         var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(detached), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(detached, AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
 
         await using (var request = provider.CreateAsyncScope())
         {
@@ -692,7 +709,7 @@ public class MemberScopeMiddlewareTests
             };
             context.Items["GrantedScopes"] = Scope.Normalize([]);
             context.Items["PermissionTrie"] = new PermissionTrie();
-            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()), subjectId);
+            await StoreMembershipAsync(context, new TenantMembershipRepository(request.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off), subjectId);
 
             await middleware.InvokeAsync(context);
 
@@ -787,10 +804,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -837,10 +854,10 @@ public class MemberScopeMiddlewareTests
         };
         context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
-        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), subjectId);
+        await StoreMembershipAsync(context, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory()), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, new TenantMembershipRepository(db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), new LastUsedClaims(TimeProvider.System), NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;
@@ -851,9 +868,12 @@ public class MemberScopeMiddlewareTests
         HttpContext context, ITenantMembershipRepository members, Guid subjectId)
     {
         var (membership, _) = await RequestMembership.ReadAsync(
-            members, subjectId, TestDatabaseSeeder.TenantId, CancellationToken.None);
+            members, subjectId, TestDatabaseSeeder.TenantId, MembershipNow, CancellationToken.None);
         membership.StoreOn(context);
     }
+
+    /// <summary>The instant the request's membership read judges end dates at.</summary>
+    private static readonly DateTime MembershipNow = new(2026, 11, 22, 9, 0, 0, DateTimeKind.Utc);
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
     private static List<string> OwnerPermissions =>
@@ -871,7 +891,7 @@ public class MemberScopeMiddlewareTests
     /// permission atoms. Returns the member's subject id.
     /// </summary>
     private static Guid SeedMemberWithRole(
-        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false)
+        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false, DateTime? accessEndsAt = null)
     {
         var subjectId = Guid.CreateVersion7();
         using var seed = db.CreateContext();
@@ -891,6 +911,7 @@ public class MemberScopeMiddlewareTests
             TenantId = TestDatabaseSeeder.TenantId,
             SubjectId = subjectId,
             LimitTo24Hours = limitTo24Hours,
+            AccessEndsAt = accessEndsAt,
         });
         var roleId = Guid.CreateVersion7();
         seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity

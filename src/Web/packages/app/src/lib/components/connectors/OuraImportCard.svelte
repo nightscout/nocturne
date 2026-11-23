@@ -8,7 +8,7 @@
     OuraImportPhase,
     OuraImportState,
     type OuraImportStatus,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getAllConnectorStatus } from "#lib/api/generated/configurations.generated.remote.js";
   import { getConnectorDataSummary } from "#lib/api/generated/services.generated.remote.js";
   import { fresh } from "#lib/api/fresh-query.js";

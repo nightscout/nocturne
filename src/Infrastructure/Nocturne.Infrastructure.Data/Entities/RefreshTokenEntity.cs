@@ -83,6 +83,15 @@ public class RefreshTokenEntity : IEntityTimestamped
     public Guid? ReplacedByTokenId { get; set; }
 
     /// <summary>
+    /// The login code the session was redeemed from, carried along its rotation chain; null for a
+    /// session the subject signed in for. A dedicated column because no existing one means "how
+    /// this session began", and a session redeemed from a code is not the subject's own sign-in
+    /// (<c>RequireInteractiveSessionAttribute</c>).
+    /// </summary>
+    [Column("login_code_id")]
+    public Guid? LoginCodeId { get; set; }
+
+    /// <summary>
     /// Device/client description for session management UI
     /// </summary>
     [MaxLength(500)]

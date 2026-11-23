@@ -47,6 +47,7 @@ public static class ShareDataCategories
                 "device_status_extras",
                 "pump_snapshots",
                 "uploader_snapshots",
+                "sensor_state_reports",
                 "aps_snapshots",
             },
             [Scope.AlertsRead] = new[]
@@ -96,6 +97,7 @@ public static class ShareDataCategories
             ["device_status_extras"] = "timestamp",
             ["pump_snapshots"] = "timestamp",
             ["uploader_snapshots"] = "timestamp",
+            ["sensor_state_reports"] = "timestamp",
             ["aps_snapshots"] = "timestamp",
             ["heart_rates"] = "timestamp",
             ["step_counts"] = "timestamp",

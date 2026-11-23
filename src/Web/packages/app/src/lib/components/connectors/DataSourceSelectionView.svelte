@@ -2,12 +2,12 @@
   import {
     UploaderPlatform,
     UploaderCategory,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import type {
     UploaderApp,
     DataSourceInfo,
     AvailableConnector,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -21,6 +21,7 @@
   import Apple from "@lucide/svelte/icons/apple";
   import { EmptyState } from "#lib/components/shared/index.js";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
 
   interface Props {
     connectors: AvailableConnector[];
@@ -31,6 +32,8 @@
     onSelectConnector: (id: string) => void;
     onSelectUploader: (app: UploaderApp) => void;
     onSkip: () => void;
+    /** True on a handed-off session: connecting an app creates a credential, which the server refuses it. */
+    signInRequiredForApps?: boolean;
   }
 
   const {
@@ -42,6 +45,7 @@
     onSelectConnector,
     onSelectUploader,
     onSkip,
+    signInRequiredForApps = false,
   }: Props = $props();
 
   // Each of these is set up on its own page, not through the credential form this view leads to.
@@ -180,6 +184,7 @@
             <Smartphone class="h-4 w-4" />
             Phone apps
           </h2>
+          {#if !signInRequiredForApps}
           <div class="flex flex-wrap items-center gap-1 shrink-0">
             <Button
               variant={platformFilter === "all" ? "default" : "outline"}
@@ -205,8 +210,12 @@
               Android
             </Button>
           </div>
+          {/if}
         </div>
 
+        {#if signInRequiredForApps}
+          <SignInGate reason="Sign in again to connect an app." />
+        {:else}
         <div class="space-y-6">
           {#each groupedApps as group (group.category)}
             <div class="space-y-3">
@@ -253,6 +262,7 @@
             </div>
           {/each}
         </div>
+        {/if}
       </div>
     {/if}
 

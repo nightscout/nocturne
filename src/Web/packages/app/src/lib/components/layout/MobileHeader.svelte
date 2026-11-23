@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
@@ -103,7 +104,7 @@
            reading that is no longer current. -->
       {#if !isLoading && !isStale}
         <div class="flex flex-col items-center text-xs">
-          <span class={directionInfo.css}>
+          <span class={deltaColorClass(glucose.direction)}>
             {#if directionInfo.icon}
               {@const Icon = directionInfo.icon}
               <Icon class="w-4 h-4" />

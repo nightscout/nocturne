@@ -26,6 +26,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     private readonly Mock<IPumpSnapshotRepository> _pumpRepoMock;
     private readonly Mock<IUploaderSnapshotRepository> _uploaderRepoMock;
     private readonly Mock<IDeviceStatusExtrasRepository> _extrasRepoMock;
+    private readonly Mock<ISensorStateReportRepository> _sensorStateRepoMock = new();
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
     private readonly List<StateSpan> _spans;
     private readonly Mock<IDeviceService> _deviceServiceMock;
@@ -68,11 +69,16 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => [.. records]);
 
+        _sensorStateRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.SensorStateReport>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.SensorStateReport> records, WriteOrigin origin, CancellationToken _) => [.. records]);
+
         _decomposer = new DeviceStatusDecomposer(
             _apsRepoMock.Object,
             _pumpRepoMock.Object,
             _uploaderRepoMock.Object,
             _extrasRepoMock.Object,
+            _sensorStateRepoMock.Object,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
             Mock.Of<IAuditContext>(),
@@ -506,7 +512,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         ]);
 
         var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object, spans.Object, devices.Object,
+            aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<ISensorStateReportRepository>(), spans.Object, devices.Object,
             Mock.Of<IAuditContext>(), loop.Object, TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
 
         var statuses = Enumerable.Range(0, count).Select(i => new DeviceStatus

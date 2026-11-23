@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TrackerCategory, type TrackerDefinitionDto } from "#lib/api/generated/nocturne-api-client.js";
+import { TrackerCategory, type TrackerDefinitionDto } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { updateDefinition, schemaFor } = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ const { updateDefinition, schemaFor } = vi.hoisted(() => ({
 vi.mock("#lib/api/generated/trackers.generated.remote.js", async () => {
   const { form } = await import("#lib/api/remote-server.js");
   const { formCoerce } = await import("#lib/api/generated/form-utils.generated.js");
-  const { UpdateTrackerDefinitionRequestSchema } = await import("#lib/api/generated/schemas.js");
+  const { UpdateTrackerDefinitionRequestSchema } = await import("@nocturne/api-client/schemas");
   const { z } = await import("zod");
   const update = formCoerce(z.object({ id: z.string(), request: UpdateTrackerDefinitionRequestSchema }));
   return {
@@ -58,7 +58,7 @@ const postedCovers = () =>
 
 async function tooLongAName() {
   const { formCoerce } = await import("#lib/api/generated/form-utils.generated.js");
-  const { UpdateTrackerDefinitionRequestSchema } = await import("#lib/api/generated/schemas.js");
+  const { UpdateTrackerDefinitionRequestSchema } = await import("@nocturne/api-client/schemas");
   const { z } = await import("zod");
   schemaFor.update = formCoerce(
     z.object({
@@ -127,6 +127,18 @@ describe("TrackerEditorDialog save", () => {
       request: { name: "G7 Sensor left", category: TrackerCategory.Sensor, lifespanHours: 240 },
     });
     await expect.element(page.getByTestId("tracker-editor")).not.toBeInTheDocument();
+  });
+
+  it.each(["", "   "])("does not save a name of only %j, and says why before the click", async (name) => {
+    open(TrackerCategory.Sensor);
+    await expect.element(page.getByRole("button", { name: "Save" })).toBeEnabled();
+    await expect.element(page.getByText("Enter a name.")).not.toBeInTheDocument();
+
+    await page.getByLabelText("Name").fill(name);
+
+    await expect.element(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect.element(page.getByRole("status")).toHaveTextContent("Enter a name.");
+    expect(updateDefinition).not.toHaveBeenCalled();
   });
 
   it("refuses a lifespan that is not a whole number of hours, which the schema cannot take", async () => {

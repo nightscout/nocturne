@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
@@ -11,25 +13,27 @@ namespace Nocturne.Connectors.Twiist.Mappers;
 /// </summary>
 public class TwiistInsulinMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<TwiistConnectorConfiguration>();
+
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Maps Twiist insulin doses to Bolus records, filtering to bolus-type doses only.
     /// </summary>
-    public IEnumerable<Bolus> MapBoluses(List<TwiistInsulinDose>? doses, DateTime now)
+    public IEnumerable<Bolus> MapBoluses(List<TwiistInsulinDose>? doses)
     {
         if (doses == null || doses.Count == 0) return [];
 
         return doses
             .Where(d => IsBolusDose(d.DoseType))
-            .Select(d => ConvertBolus(d, now))
+            .Select(d => ConvertBolus(d))
             .Where(b => b != null)
             .Cast<Bolus>()
             .OrderBy(b => b.Mills)
             .ToList();
     }
 
-    private Bolus? ConvertBolus(TwiistInsulinDose dose, DateTime now)
+    private Bolus? ConvertBolus(TwiistInsulinDose dose)
     {
         try
         {
@@ -40,18 +44,14 @@ public class TwiistInsulinMapper(ILogger logger)
 
             return new Bolus
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                LegacyId = $"twiist_bolus_{dose.Identifier ?? timestamp.Ticks.ToString()}",
+                LegacyId = LegacyIds.Of("bolus", dose.Identifier ?? timestamp.Ticks.ToString()),
                 Device = DataSources.TwiistConnector,
-                DataSource = DataSources.TwiistConnector,
                 Insulin = (double)dose.Value,
                 Programmed = (double)dose.Value,
                 Delivered = (double)dose.Value,
                 BolusType = BolusType.Normal,
                 Kind = BolusKind.Manual,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (InvalidOperationException ex)

@@ -24,7 +24,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
 {
     private static readonly string[] Tables =
     [
-        "aps_snapshots", "pump_snapshots", "uploader_snapshots", "device_status_extras", "state_spans",
+        "aps_snapshots", "pump_snapshots", "uploader_snapshots", "device_status_extras", "sensor_state_reports", "state_spans",
         "devices", "patient_devices",
     ];
 
@@ -125,11 +125,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await using (var truncate = conn.CreateCommand())
-        {
-            truncate.CommandText = $"TRUNCATE TABLE {string.Join(", ", Tables)}, linked_records CASCADE";
-            await truncate.ExecuteNonQueryAsync();
-        }
+        await DecomposedRows.TruncateAsync(conn, Tables);
 
         var statuses = sequence.Select(json => JsonSerializer.Deserialize<DeviceStatus>(json)!).ToList();
         await WithTenantScopeAsync(async services =>
@@ -196,6 +192,8 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
 
         foreach (var row in rows["device_status_extras"])
             Name(row, $"extras:{Rename((string?)row["correlation_id"])}");
+        foreach (var row in rows["sensor_state_reports"])
+            Name(row, $"sensor-state:{Rename((string?)row["correlation_id"])}");
         foreach (var row in rows["patient_devices"])
             Name(row, $"patient-device:{Rename((string?)row["device_id"])}|{row["start_date"]}");
         foreach (var row in rows["state_spans"])

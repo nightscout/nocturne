@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
@@ -31,6 +33,12 @@ public class GlucosePredictionResponse
 
     /// <summary>Prediction curves with different scenarios</summary>
     public PredictionCurves Predictions { get; set; } = new();
+
+    /// <summary>
+    /// The algorithm that made the curves: the uploading loop's, or <see cref="AidAlgorithm.OpenAps"/>
+    /// for the server-side oref run. Null when it is not known.
+    /// </summary>
+    public AidAlgorithm? Algorithm { get; set; }
 }
 
 /// <summary>

@@ -18,24 +18,22 @@ public static class TreatmentClientId
     public const string Field = "id";
 
     public static Dictionary<string, object?>? ToRecord(Treatment treatment) =>
-        Present(treatment.AdditionalProperties?.GetValueOrDefault(Field)) is { } id
-            ? new() { [Field] = id }
-            : null;
+        KeptField.Add(null, Field, KeptField.Value(treatment.AdditionalProperties, Field));
 
     public static Dictionary<string, object>? ToTreatment(IReadOnlyDictionary<string, object?>? record) =>
-        Present(record?.GetValueOrDefault(Field)) is { } id
+        KeptField.Value(record, Field) is { } id
             ? new() { [Field] = id }
             : null;
 
     public static void KeepInMetadata(Dictionary<string, object> metadata, Treatment treatment)
     {
-        if (Present(treatment.AdditionalProperties?.GetValueOrDefault(Field)) is { } id)
+        if (KeptField.Value(treatment.AdditionalProperties, Field) is { } id)
             metadata[Field] = id;
     }
 
     public static void RestoreFromMetadata(Treatment treatment, IDictionary<string, object>? metadata)
     {
-        if (metadata is not null && metadata.TryGetValue(Field, out var stored) && Present(stored) is { } id)
+        if (metadata is not null && metadata.TryGetValue(Field, out var stored) && KeptField.Present(stored) is { } id)
             (treatment.AdditionalProperties ??= new())[Field] = id;
     }
 
@@ -51,13 +49,7 @@ public static class TreatmentClientId
 
     /// <summary>The client id <paramref name="treatment"/> carries, or null.</summary>
     public static string? Of(Treatment treatment) =>
-        Present(treatment.AdditionalProperties?.GetValueOrDefault(Field)) switch
-        {
-            JsonElement { ValueKind: JsonValueKind.String } id => id.GetString(),
-            JsonElement id => id.GetRawText(),
-            { } id => id.ToString(),
-            null => null,
-        };
+        KeptField.AnyKindAsText(treatment.AdditionalProperties, Field);
 
     /// <summary>The client id inside a serialized additional-properties object, or null.</summary>
     public static string? Of(string? additionalPropertiesJson)
@@ -68,8 +60,7 @@ public static class TreatmentClientId
         using var doc = JsonDocument.Parse(additionalPropertiesJson);
         return doc.RootElement.ValueKind == JsonValueKind.Object
             && doc.RootElement.TryGetProperty(Field, out var id)
-            && Present(id) is not null
-                ? id.ValueKind == JsonValueKind.String ? id.GetString() : id.GetRawText()
+                ? KeptField.AnyKindAsText(id)
                 : null;
     }
 
@@ -89,7 +80,4 @@ public static class TreatmentClientId
         && incoming is not null
         && stored is not null
         && !string.Equals(incoming, stored, StringComparison.Ordinal);
-
-    private static object? Present(object? id) =>
-        id is null or JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : id;
 }

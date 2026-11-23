@@ -1,11 +1,10 @@
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.NocturneRemote;
 
 /// <summary>
-///     Stamps V4 records for import: preserves the source Id as LegacyId,
-///     clears Id for fresh UUID v7 generation, and sets DataSource.
+///     Prepares V4 records for import: the source Id becomes the LegacyId and the Id is cleared, so
+///     the publish stamps a local one.
 /// </summary>
 public static class ImportHelper
 {
@@ -19,7 +18,6 @@ public static class ImportHelper
         {
             record.LegacyId = record.Id.ToString();
             record.Id = Guid.Empty;
-            record.DataSource = DataSources.NocturneRemoteConnector;
         }
 
         return list;

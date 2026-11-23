@@ -57,11 +57,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// The current UTC time truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores, so
     /// that a stamp held in memory equals the one read back from its row.
     /// </summary>
-    public static DateTime UtcNowAtStoredPrecision()
-    {
-        var now = DateTime.UtcNow;
-        return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
-    }
+    public static DateTime UtcNowAtStoredPrecision() => AtStoredPrecision(DateTime.UtcNow);
+
+    /// <summary><paramref name="value"/> truncated to the microsecond a PostgreSQL <c>timestamptz</c> stores.</summary>
+    public static DateTime AtStoredPrecision(DateTime value) =>
+        value.AddTicks(-(value.Ticks % TimeSpan.TicksPerMicrosecond));
 
     /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
@@ -188,6 +188,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TotpStepUpTokenEntity> TotpStepUpTokens { get; set; }
 
+    public DbSet<TrustedDeviceEntity> TrustedDevices { get; set; }
+
     /// <summary>
     /// ASP.NET Core Data Protection key ring — persisted so keys survive container restarts.
     /// Not tenant-scoped; no RLS.
@@ -279,6 +281,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<PlatformPolicyEntity> PlatformPolicy { get; set; } = null!;
 
+    public DbSet<TeamEntity> Teams { get; set; } = null!;
+
+    public DbSet<TeamMemberEntity> TeamMembers { get; set; } = null!;
+
+    public DbSet<TeamInviteEntity> TeamInvites { get; set; } = null!;
+
+    public DbSet<TeamAccessLinkEntity> TeamAccessLinks { get; set; } = null!;
+
+    public DbSet<TeamTenantAccessEntity> TeamTenantAccess { get; set; } = null!;
+
+    public DbSet<TeamTenantAccessRoleEntity> TeamTenantAccessRoles { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
@@ -335,6 +349,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<UploaderSnapshotEntity> UploaderSnapshots { get; set; }
 
+    public DbSet<SensorStateReportEntity> SensorStateReports { get; set; }
+
     public DbSet<DeviceStatusExtrasEntity> DeviceStatusExtras { get; set; }
 
     public DbSet<DeviceEntity> Devices { get; set; }
@@ -373,13 +389,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TenantMemberRoleEntity> TenantMemberRoles { get; set; } = null!;
 
+    public DbSet<TenantMemberReasonEntity> TenantMemberReasons { get; set; } = null!;
+
+    public DbSet<TenantMemberReasonRoleEntity> TenantMemberReasonRoles { get; set; } = null!;
+
     // Alert Engine entities
 
     public DbSet<AlertRuleEntity> AlertRules { get; set; }
 
     public DbSet<AlertConditionTimerEntity> AlertConditionTimers { get; set; }
 
+    public DbSet<AlertConditionNotTrueEntity> AlertConditionNotTrue { get; set; }
+
     public DbSet<AlertTrackerStateEntity> AlertTrackerState { get; set; }
+
+    public DbSet<AlertEvaluatedReadingEntity> AlertEvaluatedReadings { get; set; }
 
     public DbSet<AlertExcursionEntity> AlertExcursions { get; set; }
 
@@ -527,7 +551,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private static Type[] Implementing<TMarker>() => [.. MappedEntityTypes.Where(typeof(TMarker).IsAssignableFrom)];
 
     /// <summary>
-    /// The device-status snapshot tables, upserted on the <see cref="ISyncDedupable"/> key.
+    /// The tables a device status decomposes into (<see cref="V4RecordKind.DeviceStatus"/>): the APS,
+    /// pump and uploader snapshots, upserted on the <see cref="ISyncDedupable"/> key, and the sensor
+    /// state report, keyed by its status's correlation id.
     /// </summary>
     internal static readonly Type[] V4SnapshotEntities =
         [.. V4RecordTables.OfKind(V4RecordKind.DeviceStatus).Select(t => t.Entity)];

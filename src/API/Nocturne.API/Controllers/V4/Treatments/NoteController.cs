@@ -38,29 +38,19 @@ public class NoteController(INoteRepository repo)
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Note", "note", "notes");
+    protected override V4BulkNaming BulkNaming => new("Note", "notes");
 
-    protected override Note MapCreateToModel(UpsertNoteRequest request) => new()
+    protected override Note MapCreateToModel(UpsertNoteRequest request) => new Note
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Text = request.Text ?? string.Empty,
         EventType = request.EventType,
         IsAnnouncement = request.IsAnnouncement,
         SyncIdentifier = request.SyncIdentifier,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override Note MapUpdateToModel(Guid id, UpsertNoteRequest request, Note existing) => new()
+    protected override Note MapUpdateToModel(Guid id, UpsertNoteRequest request, Note existing) => new Note
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Text = request.Text ?? string.Empty,
         EventType = request.EventType,
         IsAnnouncement = request.IsAnnouncement,
@@ -69,7 +59,7 @@ public class NoteController(INoteRepository repo)
         CreatedAt = existing.CreatedAt,
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Delete a note by its external sync identifier (dataSource + syncIdentifier pair).

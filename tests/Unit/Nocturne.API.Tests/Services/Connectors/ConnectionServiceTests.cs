@@ -10,9 +10,11 @@ using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.Services;
 using Xunit;
 
@@ -23,12 +25,16 @@ public class ConnectionServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 16, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid Viewer = Guid.NewGuid();
+    private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly string SleepType = nameof(SyncDataType.Sleep);
 
     private readonly Mock<ISourceOwnedDataReader> _sourceData = new();
     private readonly Mock<IOAuthGrantRepository> _grants = new();
     private readonly Mock<IConnectorHealthService> _health = new();
     private readonly Mock<IDataSourceService> _dataSources = new();
+    private readonly Mock<ITenantMembershipRepository> _members = new();
+    private readonly Mock<ISubjectRepository> _subjects = new();
+    private bool _viewerMayKeep;
     private readonly List<WriterBucket> _buckets = [];
     private readonly Dictionary<string, Dictionary<string, long>> _importCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<OAuthGrantRecord> _grantRecords = [];
@@ -67,8 +73,8 @@ public class ConnectionServiceTests
 
         return new ConnectionService(
                 _sourceData.Object, _grants.Object, health ?? _health.Object, devices.Object, _dataSources.Object,
-                new FakeTimeProvider(Now))
-            .GetConnectionsAsync(Viewer);
+                _members.Object, _subjects.Object, Tenant(), new FakeTimeProvider(Now))
+            .GetConnectionsAsync(Viewer, _viewerMayKeep);
     }
 
     private static OAuthGrantRecord Grant(
@@ -84,6 +90,18 @@ public class ConnectionServiceTests
             Guid.NewGuid(), Guid.NewGuid(), clientEntityId, client, identity,
             subject ?? Viewer, null, type, ["*"], label, Now.UtcDateTime.AddDays(-10), lastUsedAt, null, null,
             revokedAt, null, null, null, null, null, false, false);
+
+    private static OAuthGrantRecord DeviceCredential(Guid maker, DateTime? stopsAt) =>
+        Grant(OAuthGrantTypes.Direct, "Camp uploader", subject: Guid.NewGuid())
+            with { CreatedBySubjectId = maker, ExpiresAt = stopsAt };
+
+    private void Named(Guid subjectId, string name) =>
+        _members.Setup(m => m.ListPeopleAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new TenantMemberRecord(
+                Guid.NewGuid(), TenantId, subjectId, name, null, true, false, false, false, true, [], null,
+                null, null, false, Now.UtcDateTime.AddDays(5), null, null, Now.UtcDateTime.AddDays(-30), []),
+        ]);
 
     private static WriterBucket Bucket(
         string type, Guid? writer, string? dataSource, string? device, long count, int minutesAgo = 1) =>
@@ -458,6 +476,62 @@ public class ConnectionServiceTests
         overview.Connections.Single().LastUsedAt.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADeviceCredentialAMemberSetUpSaysWhenItStopsAndWhoSetItUp(bool viewerMayKeep)
+    {
+        var maker = Guid.NewGuid();
+        var stopsAt = Now.UtcDateTime.AddDays(5);
+        var camp = DeviceCredential(maker, stopsAt);
+        _grantRecords.Add(camp);
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, camp.Id, null, "xDrip", 12));
+        Named(maker, "Camp nurse");
+        _viewerMayKeep = viewerMayKeep;
+
+        var credential = (await ListAsync()).Connections.Single().Credentials.Single();
+
+        credential.StopsAt.Should().Be(stopsAt);
+        credential.HasStopped.Should().BeFalse();
+        credential.SetUpByName.Should().Be("Camp nurse");
+        credential.CanKeep.Should().Be(viewerMayKeep);
+    }
+
+    [Fact]
+    public async Task ADeviceCredentialPastItsStopSaysItStopped()
+    {
+        var maker = Guid.NewGuid();
+        var camp = DeviceCredential(maker, Now.UtcDateTime.AddDays(-1));
+        _grantRecords.Add(camp);
+        _buckets.Add(Bucket(SourceDataTypes.Glucose, camp.Id, null, "xDrip", 12, minutesAgo: 60 * 30));
+        Named(maker, "Camp nurse");
+
+        var credential = (await ListAsync()).Connections.Single().Credentials.Single();
+
+        credential.StopsAt.Should().Be(Now.UtcDateTime.AddDays(-1));
+        credential.HasStopped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OnlyADeviceCredentialAMemberSetUpWithAnExpiryCarriesAStop()
+    {
+        var open = DeviceCredential(Guid.NewGuid(), stopsAt: null);
+        var ownExpiring = Grant(OAuthGrantTypes.Direct, "Mine") with { ExpiresAt = Now.UtcDateTime.AddDays(2) };
+        var revoked = DeviceCredential(Guid.NewGuid(), Now.UtcDateTime.AddDays(2)) with { RevokedAt = Now.UtcDateTime };
+        _grantRecords.AddRange([open, ownExpiring, revoked]);
+        _buckets.AddRange(
+        [
+            Bucket(SourceDataTypes.Glucose, open.Id, null, "a", 1),
+            Bucket(SourceDataTypes.Glucose, ownExpiring.Id, null, "b", 1),
+            Bucket(SourceDataTypes.Glucose, revoked.Id, null, "c", 1),
+        ]);
+        _viewerMayKeep = true;
+
+        var credentials = (await ListAsync()).Connections.SelectMany(c => c.Credentials).ToList();
+
+        credentials.Should().HaveCount(3).And.OnlyContain(c => c.StopsAt == null && !c.CanKeep && c.SetUpByName == null);
+    }
+
     [Fact]
     public async Task RecordsWithNoWriterGoToTheirConnectorOrToOtherSources()
     {
@@ -508,7 +582,9 @@ public class ConnectionServiceTests
 
     private ConnectionService Service() =>
         new(_sourceData.Object, _grants.Object, _health.Object, Mock.Of<IClientDeviceService>(), _dataSources.Object,
-            new FakeTimeProvider(Now));
+            _members.Object, _subjects.Object, Tenant(), new FakeTimeProvider(Now));
+
+    private static ITenantAccessor Tenant() => Mock.Of<ITenantAccessor>(t => t.TenantId == TenantId);
 
     private void Owns(OAuthGrantRecord grant) =>
         _grants.Setup(g => g.FindOfSubjectAsync(grant.Id, Viewer, It.IsAny<CancellationToken>())).ReturnsAsync(grant);

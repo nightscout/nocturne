@@ -23,7 +23,7 @@ public class GlookoV4TreatmentMapperSsv2InsulinEventTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
     }
 
     private static GlookoSsv2InsulinEvent Event(
@@ -53,7 +53,6 @@ public class GlookoV4TreatmentMapperSsv2InsulinEventTests
         b.Insulin.Should().Be(4.5);
         b.BolusType.Should().Be(BolusType.Normal);
         b.Automatic.Should().BeFalse();
-        b.DataSource.Should().Be("glooko-connector");
         b.InsulinContext.Should().NotBeNull();
     }
 

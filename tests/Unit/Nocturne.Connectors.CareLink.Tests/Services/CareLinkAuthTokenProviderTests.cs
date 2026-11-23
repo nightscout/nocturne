@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
 
@@ -171,9 +172,7 @@ public class CareLinkAuthTokenProviderTests
     private static TestableProvider CreateProvider(CareLinkFakeHandler handler, TimeProvider? clock = null)
     {
         clock ??= TimeProvider.System;
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenantAccessor = ResolvedTenant.Accessor();
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
         retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -182,7 +181,7 @@ public class CareLinkAuthTokenProviderTests
             new HttpClient(handler),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<CareLinkConnectorConfiguration>(null, null, CareLinkConstants.Servers.Eu),
-            tenantAccessor.Object,
+            tenantAccessor,
             NullLogger<CareLinkAuthTokenProvider>.Instance,
             retryDelay.Object,
             clock,

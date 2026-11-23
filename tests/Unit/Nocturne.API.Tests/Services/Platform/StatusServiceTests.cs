@@ -225,7 +225,7 @@ public class StatusServiceTests
             _mockDemoModeService.Object,
             tenantFactory.Object,
             new CollectionLastModifiedReader(tenantFactory.Object),
-            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
+            new TenantRepository(tenantFactory.Object), new SubjectRepository(tenantFactory.Object, AccountLinkRoutes.Off), new RoleRepository(tenantFactory.Object), new OidcProviderRepository(tenantFactory.Object),
             _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),
@@ -1191,7 +1191,7 @@ public class StatusServiceTests
         var flights = new CacheFlights();
         StatusService Service() => new(
             _configuration, cache, flights, _mockDemoModeService.Object, Mock.Of<INocturneDbContextFactory>(), Mock.Of<ICollectionLastModifiedReader>(),
-            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>()),
+            new TenantRepository(Mock.Of<INocturneDbContextFactory>()), new SubjectRepository(Mock.Of<INocturneDbContextFactory>(), AccountLinkRoutes.Off),
             new RoleRepository(Mock.Of<INocturneDbContextFactory>()), new OidcProviderRepository(Mock.Of<INocturneDbContextFactory>()),
             _httpContextAccessor, _mockTenantAccessor.Object, TestPublicAccessCache.Create(),
             new TenantGlucoseUnits(
@@ -1629,7 +1629,7 @@ public class StatusServiceTests
             _mockDemoModeService.Object,
             mockTenantDbContextFactory.Object,
             new CollectionLastModifiedReader(mockTenantDbContextFactory.Object),
-            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
+            new TenantRepository(mockTenantDbContextFactory.Object), new SubjectRepository(mockTenantDbContextFactory.Object, AccountLinkRoutes.Off), new RoleRepository(mockTenantDbContextFactory.Object), new OidcProviderRepository(mockTenantDbContextFactory.Object),
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor,
             TestPublicAccessCache.Create(),

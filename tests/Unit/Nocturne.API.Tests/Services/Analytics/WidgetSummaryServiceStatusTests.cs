@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;

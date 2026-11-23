@@ -19,9 +19,9 @@ public static class MemberScopeResolver
     /// may do (an OAuth access token's consented scopes, a direct grant's scopes, an API key's
     /// grant scopes, a guest link's scopes) and is intersected with membership instead. Membership
     /// resolution must never widen a scoped credential, or the consent decision is erased. Keyed on
-    /// the credential type rather than on "the scope list is empty" because an interactive OIDC
-    /// login carries the identity provider's own scopes (<c>openid</c>, <c>profile</c>), which are
-    /// not Nocturne data scopes. Types absent from this set are treated as scoped (fail closed).
+    /// the credential type rather than on "the scope list is empty", so a scoped credential granted
+    /// no scopes is not read as unscoped. Types absent from this set are treated as scoped (fail
+    /// closed).
     /// </summary>
     /// <remarks>
     /// Per-type basis for membership:
@@ -29,12 +29,9 @@ public static class MemberScopeResolver
     /// <item><see cref="AuthType.SessionCookie"/> — <c>SessionCookieHandler</c> never sets
     /// <c>Scopes</c>; the session JWT's permission claims are the subject's global
     /// <c>SubjectRoles</c>, which are unrelated to this tenant.</item>
-    /// <item><see cref="AuthType.OidcToken"/> — <c>OidcTokenHandler</c> sets <c>Scopes</c> to the
-    /// provider's configured scopes (<c>openid</c>, <c>profile</c>, <c>email</c>), an outbound
-    /// protocol list identical for every user of that provider, not a per-user Nocturne grant.</item>
     /// <item><see cref="AuthType.LegacyJwt"/> — structurally unscoped:
     /// <c>OAuthAccessTokenHandler</c> runs first and claims every JWT bearing a <c>scope</c> or
-    /// <c>client_id</c> claim, so a JWT that reaches <c>LegacyJwtHandler</c> has neither.
+    /// <c>client_id</c> claim, so a JWT that reaches <c>SessionBearerHandler</c> has neither.
     /// <c>SessionService</c> mints session tokens through the same <c>IJwtService</c>, so this is
     /// the same credential as a session cookie presented on a different transport.</item>
     /// </list>
@@ -51,7 +48,6 @@ public static class MemberScopeResolver
     public static readonly IReadOnlySet<AuthType> UnscopedCredentialTypes = new HashSet<AuthType>
     {
         AuthType.SessionCookie,
-        AuthType.OidcToken,
         AuthType.LegacyJwt,
     };
 

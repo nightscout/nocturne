@@ -1,8 +1,10 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Models;
@@ -116,7 +118,8 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectionsOverview), 200)]
     public async Task<ActionResult<ConnectionsOverview>> GetConnections(CancellationToken cancellationToken = default) =>
-        Ok(await _connectionService.GetConnectionsAsync(HttpContext.GetSubjectId(), cancellationToken));
+        Ok(await _connectionService.GetConnectionsAsync(
+            HttpContext.GetSubjectId(), HttpContext.MayKeepDeviceCredentials(), cancellationToken));
 
     /// <summary>
     /// Get all active data sources that have been sending data to this Nocturne instance.
@@ -173,7 +176,7 @@ public class ServicesController : ControllerBase
     /// </summary>
     /// <returns>List of available connectors</returns>
     [HttpGet("connectors")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AvailableConnector>), 200)]
     public async Task<ActionResult<List<AvailableConnector>>> GetAvailableConnectors(
@@ -185,7 +188,7 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
-    /// Get capabilities for a specific connector.
+    /// Get capabilities for a specific connector, and when an API secret the caller saves on it stops.
     /// </summary>
     /// <param name="id">The connector ID (e.g., "dexcom", "libre")</param>
     /// <returns>Connector capabilities</returns>
@@ -202,6 +205,14 @@ public class ServicesController : ControllerBase
         {
             return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
         }
+
+        if (!ConnectorConfigurationService.AdoptsSecret(id))
+            return Ok(capabilities);
+
+        if (ConnectorSecretSaver.MayAdoptFor(HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped()))
+            capabilities.SavedSecretStopsAt = HttpContext.CallerAccessEndsAt();
+        else
+            capabilities.SavedSecretMakesNoCredential = true;
 
         return Ok(capabilities);
     }
@@ -392,7 +403,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data summary with counts by type</returns>
     [HttpGet("connectors/{id}/data-summary")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
     [ProducesResponseType(500)]
@@ -473,7 +484,8 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
+    [LimitDelegatedConnectorSync]
     [DenyDemoSubject]
     [RemoteCommand(
         Invalidates = [
@@ -486,6 +498,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(409)]
+    [ProducesResponseType(404)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > TriggerConnectorSync(
@@ -529,7 +542,8 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Sync result with success status and details.</returns>
     [HttpPost("connectors/{id}/reset-cursor")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
+    [LimitDelegatedConnectorSync]
     [DenyDemoSubject]
     [RemoteCommand(
         Invalidates = [
@@ -542,6 +556,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(409)]
+    [ProducesResponseType(404)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > ResetConnectorCursor(
@@ -569,7 +584,7 @@ public class ServicesController : ControllerBase
         _logger.LogInformation(
             "Cursor reset requested for connector {ConnectorId} (from {From})",
             id,
-            request.From?.ToString("o") ?? "beginning");
+            request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
         return SyncOrConflict(result);
@@ -583,7 +598,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete sync status including timestamps for entries, treatments, and connector state</returns>
     [HttpGet("connectors/{id}/sync-status")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorSyncStatus), 200)]
     [ProducesResponseType(400)]

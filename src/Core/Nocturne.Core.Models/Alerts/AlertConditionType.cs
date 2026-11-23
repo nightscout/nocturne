@@ -146,4 +146,14 @@ public enum AlertConditionType
     /// <summary>A CGM transmitter battery reading (voltage, resistance or days in use) comparison.</summary>
     [EnumMember(Value = "transmitter_battery"), JsonStringEnumMemberName("transmitter_battery")]
     TransmitterBattery,
+
+    /// <summary>The sensor's state is one of a configured set, optionally for a sustained duration.</summary>
+    [EnumMember(Value = "sensor_state"), JsonStringEnumMemberName("sensor_state")]
+    SensorState,
+
+    [EnumMember(Value = "eventual_glucose"), JsonStringEnumMemberName("eventual_glucose")]
+    EventualGlucose,
+
+    [EnumMember(Value = "carbs_required"), JsonStringEnumMemberName("carbs_required")]
+    CarbsRequired,
 }

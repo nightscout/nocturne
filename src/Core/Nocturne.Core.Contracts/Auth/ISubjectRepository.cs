@@ -13,8 +13,8 @@ namespace Nocturne.Core.Contracts.Auth;
 /// <c>subject_pin</c> policy narrows them only on a context pinned to a subject. Every method runs
 /// as the scope's reader unless its remarks name a pin: a platform context where the caller has no
 /// resolved tenant, the subject pin where the caller is the subject's own connection, the setup
-/// flow's tenant pin, and the system pin for the two setup-state reads a public share host must
-/// answer, which <c>SystemPinnedAllowlistTests</c> limits to their callers.
+/// flow's tenant pin, and the system pin for the reads a public share host must answer, which
+/// <c>SystemPinnedAllowlistTests</c> limits to their callers.
 /// </remarks>
 public interface ISubjectRepository
 {
@@ -34,25 +34,62 @@ public interface ISubjectRepository
     Task<SubjectRecord?> FindSystemSubjectAsync(string name, CancellationToken ct);
 
     /// <summary>
-    /// The subject holding a membership of <paramref name="tenantId"/> whose username is
-    /// <paramref name="username"/>, with its roles; with <paramref name="activeOnly"/>, only an
-    /// active one. Null when no member matches.
+    /// The subject holding a membership of <paramref name="tenantId"/> in force at
+    /// <paramref name="now"/>, recomputed first when a reason of it has lapsed, whose username is <paramref name="username"/>, with its roles; with
+    /// <paramref name="activeOnly"/>, only an active one. Null when no member matches.
     /// </summary>
-    Task<SubjectRecord?> FindMemberByUsernameAsync(Guid tenantId, string username, bool activeOnly, CancellationToken ct);
+    Task<SubjectRecord?> FindMemberByUsernameAsync(Guid tenantId, string username, bool activeOnly, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// The first-run owner candidate: the earliest active subject that is neither a system subject
-    /// nor the demo visitor, roles not read. Setup only runs while no member of the tenant holds a
-    /// credential, so this is the account the owner options step created or reused, and the
-    /// ordering is what lets the options and complete steps resolve the same row.
+    /// The active members of <paramref name="tenantId"/> whose membership is in force at
+    /// <paramref name="now"/>, recomputed first when a reason of it has lapsed, neither system nor demo subjects, whose confirmed address is
+    /// <paramref name="email"/> by <see cref="EmailAddresses.AreSame"/>, roles not read. One address
+    /// can sit on several accounts, so there may be more than one.
+    /// </summary>
+    Task<IReadOnlyList<SubjectRecord>> FindMembersByConfirmedEmailAsync(Guid tenantId, string email, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// The subject the first-run setup owner step recorded for <paramref name="tenantId"/>
+    /// (<see cref="CreateSetupOwnerAsync"/>), roles not read, while it is still safe to hand to
+    /// whoever runs setup; otherwise null, and the step creates and records a new one.
     /// </summary>
     /// <remarks>
     /// Pinned to <paramref name="tenantId"/>: setup runs on the apex host, where the scope has no
-    /// tenant, and the flow pins the one it is setting up. <c>subjects</c> is not tenant-scoped, so
-    /// the read sees every subject on the instance, the demo visitor included, which is why the
-    /// demo exclusion is part of the predicate.
+    /// tenant, and the flow pins the one it is setting up, so the login codes read are that
+    /// tenant's.
+    /// <para>
+    /// Setup resumes the subject it recorded for this tenant and no other. The record is set in
+    /// the save that creates the subject and cleared when setup completes as it
+    /// (<see cref="ClearSetupOwnerAsync"/>) or when the subject is deleted.
+    /// </para>
+    /// <para>
+    /// The recorded subject is then checked, because setup is first-come and the subject is about
+    /// to pass to whoever runs it. It is refused unless it is active, neither a system subject nor
+    /// the demo visitor, and holds none of these, which the step never writes: a passkey, a
+    /// provider link (to any provider, enabled or not, since a provider enabled again signs that
+    /// identity in again), an authenticator, an unexpired session, an unspent and unexpired
+    /// recovery code from an administrator or the operator, an emailed recovery link, a recovery
+    /// session or a login code handed to another browser, or a confirmed address while a recovery
+    /// link can be delivered (<see cref="IAccountLinkRoute"/>). The platform-admin flag is not
+    /// refused: the startup bootstrap (<see cref="GrantPlatformAdminAsync"/>) grants it to the
+    /// oldest tenant's owner whether or not that owner holds a factor, so the recorded subject can
+    /// hold it after a restart.
+    /// </para>
     /// </remarks>
     Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Stores a subject as <see cref="CreateAsync"/> does and records it as the subject the setup
+    /// owner step created for <paramref name="tenantId"/> (<see cref="FindSetupOwnerCandidateAsync"/>),
+    /// in one save, so no subject the step creates is left unrecorded.
+    /// </summary>
+    Task<Guid> CreateSetupOwnerAsync(Guid tenantId, NewSubject subject, CancellationToken ct);
+
+    /// <summary>
+    /// Ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>) of every tenant
+    /// that names <paramref name="subjectId"/>, once setup has completed as that subject.
+    /// </summary>
+    Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
     /// The system subject the scope's tenant issues its API tokens to, or null when it has never
@@ -73,16 +110,36 @@ public interface ISubjectRepository
     /// </summary>
     Task<Guid> EnsureDeviceSubjectAsync(CancellationToken ct);
 
-    /// <summary>The pending access requests, newest first, roles not read. A system subject is never one.</summary>
+    /// <summary>
+    /// The pending access requests, newest first, roles not read. A system subject is never one, and
+    /// neither is a pending subject with no passkey: its enrolment never registered one, so approving
+    /// it would leave an account no one can sign in to.
+    /// </summary>
     Task<IReadOnlyList<SubjectRecord>> ListPendingAccessRequestsAsync(CancellationToken ct);
 
     /// <summary>
-    /// The subjects part-way through an anonymous enrolment that <paramref name="match"/> names:
-    /// not a system subject, holding no passkey and no working OIDC identity. Newest first, by id,
-    /// which for UUID v7 ids is creation order. Membership is not consulted here; the caller asks
-    /// it per candidate under that subject's own pin.
+    /// Whether a pending access request of the kind <see cref="ListPendingAccessRequestsAsync"/>
+    /// lists is under <paramref name="name"/> and has a pending request to join
+    /// <paramref name="tenantId"/>. A request filed on another tenant does not count.
     /// </summary>
-    Task<IReadOnlyList<Guid>> FindCredentiallessSubjectIdsAsync(EnrolmentMatch match, CancellationToken ct);
+    /// <remarks>
+    /// System-pinned: a public-share host's visitor gets the answer a member's host gives, though a
+    /// share is hidden the tenant's membership requests, which are tenant-scoped. The caller is
+    /// pinned by <c>SystemPinnedAllowlistTests</c>.
+    /// </remarks>
+    Task<bool> AnyPendingAccessRequestNamedAsync(Guid tenantId, string name, CancellationToken ct);
+
+    /// <summary>
+    /// Whether <paramref name="subjectId"/> is still what an anonymous enrolment's options step left
+    /// for <paramref name="match"/>: of the kind and under the name the match names, not a system
+    /// subject, and holding no way to sign in: no passkey, no identity-provider link, no
+    /// authenticator and no unexpired session. The complete step gives the subject a passkey, and an
+    /// invite enrolment signs it in without asking for a code, so a subject holding any of these is
+    /// an account, not an enrolment. Any provider link counts, not only one to an enabled provider,
+    /// for the reason <see cref="FindSetupOwnerCandidateAsync"/> gives. Membership is not consulted
+    /// here; the caller asks it under that subject's own pin.
+    /// </summary>
+    Task<bool> IsEnrollingSubjectAsync(Guid subjectId, EnrolmentMatch match, CancellationToken ct);
 
     /// <summary>
     /// Applies <paramref name="edit"/> to the subject and stamps it updated. A null member of the
@@ -90,7 +147,7 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>
     /// Deactivating an active subject is refused with <see cref="SubjectChange.LastOwnerOf"/> while it
-    /// is the last owner who can sign in of any tenant, since a deactivated owner no longer counts.
+    /// is the last owner of any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, since a deactivated owner no longer counts.
     /// The check holds the owner lock of each tenant the subject belongs to, in ascending tenant id,
     /// until the change commits. Over a unit, deactivate inside the unit's commit.
     /// </remarks>
@@ -104,8 +161,16 @@ public interface ISubjectRepository
     /// </summary>
     Task<SubjectRecord?> UpdateProfileAsync(Guid subjectId, SubjectProfile profile, CancellationToken ct);
 
-    /// <summary>Sets, or with null clears, the message a subject submitted with its access request.</summary>
-    Task<bool> SetAccessRequestMessageAsync(Guid subjectId, string? message, CancellationToken ct);
+    /// <summary>
+    /// Confirms the subject's address at <paramref name="now"/> when <paramref name="email"/> is the
+    /// address it holds, compared trimmed and without regard to case. The address the proof was for
+    /// is named, so a proof for an address the account has since left confirms nothing, including
+    /// when the change commits while this call runs: it is one statement conditional on the stored
+    /// address. An address already confirmed keeps its first time. Besides a provider's verified
+    /// assertion at creation or sign-in (<see cref="NewSubject.EmailConfirmedAt"/>,
+    /// <see cref="SubjectEdit.EmailConfirmedAt"/>), this is the only way an address becomes confirmed.
+    /// </summary>
+    Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email, DateTime now, CancellationToken ct);
 
     /// <summary>
     /// Deletes the subject, and in the same transaction clears its personal data from the three
@@ -119,9 +184,16 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>
     /// Refused with <see cref="SubjectChange.LastOwnerOf"/> while an active subject is the last owner
-    /// who can sign in of any tenant, whether or not the tenant has other members: the cascade would
-    /// remove its membership. An inactive subject is never refused, since it counts as no owner. The check holds the owner lock of each tenant the subject belongs to, in
-    /// ascending tenant id, until the delete commits.
+    /// of any tenant by <c>TenantOwnerFilter.IsLastOwnerAsync</c>, whether or not the tenant has other members: the cascade would remove
+    /// its membership. An inactive subject is never refused, since it counts as no owner. The check
+    /// holds the owner lock of each tenant the subject belongs to, in ascending tenant id, until the
+    /// delete commits.
+    /// <para>
+    /// A team the subject is the only member of is deleted with them. A team with other members is
+    /// refused with <see cref="SubjectChange.LastManagerOf"/> while the subject is its last manager by
+    /// <c>TeamManagerFilter.IsLastManagerAsync</c>. Both hold the manager lock of each team the subject
+    /// belongs to, in ascending team id, until the delete commits.
+    /// </para>
     /// </remarks>
     Task<SubjectChange> DeleteAsync(Guid subjectId, CancellationToken ct);
 
@@ -133,8 +205,8 @@ public interface ISubjectRepository
     Task<bool?> IsDemoSubjectAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
-    /// Whether the subject holds platform admin; false when there is no such subject. Read as the
-    /// scope's reader, unlike <see cref="GetSignInStateAsync"/>.
+    /// Whether the subject holds platform admin and is active; false when there is no such subject.
+    /// Read as the scope's reader, unlike <see cref="GetSignInStateAsync"/>.
     /// </summary>
     Task<bool> IsPlatformAdminAsync(Guid subjectId, CancellationToken ct);
 
@@ -186,6 +258,50 @@ public interface ISubjectRepository
     Task<Guid> AddOidcIdentityAsync(NewSubjectOidcIdentity identity, CancellationToken ct);
 
     /// <summary>
+    /// Makes <paramref name="holderId"/> the subject first-run setup completes, in place of the
+    /// subject <paramref name="createdId"/> the owner step created: the created subject's membership,
+    /// username, display name and global roles pass to the holder and the created subject is deleted.
+    /// The membership passes as a removal (system) and a new membership of the holder (setup) with
+    /// the same access, so the audit log names the holder as the owner who set up the site.
+    /// False, with nothing written, unless both qualify, checked and written in one serializable
+    /// transaction.
+    /// </summary>
+    /// <remarks>
+    /// The caller has just proved <paramref name="identityId"/>, so the holder qualifies only when
+    /// nothing else could make someone else the owner: it is active, neither a system nor a demo
+    /// subject, not a platform admin, a member of no tenant, holds no passkey and no authenticator,
+    /// and <paramref name="identityId"/> is the only provider identity it holds. A session and a last
+    /// login are allowed, and the holder's refresh tokens are revoked in the same transaction. The
+    /// owner step can resume an earlier subject, so the created subject is deleted only when it holds
+    /// what that step writes and is otherwise unclaimed, by the same rule as
+    /// <see cref="TakeUnclaimedOidcIdentityAsync"/>: its one membership is of the tenant
+    /// <paramref name="tenantSlug"/> names, the tenant this setup run is for, and holds the owner role;
+    /// it holds no global role but admin; nothing else names it, and it holds no provider identity.
+    /// Deleting it ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>).
+    /// </remarks>
+    Task<bool> AdoptForSetupAsync(Guid createdId, Guid holderId, Guid identityId, string tenantSlug, CancellationToken ct);
+
+    /// <summary>
+    /// Links identity <paramref name="identityId"/> to <paramref name="subjectId"/>, with the address
+    /// <paramref name="email"/> the provider now asserts, when the subject
+    /// holding it is unclaimed, deleting that subject, and returns the new link's id. Null, with
+    /// nothing written, when it is not, checked and written in one serializable transaction. The
+    /// rows removed are the holder's <c>subjects</c> row and, by cascade, its
+    /// <c>subject_oidc_identities</c> and <c>subject_roles</c>; audit rows naming it are kept.
+    /// </summary>
+    /// <remarks>
+    /// Unclaimed: it is active, neither a system nor a demo subject, not a platform admin, has never
+    /// signed in (no last login and no refresh token row), holds no other provider identity, and no
+    /// row of any other table with a foreign key to <c>subjects</c> names it, so the cascade removes
+    /// nothing else. Of the columns that hold a subject id with no foreign key, membership requests,
+    /// client devices, device codes, alert invites and alert receipts are checked too; the rest are
+    /// written only by a signed-in subject, so the never-signed-in clause is what keeps them empty.
+    /// The tenant-scoped tables are read tenant by tenant. A reader whose history is clamped could
+    /// not see every row, so for one the answer is always null.
+    /// </remarks>
+    Task<Guid?> TakeUnclaimedOidcIdentityAsync(Guid identityId, Guid subjectId, string? email, CancellationToken ct);
+
+    /// <summary>
     /// Records a sign-in with identity <paramref name="identityId"/> at <paramref name="now"/>, and
     /// when <paramref name="email"/> is given the address the provider now asserts. False when
     /// there is no such identity.
@@ -206,9 +322,8 @@ public interface ISubjectRepository
     Task<FactorRemovalResult> TryRemoveFactorAsync(Guid subjectId, SignInFactor factor, CancellationToken ct);
 
     /// <summary>
-    /// How many subjects would be left with no sign-in method if provider
-    /// <paramref name="providerId"/> went away: active, non-system, non-demo subjects whose only
-    /// working factor is an identity at that provider.
+    /// How many subjects holding a working identity at <paramref name="providerId"/>, on any tenant,
+    /// would be unable to sign in if that provider went away (<c>OrphanedSubjectFilter</c>).
     /// </summary>
     Task<int> CountStrandedByProviderAsync(Guid providerId, CancellationToken ct);
 
@@ -222,13 +337,6 @@ public interface ISubjectRepository
     /// pinned by <c>SystemPinnedAllowlistTests</c>.
     /// </remarks>
     Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct);
-
-    /// <summary>
-    /// Whether <paramref name="tenantId"/> has an active, non-system, non-demo member with no
-    /// passkey and no working OIDC identity: an account that cannot sign in at all.
-    /// </summary>
-    /// <remarks>System-pinned, as <see cref="TenantHasCredentialedMemberAsync"/> is.</remarks>
-    Task<bool> HasOrphanedMemberAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>When any subject was last updated, read as the scope's reader; null when there is none.</summary>
     Task<DateTime?> LastModifiedAsync(CancellationToken ct);

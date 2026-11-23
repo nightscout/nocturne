@@ -77,4 +77,50 @@ public class CanonicalGlucoseServiceTests
             since, null, null, null, It.IsAny<int>(), 0, true, null, null, It.IsAny<CancellationToken>(), null,
             GlucoseStreams.CanonicalExcludingEphemeral), Times.Once);
     }
+
+    [Theory]
+    [InlineData(1440)]
+    [InlineData(2000)]
+    [InlineData(3001)]
+    public async Task GetWindowAsync_ReturnsEveryReadingOfTheWindowNewestFirstPastAnyPageSize(int count)
+    {
+        var all = Enumerable.Range(0, count).Select(i => Reading(i)).ToList();
+        ServePaged(null, GlucoseStreams.CanonicalExcludingEphemeral, all);
+
+        var window = await CreateSut().GetWindowAsync(Now.AddHours(-24), Now);
+
+        window.Should().Equal(all);
+    }
+
+    [Fact]
+    public async Task GetWindowAsync_InDemoModeReadsOnlyTheDemoSource()
+    {
+        var all = Enumerable.Range(0, 1440).Select(i => Reading(i)).ToList();
+        ServePaged(DataSources.DemoService, GlucoseStreams.Canonical, all);
+
+        var window = await CreateSut(demoMode: true).GetWindowAsync(Now.AddHours(-24), Now);
+
+        window.Should().HaveCount(1440);
+    }
+
+    [Fact]
+    public async Task GetWindowAsync_WithNoReadingsIsEmpty()
+    {
+        ServePaged(null, GlucoseStreams.CanonicalExcludingEphemeral, []);
+
+        (await CreateSut().GetWindowAsync(Now.AddHours(-24), Now)).Should().BeEmpty();
+    }
+
+    private void ServePaged(string? source, GlucoseStreams streams, List<SensorGlucose> all) =>
+        _sgRepo.Setup(r => r.GetAsync(
+                Now.AddHours(-24), Now, null, source,
+                It.IsAny<int>(), 0, true, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), null, streams))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, string? _, int limit, int _, bool _,
+                DateTime? afterTimestamp, Guid? afterId, CancellationToken _, Guid? _, GlucoseStreams _) =>
+                all.Where(r => afterTimestamp is null
+                        || r.Timestamp < afterTimestamp
+                        || (r.Timestamp == afterTimestamp && r.Id.CompareTo(afterId!.Value) < 0))
+                    .OrderByDescending(r => r.Timestamp).ThenByDescending(r => r.Id)
+                    .Take(limit).ToList());
 }

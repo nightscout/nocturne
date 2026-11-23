@@ -93,7 +93,7 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(), TimeProvider.System);
+        MigrationJobHarness.CreateService(provider);
 
     private static TestMigrationConnectionRequest TestRequest() => new()
     {
@@ -148,7 +148,7 @@ public class MigrationFailureReportingTests
         // The migration client is a guarded connector client, so a mistyped host is refused before
         // the socket opens. Its message says which of "not found" and "forbidden address" happened;
         // the generic unreachable wording would throw that away.
-        var handler = new ThrowingHost(() => new Nocturne.Core.Models.Net.OutboundRefusedException(
+        var handler = new ThrowingHost(() => new Nocturne.Infrastructure.Outbound.OutboundRefusedException(
             "Could not find 'mynightscout.xyx'. Check the address is spelled correctly and that the site is online."));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
@@ -482,7 +482,7 @@ public class MigrationFailureReportingTests
                 """,
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(9);
         status.CollectionProgress["treatments"].FailureReason.Should()
@@ -500,7 +500,7 @@ public class MigrationFailureReportingTests
             CollectionOutcomes = "{ not an outcome array",
         };
 
-        var status = MigrationJob.StatusFromRecord(run);
+        var status = MigrationJob.StatusFromRecord(run, DateTime.UtcNow);
 
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(4);
         status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(2);

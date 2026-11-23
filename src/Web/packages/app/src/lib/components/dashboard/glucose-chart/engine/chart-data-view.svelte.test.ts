@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
-import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import type { DashboardChartData } from "@nocturne/api-client";
 import { transformChartData } from "@nocturne/charts/core";
 import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
 import { createStaticChartView, type ChartDataView } from "@nocturne/charts";

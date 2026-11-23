@@ -5,8 +5,8 @@
     getConnectorCapabilities,
     resetConnectorCursor,
   } from "#lib/api/generated/services.generated.remote.js";
-  import { SyncDataType } from "#lib/api/generated/nocturne-api-client.js";
-  import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+  import { SyncDataType } from "@nocturne/api-client";
+  import type { SyncResult } from "@nocturne/api-client";
   import {
     Card,
     CardContent,

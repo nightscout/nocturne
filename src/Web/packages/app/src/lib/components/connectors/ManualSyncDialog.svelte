@@ -8,7 +8,7 @@
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import { EmptyState } from "#lib/components/shared/index.js";
-  import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncResult } from "@nocturne/api-client";
   import type { SyncProgressEvent } from "#lib/websocket/types.js";
   import { formatSyncMessage } from "#lib/utils/sync-messages.js";
   import { tick } from "svelte";

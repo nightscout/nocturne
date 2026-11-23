@@ -7,9 +7,12 @@
     type Connection,
     type ConnectionCredential,
     type ConnectionStream,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { revoke as revokeAppGrant } from "#lib/api/generated/connectedApps.generated.remote.js";
-  import { revoke as revokeDirectGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import {
+    keep as keepDeviceCredential,
+    revoke as revokeDirectGrant,
+  } from "#lib/api/generated/directGrants.generated.remote.js";
   import { deleteConnectionRecords } from "#lib/api/generated/services.generated.remote.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -35,7 +38,8 @@
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
-  import { formatNumber } from "#lib/utils/formatting.js";
+  import { formatMediumDate, formatNumber } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectionLogo from "./ConnectionLogo.svelte";
   import ConnectionStatusLabel from "./ConnectionStatusLabel.svelte";
   import ConnectionTime from "./ConnectionTime.svelte";
@@ -47,6 +51,7 @@
     windowDays,
     activeWithinMinutes,
     canManage,
+    canSetUp,
     syncing = false,
     quickSyncing = false,
     supportsManualSync = true,
@@ -59,8 +64,10 @@
     windowDays: number | undefined;
     /** Minutes without a record after which a connection that sends is no longer active. */
     activeWithinMinutes: number | undefined;
-    /** Whether the viewer may configure, sync and delete the data of connectors and of their own credentials. */
+    /** Whether the viewer may delete the data of connectors and of their own credentials. */
     canManage: boolean;
+    /** Whether the viewer may configure and sync connectors. */
+    canSetUp: boolean;
     syncing?: boolean;
     quickSyncing?: boolean;
     supportsManualSync?: boolean;
@@ -95,6 +102,24 @@
       credential.isRevoked !== true &&
       !!credential.grantId
     );
+  }
+
+  let keepingId = $state<string | null>(null);
+
+  async function handleKeep(grantId: string) {
+    keepingId = grantId;
+    revokeError = null;
+    try {
+      await keepDeviceCredential(grantId);
+      toast.success("Connection kept.");
+    } catch (err) {
+      revokeError = describeSubmitError(
+        err,
+        "Failed to keep the connection. Try again."
+      );
+    } finally {
+      keepingId = null;
+    }
   }
 
   async function handleRevoke(grantId: string) {
@@ -341,6 +366,54 @@
                         Belongs to another member
                       </p>
                     {/if}
+                    {#if credential.stopsAt}
+                      {@const stopDate = formatMediumDate(accessEndDate(credential.stopsAt))}
+                      {@const maker = credential.setUpByName}
+                      {#if credential.hasStopped}
+                        <p
+                          class="flex items-start gap-1.5 text-sm text-warning"
+                          data-testid="credential-stop"
+                        >
+                          <CircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          <span>
+                            {#if maker}
+                              Stopped on {stopDate}. {maker} set it up.
+                            {:else}
+                              Stopped on {stopDate}.
+                            {/if}
+                          </span>
+                        </p>
+                      {:else}
+                        <p
+                          class="flex items-start gap-1.5 text-sm text-muted-foreground"
+                          data-testid="credential-stop"
+                        >
+                          <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          <span>
+                            {#if maker}
+                              Stops on {stopDate}. {maker} set it up.
+                            {:else}
+                              Stops on {stopDate}.
+                            {/if}
+                          </span>
+                        </p>
+                      {/if}
+                      {#if credential.canKeep && credential.grantId}
+                        {@const grantId = credential.grantId}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={keepingId === grantId}
+                          onclick={() => handleKeep(grantId)}
+                        >
+                          {#if keepingId === grantId}
+                            <Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+                          {/if}
+                          Keep this connection
+                        </Button>
+                      {/if}
+                    {/if}
                   </div>
                   {#if canRevoke(credential)}
                     {@const grantId = credential.grantId!}
@@ -456,6 +529,12 @@
           </section>
         {/if}
 
+        {#if canSetUp && !canManage && connection?.canDeleteRecords === true}
+          <p class="text-sm text-muted-foreground" data-testid="connection-delete-reason">
+            Only members who can manage this site's settings can delete synced data.
+          </p>
+        {/if}
+
         {#if canDeleteRecords}
           <Button
             variant="outline-destructive"
@@ -467,10 +546,10 @@
           </Button>
         {/if}
 
-        {#if isConnector && connection.connectorId && (canManage || onConnectorDetails)}
+        {#if isConnector && connection.connectorId && (canSetUp || onConnectorDetails)}
           {@const connectorId = connection.connectorId}
           <div class="flex flex-wrap gap-2">
-            {#if canManage}
+            {#if canSetUp}
               <Button
                 variant="outline"
                 size="sm"
@@ -480,7 +559,7 @@
                 Configure
               </Button>
             {/if}
-            {#if canManage && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
+            {#if canSetUp && supportsManualSync && connection.direction === ConnectionDirection.Fetches && connection.status !== ConnectionStatus.Disabled}
               <Button
                 variant="outline"
                 size="sm"

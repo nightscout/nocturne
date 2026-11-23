@@ -65,11 +65,11 @@ import {
   apsSnapshotClient,
   bgCheckClient,
   bolusClient,
+  carbIntakeClient,
   currentTherapyStateClient,
   deviceEventClient,
   noteClient,
   notificationsClient,
-  nutritionClient,
   profileClient,
   sensorGlucoseClient,
   trackerLegacyFallbacksClient,
@@ -85,7 +85,7 @@ import { isRecord } from "#lib/utils/type-guards.js";
 import {
   SyncPhase,
   type V4BasalInjectionStatus,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import {
@@ -535,7 +535,7 @@ export class RealtimeStore {
         trackersClient().getActiveInstances().catch(() => null),
         notificationsClient().getNotifications().catch(() => []),
         bolusClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
-        nutritionClient().getCarbIntakes(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
+        carbIntakeClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
         bgCheckClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
         noteClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         deviceEventClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
@@ -1403,7 +1403,7 @@ export class RealtimeStore {
         sensorGlucoseClient().getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch((): Entry[] => []),
         Promise.resolve<DeviceStatus[]>([]),
         bolusClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
-        nutritionClient().getCarbIntakes(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
+        carbIntakeClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         bgCheckClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         noteClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),
         deviceEventClient().getAll(backfillFromDate, nowDate, CARE_RECORD_CAP).then((r) => r.data ?? []).catch(() => []),

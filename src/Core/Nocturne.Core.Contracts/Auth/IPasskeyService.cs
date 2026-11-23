@@ -19,19 +19,32 @@ public interface IPasskeyService
     /// </remarks>
     string? DescribeRpIdMismatch(string requestHost);
 
-    /// <summary>Generates registration options for creating a new passkey credential.</summary>
-    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username);
+    /// <summary>
+    /// Generates registration options for creating a new passkey credential. The challenge token is
+    /// bound to <paramref name="flow"/> and redeems only in that flow's complete step.
+    /// </summary>
+    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username, PasskeyRegistrationFlow flow);
 
     /// <summary>Validates the attestation response and stores the new passkey credential.</summary>
+    /// <param name="flow">
+    /// The flow whose complete step redeems the challenge. A challenge minted for any other flow,
+    /// or one that names no flow, is rejected.
+    /// </param>
     /// <param name="expectedSubjectId">
     /// The subject the caller's flow resolved as the one enrolling. The challenge token must
-    /// have been issued for this subject or the registration is rejected, so a challenge minted
-    /// by one flow cannot be redeemed as an enrolment in another. Required: every enrolment flow
+    /// have been issued for this subject or the registration is rejected. Required: every flow
     /// must name its own subject, and that subject must be one the server resolved rather than
     /// one the request supplied.
     /// </param>
     /// <param name="label">Optional user-assigned label for the credential.</param>
-    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId, string? label = null);
+    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId, Guid expectedSubjectId, string? label = null);
+
+    /// <summary>
+    /// The subject a registration challenge was issued for, or null when
+    /// <paramref name="challengeToken"/> is not an unexpired registration challenge this server
+    /// issued for <paramref name="flow"/>.
+    /// </summary>
+    Guid? FindRegistrationChallengeSubject(string challengeToken, PasskeyRegistrationFlow flow);
 
     /// <summary>Generates assertion options for a discoverable (usernameless) login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId);
@@ -39,7 +52,11 @@ public interface IPasskeyService
     /// <summary>Generates assertion options for a username-based login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateAssertionOptionsAsync(string username, Guid tenantId);
 
-    /// <summary>Validates the assertion response and returns the authenticated subject.</summary>
+    /// <summary>
+    /// Validates the assertion response and returns the authenticated subject. The credential's
+    /// holder must be an active member of <paramref name="tenantId"/>; any other holder is refused
+    /// with <see cref="InvalidOperationException"/>, as an unknown credential is.
+    /// </summary>
     Task<PasskeyAssertionResult> CompleteAssertionAsync(string assertionResponseJson, string challengeToken, Guid tenantId);
 
     Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId);
@@ -48,6 +65,25 @@ public interface IPasskeyService
 
     /// <summary>Returns the number of passkey credentials registered to the specified subject.</summary>
     Task<int> GetCredentialCountAsync(Guid subjectId, Guid tenantId);
+}
+
+/// <summary>The flow a passkey registration challenge is minted for and redeemed in.</summary>
+public enum PasskeyRegistrationFlow
+{
+    /// <summary>A passkey added to the caller's own account, signed in or under a recovery session.</summary>
+    OwnAccount = 1,
+
+    /// <summary>The first owner enrolled by setup.</summary>
+    SetupOwner,
+
+    /// <summary>A new account accepting a member invite.</summary>
+    MemberInvite,
+
+    /// <summary>A new account redeeming a tenant creation link.</summary>
+    CreationLink,
+
+    /// <summary>A new account filing an access request.</summary>
+    AccessRequest,
 }
 
 /// <summary>WebAuthn registration options JSON and the associated challenge token for verification.</summary>

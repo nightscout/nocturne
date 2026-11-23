@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
 
@@ -33,8 +34,23 @@ public sealed record AlertEngineEvaluation
     /// </summary>
     public bool Skipped { get; init; }
 
-    /// <summary>Root condition truth for this evaluation.</summary>
+    /// <summary>Root condition truth for this evaluation; false when <see cref="ConditionUnknown"/>.</summary>
     public bool ConditionMet { get; init; }
+
+    /// <summary>
+    /// The root was unknown: a fact it compares was missing (docs/alerts/engine-semantics.md
+    /// §2.4). The rule's <c>on_unknown</c> decided what the tracker made of it.
+    /// </summary>
+    public bool ConditionUnknown { get; init; }
+
+    /// <summary>
+    /// When <see cref="ConditionUnknown"/>, the facts whose unknown reached the root, each with
+    /// its reason (docs/alerts/engine-semantics.md §2.4); empty otherwise.
+    /// </summary>
+    public IReadOnlyList<HeldFact> UnknownFacts { get; init; } = [];
+
+    /// <summary>The evaluation's hold reached the engine's bound, once per hold (§6.4).</summary>
+    public bool HeldTooLong { get; init; }
 
     /// <summary>The excursion tracker transition produced by this evaluation.</summary>
     public ExcursionTransition Transition { get; init; } = new(ExcursionTransitionType.None);
@@ -50,11 +66,36 @@ public sealed record AlertEngineEvaluation
     public bool AutoResolved => AutoResolveTransition?.Type == ExcursionTransitionType.ExcursionClosed;
 
     /// <summary>
-    /// Per-leaf force-eval truths keyed by pre-order leaf id. Populated only when
-    /// <see cref="AlertEngineOptions.IncludeLeafValues"/> was requested.
+    /// Per-leaf force-eval truths keyed by pre-order leaf id, null for a leaf that is unknown.
+    /// Populated only when <see cref="AlertEngineOptions.IncludeLeafValues"/> was requested.
     /// </summary>
-    public IReadOnlyDictionary<int, bool>? LeafValues { get; init; }
+    public IReadOnlyDictionary<int, bool?>? LeafValues { get; init; }
+
+    /// <summary>
+    /// When an evaluation from the state this one left can next differ with only the clock
+    /// moving (docs/alerts/engine-semantics.md §5.3), or null when none can.
+    /// </summary>
+    public DateTime? NextChangeAt { get; init; }
+
+    /// <summary>
+    /// The anchors the evaluation read more than 5 minutes ahead of the clock, which it read as
+    /// unknown (docs/alerts/engine-semantics.md §5.4); empty when none was.
+    /// </summary>
+    public IReadOnlyList<ClockAnomaly> ClockAnomalies { get; init; } = [];
+
+    /// <summary>
+    /// What each true <c>predicted</c>, <c>eventual_glucose</c> and <c>carbs_required</c> condition of
+    /// the body met its comparison with (docs/alerts/engine-semantics.md §3); empty when none did.
+    /// </summary>
+    public IReadOnlyList<AlertMetPoint> MetBy { get; init; } = [];
 }
+
+/// <summary>
+/// An anchor an evaluation read more than 5 minutes ahead of the clock.
+/// </summary>
+/// <param name="Fact">The context field or evaluation state that held it, as the engine names it.</param>
+/// <param name="Ahead">How far ahead of the clock it was.</param>
+public sealed record ClockAnomaly(string Fact, TimeSpan Ahead);
 
 /// <summary>
 /// Engine seam for alert rule evaluation, implemented over the Rust engine

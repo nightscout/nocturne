@@ -45,6 +45,7 @@ public class ShareReadSurfaceReachabilityTests
             ["Nocturne.API.Controllers.V4.Glucose.BGCheckController"] = Scope.GlucoseRead,
             ["Nocturne.API.Controllers.V4.Glucose.CalibrationController"] = Scope.GlucoseRead,
             ["Nocturne.API.Controllers.V4.Treatments.BolusController"] = Scope.TreatmentsRead,
+            ["Nocturne.API.Controllers.V4.Treatments.CarbIntakeController"] = Scope.TreatmentsRead,
             ["Nocturne.API.Controllers.V4.Treatments.NutritionController"] = Scope.TreatmentsRead,
             ["Nocturne.API.Controllers.V4.Treatments.BasalInjectionController"] = Scope.TreatmentsRead,
             ["Nocturne.API.Controllers.V4.Treatments.BolusCalculationController"] = Scope.TreatmentsRead,

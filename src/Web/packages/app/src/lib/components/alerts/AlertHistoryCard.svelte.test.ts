@@ -5,7 +5,7 @@ import {
 	AlertConditionType,
 	type AlertHistoryResponse,
 	type HistoryExcursionResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import AlertHistoryCard from "./AlertHistoryCard.svelte";
 
 function excursion(over: Partial<HistoryExcursionResponse> = {}): HistoryExcursionResponse {
@@ -164,5 +164,21 @@ describe("AlertHistoryCard", () => {
 		await expect
 			.element(page.getByRole("button", { name: /Next/i }))
 			.toBeDisabled();
+	});
+
+	it("states that an alert closed because it had no usable data for 24 hours", async () => {
+		render(AlertHistoryCard, {
+			history: history({
+				items: [excursion({ resolutionReason: "hold-bound" }), excursion({ id: "2", resolutionReason: "hysteresis" })],
+			}),
+			page: 1,
+			loading: false,
+			onLoadPage: () => {},
+		});
+
+		await expect
+			.element(page.getByText("Closed because it had no usable data for 24 hours."))
+			.toBeVisible();
+		expect(page.getByTestId("history-hold-close").elements()).toHaveLength(1);
 	});
 });

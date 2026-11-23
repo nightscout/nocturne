@@ -21,8 +21,8 @@ public class BasalScheduleRepository : ProfileScopedRepositoryBase<BasalSchedule
     /// Initializes a new instance of the <see cref="BasalScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public BasalScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IV4RecordBroadcaster<BasalSchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
+    public BasalScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

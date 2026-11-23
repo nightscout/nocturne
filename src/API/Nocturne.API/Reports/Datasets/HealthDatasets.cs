@@ -79,7 +79,7 @@ internal sealed class HeartRateDataset : IReportDataset
             .Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["time"] = s.Start,
-                ["bpm"] = Math.Round(s.Values.Average(), 1),
+                ["bpm"] = ScaledRounding.Round(s.Values.Average(), 1),
                 ["bpmMin"] = s.Values.Min(),
                 ["bpmMax"] = s.Values.Max(),
             }).ToList();
@@ -296,7 +296,7 @@ internal sealed class SleepDataset : IReportDataset
             request.ReadLog.Record("sleep_sessions", sessions.Count);
 
         var zone = request.Zone ?? (await request.Services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken)).Zone;
-        static double? Hours(long? ms) => ms is { } v ? Math.Round(v / 3_600_000.0, 2) : null;
+        static double? Hours(long? ms) => ms is { } v ? ScaledRounding.Round(v / 3_600_000.0, 2) : null;
         static long Mills(DateTime at) => new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
         long? Night(DateTime end) => zone is null ? null
             : LocalSlotBinning.DayStarts(Mills(end), Mills(end) + 1, zone).Starts[0];

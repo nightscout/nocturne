@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
@@ -33,18 +34,21 @@ public class TenantDirectGrantController : ControllerBase
 {
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IDirectGrantService _directGrantService;
+    private readonly ISubjectRepository _subjects;
 
     public TenantDirectGrantController(
         ITenantMemberService tenantMemberService,
-        IDirectGrantService directGrantService)
+        IDirectGrantService directGrantService,
+        ISubjectRepository subjects)
     {
         _tenantMemberService = tenantMemberService;
         _directGrantService = directGrantService;
+        _subjects = subjects;
     }
 
     /// <summary>
-    /// Create a direct grant for a member of the tenant. The plaintext token is returned once
-    /// and cannot be retrieved again.
+    /// Create a direct grant for an active member of the tenant. The plaintext token is returned
+    /// once and cannot be retrieved again. A member who is not active is answered as a non-member is.
     /// </summary>
     /// <param name="tenantId">The tenant the grant is bound to.</param>
     /// <param name="request">The subject to issue the grant to, plus label and scopes.</param>
@@ -57,7 +61,8 @@ public class TenantDirectGrantController : ControllerBase
     public async Task<ActionResult<CreateDirectGrantResponse>> Create(
         Guid tenantId, [FromBody] AdminCreateDirectGrantRequest request, CancellationToken ct)
     {
-        if (!await _tenantMemberService.IsMemberAsync(request.SubjectId, tenantId, ct))
+        if (!await _tenantMemberService.IsMemberAsync(request.SubjectId, tenantId, ct)
+            || await _subjects.GetSignInStateAsync(request.SubjectId, ct) is not { IsActive: true })
         {
             return Problem(
                 detail: "Subject is not a member of this tenant", statusCode: 400, title: "Bad Request");
@@ -66,8 +71,9 @@ public class TenantDirectGrantController : ControllerBase
         var result = await _directGrantService.CreateAsync(
             tenantId, request.SubjectId, request.Label, request.Scopes, request.ExpiresAt,
             request.LimitTo24Hours,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
+            createdBySubjectId: null,
             actor: Actor,
             ct: ct);
 
@@ -110,7 +116,7 @@ public class TenantDirectGrantController : ControllerBase
     {
         var found = await _directGrantService.RevokeAsync(
             tenantId, grantId, subjectId: null,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent.ToString(),
             actor: Actor,
             ct: ct);

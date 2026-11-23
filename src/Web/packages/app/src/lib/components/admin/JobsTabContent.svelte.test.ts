@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import JobsTabContent from "./jobs-tab-content-test-wrapper.svelte";
-import type { JobLedgerEntry } from "#lib/api/generated/nocturne-api-client.js";
+import type { JobLedgerEntry } from "@nocturne/api-client";
 
 const failing: JobLedgerEntry = {
 	id: "row-failing",

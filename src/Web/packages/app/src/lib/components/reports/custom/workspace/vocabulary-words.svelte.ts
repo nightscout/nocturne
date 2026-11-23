@@ -6,7 +6,7 @@
  * fails until it has one.
  */
 import { EventAnchorKind } from "#lib/api/index.js";
-import { formatLocale } from "#lib/utils/formatting.js";
+import { formatList, formatLocale } from "#lib/utils/formatting.js";
 import type { Weekday } from "./catalogue-vocabulary.js";
 
 /** The word for `id` in `words`, or the id itself when the web has none yet. */
@@ -232,90 +232,235 @@ export function signalGroupLabel(id: string): string {
   return wordOf(signalGroupLabels(), id);
 }
 
+const ENGLISH_SEARCH_TERMS: Record<string, string[]> = {
+  bg: ["BG"],
+  bloodSugar: ["blood sugar"],
+  sensor: ["sensor"],
+  cgm: ["CGM"],
+  targetRange: ["target"],
+  percentile: ["percentile"],
+  meter: ["meter"],
+  fingerstick: ["fingerstick"],
+  tir: ["TIR"],
+  tbr: ["TBR"],
+  tar: ["TAR"],
+  range: ["range"],
+  low: ["low", "hypo"],
+  high: ["high", "hyper"],
+  average: ["average"],
+  iob: ["IOB"],
+  insulin: ["insulin"],
+  bolus: ["bolus"],
+  dose: ["dose"],
+  rate: ["rate"],
+  tempBasal: ["temp basal"],
+  profile: ["profile"],
+  mdi: ["MDI"],
+  pen: ["pen"],
+  tdd: ["TDD"],
+  cob: ["COB"],
+  meal: ["meal"],
+  food: ["food"],
+  loop: ["loop"],
+  automation: ["automation", "closed loop"],
+  pump: ["pump"],
+  pod: ["pod"],
+  battery: ["battery"],
+  phone: ["phone", "uploader"],
+  night: ["night"],
+  bed: ["bed"],
+  hr: ["HR"],
+  pulse: ["pulse"],
+  exercise: ["exercise"],
+  walking: ["walking"],
+  isf: ["ISF"],
+  sensitivity: ["sensitivity"],
+  icr: ["ICR", "carb ratio"],
+  override: ["override"],
+  illness: ["illness"],
+  gaps: ["gaps", "missing data"],
+  sage: ["SAGE", "sensor age"],
+  site: ["site", "infusion set"],
+  cannula: ["cannula"],
+  cage: ["CAGE", "site age"],
+  suspend: ["suspend"],
+  alarm: ["alarm"],
+  bluetooth: ["Bluetooth", "disconnected"],
+  compression: ["compression"],
+  hypnogram: ["hypnogram", "stages"],
+  rem: ["REM", "deep sleep"],
+  a1c: ["A1c", "HbA1c"],
+  lab: ["lab"],
+  weight: ["weight", "body fat"],
+  alert: ["alert"],
+  snooze: ["snooze"],
+  dnd: ["DND", "do not disturb", "mute"],
+  roc: ["rate of change", "ROC"],
+  trend: ["trend", "arrow"],
+  noise: ["noise"],
+  consumable: ["consumable", "supplies"],
+  hrv: ["HRV", "heart rate variability"],
+  spo2: ["SpO2", "blood oxygen", "oxygen"],
+  breathing: ["breathing", "respiration"],
+  score: ["score"],
+  episode: ["episode", "hypo", "hyper"],
+};
+
 /**
  * The other words a search finds a signal by, keyed by the catalogue's search keys: abbreviations and the names
- * people use.
+ * people use, in the current locale. A search also matches the English words, which `ENGLISH_SEARCH_TERMS` keeps
+ * in step with these; "blood sugar" is only there, since the interface names that term glucose.
  */
 export function searchTermWords(): Record<string, string[]> {
   return {
+    // @wc-include
     bg: ["BG"],
-    bloodSugar: ["blood sugar"],
+    bloodSugar: [],
+    // @wc-include
     sensor: ["sensor"],
+    // @wc-include
     cgm: ["CGM"],
+    // @wc-include
     targetRange: ["target"],
+    // @wc-include
     percentile: ["percentile"],
+    // @wc-include
     meter: ["meter"],
+    // @wc-include
     fingerstick: ["fingerstick"],
+    // @wc-include
     tir: ["TIR"],
+    // @wc-include
     tbr: ["TBR"],
+    // @wc-include
     tar: ["TAR"],
+    // @wc-include
     range: ["range"],
+    // @wc-include
     low: ["low", "hypo"],
+    // @wc-include
     high: ["high", "hyper"],
+    // @wc-include
     average: ["average"],
+    // @wc-include
     iob: ["IOB"],
+    // @wc-include
     insulin: ["insulin"],
+    // @wc-include
     bolus: ["bolus"],
+    // @wc-include
     dose: ["dose"],
+    // @wc-include
     rate: ["rate"],
+    // @wc-include
     tempBasal: ["temp basal"],
+    // @wc-include
     profile: ["profile"],
+    // @wc-include
     mdi: ["MDI"],
+    // @wc-include
     pen: ["pen"],
+    // @wc-include
     tdd: ["TDD"],
+    // @wc-include
     cob: ["COB"],
+    // @wc-include
     meal: ["meal"],
+    // @wc-include
     food: ["food"],
+    // @wc-include
     loop: ["loop"],
+    // @wc-include
     automation: ["automation", "closed loop"],
+    // @wc-include
     pump: ["pump"],
+    // @wc-include
     pod: ["pod"],
+    // @wc-include
     battery: ["battery"],
+    // @wc-include
     phone: ["phone", "uploader"],
+    // @wc-include
     night: ["night"],
+    // @wc-include
     bed: ["bed"],
+    // @wc-include
     hr: ["HR"],
+    // @wc-include
     pulse: ["pulse"],
+    // @wc-include
     exercise: ["exercise"],
+    // @wc-include
     walking: ["walking"],
+    // @wc-include
     isf: ["ISF"],
+    // @wc-include
     sensitivity: ["sensitivity"],
+    // @wc-include
     icr: ["ICR", "carb ratio"],
+    // @wc-include
     override: ["override"],
+    // @wc-include
     illness: ["illness"],
+    // @wc-include
     gaps: ["gaps", "missing data"],
+    // @wc-include
     sage: ["SAGE", "sensor age"],
+    // @wc-include
     site: ["site", "infusion set"],
+    // @wc-include
     cannula: ["cannula"],
+    // @wc-include
     cage: ["CAGE", "site age"],
+    // @wc-include
     suspend: ["suspend"],
+    // @wc-include
     alarm: ["alarm"],
+    // @wc-include
     bluetooth: ["Bluetooth", "disconnected"],
+    // @wc-include
     compression: ["compression"],
+    // @wc-include
     hypnogram: ["hypnogram", "stages"],
+    // @wc-include
     rem: ["REM", "deep sleep"],
+    // @wc-include
     a1c: ["A1c", "HbA1c"],
+    // @wc-include
     lab: ["lab"],
+    // @wc-include
     weight: ["weight", "body fat"],
+    // @wc-include
     alert: ["alert"],
+    // @wc-include
     snooze: ["snooze"],
+    // @wc-include
     dnd: ["DND", "do not disturb", "mute"],
+    // @wc-include
     roc: ["rate of change", "ROC"],
+    // @wc-include
     trend: ["trend", "arrow"],
+    // @wc-include
     noise: ["noise"],
+    // @wc-include
     consumable: ["consumable", "supplies"],
+    // @wc-include
     hrv: ["HRV", "heart rate variability"],
+    // @wc-include
     spo2: ["SpO2", "blood oxygen", "oxygen"],
+    // @wc-include
     breathing: ["breathing", "respiration"],
+    // @wc-include
     score: ["score"],
+    // @wc-include
     episode: ["episode", "hypo", "hyper"],
   };
 }
 
 /** The words of a signal's search keys. */
-export function searchWords(keys: readonly string[]): string[] {
-  const words = searchTermWords();
-  return keys.flatMap((k) => (Object.hasOwn(words, k) ? words[k] : []));
+export function searchWords(keys: readonly string[], translated: Record<string, string[]> = searchTermWords()): string[] {
+  const found = keys.flatMap((k) => [...(Object.hasOwn(translated, k) ? translated[k] : []), ...(Object.hasOwn(ENGLISH_SEARCH_TERMS, k) ? ENGLISH_SEARCH_TERMS[k] : [])]);
+  return found.filter((word, i) => found.indexOf(word) === i);
 }
 
 /** Each lens's name. */
@@ -375,19 +520,33 @@ export function anchorLabel(id: string): string {
 /** Each kind of event inside a sentence: "around meals". */
 export function anchorPhrases(): Record<string, string> {
   return {
+    // @wc-include
     [EventAnchorKind.Meal]: "meals",
+    // @wc-include
     [EventAnchorKind.CorrectionBolus]: "correction boluses",
+    // @wc-include
     [EventAnchorKind.AnyBolus]: "boluses",
+    // @wc-include
     [EventAnchorKind.UnannouncedRise]: "rises with no carbs",
+    // @wc-include
     [EventAnchorKind.LowStart]: "lows",
+    // @wc-include
     [EventAnchorKind.HighStart]: "highs",
+    // @wc-include
     [EventAnchorKind.LowTreatment]: "carbs taken in a low",
+    // @wc-include
     [EventAnchorKind.ExerciseStart]: "exercise",
+    // @wc-include
     [EventAnchorKind.SleepStart]: "sleep starts",
+    // @wc-include
     [EventAnchorKind.Wake]: "wake-ups",
+    // @wc-include
     [EventAnchorKind.SensorStart]: "sensor starts",
+    // @wc-include
     [EventAnchorKind.SiteChange]: "site changes",
+    // @wc-include
     [EventAnchorKind.OverrideStart]: "overrides",
+    // @wc-include
     [EventAnchorKind.TemporaryTargetStart]: "temporary targets",
   };
 }
@@ -413,11 +572,17 @@ export function anchorGroupLabel(id: string): string {
 /** Each range preset. */
 export function rangeLabels(): Record<string, string> {
   return {
+    // @wc-include
     "6h": "6 hours",
+    // @wc-include
     "24h": "24 hours",
+    // @wc-include
     "7d": "7 days",
+    // @wc-include
     "14d": "14 days",
+    // @wc-include
     "28d": "28 days",
+    // @wc-include
     "90d": "90 days",
   };
 }
@@ -429,7 +594,11 @@ export function rangeLabel(id: string): string {
 /** The whole days in `hours`: "1 day", or "N days". */
 export function daysText(hours: number): string {
   const days = Math.floor(hours / 24);
-  return days === 1 ? "1 day" : `${days} days`;
+  if (days === 1) {
+    // @wc-include
+    return "1 day";
+  }
+  return `${days} days`;
 }
 
 /** Each preset of groups of days. */
@@ -699,14 +868,23 @@ export function weekdayName(day: Weekday, weekdays: readonly Weekday[], width: "
 /** The access scopes a part of a report reads, in words. */
 export function scopeWords(): Record<string, string> {
   return {
+    // @wc-include
     "glucose.read": "glucose",
+    // @wc-include
     "treatments.read": "treatments",
+    // @wc-include
     "food.read": "food",
+    // @wc-include
     "therapy.read": "therapy settings",
+    // @wc-include
     "devices.read": "devices",
+    // @wc-include
     "heartrate.read": "heart rate",
+    // @wc-include
     "sleep.read": "sleep",
+    // @wc-include
     "stepcount.read": "steps",
+    // @wc-include
     "alerts.read": "alerts",
   };
 }
@@ -719,7 +897,7 @@ function scopeWord(scope: string): string {
 export function accessReason(scopes: readonly string[]): string {
   const words = scopes.map(scopeWord);
   return words.length > 0
-    ? `Your access cannot read ${words.join(" or ")}, which this needs.`
+    ? `Your access cannot read ${formatList(words, "disjunction")}, which this needs.`
     : "Your access cannot read the data this needs.";
 }
 
@@ -752,7 +930,12 @@ export function whenPhrase(anchors: readonly string[], phrase: string): string {
 
 /** What a "When" chart counts the events by. */
 export function whenAxisLabels(): Record<string, string> {
-  return { hour: "by hour of day", weekday: "by weekday" };
+  return {
+    // @wc-include
+    hour: "by hour of day",
+    // @wc-include
+    weekday: "by weekday",
+  };
 }
 
 export function whenAxisLabel(id: string): string {

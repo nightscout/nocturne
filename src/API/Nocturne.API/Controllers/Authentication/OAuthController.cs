@@ -177,6 +177,18 @@ public class OAuthController : ControllerBase
         }
 
         // Check if user is authenticated
+        // The login page counts a caller with a live session as signed in and sends it straight
+        // back here, so an inactive caller is answered as a refused consent rather than sent there.
+        if (HttpContext.IsAuthenticated() && HttpContext.IsCallerInactive())
+        {
+            return RedirectWithError(
+                redirect_uri,
+                "access_denied",
+                "The user denied the authorization request.",
+                state
+            );
+        }
+
         if (!HttpContext.IsAuthenticated())
         {
             // Redirect to login, preserving the OAuth params to return to after login
@@ -237,6 +249,11 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
         }
 
         // Find the client. Resolved before the approval decision is read: every exit from this
@@ -560,6 +577,11 @@ public class OAuthController : ControllerBase
         if (!TryGetSubject(out var subjectId, out var subjectError))
         {
             return subjectError;
+        }
+
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
         }
 
         if (string.IsNullOrEmpty(request.UserCode))
@@ -937,9 +959,9 @@ public class OAuthController : ControllerBase
                     return Ok(new TokenIntrospectionResponse { Active = false });
                 }
 
-                // A revoked grant takes its outstanding access tokens with it
+                // A revoked or expired grant takes its outstanding access tokens with it
                 if (claims is { GrantId: not null, TenantId: not null } &&
-                    await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+                    !await _grantService.IsGrantLiveAsync(claims.GrantId.Value, claims.TenantId.Value))
                 {
                     return Ok(new TokenIntrospectionResponse { Active = false });
                 }
@@ -1045,7 +1067,7 @@ public class OAuthController : ControllerBase
             });
         }
 
-        var createdFromIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var createdFromIp = HttpContext.GetClientAddress();
 
         var client = await _clientService.RegisterClientAsync(
             request.SoftwareId,

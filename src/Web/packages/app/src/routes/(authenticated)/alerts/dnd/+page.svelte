@@ -9,7 +9,7 @@
     update as updateDnd,
   } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TenantAlertSettingsResponse } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

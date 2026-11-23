@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { glucoseChartLookback } from "#lib/stores/appearance-store.svelte.js";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 

@@ -12,6 +12,7 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -56,6 +57,27 @@ public class GlookoSsv2SyncTests
         // Final advanced cursor persisted exactly once.
         cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs")
             .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-03T00:00:00.000Z", "g3"));
+    }
+
+    [Fact]
+    public async Task Ssv2_SecondSyncOfTheSameFeedAfterTheCursorIsLost_StoresNoNewRow()
+    {
+        var store = new StoringConnectorPublisher();
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? EgvPage(["e1", "e2", "e3"], "2026-06-03T00:00:00.000Z", "g3", lastPage: true)
+            : Json("{\"lastPage\":true}"));
+
+        (await BuildService(handler, new FakeCursorStore(), store)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None)).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        (await BuildService(handler, new FakeCursorStore(), store)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None)).Success.Should().BeTrue();
+
+        stored.Should().HaveCount(3).And.OnlyContain(k => k.Type == nameof(SensorGlucose));
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
     }
 
     [Fact]
@@ -421,14 +443,18 @@ public class GlookoSsv2SyncTests
 
     private static GlookoConnectorService BuildService(
         RoutingHandler handler, IConnectorSyncCursorStore cursorStore, Mock<IConnectorPublisher> publisher) =>
+        BuildService(handler, cursorStore, publisher.Object);
+
+    private static GlookoConnectorService BuildService(
+        RoutingHandler handler, IConnectorSyncCursorStore cursorStore, IConnectorPublisher publisher) =>
         new(
             new HttpClient(handler),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             new FixedGlookoTokenProvider(),
-            publisher.Object,
-            mealMatchingService: null,
+            publisher,
+            mealMatchLinker: null,
             timezoneTimelineService: null,
             cursorStore: cursorStore,
             endpointPause: TimeSpan.Zero);

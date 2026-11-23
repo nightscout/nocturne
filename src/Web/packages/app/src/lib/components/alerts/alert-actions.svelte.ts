@@ -7,7 +7,7 @@ import {
   markSeen,
   snoozeInstance,
 } from "#lib/api/generated/alerts.generated.remote.js";
-import type { ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { ActiveExcursionResponse } from "@nocturne/api-client";
 import { markSeenOnThisDevice, seenHere } from "./seen-here.svelte";
 
 /** The snooze lengths every alert surface offers, in minutes. */

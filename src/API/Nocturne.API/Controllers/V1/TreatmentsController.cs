@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -85,7 +86,7 @@ public class TreatmentsController : ControllerBase
             count,
             skip,
             findQuery,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         count = LegacyReadLimits.ZeroAsAbsent(count);
@@ -113,7 +114,7 @@ public class TreatmentsController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(treatmentArray);
     }
@@ -139,7 +140,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Treatment by ID endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -160,7 +161,7 @@ public class TreatmentsController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(treatment);
     }
@@ -284,7 +285,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Update treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -312,6 +313,7 @@ public class TreatmentsController : ControllerBase
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
@@ -325,7 +327,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Delete treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))

@@ -8,8 +8,6 @@ namespace Nocturne.Connectors.MyLife.Tests.Mappers;
 
 public class MyLifePumpSettingsMapperActivationTests
 {
-    private const string ConnectorSource = "mylife-connector";
-
     private static long Ticks(int year, int month, int day, int hour = 0, int minute = 0)
     {
         var mills = new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -39,13 +37,12 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r1", Ticks(2026, 4, 1, 10), "Morning"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
 
         spans.Should().HaveCount(1);
         var span = spans[0];
         span.Phase.Should().Be(ProfileActivationPhase.Effective);
         span.Origin.Should().Be(ProfileActivationOrigin.Connector);
-        span.DataSource.Should().Be(ConnectorSource);
         span.StartTimestamp.Should().Be(new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc));
         span.EndTimestamp.Should().BeNull();
         span.BaseProfileName.Should().Be("Morning");
@@ -62,7 +59,7 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r3", Ticks(2026, 4, 3, 10), "A"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -91,7 +88,7 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r2", Ticks(2026, 4, 2, 10), "B"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts)
             .OrderBy(s => s.StartTimestamp)
             .ToList();
 
@@ -111,7 +108,7 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r3", Ticks(2026, 4, 3, 10), ""),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
 
         spans.Should().HaveCount(1);
         spans[0].BaseProfileName.Should().Be("A");
@@ -130,7 +127,7 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r3", Ticks(2026, 4, 1, 10), "X", deviceSerialNumber: "SN-2"),
         };
 
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
 
         spans.Should().HaveCount(3);
 
@@ -155,9 +152,9 @@ public class MyLifePumpSettingsMapperActivationTests
             Readout("r2", Ticks(2026, 4, 2, 10), "B"),
         };
 
-        var first = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+        var first = MyLifePumpSettingsMapper.MapToProfileActivations(readouts)
             .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
-        var second = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource)
+        var second = MyLifePumpSettingsMapper.MapToProfileActivations(readouts)
             .Select(s => s.SyncIdentifier).OrderBy(id => id).ToList();
 
         first.Should().Equal(second);
@@ -167,7 +164,7 @@ public class MyLifePumpSettingsMapperActivationTests
     [Fact]
     public void MapToProfileActivations_EmptyList_ReturnsEmpty()
     {
-        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(Array.Empty<MyLifePumpSettingsReadout>(), ConnectorSource);
+        var spans = MyLifePumpSettingsMapper.MapToProfileActivations(Array.Empty<MyLifePumpSettingsReadout>());
 
         spans.Should().BeEmpty();
     }

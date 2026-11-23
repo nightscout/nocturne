@@ -89,6 +89,7 @@
     <ProjectReference Include="..\..\Core\Nocturne.Core.Oref\Nocturne.Core.Oref.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\Nocturne.Infrastructure.Cache.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Outbound\Nocturne.Infrastructure.Outbound.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Shared\Nocturne.Infrastructure.Shared.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
@@ -149,9 +150,14 @@
   </PropertyGroup>
   <PropertyGroup>
     <_ApiClientSentinel>$(MSBuildProjectDirectory)/../../Web/packages/app/src/lib/api/api-client.generated.ts</_ApiClientSentinel>
+    <_ApiClientPackageFile>$(MSBuildProjectDirectory)/../../Web/packages/api-client/src/nocturne-api-client.ts</_ApiClientPackageFile>
   </PropertyGroup>
-  <Target Name="InvalidateApiClientStamp" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true' And ('$(_GenerateNSwagClientExplicit)' == 'true' Or !Exists('$(_ApiClientSentinel)'))">
+  <Target Name="InvalidateApiClientStamp" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true' And ('$(_GenerateNSwagClientExplicit)' == 'true' Or !Exists('$(_ApiClientSentinel)') Or !Exists('$(_ApiClientPackageFile)'))">
     <Delete Files="$(IntermediateOutputPath)api-client.stamp" />
+  </Target>
+  <!-- The client, schemas and spec used to be written into the app; this can go after the next release. -->
+  <Target Name="DeleteLegacyApiClientOutputs" AfterTargets="InvalidateApiClientStamp">
+    <Delete Files="$(MSBuildProjectDirectory)/../../Web/packages/app/src/lib/api/generated/nocturne-api-client.ts;$(MSBuildProjectDirectory)/../../Web/packages/app/src/lib/api/generated/schemas.ts;$(MSBuildProjectDirectory)/../../Web/packages/app/src/lib/api/generated/openapi.json" />
   </Target>
   <Target Name="GenerateClient" AfterTargets="InvalidateApiClientStamp" Condition="'$(GenerateNSwagClient)' == 'true'" Inputs="$(TargetRefPath);nswag.json" Outputs="$(IntermediateOutputPath)api-client.stamp">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />

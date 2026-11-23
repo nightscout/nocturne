@@ -13,7 +13,9 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
@@ -137,8 +139,7 @@ public class CareLinkConnectorServiceTests
     }
 
     /// <summary>
-    /// A rejected alarm publish must fail the sync and leave the dedup key unadvanced, so the next
-    /// cycle retries the same alarm instead of treating it as delivered.
+    /// A rejected alarm publish must fail the sync, and the next cycle offers the same alarm again.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_WhenAlarmPublishIsRejected_ReportsFailureAndRetriesNextSync()
@@ -168,7 +169,7 @@ public class CareLinkConnectorServiceTests
         first.Success.Should().BeFalse("an alarm that never reached the tenant is not a successful sync");
         first.Errors.Should().Contain("DeviceEvents publish failed");
         second.Errors.Should().Contain("DeviceEvents publish failed",
-            "the dedup key must not advance past an alarm that was never published");
+            "an alarm that was never published is offered again");
         second.ItemsSynced.GetValueOrDefault(SyncDataType.DeviceEvents).Should().Be(1,
             "the second cycle must attempt the same alarm again");
     }
@@ -406,6 +407,61 @@ public class CareLinkConnectorServiceTests
         fixture.PublishedDeviceStatuses.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSamePayload_StoresNoNewRow()
+    {
+        var store = new StoringConnectorPublisher();
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = $$"""
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" },
+                  "sgs": [
+                    { "sg": 100, "datetime": "2026-01-01T09:50:00", "kind": "SG" },
+                    { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" }
+                  ],
+                  "markers": [
+                    {
+                      "type": "INSULIN", "dateTime": "2026-01-01T09:30:00", "id": 1,
+                      "bolusType": "NORMAL", "programmedFastAmount": 2.5, "deliveredFastAmount": 2.5
+                    },
+                    { "type": "MEAL", "dateTime": "2026-01-01T09:30:00", "amount": 40, "index": 5 },
+                    { "type": "AUTO_BASAL_DELIVERY", "dateTime": "2026-01-01T09:40:00", "bolusAmount": 0.275 }
+                  ],
+                  "lastAlarm": { "type": "PUMP_SUSPEND", "code": 816, "flash": true, "datetime": "{{AlarmDateTime}}" },
+                  "notificationHistory": {
+                    "activeNotifications": [
+                      {
+                        "referenceGUID": "11111111-1111-1111-1111-111111111111",
+                        "triggeredDateTime": "{{NotificationBeforeAlarm}}",
+                        "type": "ALERT", "faultId": 105, "messageId": "BC_SID_LOW_RESERVOIR"
+                      }
+                    ]
+                  }
+                }
+                """
+        };
+        var fixture = new ServiceFixture(handler, store: store);
+
+        (await fixture.Service.SyncDataAsync(new SyncRequest(), fixture.Config, CancellationToken.None))
+            .Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        (await fixture.Service.SyncDataAsync(new SyncRequest(), fixture.Config, CancellationToken.None))
+            .Success.Should().BeTrue();
+
+        stored.Select(k => k.Type).Distinct().Should().Contain(
+            [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal), nameof(SystemEvent)]);
+        // The service holds no record of what it published: the second sync offers the alarm again
+        // and the store's key decides, so one event is held per alarm and per notification.
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+        store.Stored.Keys.Count(k => k.Type == nameof(SystemEvent)).Should().Be(2);
+        store.Stored.Values.OfType<SystemEvent>().Count(e => e.Code == "816").Should().Be(1);
+    }
+
     /// <summary>Leaves only the glucose step able to publish.</summary>
     private static CareLinkConnectorConfiguration GlucoseOnlyConfiguration() => new()
     {
@@ -491,7 +547,7 @@ public class CareLinkConnectorServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
         fixture.ConfigService.Verify(s => s.SaveSecretsAsync(
             It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()), Times.Never);
         handler.Requests.Count(r => r.Url == CareLinkFakeHandler.TokenUrl).Should().Be(1);
     }
 
@@ -592,17 +648,14 @@ public class CareLinkConnectorServiceTests
             CareLinkFakeHandler handler,
             CareLinkConnectorConfiguration? config = null,
             bool withPublisher = false,
-            ITimezoneTimelineService? timezoneTimeline = null)
+            ITimezoneTimelineService? timezoneTimeline = null,
+            IConnectorPublisher? store = null)
         {
             Config = config ?? new CareLinkConnectorConfiguration
             {
                 Username = "user@example.com",
                 Server = "EU",
             };
-
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
             var stored = new Dictionary<string, string> { ["refresh_token"] = "stored-refresh-token" };
             var configService = ConfigService;
@@ -623,12 +676,12 @@ public class CareLinkConnectorServiceTests
                 new HttpClient(handler),
                 new ConnectorTokenCache(),
                 serverResolver,
-                tenantAccessor.Object,
+                ResolvedTenant.Accessor(),
                 NullLogger<CareLinkAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 handler);
 
-            IConnectorPublisher? publisher = null;
+            var publisher = store;
             if (withPublisher)
             {
                 var glucose = new Mock<IGlucosePublisher>();

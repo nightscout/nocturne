@@ -49,10 +49,11 @@ public class SessionService : ISessionService
             ? Guid.CreateVersion7().ToString("N")
             : context.OidcSessionId;
 
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles, oidcSessionId);
+        var accessToken = _jwtService.GenerateAccessToken(
+            subjectInfo, permissions, roles, oidcSessionId, handedOff: context.LoginCodeId.HasValue);
         var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
             subjectId, oidcSessionId, context.DeviceDescription,
-            context.IpAddress, context.UserAgent);
+            context.IpAddress, context.UserAgent, context.LoginCodeId);
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
 
         return new SessionTokenPair(accessToken, refreshToken, expiresIn, subjectId);
@@ -69,7 +70,7 @@ public class SessionService : ISessionService
             return null;
 
         var accessToken = _jwtService.GenerateAccessToken(
-            claims.Subject, claims.Permissions, claims.Roles, owner.SessionId);
+            claims.Subject, claims.Permissions, claims.Roles, owner.SessionId, handedOff: owner.HandedOff);
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
 
         var newRefreshToken = await _refreshTokenService.RotateRefreshTokenAsync(

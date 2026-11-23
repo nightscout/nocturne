@@ -10,7 +10,9 @@ web
 
 The primary users are people with diabetes (usually type 1) and the caregivers who follow them: parents, partners, and other family members. They check the current glucose value and its direction at a glance, many times a day and often at night. Afterwards they review trends, treatments, and reports to change therapy.
 
-The secondary user is the self-hoster, the technically capable person who installs Nocturne, connects devices, and manages the tenants for a household or community. A single deployment can serve a household, a clinic, or a community. Clinics and multi-patient review are supported, but the app UI is not designed around them.
+The secondary user is the self-hoster, the technically capable person who installs Nocturne, connects devices, and manages the tenants for a household or community. A single deployment can serve a household, a camp, or a community.
+
+A third group looks after several people at once: a parent of more than one child, a camp's medical staff, a care team. The People page is designed for them, and for a roster of any size from 2 people to about 300. When a design serves this group at the cost of the person with diabetes or their own caregiver, the person with diabetes wins.
 
 ## Product Purpose
 
@@ -32,6 +34,7 @@ Commercial platforms such as Clarity, Tidepool, and Sugarmate are not self-hoste
 
 - **Surfaces:**
   - the tenant web app (SvelteKit), with its dashboard, reports, alerts, food and meals, calendar, and therapy timeline;
+  - the People page, a roster of everyone a person follows, with its wall display for a shared screen;
   - configurable clock faces and fullscreen displays;
   - public share links (`{token}.share.{domain}`), which show anonymous viewers only the categories the owner granted;
   - the marketing and docs portal (`src/Portal`, `packages/portal`).

@@ -23,7 +23,6 @@ public class EntriesControllerTests
 {
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<IDocumentProcessingService> _mockDocumentProcessingService;
-    private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly Mock<ILogger<EntriesController>> _mockLogger;
     private readonly EntriesController _controller;
     private List<Entry> _uploaded = [];
@@ -33,13 +32,11 @@ public class EntriesControllerTests
         _mockEntryService = new Mock<IEntryService>();
         StubNothingStored();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
-        _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
         _mockLogger = new Mock<ILogger<EntriesController>>();
 
         _controller = new EntriesController(
             _mockEntryService.Object,
             _mockDocumentProcessingService.Object,
-            _mockAlertEvaluator.Object,
             TimeProvider.System,
             _mockLogger.Object
         );
@@ -292,25 +289,6 @@ public class EntriesControllerTests
         body.Should().HaveCount(2);
         body[0].Id.Should().Be("stored-1");
         body[1].Id.Should().Be("stored-2");
-    }
-
-    [Theory]
-    [InlineData(false, 1)]
-    [InlineData(true, 0)]
-    public async Task CreateEntries_EvaluatesAlertsOnlyWhenTheUploadMovedGlucose(bool alreadyStored, int evaluations)
-    {
-        var stored = new Entry { Id = "stored-1", Sgv = 120, Mgdl = 120, Mills = 1000, Device = "Dexcom G7", Type = "sgv" };
-
-        _mockDocumentProcessingService
-            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
-            .Returns<IEnumerable<Entry>>(entries => entries);
-
-        if (alreadyStored)
-            StubStoredAt((1000L, stored));
-
-        await _controller.CreateEntries(new[] { new Entry { Sgv = 120, Mgdl = 120, Mills = 1000, Device = "Dexcom G7" } });
-
-        _mockAlertEvaluator.Verify(x => x.EvaluateAsync(It.IsAny<CancellationToken>()), Times.Exactly(evaluations));
     }
 
     [Fact]
@@ -786,8 +764,6 @@ public class EntriesControllerTests
                 It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<Entry>, string?, CancellationToken>((processed, _, _) => _uploaded = [.. processed])
             .ReturnsAsync((IReadOnlyList<Entry> processed, string? _, CancellationToken _) =>
-                new EntryUploadResult(
-                    processed.Select(e => byMills.GetValueOrDefault(e.Mills) ?? e).ToList(),
-                    processed.Where(e => !byMills.ContainsKey(e.Mills)).ToList()));
+                new EntryUploadResult(processed.Select(e => byMills.GetValueOrDefault(e.Mills) ?? e).ToList()));
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.API.Services.Realtime;
@@ -131,7 +132,7 @@ public class SettingsController : BaseV3Controller<Settings>
         _logger.LogDebug(
             "V3 settings by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // CHECKME: Should validate admin permissions here
@@ -252,7 +253,7 @@ public class SettingsController : BaseV3Controller<Settings>
         _logger.LogDebug(
             "V3 settings update endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var validationError = ValidateV3CommonFields(settingsData);
@@ -379,7 +380,7 @@ public class SettingsController : BaseV3Controller<Settings>
         _logger.LogDebug(
             "V3 settings delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // CHECKME: Should validate admin permissions here

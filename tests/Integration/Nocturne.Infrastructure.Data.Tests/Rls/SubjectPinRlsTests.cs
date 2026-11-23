@@ -11,7 +11,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// What each kind of context reaches of the identity tables under the <c>subject_pin</c> policy,
 /// through <see cref="INocturneDbContextFactory"/>, the interceptor and the live policy, as
 /// <c>nocturne_app</c>. Every read is raw SQL that never names the pinned subject, so only Row
-/// Level Security can narrow it.
+/// Level Security can narrow it. A pinned context sees the teams its subject is a member of
+/// through <c>team_members</c>, which is itself pinned.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -23,10 +24,15 @@ public class SubjectPinRlsTests : IAsyncLifetime
     private readonly Guid _subjectB = Guid.CreateVersion7();
     private readonly Guid[] _tenants = [Guid.NewGuid(), Guid.NewGuid()];
     private readonly Guid _otherTenant = Guid.NewGuid();
+    private readonly Guid _sharedTeam = Guid.CreateVersion7();
+    private readonly Guid _teamOfA = Guid.CreateVersion7();
+    private readonly Guid _teamOfB = Guid.CreateVersion7();
 
     public SubjectPinRlsTests(RlsCompletenessFixture fx) => _fx = fx;
 
     private Guid[] Subjects => [_subjectA, _subjectB];
+
+    private Guid[] Teams => [_sharedTeam, _teamOfA, _teamOfB];
 
     public async Task InitializeAsync()
     {
@@ -62,7 +68,22 @@ public class SubjectPinRlsTests : IAsyncLifetime
                     """, ("id", Guid.CreateVersion7()), ("tenant", tenant), ("subject", subject));
             }
         }
+
+        foreach (var team in Teams)
+        {
+            await ExecuteAsync(conn, "INSERT INTO teams (id, name) VALUES (@id, 'subject-pin')", ("id", team));
+        }
+
+        foreach (var (team, subject) in TeamMemberships)
+        {
+            await ExecuteAsync(conn, """
+                INSERT INTO team_members (id, team_id, subject_id, kind) VALUES (@id, @team, @subject, 'manager')
+                """, ("id", Guid.CreateVersion7()), ("team", team), ("subject", subject));
+        }
     }
+
+    private (Guid Team, Guid Subject)[] TeamMemberships =>
+        [(_sharedTeam, _subjectA), (_sharedTeam, _subjectB), (_teamOfA, _subjectA), (_teamOfB, _subjectB)];
 
     public async Task DisposeAsync() => await _provider.DisposeAsync();
 
@@ -97,6 +118,48 @@ public class SubjectPinRlsTests : IAsyncLifetime
             .ToListAsync();
 
         subjects.Should().HaveCount(2).And.OnlyContain(s => s == _subjectB);
+    }
+
+    [Fact]
+    public async Task SubjectPin_SeesOnlyItsOwnTeamMemberships()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_subjectA);
+
+        (await TeamMembershipsAsync(context)).Should().BeEquivalentTo(
+            [(_sharedTeam, _subjectA), (_teamOfA, _subjectA)],
+            "the query names neither subject, so only the policy can have dropped B's rows, B's row in the shared team among them");
+    }
+
+    [Fact]
+    public async Task SubjectPin_SeesOnlyTheTeamsItIsAMemberOf()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_subjectB);
+
+        (await IdsAsync(context, "teams", "id", Teams)).Should().BeEquivalentTo([_sharedTeam, _teamOfB]);
+    }
+
+    [Fact]
+    public async Task SubjectPin_CannotAddAnotherSubjectToATeam()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_subjectA);
+
+        var insert = () => context.Database.ExecuteSqlAsync($"""
+            INSERT INTO team_members (id, team_id, subject_id, kind)
+            VALUES ({Guid.CreateVersion7()}, {_teamOfA}, {_subjectB}, 'manager')
+            """);
+
+        (await insert.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task SubjectPin_CannotReachATeamItIsNotInToRenameIt()
+    {
+        await using var context = await Factory().CreateForSubjectAsync(_subjectA);
+
+        var changed = await context.Database.ExecuteSqlAsync($"UPDATE teams SET name = 'taken' WHERE id = {_teamOfB}");
+
+        changed.Should().Be(0);
     }
 
     [Fact]
@@ -210,6 +273,23 @@ public class SubjectPinRlsTests : IAsyncLifetime
         (await MembershipsAsync(context)).Should().HaveCount(4);
         (await SubjectIdsAsync(context, "subjects", "id")).Should().BeEquivalentTo(Subjects);
         (await SubjectIdsAsync(context, "refresh_tokens", "subject_id")).Should().BeEquivalentTo(Subjects);
+        (await TeamMembershipsAsync(context)).Should().BeEquivalentTo(TeamMemberships);
+        (await IdsAsync(context, "teams", "id", Teams)).Should().BeEquivalentTo(Teams);
+    }
+
+    private async Task<List<(Guid Team, Guid Subject)>> TeamMembershipsAsync(NocturneDbContext context)
+    {
+        var rows = new List<(Guid, Guid)>();
+        await WithConnectionAsync(context, async connection =>
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT team_id, subject_id FROM team_members WHERE team_id = ANY(@teams)";
+            AddParam(cmd, "@teams", Teams);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                rows.Add((reader.GetGuid(0), reader.GetGuid(1)));
+        });
+        return rows;
     }
 
     private async Task<List<(Guid Tenant, Guid Subject)>> MembershipsAsync(NocturneDbContext context)
@@ -227,14 +307,17 @@ public class SubjectPinRlsTests : IAsyncLifetime
         return rows;
     }
 
-    private async Task<List<Guid>> SubjectIdsAsync(NocturneDbContext context, string table, string column)
+    private Task<List<Guid>> SubjectIdsAsync(NocturneDbContext context, string table, string column) =>
+        IdsAsync(context, table, column, Subjects);
+
+    private static async Task<List<Guid>> IdsAsync(NocturneDbContext context, string table, string column, Guid[] among)
     {
         var ids = new List<Guid>();
         await WithConnectionAsync(context, async connection =>
         {
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"SELECT {column} FROM {table} WHERE {column} = ANY(@subjects)";
-            AddParam(cmd, "@subjects", Subjects);
+            cmd.CommandText = $"SELECT {column} FROM {table} WHERE {column} = ANY(@ids)";
+            AddParam(cmd, "@ids", among);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
                 ids.Add(reader.GetGuid(0));

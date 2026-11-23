@@ -26,7 +26,7 @@ public class GlookoV4TreatmentMapperV3DeviceEventTests
         var logger = Mock.Of<ILogger>();
         var config = new GlookoConnectorConfiguration();
         var timeMapper = new GlookoTimeMapper(config, logger);
-        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoV4TreatmentMapper("glooko-connector", timeMapper, logger);
     }
 
     private static GlookoV3GraphResponse BuildGraphData(
@@ -55,7 +55,6 @@ public class GlookoV4TreatmentMapperV3DeviceEventTests
 
         events.Should().ContainSingle();
         events[0].EventType.Should().Be(DeviceEventType.SensorChange);
-        events[0].DataSource.Should().Be("glooko-connector");
         events[0].Notes.Should().Be("Sensor change");
         events[0].LegacyId.Should().StartWith("glooko_");
     }

@@ -1,4 +1,4 @@
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import type { LensId, SignalId, Vocabulary } from "./catalogue-vocabulary.js";
 import {
   addCalculated,

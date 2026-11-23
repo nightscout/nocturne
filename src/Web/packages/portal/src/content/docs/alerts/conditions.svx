@@ -15,11 +15,9 @@ settings, and when you would reach for it.
 
 Two things apply to all of them.
 
-**No data means "not true".** If a condition needs something Nocturne has
-never received, such as insulin on board from a site with no pump connected, it
-is simply never true. It does not raise an error and it does not alert. A rule
-built on data you do not have stays silent, so check the data is there before
-relying on the rule. The few exceptions are called out below.
+**No data means the rule cannot know.** If a condition needs data that Nocturne
+does not have, the rule does what you set in **When data is missing** (see
+[Building a rule](/docs/alerts/building-rules#when-data-is-missing)).
 
 **Values are compared exactly as written.** "Below 70" means 69 counts and 70
 does not. "At least 2" means 2 counts.
@@ -37,11 +35,14 @@ does not. "At least 2" means 2 counts.
 
 The latest CGM reading compared with a value: below it (`<`) or above it (`>`).
 
-- **Settings:** below or above, and a glucose value in your units.
+- **Settings:** below or above, and a glucose value in your units. In place of
+  the value it can use your target low or target high, with an amount added. See
+  [Compare with a target or the latest glucose](/docs/alerts/building-rules#compare-with-a-target-or-the-latest-glucose).
 - **Use it for:** the core low and high alerts.
 - **Good to know:** "below" and "above" are strict. A rule for "below 70" does
   not fire on a reading of exactly 70. Between readings, the last reading is
-  what the rule sees.
+  what the rule sees. A condition that uses a target waits if your profile has no
+  target range.
 
 ### Glucose bucket
 
@@ -72,12 +73,28 @@ Your loop's forecast of where glucose is heading. The condition is true if
 **any** forecast point within the next so many minutes matches.
 
 - **Settings:** a comparison (at least, more than, at most or less than), a glucose value, and how many minutes
-  ahead to look.
+  ahead to look. In place of the glucose value it can use your target low, your
+  target high or the latest glucose, with an amount added. For example, "30 below
+  the latest glucose". From the actions menu you can also select which forecast curve
+  it uses (see [Forecast curves](/docs/alerts/building-rules#forecast-curves)).
 - **Use it for:** "warn me if my loop thinks I will be under 70 within the next
   30 minutes", before the low arrives.
 - **Good to know:** forecasts come from loop apps that upload them, such as
-  AAPS and Trio (the oref algorithm). With no forecast the condition is never
-  true. A forecast is a guess, and it changes with every loop cycle.
+  AAPS and Trio (the oref algorithm). With no forecast, or without the curve that
+  the condition uses, the condition does not know if it is true, and the rule
+  waits. A forecast is a guess, and it changes with every loop cycle.
+
+### Eventual glucose
+
+The glucose that your loop expects at the end of its forecast, from its newest
+result.
+
+- **Settings:** a comparison and a glucose value, or your target low, your target
+  high or the latest glucose with an amount added.
+- **Good to know:** AAPS, Trio and OpenAPS send this value. For Loop, Nocturne
+  uses the last value of Loop's forecast. The newest result can be older than the
+  rule's minutes until a reading counts as missing. Then the condition does not
+  know if it is true, and the rule waits.
 
 ### Rate of change
 
@@ -162,6 +179,17 @@ Minutes since the last bolus Nocturne has on record.
 Carbs on board: how many grams your loop reports are still being absorbed.
 
 - **Settings:** a comparison and grams.
+
+### Carbs needed
+
+The grams of carbs that your loop says are necessary, from its newest result.
+
+- **Settings:** a comparison and a number of grams.
+- **Good to know:** only AAPS, Trio and OpenAPS (the oref algorithm) send this
+  value. When their result gives no number, Nocturne uses 0 g. The oref algorithm
+  gives a number only when the carbs it needs are more than its own limit. Loop does not
+  send it, so with Loop the condition does not know if it is true. As for
+  **Eventual glucose**, an old result counts as missing.
 
 ### Time since last carb
 
@@ -253,6 +281,21 @@ No CGM reading for a number of minutes.
   arrives. A site that has never had a reading does not raise it.
 
 <AlertSimulator scenario="sensor-gap" rules={["signal-loss"]} />
+
+### Sensor state
+
+The state that the CGM sensor reports: warm-up, OK, calibration necessary, error,
+expired, or no value (the newest reading has no glucose value).
+
+- **Settings:** one or more states. Minutes are only for No value.
+- **Use it for:** an alert when readings arrive with no value, for example "No
+  value for 30 minutes". Also an alert when a Guardian sensor has an error or has
+  expired.
+- **Good to know:** only CareLink sends a state, for Medtronic Guardian sensors.
+  No value applies to all sources: when the newest reading has a glucose value,
+  "No value" is not true. When Nocturne has no state for the sensor, the other
+  states cannot know if they are true, and the rule waits. The minutes count from
+  the first reading with no value. Checked every 30 seconds.
 
 ## Behaviour
 

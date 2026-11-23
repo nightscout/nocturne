@@ -6,22 +6,26 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Bell from "@lucide/svelte/icons/bell";
   import X from "@lucide/svelte/icons/x";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import { getLinkedPlatforms } from "#lib/api/generated/linkedPlatforms.generated.remote.js";
   import { getChannelStatuses } from "#lib/api/generated/systems.generated.remote.js";
   import { getCapabilityCatalog } from "#lib/api/generated/clientDevices.generated.remote.js";
-  import { getInAppRecipients } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { getInAppRecipients, keepChannel } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
-  import { ChannelType, AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+  import { ChannelType, AlertRuleSeverity, AlertChannelState } from "@nocturne/api-client";
   import type {
     ChannelStatusEntry,
     DeviceCapabilityCatalog,
     InAppRecipientResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { EmptyState } from "#lib/components/shared/index.js";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
-  import { applyChannelDestination, type ChannelDef } from "./types";
+  import { applyChannelDestination, channelStateOf, type ChannelDef } from "./types";
+  import { channelStateLine } from "./channelState.svelte";
   import {
     CHANNEL_META,
     findChannelMeta,
@@ -41,12 +45,15 @@
     severity?: AlertRuleSeverity;
     /** Narrows the kinds that may be added to these; every kind the API offers when omitted. */
     kinds?: ChannelType[];
+    /** The stored rule the channels belong to. A channel can be kept only on a stored rule. */
+    ruleId?: string;
   }
 
   let {
     channels = $bindable(),
     severity = AlertRuleSeverity.Warning,
     kinds,
+    ruleId,
   }: Props = $props();
 
   const linkedPlatformsQuery = getLinkedPlatforms();
@@ -142,6 +149,46 @@
     );
   }
 
+  /** A stored in-app channel states its recipient's state only while it still names that recipient. */
+  function stateLine(ch: ChannelDef) {
+    if (
+      ch.channelType === ChannelType.InApp &&
+      (ch.recipient?.subjectId ?? "") !== ch.destination
+    ) {
+      return null;
+    }
+    return channelStateLine(ch);
+  }
+
+  function canKeep(ch: ChannelDef): boolean {
+    return (
+      canEdit &&
+      ruleId !== undefined &&
+      ch.id !== undefined &&
+      ch.state === AlertChannelState.Stopped &&
+      needsDestination(ch.channelType)
+    );
+  }
+
+  let keeping = $state<string | null>(null);
+  let keepFailure = $state<{ id: string; message: string } | null>(null);
+
+  async function keep(ch: ChannelDef): Promise<void> {
+    if (!ruleId || !ch.id) return;
+    const id = ch.id;
+    keeping = id;
+    keepFailure = null;
+    try {
+      const kept = await keepChannel({ ruleId, channelId: id });
+      const stored = kept.channels?.find((c) => c.id === id);
+      if (stored) Object.assign(ch, channelStateOf(stored));
+    } catch (err) {
+      keepFailure = { id, message: describeSubmitError(err, "Could not keep this channel. Try again.") };
+    } finally {
+      keeping = null;
+    }
+  }
+
   function recipientValue(ch: ChannelDef): string {
     return !ch.destination || ch.destination === mySubjectId ? SAVER : ch.destination;
   }
@@ -179,7 +226,13 @@
     {@const opt = findChannelMeta(ch.channelType)}
     {@const Glyph = opt?.icon ?? Bell}
     {@const linked = !opt || isLinked(opt)}
-    <div class="flex items-start gap-2 rounded-md border bg-background p-3">
+    {@const line = stateLine(ch)}
+    <div
+      class="flex items-start gap-2 rounded-md border bg-background p-3"
+      role="group"
+      aria-labelledby="channel-name-{i}"
+      aria-describedby={line ? `channel-state-${i}` : undefined}
+    >
       <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded bg-muted text-muted-foreground overflow-hidden">
         {#if opt?.logo}
           <img src={opt.logo} alt="" class="h-5 w-5 object-contain" />
@@ -190,14 +243,46 @@
       <div class="flex-1 space-y-2">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <div class="text-sm font-medium">{opt ? channelLabel(opt.type) : ch.channelType}</div>
+            <div id="channel-name-{i}" class="text-sm font-medium">{opt ? channelLabel(opt.type) : ch.channelType}</div>
             {#if opt}
               <div class="text-xs text-muted-foreground">{channelDescription(opt.type)}</div>
             {/if}
-            {#if !linked && opt?.platform}
+            {#if !linked && opt?.platform && ch.state === undefined}
               <div class="text-xs text-status-warning mt-0.5">
                 {platformLabel(opt.platform)} not linked. Nothing is delivered until it is connected.
               </div>
+            {/if}
+            {#if line}
+              <p
+                id="channel-state-{i}"
+                class="mt-0.5 flex items-start gap-1.5 text-xs {line.tone === 'warn'
+                  ? 'text-status-warning'
+                  : 'text-muted-foreground'}"
+                data-testid="channel-state"
+              >
+                {#if line.tone === "warn"}
+                  <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                {:else}
+                  <CalendarClock class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                {/if}
+                <span>{line.text}</span>
+              </p>
+            {/if}
+            {#if canKeep(ch)}
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                class="mt-1.5"
+                disabled={keeping === ch.id}
+                onclick={() => keep(ch)}
+              >
+                Keep this channel
+              </Button>
+              {@const failure = keepFailure}
+              {#if failure && failure.id === ch.id}
+                <p class="mt-1 text-xs text-destructive" role="alert">{failure.message}</p>
+              {/if}
             {/if}
           </div>
           <Button
@@ -243,13 +328,9 @@
                 {/each}
               </Select.Content>
             </Select.Root>
-            {#if unavailable && !ch.destination}
+            {#if unavailable}
               <p class="text-xs text-status-warning">
-                This channel has no recipient. Saving the rule sends it to you.
-              </p>
-            {:else if unavailable}
-              <p class="text-xs text-status-warning">
-                This person can no longer receive alerts on this site. Saving the rule sends this channel to you.
+                Saving the rule sends this channel to you.
               </p>
             {:else}
               <p class="text-xs text-muted-foreground">
@@ -289,7 +370,7 @@
                 </p>
               {/if}
             </div>
-          {:else if opt && channelDestinationHelper(opt.type)}
+          {:else if opt && channelDestinationHelper(opt.type) && ch.state === undefined}
             <p class="text-xs text-muted-foreground">{channelDestinationHelper(opt.type)}</p>
           {/if}
           {#if ch.channelType === ChannelType.Webhook}

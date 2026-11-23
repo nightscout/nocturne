@@ -4,7 +4,7 @@
  * produces the spec, and from the spec alone (`Report.fromSpec`) when it carries none or the spec was
  * changed elsewhere since.
  */
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import { Report } from "./report.svelte.js";
 import type { DateSpan } from "./workspace.svelte.js";
 import { BUILDER_MAX_BYTES, builderOf, sameJson, withBuilder, withoutBuilder, withoutNulls } from "./saved-state.js";

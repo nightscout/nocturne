@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
@@ -68,7 +69,7 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile GET endpoint requested with count: {Count} from {RemoteIpAddress}",
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -94,7 +95,7 @@ public class ProfileController : ControllerBase
                 lastModified = DateTimeOffset.UtcNow.AddDays(-1); // Default fallback
             }
 
-            Response.Headers.LastModified = lastModified.ToString("R");
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
             // Check If-Modified-Since header for conditional requests
             if (Request.Headers.IfModifiedSince.Count > 0)
@@ -102,6 +103,8 @@ public class ProfileController : ControllerBase
                 if (
                     DateTimeOffset.TryParse(
                         Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var ifModifiedSince
                     )
                 )
@@ -268,7 +271,7 @@ public class ProfileController : ControllerBase
     private static void StampCreatedAt(Profile profile)
     {
         if (string.IsNullOrEmpty(profile.CreatedAt))
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -360,7 +363,7 @@ public class ProfileController : ControllerBase
 
         // Set Last-Modified header for caching
         var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-        Response.Headers.LastModified = lastModified.ToString("R");
+        Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
         // Check If-Modified-Since header for conditional requests
         if (Request.Headers.IfModifiedSince.Count > 0)
@@ -368,6 +371,8 @@ public class ProfileController : ControllerBase
             if (
                 DateTimeOffset.TryParse(
                     Request.Headers.IfModifiedSince.ToString(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
                     out var ifModifiedSince
                 )
             )
@@ -404,7 +409,7 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
             spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
@@ -430,7 +435,7 @@ public class ProfileController : ControllerBase
 
             // Set Last-Modified header for caching
             var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-            Response.Headers.LastModified = lastModified.ToString("R");
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
             // Check If-Modified-Since header for conditional requests
             if (Request.Headers.IfModifiedSince.Count > 0)
@@ -438,6 +443,8 @@ public class ProfileController : ControllerBase
                 if (
                     DateTimeOffset.TryParse(
                         Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var ifModifiedSince
                     )
                 )

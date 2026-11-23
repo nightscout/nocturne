@@ -18,16 +18,19 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<ConnectorFoodEntryRepository> _logger;
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
+    private readonly TimeProvider _time;
 
     /// <inheritdoc cref="IConnectorFoodEntryRepository" />
     public ConnectorFoodEntryRepository(
         INocturneDbContextFactory contexts,
         ILogger<ConnectorFoodEntryRepository> logger,
-        ILegacyReadCacheInvalidation? legacyReads = null)
+        ILegacyReadCacheInvalidation? legacyReads = null,
+        TimeProvider? time = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _legacyReads = legacyReads;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -74,21 +77,99 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
     }
 
     /// <inheritdoc />
-    public async Task UpdateStatusAsync(
-        Guid id,
-        ConnectorFoodEntryStatus status,
-        CancellationToken ct = default)
+    public async Task<DismissMatchOutcome> DismissAsync(Guid id, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var entity = await db.ConnectorFoodEntries
-            .FirstOrDefaultAsync(e => e.Id == id, ct);
+        var now = _time.GetUtcNow();
 
-        if (entity != null)
+        var dismissed = await db.ConnectorFoodEntries
+            .Where(e => e.Id == id && e.Status == ConnectorFoodEntryStatus.Pending)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(e => e.Status, ConnectorFoodEntryStatus.Standalone)
+                    .SetProperty(e => e.ResolvedAt, now)
+                    .SetProperty(e => e.SysUpdatedAt, now.UtcDateTime),
+                ct);
+
+        if (dismissed == 1)
         {
-            entity.Status = status;
-            entity.ResolvedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
+            return DismissMatchOutcome.Dismissed;
         }
+
+        var stored = await db.ConnectorFoodEntries
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => (ConnectorFoodEntryStatus?)e.Status)
+            .FirstOrDefaultAsync(ct);
+
+        return stored switch
+        {
+            null => DismissMatchOutcome.NotFound,
+            ConnectorFoodEntryStatus.Standalone => DismissMatchOutcome.AlreadyDismissed,
+            _ => DismissMatchOutcome.AlreadyResolved,
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<AcceptMatchOutcome> AcceptMatchAsync(
+        Guid foodEntryId,
+        TreatmentFood treatmentFood,
+        CancellationToken ct = default)
+    {
+        if (treatmentFood.Id == Guid.Empty)
+        {
+            throw new ArgumentException("The row to write needs an id.", nameof(treatmentFood));
+        }
+
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var db = unit.Context;
+        var breakdowns = new TreatmentFoodRepository(unit);
+
+        var outcome = await unit.CommitAsync(
+            async token =>
+            {
+                var now = _time.GetUtcNow();
+                var claimed = await db.ConnectorFoodEntries
+                    .Where(e => e.Id == foodEntryId && e.Status == ConnectorFoodEntryStatus.Pending)
+                    .ExecuteUpdateAsync(
+                        s => s
+                            .SetProperty(e => e.Status, ConnectorFoodEntryStatus.Matched)
+                            .SetProperty(e => e.MatchedCarbIntakeId, treatmentFood.CarbIntakeId)
+                            .SetProperty(e => e.ResolvedAt, now)
+                            .SetProperty(e => e.SysUpdatedAt, now.UtcDateTime),
+                        token);
+
+                if (claimed == 1)
+                {
+                    await breakdowns.CreateAsync(treatmentFood, token);
+                    return AcceptMatchOutcome.Linked;
+                }
+
+                var stored = await db.ConnectorFoodEntries
+                    .AsNoTracking()
+                    .Where(e => e.Id == foodEntryId)
+                    .Select(e => new { e.Status, e.MatchedCarbIntakeId })
+                    .FirstOrDefaultAsync(token);
+
+                return stored switch
+                {
+                    null => AcceptMatchOutcome.NotFound,
+                    { Status: ConnectorFoodEntryStatus.Matched } when stored.MatchedCarbIntakeId == treatmentFood.CarbIntakeId =>
+                        AcceptMatchOutcome.AlreadyLinked,
+                    _ => AcceptMatchOutcome.AlreadyResolved,
+                };
+            },
+            async (result, token) =>
+                result == AcceptMatchOutcome.Linked
+                && await db.TreatmentFoods.AsNoTracking().AnyAsync(t => t.Id == treatmentFood.Id, token),
+            ct: ct);
+
+        if (outcome == AcceptMatchOutcome.Linked && _legacyReads is not null)
+        {
+            await _legacyReads.WrittenAsync([typeof(TreatmentFood)]);
+        }
+
+        return outcome;
     }
 
     /// <inheritdoc />
@@ -106,6 +187,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         var idsForMatching = new HashSet<Guid>();
 
         var batchFoodCache = new Dictionary<string, FoodEntity>(StringComparer.OrdinalIgnoreCase);
+        var batchEntryKeys = new HashSet<(string ConnectorSource, string ExternalEntryId)>();
 
         foreach (var import in imports)
         {
@@ -124,6 +206,14 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
             var connectorSource = import.ConnectorSource.Trim();
             var externalEntryId = import.ExternalEntryId.Trim();
             var externalFoodId = import.ExternalFoodId?.Trim() ?? string.Empty;
+
+            // The lookup below cannot see an entry this batch has added but not saved, so a second
+            // import of one key would insert a second row. The first import's values stand, as a
+            // caller that keys its own records by entry id keeps the first it sees.
+            if (!batchEntryKeys.Add((connectorSource, externalEntryId)))
+            {
+                continue;
+            }
 
             FoodEntity? foodEntity = null;
             if (import.Food != null && !string.IsNullOrWhiteSpace(import.Food.ExternalId))
@@ -224,6 +314,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
                 if (entryEntity.Status == ConnectorFoodEntryStatus.Deleted)
                 {
                     entryEntity.Status = ConnectorFoodEntryStatus.Pending;
+                    entryEntity.MatchedCarbIntakeId = null;
                     entryEntity.ResolvedAt = null;
                     idsForMatching.Add(entryEntity.Id);
 
@@ -298,30 +389,65 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         await using var db = await _contexts.CreateAsync(ct);
 
         // Only entries still awaiting a decision are withdrawn. A matched or dismissed one has been
-        // acted on and its carbs are linked to a treatment. Pending is also the only status that
-        // produces match suggestions.
+        // acted on. Pending is also the only status that produces match suggestions.
         var candidates = await db.ConnectorFoodEntries
+            .AsNoTracking()
             .Where(e => e.ConnectorSource == connectorSource
                         && e.Status == ConnectorFoodEntryStatus.Pending
                         && e.ConsumedAt >= from
                         && e.ConsumedAt <= to)
+            .Select(e => new { e.Id, e.ExternalEntryId })
             .ToListAsync(ct);
 
-        var removed = candidates.Where(e => !presentExternalEntryIds.Contains(e.ExternalEntryId)).ToList();
+        var removed = candidates
+            .Where(e => !presentExternalEntryIds.Contains(e.ExternalEntryId))
+            .Select(e => e.Id)
+            .ToList();
         if (removed.Count == 0)
         {
             return [];
         }
 
-        foreach (var entry in removed)
-        {
-            entry.Status = ConnectorFoodEntryStatus.Deleted;
-            entry.ResolvedAt = resolvedAt;
-        }
+        // Each entry is withdrawn by its own claim on Pending, as an accept claims it, so one an
+        // accept linked after the read above stays linked and is not reported as withdrawn.
+        // A commit that landed but reported failure reruns the claims, which then find every entry
+        // already Deleted, so the verification returns the attempt's own ids instead. One
+        // transaction commits all of them or none, so the first id decides. The stored precision is
+        // the microsecond, hence the window around the stamp.
+        var stampFrom = resolvedAt.AddTicks(-10);
+        var stampTo = resolvedAt.AddTicks(10);
+        return await db.ExecuteInTransactionAsync<IReadOnlyList<Guid>>(
+            async token =>
+            {
+                var withdrawn = new List<Guid>(removed.Count);
+                foreach (var id in removed)
+                {
+                    var claimed = await db.ConnectorFoodEntries
+                        .Where(e => e.Id == id && e.Status == ConnectorFoodEntryStatus.Pending)
+                        .ExecuteUpdateAsync(
+                            s => s
+                                .SetProperty(e => e.Status, ConnectorFoodEntryStatus.Deleted)
+                                .SetProperty(e => e.ResolvedAt, resolvedAt)
+                                .SetProperty(e => e.SysUpdatedAt, resolvedAt.UtcDateTime),
+                            token);
 
-        await db.SaveChangesAsync(ct);
+                    if (claimed == 1)
+                    {
+                        withdrawn.Add(id);
+                    }
+                }
 
-        return removed.ConvertAll(e => e.Id);
+                return withdrawn;
+            },
+            verifySucceeded: async (withdrawn, token) =>
+                withdrawn.Count > 0
+                && await db.ConnectorFoodEntries.AnyAsync(
+                    e => e.Id == withdrawn[0]
+                         && e.Status == ConnectorFoodEntryStatus.Deleted
+                         && e.ResolvedAt >= stampFrom
+                         && e.ResolvedAt <= stampTo,
+                    token),
+            ct: ct);
     }
 
     private static FoodEntity BuildFoodEntity(ConnectorFoodImport food, string connectorSource)

@@ -4,6 +4,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -17,13 +18,13 @@ using Nocturne.API.Services.Caching;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Carbohydrate intakes, the foods in each intake, and meals. Create, read, update, and delete carb intakes
-/// and their food lines. Create a meal, and list meals.
+/// The foods in each carb intake, and meals. Create, read, update, and delete the food lines of a carb
+/// intake. Create a meal, and list meals.
 /// </summary>
 /// <remarks>
-/// Three logical resource groups are exposed under <c>/api/v4/nutrition</c>:
+/// Two logical resource groups are exposed under <c>/api/v4/nutrition</c>; the carb intakes
+/// themselves are <see cref="CarbIntakeController"/>:
 /// <list type="bullet">
-///   <item><description><b>Carb Intakes</b> (<c>/carbs</c>) — standard CRUD for <see cref="CarbIntake"/> records backed by <see cref="ICarbIntakeRepository"/>.</description></item>
 ///   <item><description><b>Food Breakdown</b> (<c>/carbs/{id}/foods</c>) — per-carb-intake food attribution lines managed via <see cref="ITreatmentFoodService"/>.</description></item>
 ///   <item><description><b>Meals</b> (<c>/meals</c>) — atomic creation of a correlated <see cref="Bolus"/> + <see cref="CarbIntake"/> pair, and event-centric meal retrieval grouped by <c>CorrelationId</c>.</description></item>
 /// </list>
@@ -31,7 +32,9 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// The <c>POST /meals</c> endpoint is idempotent on <c>(DataSource, SyncIdentifier)</c>: if a matching
 /// bolus already exists its <c>CorrelationId</c> is propagated to both records. The two repositories
 /// write on their own contexts, so <see cref="GuardRecreationAsync"/> is what keeps a refused meal
-/// from writing one half.
+/// from writing one half. The food types of the carb intake of an existing meal are filled through
+/// <see cref="CommittedWriteEnrichment"/>, so a failure there leaves them unset and the meal is still
+/// answered.
 ///
 /// Meal retrieval, including its demo-mode filtering, is <see cref="IMealReadService"/>.
 /// </remarks>
@@ -39,7 +42,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="ITreatmentFoodService"/>
 [ApiController]
-[System.ComponentModel.DisplayName("Carbs and Meals")]
+[System.ComponentModel.DisplayName("Carb Foods and Meals")]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
 [RequireScope(Scope.TreatmentsRead)]
@@ -75,217 +78,6 @@ public class NutritionController : ControllerBase, IWriteScopedController
         _foodRepo = foodRepo;
         _mealReadService = mealReadService;
     }
-
-    #region Carb Intakes
-
-    /// <summary>
-    /// Get carb intakes with optional filtering
-    /// </summary>
-    /// <param name="from">Inclusive start of the date range filter.</param>
-    /// <param name="to">Inclusive end of the date range filter.</param>
-    /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
-    /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
-    /// <param name="sort">Sort order by timestamp: `timestamp_asc` or `timestamp_desc`. Defaults to `timestamp_desc`.</param>
-    /// <param name="device">Optional filter to restrict results to a specific device.</param>
-    /// <param name="source">Optional filter to restrict results to a specific data source.</param>
-    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
-    /// <param name="ct">Cancels the operation.</param>
-    [HttpGet("carbs")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(PaginatedResponse<CarbIntake>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<CarbIntake>>> GetCarbIntakes(
-        [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] int limit = 100, [FromQuery] int offset = 0,
-        [FromQuery] string sort = "timestamp_desc",
-        [FromQuery] string? device = null, [FromQuery] string? source = null,
-        [FromQuery] bool includeTotal = false,
-        CancellationToken ct = default)
-    {
-        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
-            return invalid;
-
-        var data = (await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct)).ToList();
-        await _treatmentFoodService.ApplyFoodTypesAsync(data, ct);
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => _carbIntakeRepo.CountAsync(from, to, device, source, ct));
-        return Ok(new PaginatedResponse<CarbIntake> { Data = data, Pagination = pagination });
-    }
-
-    /// <summary>
-    /// Get a carb intake by ID
-    /// </summary>
-    [HttpGet("carbs/{id:guid}")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<CarbIntake>> GetCarbIntakeById(Guid id, CancellationToken ct = default)
-    {
-        var result = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        if (result is null)
-            return NotFound();
-
-        await _treatmentFoodService.ApplyFoodTypesAsync([result], ct);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Create a new carb intake
-    /// </summary>
-    [HttpPost("carbs")]
-    [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes"])]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<CarbIntake>> CreateCarbIntake([FromBody] CreateCarbIntakeRequest request, CancellationToken ct = default)
-    {
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        var model = MapCreateToModel(request);
-
-        var created = await _carbIntakeRepo.CreateAsync(model, WriteOrigin.Live, ct);
-        return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
-    }
-
-    /// <summary>
-    /// Create or update carb intakes in bulk (max 1000).
-    /// An intake with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other intake is inserted. An item whose pair is held by a deleted record is skipped and left out of the response.
-    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing.
-    /// </summary>
-    /// <remarks>
-    /// Array semantics are per-item upsert, not all-or-nothing: each intake carrying both
-    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
-    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
-    /// is persisted.
-    /// </remarks>
-    [HttpPost("carbs/bulk")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(typeof(CarbIntake[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CarbIntake[]>> CreateCarbIntakesBulk(
-        [FromBody] CreateCarbIntakeRequest[] requests,
-        CancellationToken ct = default)
-    {
-        if (await this.ValidateBulkAsync(requests, "Carb intake", "intake", "intakes", ct) is { } invalid)
-            return invalid;
-
-        var models = requests.Select(MapCreateToModel).ToList();
-        var persisted = (await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
-        await _treatmentFoodService.ApplyFoodTypesAsync(persisted, ct);
-        return StatusCode(201, persisted);
-    }
-
-    private static CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
-    {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
-        Carbs = request.Carbs,
-        SyncIdentifier = request.SyncIdentifier,
-        CarbTime = request.CarbTime,
-        AbsorptionTime = request.AbsorptionTime,
-        FatGrams = request.FatGrams,
-        ProteinGrams = request.ProteinGrams,
-        // Records split from one source share a correlation_id; it is a free-standing
-        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
-        CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
-    };
-
-    /// <summary>
-    /// Update an existing carb intake
-    /// </summary>
-    [HttpPut("carbs/{id:guid}")]
-    [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes", "GetCarbIntakeById"])]
-    [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<CarbIntake>> UpdateCarbIntake(Guid id, [FromBody] UpdateCarbIntakeRequest request, CancellationToken ct = default)
-    {
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        var existing = await _carbIntakeRepo.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = new CarbIntake
-        {
-            Id = id,
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
-            Carbs = request.Carbs,
-            SyncIdentifier = request.SyncIdentifier,
-            CarbTime = request.CarbTime,
-            AbsorptionTime = request.AbsorptionTime,
-            FatGrams = request.FatGrams,
-            ProteinGrams = request.ProteinGrams,
-            CorrelationId = request.CorrelationId ?? existing.CorrelationId,
-            LegacyId = existing.LegacyId,
-            CreatedAt = existing.CreatedAt,
-            AdditionalProperties = existing.AdditionalProperties,
-        };
-
-        try
-        {
-            var updated = await _carbIntakeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            await _treatmentFoodService.ApplyFoodTypesAsync([updated], ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
-
-    /// <summary>
-    /// Delete a carb intake
-    /// </summary>
-    [HttpDelete("carbs/{id:guid}")]
-    [RequireDeclaredWriteScope]
-    [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> DeleteCarbIntake(Guid id, CancellationToken ct = default)
-    {
-        try
-        {
-            await _carbIntakeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
-
-    /// <summary>
-    /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
-    /// </summary>
-    [HttpDelete("carbs/by-sync-id")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> DeleteCarbIntakeBySyncIdentifier(
-        [FromQuery] string dataSource,
-        [FromQuery] string syncIdentifier,
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
-            return BadRequest("dataSource and syncIdentifier are required");
-
-        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
-        return deleted > 0 ? NoContent() : NotFound();
-    }
-
-    #endregion
 
     #region Carb Intake Food Breakdown
 
@@ -401,7 +193,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// </summary>
     [HttpPost("meals")]
     [RequireDeclaredWriteScope]
-    [RemoteForm(Invalidates = ["GetCarbIntakes", "GetMeals"])]
+    [RemoteForm(Invalidates = ["CarbIntake_GetAll", "GetMeals"])]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -410,21 +202,15 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateMealRequest request,
         CancellationToken ct = default)
     {
-        if (request.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(request.Timestamp))
+            return this.TimestampRequiredProblem();
 
         // The meal's bolus + carb intake share a correlation_id; it is a free-standing
         // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
         var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
-        var timestamp = request.Timestamp.UtcDateTime;
 
         var bolusModel = new Bolus
         {
-            Timestamp = timestamp,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
             Insulin = request.Insulin,
             BolusType = request.BolusType,
             Kind = BolusKind.Manual,
@@ -433,21 +219,16 @@ public class NutritionController : ControllerBase, IWriteScopedController
             InsulinType = request.InsulinType,
             BolusCalculationId = request.BolusCalculationId,
             CorrelationId = correlationId,
-        };
+        }.WithHeaderFrom(request);
 
         var carbModel = new CarbIntake
         {
-            Timestamp = timestamp,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
             Carbs = request.Carbs,
             SyncIdentifier = request.SyncIdentifier,
             CarbTime = request.CarbTime,
             AbsorptionTime = request.AbsorptionTime,
             CorrelationId = correlationId,
-        };
+        }.WithHeaderFrom(request);
 
         if (!string.IsNullOrEmpty(request.DataSource) && !string.IsNullOrEmpty(request.SyncIdentifier))
             await GuardRecreationAsync(request.DataSource, request.SyncIdentifier, ct);
@@ -472,7 +253,10 @@ public class NutritionController : ControllerBase, IWriteScopedController
         var carb = await _carbIntakeRepo.UpsertAsync(carbModel, WriteOrigin.Live, ct);
 
         if (!carb.Created)
-            await _treatmentFoodService.ApplyFoodTypesAsync([carb.Record], ct);
+        {
+            CarbIntake[] carbs = [carb.Record];
+            await CommittedWriteEnrichment.RunAsync(this, carbs, () => _treatmentFoodService.ApplyFoodTypesAsync(carbs, ct), ct);
+        }
 
         var response = new CreateMealResponse
         {
@@ -516,6 +300,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     [HttpGet("meals")]
     [RemoteQuery]
     [ProducesResponseType(typeof(MealEvent[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MealEvent[]>> GetMeals(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
@@ -524,6 +309,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
     {
         var fromTimestamp = from ?? DateTime.UtcNow.Date;
         var toTimestamp = to ?? DateTime.UtcNow.Date.AddDays(1);
+        if (this.RejectDateSpan(fromTimestamp, toTimestamp) is { } overlong)
+            return overlong;
 
         var meals = await _mealReadService.GetMealsAsync(fromTimestamp, toTimestamp, attributed, ct);
         return Ok(meals.ToArray());

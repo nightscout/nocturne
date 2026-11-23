@@ -85,4 +85,21 @@ public class AlertActionHandlerTests
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [Fact]
+    public async Task Dismiss_archives_without_acknowledging()
+    {
+        var subjectId = Guid.NewGuid();
+        CallerIs(subjectId, Scope.AlertsReadWrite);
+
+        var result = await CreateHandler().HandleAsync(
+            Guid.NewGuid(), InAppProvider.DismissActionId, subjectId.ToString(), Guid.NewGuid().ToString(), null);
+
+        result.Should().Be(NotificationActionResult.Dismissed);
+        _acknowledgement.Verify(
+            s => s.AcknowledgeExcursionAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<AlertAcknowledgementAuthority>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

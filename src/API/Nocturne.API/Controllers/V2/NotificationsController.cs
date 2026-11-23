@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Notifications;
@@ -68,7 +69,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SendLoopNotification(CancellationToken cancellationToken = default)
     {
-        var remoteAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         LoopNotificationData data;
         try
@@ -144,7 +145,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         if (notification == null)
         {
@@ -203,7 +204,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         var status = await _notificationService.GetNotificationStatusAsync(cancellationToken);
 

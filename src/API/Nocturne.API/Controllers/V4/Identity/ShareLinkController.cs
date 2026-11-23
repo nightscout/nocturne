@@ -1,6 +1,7 @@
 using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Identity;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
@@ -43,15 +44,15 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>Get the current public share link state.</summary>
     [HttpGet]
+    [RequireScope(Scope.SharingManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
-
-        return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
+        var link = await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct);
+        link.CallerAccessEndsAt = HttpContext.CallerAccessEndsAt();
+        return Ok(link);
     }
 
     /// <summary>
@@ -62,14 +63,12 @@ public class ShareLinkController : ControllerBase
     /// </summary>
     [HttpPost("reveal")]
     [RequireInteractiveSession]
+    [RequireScope(Scope.SharingManage)]
     [RemoteCommand]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RevealShareLink(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
-
         if (await WouldHandOutFullHistoryAsync(ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
@@ -83,7 +82,7 @@ public class ShareLinkController : ControllerBase
                 AuthAuditEventType.ShareLinkRevealed,
                 HttpContext.GetSubjectId(),
                 success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString());
         }
 
@@ -96,13 +95,17 @@ public class ShareLinkController : ControllerBase
     /// </summary>
     [HttpPost("rotate")]
     [RequireInteractiveSession]
+    [RequireScope(Scope.SharingManage)]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
 
         if (await WouldHandOutFullHistoryAsync(ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
@@ -112,13 +115,14 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>Disable public sharing and invalidate the current link.</summary>
     [HttpDelete]
+    [RequireScope(Scope.SharingManage)]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> DisableShareLink(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
 
         return Ok(await _shareLinkService.DisableAsync(_tenantAccessor.TenantId, ct));
     }
@@ -126,14 +130,15 @@ public class ShareLinkController : ControllerBase
     /// <summary>Choose whether the public view shows full history or only the last 24 hours.</summary>
     [HttpPut("full-history")]
     [RequireInteractiveSession]
+    [RequireScope(Scope.SharingManage)]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
 
         if (request.FullHistory && HttpContext.IsCallerHistoryClamped())
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
@@ -148,6 +153,7 @@ public class ShareLinkController : ControllerBase
     /// </summary>
     [HttpPut("scopes")]
     [RequireInteractiveSession]
+    [RequireScope(Scope.SharingManage)]
     [RemoteCommand(Invalidates = ["GetShareLink"])]
     [ProducesResponseType(typeof(ShareLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -155,8 +161,8 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.SharingManage))
-            return Forbid();
+        if (this.PublicSharingEndDateRefusal() is { } dated)
+            return dated;
 
         // A member may publish only what they can read themselves.
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)

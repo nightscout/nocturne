@@ -7,10 +7,11 @@ import {
   ConnectionKind,
   ConnectionStatus,
   type Connection,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 let deleteArgs: unknown[];
 let deleteImpl: () => Promise<unknown>;
+const keepDeviceCredential = vi.hoisted(() => vi.fn(() => Promise.resolve({ success: true })));
 
 vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   deleteConnectionRecords: (args: unknown) => {
@@ -23,6 +24,7 @@ vi.mock("#lib/api/generated/connectedApps.generated.remote.js", () => ({
 }));
 vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   revoke: vi.fn(),
+  keep: keepDeviceCredential,
 }));
 
 const toastSuccess = vi.hoisted(() => vi.fn());
@@ -45,14 +47,19 @@ const token: Connection = {
   canDeleteRecords: true,
 };
 
-function renderDialog(connection: Connection, canManage = true) {
-  render(ConnectionDetailDialog, {
+/** What the viewer may do: manage the site's settings, only set up data sources, or neither. */
+const SETTINGS = { canManage: true, canSetUp: true };
+const CARETAKER = { canManage: false, canSetUp: true };
+const VIEWER = { canManage: false, canSetUp: false };
+
+function renderDialog(connection: Connection, access: { canManage: boolean; canSetUp: boolean }) {
+  return render(ConnectionDetailDialog, {
     props: {
       open: true,
       connection,
       windowDays: 30,
       activeWithinMinutes: 15,
-      canManage,
+      ...access,
       onQuickSync: () => {},
       onDeleteStream: () => {},
     },
@@ -67,7 +74,7 @@ describe("ConnectionDetailDialog", () => {
   });
 
   it("deletes the records of the viewer's own credentials after the typed confirmation", async () => {
-    renderDialog(token);
+    renderDialog(token, SETTINGS);
 
     await page.getByRole("button", { name: "Delete data..." }).click();
     const confirm = page.getByRole("button", { name: "Delete all data" });
@@ -84,7 +91,7 @@ describe("ConnectionDetailDialog", () => {
   });
 
   it("allows re-import when the option is checked", async () => {
-    renderDialog(token);
+    renderDialog(token, SETTINGS);
 
     await page.getByRole("button", { name: "Delete data..." }).click();
     await page.getByRole("checkbox", { name: /Allow re-import/ }).click();
@@ -101,7 +108,7 @@ describe("ConnectionDetailDialog", () => {
       ...token,
       direction: ConnectionDirection.NoRecords,
       recordCounts: {},
-    });
+    }, SETTINGS);
 
     await expect
       .element(page.getByRole("button", { name: "Delete data..." }))
@@ -110,7 +117,7 @@ describe("ConnectionDetailDialog", () => {
 
   it("says a refused delete is about the credential, not about missing records", async () => {
     deleteImpl = async () => error(404, "Not found");
-    renderDialog(token);
+    renderDialog(token, SETTINGS);
 
     await page.getByRole("button", { name: "Delete data..." }).click();
     await page.getByRole("textbox").fill("DELETE");
@@ -128,7 +135,7 @@ describe("ConnectionDetailDialog", () => {
   });
 
   it("offers no delete when the server finds a credential of the connection that is not the viewer's, listed or not", async () => {
-    renderDialog({ ...token, canDeleteRecords: false });
+    renderDialog({ ...token, canDeleteRecords: false }, SETTINGS);
 
     await expect.element(page.getByText("Phone uploader").first()).toBeVisible();
     expect(
@@ -144,7 +151,7 @@ describe("ConnectionDetailDialog", () => {
         ...token.credentials!,
         { grantId: otherGrant, label: "Theirs", isOwn: false },
       ],
-    });
+    }, SETTINGS);
 
     await expect.element(page.getByText("Belongs to another member")).toBeVisible();
     expect(
@@ -153,7 +160,7 @@ describe("ConnectionDetailDialog", () => {
   });
 
   it("offers no delete to a viewer who cannot manage connections", async () => {
-    renderDialog(token, false);
+    renderDialog(token, VIEWER);
 
     await expect.element(page.getByText("Phone uploader").first()).toBeVisible();
     expect(
@@ -172,11 +179,120 @@ describe("ConnectionDetailDialog", () => {
       recordCounts: { Glucose: 10 },
       credentials: [],
       streams: [],
-    });
+    }, SETTINGS);
 
     await expect.element(page.getByText("Dexcom").first()).toBeVisible();
     expect(
       page.getByRole("button", { name: "Delete data..." }).elements()
     ).toHaveLength(0);
+  });
+
+  const dexcom: Connection = {
+    id: "connector:dexcom",
+    kind: ConnectionKind.Connector,
+    direction: ConnectionDirection.Fetches,
+    status: ConnectionStatus.Active,
+    name: "Dexcom",
+    connectorId: "dexcom",
+    recordCounts: { Glucose: 10 },
+    credentials: [],
+    streams: [],
+  };
+
+  it("offers a caretaker and a settings holder configure and sync on a connector", async () => {
+    for (const access of [CARETAKER, SETTINGS]) {
+      const dialog = renderDialog(dexcom, access);
+
+      await expect.element(page.getByRole("link", { name: "Configure" })).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Sync now" })).toBeVisible();
+      dialog.unmount();
+    }
+  });
+
+  it("offers a viewer neither configure nor sync on a connector", async () => {
+    renderDialog(dexcom, VIEWER);
+
+    await expect.element(page.getByText("Dexcom").first()).toBeVisible();
+    expect(page.getByRole("link", { name: "Configure" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Sync now" }).elements()).toHaveLength(0);
+  });
+
+  it("tells a caretaker why the data delete is not theirs", async () => {
+    renderDialog(token, CARETAKER);
+
+    await expect
+      .element(page.getByTestId("connection-delete-reason"))
+      .toHaveTextContent("Only members who can manage this site's settings can delete synced data.");
+    expect(page.getByRole("button", { name: "Delete data..." }).elements()).toHaveLength(0);
+  });
+
+  it("gives a settings holder the data delete and a viewer no reason", async () => {
+    const settings = renderDialog(token, SETTINGS);
+    await expect.element(page.getByRole("button", { name: "Delete data..." })).toBeVisible();
+    expect(page.getByTestId("connection-delete-reason").elements()).toHaveLength(0);
+    settings.unmount();
+
+    renderDialog(token, VIEWER);
+    await expect.element(page.getByText("Phone uploader").first()).toBeVisible();
+    expect(page.getByTestId("connection-delete-reason").elements()).toHaveLength(0);
+  });
+
+  describe("a device credential a member set up", () => {
+    const campGrant = "33333333-3333-3333-3333-333333333333";
+
+    function camp(credential: Partial<NonNullable<Connection["credentials"]>[number]>): Connection {
+      return {
+        ...token,
+        id: `token:${campGrant}`,
+        name: "Camp uploader",
+        canDeleteRecords: false,
+        credentials: [
+          {
+            grantId: campGrant,
+            label: "Camp uploader",
+            isOwn: false,
+            stopsAt: "2026-12-02T00:00:00Z",
+            setUpByName: "Sam",
+            ...credential,
+          },
+        ],
+      };
+    }
+
+    beforeEach(() => keepDeviceCredential.mockClear());
+
+    it("says when it stops and who set it up", async () => {
+      renderDialog(camp({ hasStopped: false }), SETTINGS);
+
+      await expect
+        .element(page.getByTestId("credential-stop"))
+        .toHaveTextContent(/^Stops on .+\. Sam set it up\.$/);
+    });
+
+    it("says when it stopped, in the warning tone", async () => {
+      renderDialog(camp({ hasStopped: true }), SETTINGS);
+
+      const line = page.getByTestId("credential-stop");
+      await expect.element(line).toHaveTextContent(/^Stopped on .+\. Sam set it up\.$/);
+      await expect.element(line).toHaveClass(/text-warning/);
+    });
+
+    it("keeps it when the API says the viewer may", async () => {
+      renderDialog(camp({ canKeep: true }), SETTINGS);
+
+      await page.getByRole("button", { name: "Keep this connection" }).click();
+
+      await expect.poll(() => keepDeviceCredential.mock.calls).toEqual([[campGrant]]);
+      expect(toastSuccess).toHaveBeenCalledWith("Connection kept.");
+    });
+
+    it("shows no keep control when the API says the viewer may not", async () => {
+      renderDialog(camp({ canKeep: false }), SETTINGS);
+
+      await expect.element(page.getByTestId("credential-stop")).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: "Keep this connection" }))
+        .not.toBeInTheDocument();
+    });
   });
 });

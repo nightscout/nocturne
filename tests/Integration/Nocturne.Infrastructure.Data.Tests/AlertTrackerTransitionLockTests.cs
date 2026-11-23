@@ -113,6 +113,30 @@ public class AlertTrackerTransitionLockTests
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task A_tracker_row_is_written_without_the_retired_count_and_one_that_holds_it_still_reads()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedTenantAsync(tenant);
+        await using var provider = BuildProvider();
+        var ruleId = await SeedRuleAsync(provider, tenant);
+
+        await using var context = await ContextAsync(provider, tenant);
+        var repository = new AlertTrackerRepository(DbUnitOfWork.Own(context));
+        await repository.UpsertTrackerStateAsync(State(ruleId, "active"));
+
+        var stored = await context.Database
+            .SqlQuery<int>($"SELECT confirmation_count AS \"Value\" FROM alert_tracker_state WHERE alert_rule_id = {ruleId}")
+            .SingleAsync();
+        stored.Should().Be(0, "the column keeps its default while the model no longer writes it");
+
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE alert_tracker_state SET state = 'confirming', confirmation_count = 3 WHERE alert_rule_id = {ruleId}");
+        await using var fresh = await ContextAsync(provider, tenant);
+        var reader = new AlertTrackerRepository(DbUnitOfWork.Own(fresh));
+        (await reader.GetTrackerStateAsync(ruleId))!.State.Should().Be("confirming");
+    }
+
     private static AlertTrackerState State(Guid ruleId, string state) => new()
     {
         AlertRuleId = ruleId,

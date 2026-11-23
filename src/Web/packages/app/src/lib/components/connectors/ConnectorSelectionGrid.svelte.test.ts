@@ -5,7 +5,7 @@ import ConnectorSelectionGrid from "./ConnectorSelectionGrid.svelte";
 import type {
 	AvailableConnector,
 	ServicesOverview,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 function makeConnector(
 	overrides: Partial<AvailableConnector> = {},

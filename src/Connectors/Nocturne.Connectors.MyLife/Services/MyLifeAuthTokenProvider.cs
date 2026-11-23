@@ -116,6 +116,7 @@ public class MyLifeAuthTokenProvider(
                 _logger.LogWarning(
                     "MyLife auth failed: login returned no auth token (check credentials; appVersion {AppVersion})",
                     config.AppVersion);
+                RecordLoginAnswer(credentialsRefused: true);
                 return (null, false);
             }
 

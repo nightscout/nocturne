@@ -6,9 +6,9 @@ using Nocturne.Infrastructure.Data.Repositories;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Drops a rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) once a write changes what
-/// it was taken against. That is the rule's condition, auto-resolve configuration or
-/// enablement. Every writer of alert rules goes through here.
+/// Drops a rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) and its recorded next change
+/// (§5.3) once a write changes what they were taken against, the fields of
+/// <see cref="AlertRuleConditions"/>. Every writer of alert rules goes through here.
 /// </summary>
 /// <remarks>
 /// Under the lease, no evaluation can read the hold and then find it cleared when it writes, and
@@ -31,9 +31,9 @@ public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate)
         SaveAndClearAsync(unit, [ruleId], ct);
 
     /// <summary>
-    /// Saves the changes <paramref name="unit"/> tracks, clears the hold of each of
-    /// <paramref name="ruleIds"/> and prunes its sustained timers to the paths its saved trees still
-    /// have (<see cref="ConditionTimerPaths"/>), in one transaction on that unit, under the lease
+    /// Saves the changes <paramref name="unit"/> tracks, clears the hold and recorded next change
+    /// of each of <paramref name="ruleIds"/> and prunes its sustained timers to the paths its
+    /// saved trees still have (<see cref="ConditionTimerPaths"/>), in one transaction on that unit, under the lease
     /// and transition lock the tracker's writer takes for each rule, so that none lands without
     /// the others.
     /// </summary>
@@ -89,14 +89,16 @@ public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate)
         }
     }
 
-    private static async Task<bool> ClearHoldAsync(
+    private static async Task ClearHoldAsync(
         IAlertTrackerRepository tracker, Guid ruleId, CancellationToken ct)
     {
         var state = await tracker.GetTrackerStateAsync(ruleId, ct);
-        if (state is not { AwaitingRearm: true })
-            return false;
+        if (state is not ({ AwaitingRearm: true } or { NextChangeKnown: true }))
+            return;
         state.AwaitingRearm = false;
+        state.NextChangeKnown = false;
+        state.NextChangeAt = null;
+        state.NextChangeGlucose = null;
         await tracker.UpsertTrackerStateAsync(state, ct);
-        return true;
     }
 }

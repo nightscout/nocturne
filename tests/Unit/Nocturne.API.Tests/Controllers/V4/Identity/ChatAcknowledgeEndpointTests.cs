@@ -62,7 +62,7 @@ public class ChatAcknowledgeEndpointTests : IDisposable
 
         return new ChatIdentityDirectoryController(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,

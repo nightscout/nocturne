@@ -34,6 +34,22 @@ public class AutoResolveSuggestionTests
             $$$"""{"type":"threshold","threshold":{"direction":"{{{direction}}}","value":70.0}}""",
             $$$"""{"type":"threshold","threshold":{"direction":"{{{opposite}}}","value":70.0}}""");
 
+    [Fact]
+    public void AnOppositeCarriesNoClearMarginSinceAResolveTreeReadsNone() =>
+        Opposite(
+            """
+            {"type":"composite","composite":{"operator":"and","conditions":[
+                {"type":"threshold","threshold":{"direction":"below","value":70,"clear_margin":5}},
+                {"type":"iob","iob":{"operator":">","value":2,"clear_margin":1}},
+                {"type":"rate_of_change","rate_of_change":{"direction":"falling","rate":2,"clear_margin":1}}]}}
+            """,
+            """
+            {"type":"composite","composite":{"operator":"or","conditions":[
+                {"type":"threshold","threshold":{"direction":"above","value":70}},
+                {"type":"iob","iob":{"operator":"<=","value":2}},
+                {"type":"not","not":{"child":{"type":"rate_of_change","rate_of_change":{"direction":"falling","rate":2}}}}]}}
+            """);
+
     [Theory]
     [InlineData("<", ">=")]
     [InlineData("<=", ">")]
@@ -130,6 +146,9 @@ public class AutoResolveSuggestionTests
     [InlineData("""{"type":"rate_of_change","rate_of_change":{"direction":"rising","rate":0.5}}""", "not")]
     [InlineData("""{"type":"trend","trend":{"bucket":"rising"}}""", "bucket")]
     [InlineData("""{"type":"predicted","predicted":{"operator":"<=","value":55,"within_minutes":20}}""", "not")]
+    [InlineData("""{"type":"predicted","predicted":{"operator":"<","value":70,"within_minutes":30,"min_of":["iob","zt"]}}""", "not")]
+    [InlineData("""{"type":"eventual_glucose","eventual_glucose":{"operator":"<","value":80}}""", "operator")]
+    [InlineData("""{"type":"carbs_required","carbs_required":{"operator":">=","value":10}}""", "operator")]
     [InlineData("""{"type":"staleness","staleness":{"operator":">","value":15}}""", "operator")]
     [InlineData("""{"type":"iob","iob":{"operator":">","value":2}}""", "operator")]
     [InlineData("""{"type":"cob","cob":{"operator":">","value":20}}""", "operator")]

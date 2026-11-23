@@ -55,17 +55,8 @@ public static class V4ReadLimits
     /// <inheritdoc cref="V4ApiLimits.MaxDateSpanDays"/>
     public const int MaxDateSpanDays = V4ApiLimits.MaxDateSpanDays;
 
-    /// <summary>
-    /// Maximum local calendar days a CGM comparison or sleep trends window may cover.
-    /// </summary>
-    /// <remarks>
-    /// Counted in the tenant's zone, from the day of <c>from</c> through the day of <c>to</c>
-    /// inclusive, by <see cref="RejectAnalyticsSpanAsync"/>. A range of exactly this many days ends
-    /// on the last millisecond of its final day, which is what the report pages send; ending on the
-    /// midnight after it counts one day more. Loop Analysis trims to this many days instead of
-    /// refusing, in <c>LoopAnalysisRanges</c>.
-    /// </remarks>
-    public const int MaxAnalyticsSpanDays = 90;
+    /// <inheritdoc cref="V4ApiLimits.MaxAnalyticsSpanDays"/>
+    public const int MaxAnalyticsSpanDays = V4ApiLimits.MaxAnalyticsSpanDays;
 
     private const int ZoneLookupMarginDays = 2;
 

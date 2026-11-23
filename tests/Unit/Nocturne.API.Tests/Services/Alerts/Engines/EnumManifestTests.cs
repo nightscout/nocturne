@@ -46,6 +46,9 @@ internal static class EnumManifest
             ["TempBasalMetric"] = WireNames<TempBasalMetric>(),
             ["TransmitterBatteryMetric"] = WireNames<TransmitterBatteryMetric>(),
             ["TrendBucket"] = WireNames<TrendBucket>(),
+            ["SensorState"] = WireNames<SensorState>(),
+            ["ForecastCurve"] = WireNames<ForecastCurve>(),
+            ["AlertLimitFact"] = WireNames<AlertLimitFact>(),
             ["PayloadFields"] = PayloadFields(),
         };
         var json = root.ToJsonString(new JsonSerializerOptions

@@ -51,7 +51,6 @@ public class GlookoSystemEventMapperV3AlarmTests
         e.Description.Should().Be("Occlusion");
         e.Category.Should().Be(SystemEventCategory.Pump);
         e.EventType.Should().Be(SystemEventType.Hazard);
-        e.Source.Should().Be("glooko-connector");
         e.Mills.Should().BeGreaterThan(0);
         e.Metadata!["severity"].Should().Be("hazard");
     }

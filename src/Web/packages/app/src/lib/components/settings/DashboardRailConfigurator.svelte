@@ -14,7 +14,7 @@
     type LegacyConsumableKind,
     RailItemId,
     type DashboardRailPreference,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import {
     RAIL_ITEM_IDS,
     isRailItemHidden,

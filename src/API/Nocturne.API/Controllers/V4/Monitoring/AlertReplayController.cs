@@ -39,6 +39,7 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> Replay(
         [FromBody] AlertReplayRequest request, CancellationToken ct)
     {
@@ -52,6 +53,10 @@ public class AlertReplayController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
 
     /// <summary>
@@ -63,9 +68,12 @@ public class AlertReplayController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
+        if (Invalid(request.Rule) is { } invalid)
+            return invalid;
         try
         {
             var result = await _replayService.ReplayDryRunAsync(
@@ -76,6 +84,10 @@ public class AlertReplayController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
     }
 
     /// <summary>
@@ -85,9 +97,39 @@ public class AlertReplayController : ControllerBase
     [HttpPost("dry-run/firings")]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertFiringSearchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AlertFiringSearchResult>> FindFirings(
-        [FromBody] AlertFiringSearchRequest request, CancellationToken ct) =>
-        Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        [FromBody] AlertFiringSearchRequest request, CancellationToken ct)
+    {
+        if (Invalid(request.Rule) is { } invalid)
+            return invalid;
+        try
+        {
+            return Ok(await _replayService.FindFiringsAsync(ToOverride(request.Rule), HttpContext.IsCallerHistoryClamped(), ct));
+        }
+        catch (ReplayStepLimitException ex)
+        {
+            return StepLimit(ex);
+        }
+    }
+
+    /// <summary>A 422 naming the rule the replay stopped at.</summary>
+    private ObjectResult StepLimit(ReplayStepLimitException ex) =>
+        Problem(detail: ex.Message, statusCode: 422, title: "Unprocessable Entity");
+
+    /// <summary>
+    /// A 400 for an <c>on_unknown</c> naming none of <see cref="AlertRuleOnUnknown"/>, or a
+    /// glucose freshness bound outside <see cref="AlertRuleGlucoseFreshness"/>'s range, else null.
+    /// </summary>
+    private ObjectResult? Invalid(ReplayRuleDefinition rule)
+    {
+        if (rule.OnUnknown is not null && !AlertRuleOnUnknown.IsKnown(rule.OnUnknown))
+            return Problem(detail: AlertRuleOnUnknown.InvalidMessage, statusCode: 400, title: "Bad Request");
+        if (!AlertRuleGlucoseFreshness.IsValid(rule.GlucoseFreshnessMinutes))
+            return Problem(detail: AlertRuleGlucoseFreshness.InvalidMessage, statusCode: 400, title: "Bad Request");
+        return null;
+    }
 
     private static ReplayRuleOverride ToOverride(ReplayRuleDefinition rule) => new(
         Id: rule.Id,
@@ -97,7 +139,9 @@ public class AlertReplayController : ControllerBase
         Severity: rule.Severity,
         AllowThroughDnd: rule.AllowThroughDnd,
         AutoResolveEnabled: rule.AutoResolveEnabled,
-        AutoResolveParams: rule.AutoResolveParams);
+        AutoResolveParams: rule.AutoResolveParams,
+        OnUnknown: rule.OnUnknown,
+        GlucoseFreshnessMinutes: rule.GlucoseFreshnessMinutes);
 }
 
 /// <summary>Request body for the firing search.</summary>
@@ -132,6 +176,10 @@ public record AlertReplayDryRunRequest(
 /// In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save
 /// shape — the controller doesn't deserialise the condition tree itself, just the
 /// <see cref="ConditionParams"/> JSON blob the rule body would have stored.
+/// <see cref="OnUnknown"/> is one of <see cref="AlertRuleOnUnknown"/>; null is the stored rule's
+/// word when <see cref="Id"/> names one, else <c>hold</c>. <see cref="GlucoseFreshnessMinutes"/> is
+/// in <see cref="AlertRuleGlucoseFreshness"/>'s range; null is the stored rule's bound in the same
+/// way, else the engine's default.
 /// </summary>
 public record ReplayRuleDefinition(
     Guid? Id,
@@ -141,4 +189,6 @@ public record ReplayRuleDefinition(
     AlertRuleSeverity Severity,
     bool AllowThroughDnd,
     bool AutoResolveEnabled,
-    string? AutoResolveParams);
+    string? AutoResolveParams,
+    string? OnUnknown = null,
+    int? GlucoseFreshnessMinutes = null);

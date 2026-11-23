@@ -8,7 +8,7 @@ public static class CareLinkDeviceStatusMapper
 {
     private const string GuardianFamily = "Guardian";
 
-    public static DeviceStatus? Map(CareLinkData? data, DateTime now)
+    public static DeviceStatus? Map(CareLinkData? data)
     {
         if (data == null)
             return null;
@@ -30,7 +30,6 @@ public static class CareLinkDeviceStatusMapper
             Id = Guid.CreateVersion7().ToString(),
             Mills = mills,
             Device = deviceName,
-            CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         };
 
         if (isGuardian)

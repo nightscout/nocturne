@@ -1,4 +1,3 @@
-using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -17,6 +16,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Health;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -200,7 +200,7 @@ public sealed class GoogleHealthService(
         var flow = new GoogleHealthCoordinator.Flow(state, verifier, subject, expires, platform.ClientId, platform.RedirectUri);
         var secrets = await connectorConfigurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
         secrets["oauthFlow"] = JsonSerializer.Serialize(flow, Json);
-        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), ct);
+        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), saver: null, ct);
         var parameters = new Dictionary<string, string?>
         {
             ["client_id"] = platform.ClientId,
@@ -328,7 +328,7 @@ public sealed class GoogleHealthService(
         {
             await sessions.ReleaseUnstoredAsync(CancellationToken.None);
         }
-        catch (Exception ex) when (ex is DbException or InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
         {
             logger.LogWarning(ex, "Google Health could not release the hold of tenant {TenantId} on an unstored grant", TenantId);
         }
@@ -442,8 +442,8 @@ public sealed class GoogleHealthService(
             throw new GoogleHealthException("already_running", stage: "preview");
         try
         {
-            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            previewCancellation.CancelAfter(PreviewTimeout);
+            using var deadline = new CancellationTokenSource(PreviewTimeout, time);
+            using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
             var previewCt = previewCancellation.Token;
             GoogleHealthConnectorConfiguration configuration;
             try
@@ -582,7 +582,7 @@ public sealed class GoogleHealthService(
     {
         var secrets = await connectorConfigurations.GetSecretsAsync(GoogleHealthConnectorService.ConnectorName, ct);
         if (!secrets.Remove("oauthFlow")) return;
-        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, ct: ct);
+        await connectorConfigurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, modifiedBy: null, saver: null, ct);
     }
 
     private void LogFailure(Exception ex, GoogleHealthException error) => logger.LogError(ex,

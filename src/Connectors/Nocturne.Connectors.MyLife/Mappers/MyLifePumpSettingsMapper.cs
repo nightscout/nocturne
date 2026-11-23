@@ -1,4 +1,6 @@
 using System.Globalization;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
@@ -8,6 +10,8 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 
 internal static class MyLifePumpSettingsMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<MyLifeConnectorConfiguration>();
+
     /// <summary>
     /// Maps MyLife pump settings readouts to Nightscout Profile records.
     /// Each readout becomes one Profile with its basal programs mapped to named profiles in the store.
@@ -50,9 +54,9 @@ internal static class MyLifePumpSettingsMapper
             {
                 Id = readout.Id,
                 DefaultProfile = defaultProfile,
-                StartDate = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                StartDate = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 Mills = uploadMills,
-                CreatedAt = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                CreatedAt = uploadDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
                 Units = "mg/dL",
                 Store = store,
                 EnteredBy = "MyLife",
@@ -71,8 +75,7 @@ internal static class MyLifePumpSettingsMapper
     /// ends the prior activation).
     /// </summary>
     internal static List<ProfileActivation> MapToProfileActivations(
-        IReadOnlyList<MyLifePumpSettingsReadout> readouts,
-        string connectorSource)
+        IReadOnlyList<MyLifePumpSettingsReadout> readouts)
     {
         var activations = new List<ProfileActivation>();
 
@@ -102,13 +105,12 @@ internal static class MyLifePumpSettingsMapper
                 var deviceKey = string.IsNullOrEmpty(device.Key) ? "unknown" : device.Key;
                 activations.Add(new ProfileActivation
                 {
-                    SyncIdentifier = $"mylife_active_profile_{deviceKey}_{startMills}",
+                    SyncIdentifier = LegacyIds.Of("active_profile", deviceKey, startMills),
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
                     Phase = ProfileActivationPhase.Effective,
                     Origin = ProfileActivationOrigin.Connector,
                     BaseProfileName = profileName,
-                    DataSource = connectorSource,
                 });
             }
         }

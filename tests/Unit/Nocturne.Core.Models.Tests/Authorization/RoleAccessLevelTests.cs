@@ -23,6 +23,7 @@ public class RoleAccessLevelTests
     [InlineData(Scope.GlucoseReadWrite, RoleAccessLevel.Manage)]
     [InlineData(Scope.TreatmentsReadWrite, RoleAccessLevel.ReadAndLogTreatments)]
     [InlineData(Scope.AlertsReadWrite, RoleAccessLevel.ReadAndLogTreatments)]
+    [InlineData(Scope.ConnectorsReadWrite, RoleAccessLevel.ReadAndLogTreatments)]
     [InlineData(Scope.TherapyReadWrite, RoleAccessLevel.Manage)]
     [InlineData(Scope.TenantSettings, RoleAccessLevel.Manage)]
     [InlineData(Scope.MembersInvite, RoleAccessLevel.Manage)]

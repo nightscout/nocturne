@@ -202,6 +202,6 @@ export default defineConfig({
   ssr: {
     // layerchart and @layerstack/*, reached through the app's alert replay, emit .svelte sources and
     // bare `svelte` imports Node cannot resolve from pnpm's store, as in the app's config.
-    noExternal: ['@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'layerchart', /^@layerstack\//]
+    noExternal: ['@nocturne/api-client', '@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'layerchart', /^@layerstack\//]
   }
 });

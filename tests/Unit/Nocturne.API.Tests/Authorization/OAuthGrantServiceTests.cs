@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
@@ -69,6 +70,8 @@ public class OAuthGrantServiceTests : IDisposable
             _mockClientService.Object,
             _guestSessionCache,
             new GrantRevocationService(_guestSessionCache),
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            TimeProvider.System,
             _mockLogger.Object);
     }
 
@@ -99,11 +102,14 @@ public class OAuthGrantServiceTests : IDisposable
 
     private async Task SeedSubjectAsync(NocturneDbContext db, Guid id, string name, string? email = null)
     {
-        db.Subjects.Add(new SubjectEntity
+        var subject = new SubjectEntity { Id = id, Name = name };
+        subject.SetEmail(email);
+        db.Subjects.Add(subject);
+        db.TenantMembers.Add(new TenantMemberEntity
         {
-            Id = id,
-            Name = name,
-            Email = email,
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            SubjectId = id,
         });
         await db.SaveChangesAsync();
     }
@@ -133,6 +139,17 @@ public class OAuthGrantServiceTests : IDisposable
         return id;
     }
 
+    /// <summary>A consent the way a device-code approval stages it, committed on its own unit.</summary>
+    private async Task<OAuthGrantInfo> StageConsentAsync(string[] scopes, bool approvedByDeviceCode)
+    {
+        var contexts = _db.ContextFactory.AsNocturneFactory();
+        await using var unit = await DbUnitOfWork.OpenAsync(contexts);
+        var consent = new GrantConsentService(NullLogger<GrantConsentService>.Instance);
+        var staged = await unit.CommitAsync(token => consent.StageAsync(
+            unit, _testClientEntityId, _ownerSubjectId, scopes, approvedByDeviceCode: approvedByDeviceCode, ct: token));
+        return staged.Grant;
+    }
+
     // ---------------------------------------------------------------
     // ClientIdentity
     // ---------------------------------------------------------------
@@ -150,9 +167,7 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var service = CreateService(db);
 
-        var created = await service.CreateOrUpdateGrantAsync(
-            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead],
-            approvedByDeviceCode: approvedByDeviceCode);
+        var created = await StageConsentAsync([Scope.GlucoseRead], approvedByDeviceCode);
         var listed = await service.GetGrantsForSubjectAsync(_ownerSubjectId);
 
         created.ClientIdentity.Should().Be(identity);
@@ -167,8 +182,7 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var service = CreateService(db);
 
-        await service.CreateOrUpdateGrantAsync(
-            _testClientEntityId, _ownerSubjectId, [Scope.GlucoseRead], approvedByDeviceCode: true);
+        await StageConsentAsync([Scope.GlucoseRead], approvedByDeviceCode: true);
         var consented = await service.CreateOrUpdateGrantAsync(
             _testClientEntityId, _ownerSubjectId, [Scope.TreatmentsRead]);
 

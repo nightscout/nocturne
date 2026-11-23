@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
@@ -75,7 +77,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodList.ToArray());
     }
@@ -104,7 +106,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodArray);
     }
@@ -141,7 +143,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(foodArray);
     }
@@ -167,7 +169,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Food by ID endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -187,7 +189,7 @@ public class FoodController : ControllerBase
 
         // Set response headers for caching
         Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
         return Ok(food);
     }
@@ -294,7 +296,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Update food endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -390,7 +392,7 @@ public class FoodController : ControllerBase
         _logger.LogDebug(
             "Delete food endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))

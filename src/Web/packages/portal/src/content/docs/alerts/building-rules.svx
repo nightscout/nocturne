@@ -130,6 +130,32 @@ recorded in alert history; it just does not notify anyone.
 The channels on offer depend on what your site has set up. A chat channel only
 appears once that chat app is connected.
 
+### When a rule cannot run
+
+If Nocturne cannot evaluate the condition of an enabled rule, the rule cannot
+fire until you edit it. Nocturne then sends one notice through the rule's
+channels to tell its recipients. It sends the notice again only when the
+condition changes, or when you disable the rule and enable it again. A
+**Device** channel does not get the notice. The notice clears when you fix the
+condition, disable the rule or delete it.
+
+### Webhook messages
+
+A webhook channel sends each message as a JSON object. The `Kind` field tells
+you what the message is:
+
+| `Kind` | Meaning |
+|--------|---------|
+| `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. `MetBy` gives what made the condition true. It is there for a forecast, eventual glucose or carbs needed condition, and for a glucose condition that compares with a target. Each item has `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). A condition that compares with a target or the latest glucose also gives `Limit`, the limit it compared with. It gives `LimitFact` (`target_low`, `target_high` or `latest_glucose`) and `LimitOffset`, the amount added in mg/dL. `LimitOffset` is left out when it is 0 (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). |
+| `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
+| `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
+| `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data has been missing for 24 hours. |
+
+The other fields are the same for both kinds: `RuleName`, `Severity`,
+`AlertType`, `ExcursionId`, `InstanceId`, `TenantId`, `SubjectName` and
+`ActiveExcursionCount`. A receiver that does not know a value of `Kind` must
+not show the message as a glucose alert.
+
 ## Auto-resolve
 
 Auto-resolve closes an alert when a second condition becomes true, even if the
@@ -158,6 +184,249 @@ is "I have treated this low; stay quiet while glucose is climbing back".
 
 Details, including the limit on how many times a snooze can be extended, are on
 [When an alert fires](/docs/alerts/when-an-alert-fires#snoozing).
+
+## Advanced
+
+The **Advanced** section is closed until you open it. It holds two settings
+for what a rule does when its data is missing. When a rule has a setting that is
+not the default, the closed section shows it.
+
+### When data is missing
+
+These choices apply only when missing data stops the rule from knowing whether
+its full condition is true. If the other parts of the condition give a result,
+the rule uses that result.
+
+- **Wait** (the default). The rule does not change the alert. It opens no alert,
+  and it does not close an open alert, until it knows again. A true auto-resolve
+  condition can still close the alert. The waiting has a limit of 24 hours (see
+  [While a rule waits](#while-a-rule-waits)).
+- **Count the condition as true.** The rule counts its full condition as true. It
+  can open an alert because data is missing. A "for N minutes" part does not delay
+  this alert.
+- **Count the condition as false.** The rule counts its full condition as false.
+  An open alert closes as it does when the condition stops being true. A condition
+  that uses "not" also counts as false when data is missing.
+
+<Callout type="warning" title="A slow data source needs its own bound">
+
+  If your data source sends readings less often than every 5 minutes, set a bound
+  for this rule. Make it at least the time between two readings plus the time a
+  reading can be late. If you do not: with **Count the condition as true**, the
+  rule can open an alert between two readings that arrive on time. With **Count
+  the condition as false**, it can close an open alert between them.
+
+</Callout>
+
+### While a rule waits
+
+When a rule with **Wait** cannot know its condition, the rules list and the rule
+page show **Waiting** and the time the wait started. They also show each data
+source that has no usable data, and the cause. The cause is one of these:
+missing, too old, has a time in the future, has a value that Nocturne does not
+know, not exact (for example a pump that reports "50+" units), or not OK. Not OK is for the sensor state (see
+[When the sensor is not OK](#when-the-sensor-is-not-ok)). An open alert that waits
+shows the same in the alert banner.
+
+The waiting has a limit of 24 hours, and you cannot change it:
+
+- When a rule has waited for 24 hours, Nocturne sends one message through the
+  rule's channels. The message gives the name of the rule. It has no glucose value
+  and nothing to acknowledge. The rule continues to wait and shows **Waiting**
+  until usable data comes back. If the usable data stops again later, Nocturne
+  sends a new message after 24 more hours.
+- When an open alert has waited for 24 hours, Nocturne closes the alert, and the
+  message says so. The alert closes even if its condition can still be true. The
+  alert history shows that it closed because it had no usable data for 24 hours.
+  The rule opens a new alert only when usable data comes back and the condition is
+  true.
+
+A rule that you disable while it waits sends no message.
+
+### When the sensor is not OK
+
+Some CGM sources tell Nocturne the state of the sensor. CareLink does this for
+Medtronic Guardian sensors. Nocturne uses a state only for the readings of the
+same device and source.
+When the sensor reports warm-up, a necessary calibration, an error or the end of
+its life, Nocturne does not use the glucose value. Nocturne also does not use a
+glucose value when the newest reading arrives with no value, from any source. The
+conditions on the glucose value, rate of change, trend and glucose range then
+cannot know if they are true.
+
+- A rule with **Wait** waits and shows **Waiting**, with the cause "Sensor state:
+  not OK". It does not open an alert on a value from the warm-up, and it does not
+  close an open alert. The limit of 24 hours applies (see
+  [While a rule waits](#while-a-rule-waits)).
+- When the sensor reports OK again, Nocturne checks the rules at once with the
+  newest reading.
+- Nocturne uses a state only when the source sends it, and only for 11 minutes
+  after it arrives. Nocturne does not calculate a state from the time since a
+  sensor start. For a source that sends no state, the rules work as before.
+- Readings that arrive with no glucose value do not stop **Signal loss**. Signal
+  loss counts the time since the last reading with a value.
+
+To get an alert for a sensor state, use the **Sensor state** condition (see
+[Conditions](/docs/alerts/conditions)). For example, "No value for 30 minutes"
+tells you when readings arrive with no glucose value for 30 minutes.
+
+### Minutes until a glucose reading counts as missing
+
+The rule counts a glucose reading as missing when Nocturne received it more than this
+number of minutes ago. This applies to conditions on the glucose value, rate of
+change, trend and glucose range. It does not apply to signal loss, data age,
+predicted glucose or Smart snooze conditions.
+
+The same number of minutes applies to the newest result of your loop, for the
+**Eventual glucose** and **Carbs needed** conditions. Nocturne counts the result as
+missing when the loop made it more than this number of minutes ago.
+
+The bound is a number of minutes. When you leave the field empty, the rule uses
+the default that the setting shows. **Use the default** clears the bound you set.
+
+This section explains what each setting does. It does not say which setting is
+right for you.
+
+### Clear margin
+
+A clear margin changes the value at which an open alert ends. It does not change
+the value at which the alert starts. You set it on one condition: open the
+condition's actions menu and select **Add a clear margin**. A condition can have
+a margin when it compares a value with a number, or with a target or the current
+glucose (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). These are glucose, rate of
+change, predicted glucose, insulin on board, carbs on board and reservoir. Pump
+battery, uploader battery, transmitter, temp basal, sensitivity, eventual glucose
+and carbs needed can also have one. Conditions about time, such as signal loss or site age, cannot have one.
+
+For example, a condition "glucose below 70 mg/dL" with a clear margin of 5 mg/dL:
+
+- The alert starts when glucose goes below 70 mg/dL, as without a margin.
+- While the alert is open, the condition stays true until glucose is 75 mg/dL or
+  more. A glucose value that goes from 69 to 72 and back to 69 stays one alert.
+  Without the margin, each crossing of 70 can end the alert and start a new one.
+- After the alert ends, the condition is true again only below 70 mg/dL.
+
+Inside "not", the margin moves the other way. It also keeps the open alert true
+for longer. For example, "not glucose below 70 mg/dL" with a clear margin of 5
+stays true until glucose goes below 65 mg/dL.
+
+A "for at least" setting is different. With it, the condition must be true for
+that time before the alert starts. A clear margin has no effect until the alert is
+open, and it does not delay the start.
+
+A condition cannot have both. "For at least" also stops a value that crosses the
+line back and forth from starting many alerts. It measures one time for each
+condition, and that time cannot be correct for two lines at once. When you add "for
+at least" to a condition, the editor removes its clear margin. A rule that has a
+margin inside "for at least" cannot run until you remove the margin.
+
+The margin has no effect in auto-resolve and Smart snooze conditions, so the
+editor does not show it there. A margin of 0 is the same as no margin. A margin
+cannot be less than 0, and a condition that checks for an exact value cannot have
+one. On a rate of change, the margin cannot be more than the rate. With a margin
+equal to the rate, a "falling" alert stays open until glucose starts to rise. The rule summary shows the margin, for example "Glucose below 70 mg/dL, clear
+margin 5 mg/dL".
+
+This section explains what the clear margin does. It does not say if a margin is
+right for you, or which margin to use.
+
+### Forecast curves
+
+A loop that uses the oref algorithm (AAPS, Trio and OpenAPS) makes more than one
+forecast in each cycle. Each forecast is a curve, and each curve uses a different
+assumption:
+
+- **IOB forecast**: the insulin on board only. It does not include carbs.
+- **COB forecast**: the carbs on board, which are absorbed as they were entered.
+- **UAM forecast**: a rise that is occurring now continues as carbs that nobody
+  entered (unannounced meal).
+- **Zero temp forecast**: the pump gives no basal insulin from now.
+- **Default forecast**: the forecast that a predicted glucose condition used
+  before the curve choice was available. For AAPS, Trio and OpenAPS it is the IOB
+  forecast, so a condition on the IOB forecast reads the same curve as the
+  default. Loop sends one forecast only, which is the default.
+
+A predicted glucose condition uses the default forecast. To select a different
+forecast, open the condition's actions menu and select **Choose a forecast
+curve**. Then select one of these:
+
+- **One curve**: the condition uses the curve that you select.
+- **Lowest of**: at each time ahead where all the curves that you select have a
+  value, the condition uses the lowest of these values.
+- **Highest of**: as **Lowest of**, with the highest value.
+
+The loop can send a curve that stops before the others. The IOB, COB and UAM curves
+stop where their values stop changing, so Nocturne continues them at their last
+value. The zero temp curve stops where it starts to increase. Nocturne continues it
+at its last value, which is lower than the values that the loop does not send.
+This is correct for **Lowest of** with below. With all other comparisons, a list
+that has the zero temp curve can use a value that is too low. **Highest of** with
+above and **Lowest of** with above can then miss a high that only the zero temp
+curve shows after it stops. **Highest of** with below can be true when the real zero
+temp values are higher. **Lowest of** and **Highest of** use only
+the times where all of the selected curves have a value. To use the default
+forecast again, select **Use the default forecast** in the actions menu.
+
+If your loop does not send a curve that the condition uses, the condition does
+not know if it is true. A rule with **Wait** then waits and shows "Glucose
+forecast: missing". It does not count the condition as false.
+
+When a predicted glucose condition starts an alert, the alert tells you what made
+the condition true. It gives the curve, the time ahead and the value, for example
+"COB forecast: 65 mg/dL in 20 minutes". **Eventual glucose** and **Carbs needed** give
+their value. Chat bot messages show it, and a webhook message has it in `MetBy`.
+In-app notifications do not show it. When Nocturne sends an alert again after a
+restart, or after a snooze, the message does not show it.
+
+A forecast is a guess, and it changes with each loop cycle. This section explains
+what each curve is. It does not say which curve is right for you.
+
+### Compare with a target or the latest glucose
+
+A glucose, predicted glucose or eventual glucose condition usually compares with
+a number. It can compare with a value that Nocturne reads when the rule runs
+instead. In the condition, open the list next to the comparison and select one of
+these in place of **Number**:
+
+- **Target low**: the low end of the target range in your profile at that time.
+- **Target high**: the high end of the same target range.
+- **Latest glucose**: the newest CGM reading. Predicted glucose and eventual
+  glucose can use it. A glucose condition cannot, because it would compare the
+  reading with itself.
+
+You can add an amount to the value: type it in the box after **plus**, in your
+glucose units. Type a negative amount to subtract it.
+
+Two examples:
+
+- **Predicted more than 30 below the latest glucose**: a predicted glucose
+  condition "less than", **Latest glucose**, plus -30 mg/dL (about -1.7 mmol/L). Set
+  it to look 30 minutes ahead. The summary shows "Predicted glucose < latest glucose minus 30
+  mg/dL in 30 minutes".
+- **Below the target low in your profile**: a glucose condition "below",
+  **Target low**, plus 0. If your profile has a different target at night, the
+  condition uses the target that is in the profile at that time. The summary
+  shows "Glucose below target low".
+
+When the target range in your profile changes at a time of day, Nocturne uses
+the new target from the next reading after that time. A "for at least" time on a
+condition that compares with a target starts when Nocturne checks the reading. It
+does not start at the time of the reading.
+
+If your profile has no target range, a condition that uses a target does not know
+if it is true. Nocturne does not use a standard target in its place. A rule with
+**Wait** then waits and shows "Target range: missing". If the newest reading is
+too old, or the sensor is not OK, a condition that uses **Latest glucose** waits in
+the same way. A clear margin applies to the value with the amount added, as it
+applies to a number.
+
+When a condition of this type starts an alert, the alert gives the limit that it
+compared with first, then where the limit came from. For example, "limit 70 mg/dL
+(target low minus 10 mg/dL)", or "limit 80 mg/dL (target low)" with no amount
+added.
+
+This section explains what each choice does. It does not say which target, amount
+or condition is right for you. Work these out with your diabetes care team.
 
 ## Testing a rule
 

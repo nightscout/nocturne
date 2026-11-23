@@ -67,6 +67,19 @@ public static class Scope
     /// </summary>
     public const string AlertsAcknowledge = "alerts.acknowledge";
 
+    // Data sources
+
+    /// <summary>
+    /// Read-only access to the tenant's data source connections: which are set up, their non-secret
+    /// settings and whether they are syncing. Never their stored secrets.
+    /// </summary>
+    public const string ConnectorsRead = "connectors.read";
+    /// <summary>
+    /// Connect, change, verify, sync and remove the tenant's data source connections.
+    /// <see cref="TenantSettings"/> satisfies it (see <see cref="Narrowings"/>).
+    /// </summary>
+    public const string ConnectorsReadWrite = "connectors.readwrite";
+
     // Account
 
     /// <summary>Read-only access to identity information.</summary>
@@ -160,6 +173,8 @@ public static class Scope
         SleepReadWrite,
         FoodRead,
         FoodReadWrite,
+        ConnectorsRead,
+        ConnectorsReadWrite,
         SharingReadWrite,
         DeviceNotify,
         DeviceActuate,
@@ -188,6 +203,7 @@ public static class Scope
         StepCountRead, StepCountReadWrite,
         SleepRead, SleepReadWrite,
         FoodRead, FoodReadWrite,
+        ConnectorsRead, ConnectorsReadWrite,
         ReportsRead,
         TherapyRead, TherapyReadWrite,
         AlertsRead, AlertsReadWrite, AlertsAcknowledge,
@@ -272,6 +288,30 @@ public static class Scope
         new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate };
 
     /// <summary>
+    /// The permissions that run a tenant rather than read or write its records: who gets in, what
+    /// roles mean, public sharing, settings and the audit log. A team is given data permissions only
+    /// (<see cref="IsDataOnly"/>), since a team's staff are not the site's to choose one by one.
+    /// <see cref="ConnectorsReadWrite"/> is not among them: a camp's staff set up the data sources of
+    /// the people they look after.
+    /// </summary>
+    public static readonly IReadOnlySet<string> AdministrativePermissions = new HashSet<string>(StringComparer.Ordinal)
+    {
+        MembersInvite,
+        MembersManage,
+        RolesManage,
+        SharingManage,
+        SharingGuest,
+        TenantSettings,
+        AuditRead,
+        AuditManage,
+        FullAccess,
+    };
+
+    /// <summary>Whether <paramref name="permissions"/> hold none of the <see cref="AdministrativePermissions"/>.</summary>
+    public static bool IsDataOnly(IEnumerable<string> permissions) =>
+        !permissions.Any(AdministrativePermissions.Contains);
+
+    /// <summary>
     /// Permissions for a demo tenant's shared visitor member: everything needed to explore and
     /// change the patient-facing surfaces, and nothing that manages who can get in.
     /// </summary>
@@ -339,15 +379,22 @@ public static class Scope
         [StepCountReadWrite] = StepCountRead,
         [SleepReadWrite] = SleepRead,
         [FoodReadWrite] = FoodRead,
+        [ConnectorsReadWrite] = ConnectorsRead,
     };
 
     /// <summary>
-    /// Every atom a granted atom narrows to when a narrower credential bounds it: its read tier, and
+    /// Every atom a granted atom narrows to when a narrower credential bounds it: its read tier,
     /// <see cref="AlertsAcknowledge"/> for <see cref="AlertsReadWrite"/>, which silences alarms as
-    /// part of managing them.
+    /// part of managing them, and both connector tiers for <see cref="TenantSettings"/>, since
+    /// administering the tenant includes its data sources. That last pair is what lets an
+    /// administrator's credential naming <see cref="ConnectorsReadWrite"/> resolve to connector
+    /// access through <see cref="MemberScopeResolver"/> without carrying the rest of
+    /// <see cref="TenantSettings"/>.
     /// </summary>
     private static readonly ILookup<string, string> Narrowings = ReadWriteImpliesRead
         .Append(new KeyValuePair<string, string>(AlertsReadWrite, AlertsAcknowledge))
+        .Append(new KeyValuePair<string, string>(TenantSettings, ConnectorsReadWrite))
+        .Append(new KeyValuePair<string, string>(TenantSettings, ConnectorsRead))
         .ToLookup(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal);
 
     /// <summary>

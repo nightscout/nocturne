@@ -164,6 +164,7 @@ public static class SoftDeleteRestoreExtensions
         => ctx.ExecuteInTransactionAsync(async token =>
         {
             var (restoring, conflicts) = await pick(token);
+            await ctx.PlanForEachArrayAsync(restoring.Count, token);
             var dedup = DuplicateGroupPrimaries.RecordTypeOf<TEntity>();
 
             List<TEntity> copies = [];

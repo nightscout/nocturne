@@ -20,8 +20,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           },
           "timer_ops": [
             {
@@ -57,7 +56,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         }
@@ -82,13 +80,13 @@
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           },
           "timer_ops": [
             {
               "op": "clear",
-              "path": "composite[0].sustained"
+              "path": "composite[0].sustained",
+              "at": "2026-01-05T12:20:00Z"
             }
           ]
         }

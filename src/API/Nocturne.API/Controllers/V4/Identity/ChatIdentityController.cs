@@ -124,6 +124,7 @@ public class ChatIdentityController : ControllerBase
     /// 500.
     /// </remarks>
     [HttpPost("links/claim")]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

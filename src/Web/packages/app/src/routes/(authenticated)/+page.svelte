@@ -13,11 +13,11 @@
     dashboardTopWidgets,
     glucoseChartLookback,
   } from "#lib/stores/appearance-store.svelte.js";
-  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { WidgetId } from "@nocturne/api-client";
   import { isMainSectionEnabled, showsPredictions } from "#lib/types/dashboard-widgets.js";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";
-  import TenantsOverview from "#lib/components/tenants/TenantsOverview.svelte";
+  import PeoplePage from "#lib/components/people/PeoplePage.svelte";
   import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
   import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
@@ -77,7 +77,7 @@
 </script>
 
 {#if data.tenantless}
-  <TenantsOverview />
+  <PeoplePage />
 {:else}
   <div
     class="@container p-3 @md:p-6 space-y-3 @md:space-y-6 {reserveFloatingAction

@@ -9,8 +9,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 using Nocturne.API.Services.Glucose;
@@ -105,7 +104,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         await ReadBasalInjectionAsync(response, currentTime, cancellationToken);
 
         // Process tracker statuses
-        ProcessTrackers(response, trackerInstances);
+        response.Trackers = TrackerStatusCondenser.Condense(trackerInstances, _time.GetUtcNow().UtcDateTime);
 
         // Get alarm state
         await ProcessAlarmStateAsync(response, cancellationToken);
@@ -213,9 +212,9 @@ public class WidgetSummaryService : IWidgetSummaryService
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
             response.IobKnown = reading.HasIob;
-            response.Iob = reading.HasIob ? Math.Round(reading.Iob.Iob * 100) / 100 : 0;
+            response.Iob = reading.HasIob ? OnBoardRounding.Iob(reading.Iob.Iob) : 0;
             response.CobKnown = reading.HasCob;
-            response.Cob = reading.HasCob ? Math.Round(reading.Cob!.Cob) : 0;
+            response.Cob = reading.HasCob ? OnBoardRounding.Cob(reading.Cob!.Cob) : 0;
         }
         catch (Exception ex)
         {
@@ -267,163 +266,6 @@ public class WidgetSummaryService : IWidgetSummaryService
                 .Select(bi => bi.InsulinContext?.InsulinName)
                 .FirstOrDefault(name => !string.IsNullOrEmpty(name)),
             EstimatedRate = covering?.Rate is double rate ? ScaledRounding.Round(rate, 2) : null,
-        };
-    }
-
-    /// <summary>
-    /// Process active tracker instances into widget format
-    /// </summary>
-    private void ProcessTrackers(
-        V4SummaryResponse response,
-        TrackerInstanceEntity[] trackerInstances
-    )
-    {
-        var trackerStatuses = new List<V4TrackerStatus>();
-
-        foreach (var instance in trackerInstances)
-        {
-            // Skip if definition is not loaded or dashboard visibility is Off
-            if (instance.Definition == null)
-            {
-                continue;
-            }
-
-            var definition = instance.Definition;
-
-            // Calculate current urgency based on thresholds
-            var urgency = CalculateTrackerUrgency(instance, definition);
-
-            // Check if tracker should be shown based on DashboardVisibility
-            if (!ShouldShowTracker(definition.DashboardVisibility, urgency))
-            {
-                continue;
-            }
-
-            var status = new V4TrackerStatus
-            {
-                Id = instance.Id,
-                DefinitionId = definition.Id,
-                Name = definition.Name,
-                Icon = definition.Icon,
-                Category = definition.Category,
-                Mode = definition.Mode,
-                Urgency = urgency,
-                LifespanHours = definition.LifespanHours,
-            };
-
-            // Set mode-specific fields
-            if (definition.Mode == TrackerMode.Duration)
-            {
-                status.AgeHours = Math.Round(instance.AgeHours * 10) / 10; // Round to 1 decimal
-
-                if (definition.LifespanHours.HasValue && definition.LifespanHours.Value > 0)
-                {
-                    status.PercentElapsed = Math.Round(
-                        (instance.AgeHours / definition.LifespanHours.Value) * 100
-                    );
-                }
-            }
-            else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
-            {
-                var hoursUntil = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
-                status.HoursUntilEvent = Math.Round(hoursUntil * 10) / 10;
-            }
-
-            trackerStatuses.Add(status);
-        }
-
-        response.Trackers = trackerStatuses;
-    }
-
-    /// <summary>
-    /// Calculate the current urgency level for a tracker instance based on notification thresholds
-    /// </summary>
-    private NotificationUrgency CalculateTrackerUrgency(
-        TrackerInstanceEntity instance,
-        TrackerDefinitionEntity definition
-    )
-    {
-        var thresholds = definition.NotificationThresholds
-            .OrderByDescending(t => t.Urgency) // Higher urgency first
-            .ToList();
-
-        if (!thresholds.Any())
-        {
-            return NotificationUrgency.Info;
-        }
-
-        // For Duration mode, check against hours since start
-        if (definition.Mode == TrackerMode.Duration)
-        {
-            var ageHours = instance.AgeHours;
-            var lifespanHours = definition.LifespanHours ?? 0;
-
-            foreach (var threshold in thresholds)
-            {
-                double effectiveThresholdHours;
-
-                if (threshold.Hours < 0)
-                {
-                    // Relative threshold: negative hours means "X hours before end of lifespan"
-                    effectiveThresholdHours = lifespanHours + threshold.Hours;
-                }
-                else
-                {
-                    // Absolute threshold: positive hours means "X hours after start"
-                    effectiveThresholdHours = threshold.Hours;
-                }
-
-                if (ageHours >= effectiveThresholdHours)
-                {
-                    return threshold.Urgency;
-                }
-            }
-        }
-        // For Event mode, check against hours until scheduled time
-        else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
-        {
-            var hoursUntilEvent = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
-
-            foreach (var threshold in thresholds)
-            {
-                // For events, negative hours = before event, positive hours = after event
-                // Threshold hours represent: negative = X hours before event, positive = X hours after event
-                if (threshold.Hours < 0)
-                {
-                    // Threshold triggers when we're within X hours of the event (approaching)
-                    if (hoursUntilEvent <= Math.Abs(threshold.Hours) && hoursUntilEvent >= 0)
-                    {
-                        return threshold.Urgency;
-                    }
-                }
-                else
-                {
-                    // Threshold triggers when we're X hours past the event (overdue)
-                    if (hoursUntilEvent < 0 && Math.Abs(hoursUntilEvent) >= threshold.Hours)
-                    {
-                        return threshold.Urgency;
-                    }
-                }
-            }
-        }
-
-        return NotificationUrgency.Info;
-    }
-
-    /// <summary>
-    /// Determine if a tracker should be shown based on dashboard visibility settings
-    /// </summary>
-    private static bool ShouldShowTracker(DashboardVisibility visibility, NotificationUrgency currentUrgency)
-    {
-        return visibility switch
-        {
-            DashboardVisibility.Off => false,
-            DashboardVisibility.Always => true,
-            DashboardVisibility.Info => currentUrgency >= NotificationUrgency.Info,
-            DashboardVisibility.Warn => currentUrgency >= NotificationUrgency.Warn,
-            DashboardVisibility.Hazard => currentUrgency >= NotificationUrgency.Hazard,
-            DashboardVisibility.Urgent => currentUrgency >= NotificationUrgency.Urgent,
-            _ => true,
         };
     }
 

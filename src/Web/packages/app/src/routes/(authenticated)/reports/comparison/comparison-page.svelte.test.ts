@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { carbRatioFormat, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MetricComparison, PeriodComparison } from "#lib/api/generated/nocturne-api-client.js";
+import type { MetricComparison, PeriodComparison } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { GlucoseUnit, PeriodComparisonMetric, TimeZoneUnavailableReason } from "#lib/api/index.js";
 

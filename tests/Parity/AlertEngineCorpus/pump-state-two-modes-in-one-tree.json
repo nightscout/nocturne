@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "name": "pump-state-two-modes-in-one-tree",
+  "description": "one rule holds two pump_state leaves for different modes, Suspended and Automatic, and a Suspended span runs on top of an Automatic one: both leaves are answered from the one context, so the rule is true while both spans are active and false once either ends; with the Suspended leaf over for_minutes the rule holds from the instant the suspension has lasted that long",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "pump_state",
+            "pump_state": {
+              "mode": "Suspended",
+              "is_active": true,
+              "for_minutes": null
+            }
+          },
+          {
+            "type": "pump_state",
+            "pump_state": {
+              "mode": "Automatic",
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "pump_state",
+            "pump_state": {
+              "mode": "Suspended",
+              "is_active": true,
+              "for_minutes": 10
+            }
+          },
+          {
+            "type": "pump_state",
+            "pump_state": {
+              "mode": "Automatic",
+              "is_active": true,
+              "for_minutes": null
+            }
+          }
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          },
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T11:55:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Automatic",
+            "started_at": "2026-01-05T11:00:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_pump_modes": [
+          {
+            "mode": "Suspended",
+            "started_at": "2026-01-05T12:17:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

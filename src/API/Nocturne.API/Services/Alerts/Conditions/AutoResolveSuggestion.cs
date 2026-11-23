@@ -29,7 +29,11 @@ internal static class AutoResolveSuggestion
             return null;
         try
         {
-            return For(JsonNode.Parse(condition))?.ToJsonString();
+            var opposite = For(JsonNode.Parse(condition));
+            if (opposite is null)
+                return null;
+            DropClearMargins(opposite);
+            return opposite.ToJsonString();
         }
         catch (JsonException)
         {
@@ -104,6 +108,8 @@ internal static class AutoResolveSuggestion
             case "uploader_battery":
             case "transmitter_battery":
             case "sensitivity_ratio":
+            case "eventual_glucose":
+            case "carbs_required":
             case "tracker_age":
             {
                 if (payload is null || OppositeOperator(TextOf(payload["operator"])) is not { } turned)
@@ -139,6 +145,27 @@ internal static class AutoResolveSuggestion
             // round, and a temp basal or a lost signal has more than one reading of "opposite".
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// An auto-resolve tree reads every leaf against its plain limit
+    /// (docs/alerts/engine-semantics.md §3, clear margin), so a margin copied into one would be
+    /// stored without effect.
+    /// </summary>
+    private static void DropClearMargins(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                obj.Remove("clear_margin");
+                foreach (var (_, child) in obj)
+                    DropClearMargins(child);
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                    DropClearMargins(child);
+                break;
         }
     }
 

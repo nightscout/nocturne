@@ -30,7 +30,7 @@
   import ClinicalInsights from "#lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
   import { TextureSwatch } from "@nocturne/charts/print";
-  import { TargetStatus } from "#lib/api/generated/nocturne-api-client.js";
+  import { TargetStatus } from "@nocturne/api-client";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
   import { rangeSummaryResources } from "#lib/hooks/range-summary-resources.js";
   import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";

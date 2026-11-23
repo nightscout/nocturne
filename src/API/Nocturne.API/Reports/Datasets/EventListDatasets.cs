@@ -334,7 +334,7 @@ internal sealed class EventOutcomesDataset : EventListDataset
             {
                 var line = Fit(rows, x.Name, outcome, out var pairs, out var r);
                 foreach (var row in rows)
-                    row[FitField(outcome)] = line is null ? null : Math.Round(line.At(Convert.ToDouble(row[x.Name], CultureInfo.InvariantCulture)), 4);
+                    row[FitField(outcome)] = line is null ? null : ScaledRounding.Round(line.At(Convert.ToDouble(row[x.Name], CultureInfo.InvariantCulture)), 4);
                 if (outcome == bound)
                 {
                     fitSentence = FitSentence(outcome, x.ResolveUnit(useMmol), line, r, pairs, useMmol, facts);
@@ -511,7 +511,7 @@ internal sealed class EventOutcomeSpreadDataset : EventListDataset
         var width = Width(all.Min(), all.Max());
         var first = Index(all.Min(), width);
         var count = (int)(Index(all.Max(), width) - first) + 1;
-        string F(double v) => Number(Math.Round(v, 6), outcome.IsGlucose && useMmol ? "0.0" : "0.##");
+        string F(double v) => Number(ScaledRounding.Round(v, 6), outcome.IsGlucose && useMmol ? "0.0" : "0.##");
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         for (var i = 0; i < count; i++)
         {

@@ -93,7 +93,11 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
                 continue;
             }
 
-            yield return (condition.Direction, (double)condition.Value, rule.Severity);
+            // A limit from a fact (a target, the newest reading) has no fixed value to bucket by.
+            if (condition.Value is not { } value)
+                continue;
+
+            yield return (condition.Direction, (double)value, rule.Severity);
         }
     }
 

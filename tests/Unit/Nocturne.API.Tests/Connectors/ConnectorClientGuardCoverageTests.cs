@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
 namespace Nocturne.API.Tests.Connectors;

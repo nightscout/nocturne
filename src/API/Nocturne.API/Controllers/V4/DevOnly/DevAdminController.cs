@@ -19,7 +19,9 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -348,19 +350,8 @@ public class DevAdminController : ControllerBase
                 var tenantId = ts.Tenant.Id;
                 await db.PinTenantAsync(tenantId, token);
 
-                // Delete in FK-safe order: member-roles -> members -> roles -> OAuth clients -> connector configs
-                var existingMemberRoles = await db.TenantMemberRoles
-                    .Where(mr => db.TenantMembers
-                        .Where(m => m.TenantId == tenantId)
-                        .Select(m => m.Id)
-                        .Contains(mr.TenantMemberId))
-                    .ToListAsync(token);
-                db.TenantMemberRoles.RemoveRange(existingMemberRoles);
-
-                var existingMembers = await db.TenantMembers
-                    .Where(m => m.TenantId == tenantId)
-                    .ToListAsync(token);
-                db.TenantMembers.RemoveRange(existingMembers);
+                // Delete in FK-safe order: members -> roles -> OAuth clients -> connector configs
+                await DevSnapshotMemberships.RemoveMembersOfTenantAsync(db, tenantId, token);
 
                 var existingRoles = await db.TenantRoles
                     .Where(r => r.TenantId == tenantId)
@@ -432,12 +423,11 @@ public class DevAdminController : ControllerBase
             foreach (var s in allSubjectDtos)
             {
                 if (!addedSubjectIds.Add(s.Id)) continue;
-                db.Subjects.Add(new()
+                var restored = new SubjectEntity()
                 {
                     Id = s.Id,
                     Name = s.Name,
                     Username = s.Username,
-                    Email = s.Email,
                     Notes = s.Notes,
                     IsActive = s.IsActive,
                     IsSystemSubject = s.IsSystemSubject,
@@ -447,7 +437,9 @@ public class DevAdminController : ControllerBase
                     ApprovalStatus = s.ApprovalStatus,
                     AccessRequestMessage = s.AccessRequestMessage,
                     IsPlatformAdmin = s.IsPlatformAdmin,
-                });
+                };
+                restored.SetEmail(s.Email);
+                db.Subjects.Add(restored);
             }
             await db.SaveChangesAsync(token);
 
@@ -493,33 +485,25 @@ public class DevAdminController : ControllerBase
                     });
                 }
 
-                // Insert members
+                // Insert members with their roles
                 foreach (var m in ts.Members)
                 {
-                    db.TenantMembers.Add(new()
-                    {
-                        Id = m.Id,
-                        TenantId = m.TenantId,
-                        SubjectId = m.SubjectId,
-                        DirectPermissions = m.DirectPermissions,
-                        Label = m.Label,
-                        LimitTo24Hours = m.LimitTo24Hours,
-                        CreatedFromInviteId = m.CreatedFromInviteId,
-                        LastUsedAt = m.LastUsedAt,
-                        LastUsedIp = m.LastUsedIp,
-                        LastUsedUserAgent = m.LastUsedUserAgent,
-                    });
-                }
-
-                // Insert member roles
-                foreach (var mr in ts.MemberRoles)
-                {
-                    db.TenantMemberRoles.Add(new()
-                    {
-                        Id = mr.Id,
-                        TenantMemberId = mr.TenantMemberId,
-                        TenantRoleId = mr.TenantRoleId,
-                    });
+                    DevSnapshotMemberships.Restore(
+                        db,
+                        new()
+                        {
+                            Id = m.Id,
+                            TenantId = m.TenantId,
+                            SubjectId = m.SubjectId,
+                            Label = m.Label,
+                            LastUsedAt = m.LastUsedAt,
+                            LastUsedIp = m.LastUsedIp,
+                            LastUsedUserAgent = m.LastUsedUserAgent,
+                        },
+                        new MembershipGrant(
+                            ts.MemberRoles.Where(mr => mr.TenantMemberId == m.Id).Select(mr => mr.TenantRoleId).ToList(),
+                            m.DirectPermissions, m.LimitTo24Hours, AccessEndsAt: null),
+                        m.CreatedFromInviteId);
                 }
 
                 // Insert OAuth clients
@@ -820,16 +804,7 @@ public class DevAdminController : ControllerBase
             // Phase 1: Clean existing scoped data for this tenant
             await db.PinTenantAsync(id, token);
 
-            var existingMemberRoles = await db.TenantMemberRoles
-                .Where(mr => db.TenantMembers
-                    .Where(m => m.TenantId == id)
-                    .Select(m => m.Id)
-                    .Contains(mr.TenantMemberId))
-                .ToListAsync(token);
-            db.TenantMemberRoles.RemoveRange(existingMemberRoles);
-
-            var existingMembers = await db.TenantMembers.Where(m => m.TenantId == id).ToListAsync(token);
-            db.TenantMembers.RemoveRange(existingMembers);
+            await DevSnapshotMemberships.RemoveMembersOfTenantAsync(db, id, token);
 
             var existingRoles = await db.TenantRoles.Where(r => r.TenantId == id).ToListAsync(token);
             db.TenantRoles.RemoveRange(existingRoles);
@@ -867,7 +842,7 @@ public class DevAdminController : ControllerBase
 
                 subject.Name = s.Name;
                 subject.Username = s.Username;
-                subject.Email = s.Email;
+                subject.SetEmail(s.Email);
                 subject.Notes = s.Notes;
                 subject.IsActive = s.IsActive;
                 subject.IsSystemSubject = s.IsSystemSubject;
@@ -937,31 +912,20 @@ public class DevAdminController : ControllerBase
                 .Select(i => i.Id)
                 .ToListAsync(token)).ToHashSet();
 
-            var memberIds = new Dictionary<Guid, Guid>();
             foreach (var m in snapshot.Members)
             {
-                var newId = Guid.CreateVersion7();
-                memberIds[m.Id] = newId;
-                db.TenantMembers.Add(new()
-                {
-                    Id = newId, TenantId = id, SubjectId = m.SubjectId,
-                    DirectPermissions = m.DirectPermissions, Label = m.Label,
-                    LimitTo24Hours = m.LimitTo24Hours,
-                    CreatedFromInviteId = m.CreatedFromInviteId is { } inviteId
-                        && survivingInviteIds.Contains(inviteId) ? inviteId : null,
-                    LastUsedAt = m.LastUsedAt, LastUsedIp = m.LastUsedIp,
-                    LastUsedUserAgent = m.LastUsedUserAgent,
-                });
-            }
-
-            foreach (var mr in snapshot.MemberRoles)
-            {
-                db.TenantMemberRoles.Add(new()
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantMemberId = memberIds[mr.TenantMemberId],
-                    TenantRoleId = roleIds[mr.TenantRoleId],
-                });
+                DevSnapshotMemberships.Restore(
+                    db,
+                    new()
+                    {
+                        Id = Guid.CreateVersion7(), TenantId = id, SubjectId = m.SubjectId, Label = m.Label,
+                        LastUsedAt = m.LastUsedAt, LastUsedIp = m.LastUsedIp,
+                        LastUsedUserAgent = m.LastUsedUserAgent,
+                    },
+                    new MembershipGrant(
+                        snapshot.MemberRoles.Where(mr => mr.TenantMemberId == m.Id).Select(mr => roleIds[mr.TenantRoleId]).ToList(),
+                        m.DirectPermissions, m.LimitTo24Hours, AccessEndsAt: null),
+                    m.CreatedFromInviteId is { } inviteId && survivingInviteIds.Contains(inviteId) ? inviteId : null);
             }
 
             foreach (var c in snapshot.OAuthClients)
@@ -1190,7 +1154,10 @@ public class DevAdminController : ControllerBase
     /// next startup re-seed) and, if no other credentialed member remains,
     /// creates a synthetic "keeper" member so the tenant reports
     /// recovery_mode_active instead of setup_required. Defaults to the first
-    /// owner-role member.
+    /// owner-role member. <c>recoveryMode</c> in the answer is what the setup gate
+    /// then reads (<see cref="ITenantMembershipRepository.ReadSetupGateAsync"/>): a
+    /// target that is not the tenant's last member administrator who could sign in,
+    /// or one a recovery link can still reach, leaves the site serving.
     /// </summary>
     [HttpPost("tenants/{id:guid}/recovery-mode")]
     public async Task<ActionResult> EnterRecoveryMode(
@@ -1267,9 +1234,11 @@ public class DevAdminController : ControllerBase
             "Dev recovery-mode: orphaned subject {SubjectId} on tenant {Slug} (keeper: {Keeper})",
             target.SubjectId, tenant.Slug, keeperSubjectId);
 
+        var gate = await _members.ReadSetupGateAsync(tenant.Id, _time.GetUtcNow().UtcDateTime, ct);
+
         return Ok(new
         {
-            recoveryMode = true,
+            recoveryMode = gate?.RecoveryMode == true,
             orphanedSubjectId = target.SubjectId,
             keeperSubjectId,
         });

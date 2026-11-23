@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantAlertSettingsResponse } from "@nocturne/api-client";
 
 // The page seeds its form from the generated remote query; the mock resolves
 // synchronously so `current` is populated on first render.

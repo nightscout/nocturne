@@ -22,7 +22,7 @@ import {
   relativeTime as sharedRelativeTime,
   type RelativeTimeOptions,
 } from "@nocturne/ui/relative-time";
-import type { OverallAverages, Treatment, TreatmentSummary } from "#lib/api/generated/nocturne-api-client.js";
+import type { OverallAverages, Treatment, TreatmentSummary } from "@nocturne/api-client";
 import {
   formatClockTime,
   formatHourLabel,
@@ -43,6 +43,8 @@ export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
 export {
   convertToDisplayUnits,
   convertFromDisplayUnits,
+  convertRateToDisplayUnits,
+  convertRateFromDisplayUnits,
   formatGlucoseValue,
   formatGlucoseDelta,
   getUnitLabel,
@@ -156,6 +158,17 @@ export function timeStringToSeconds(time: string | undefined): number {
  */
 export function formatLocale(): string {
   return regionFormat.current || preferredLanguage.current;
+}
+
+/**
+ * A list as a phrase in the interface language: "a, b, and c" or "a, b, or c". The words belong
+ * to the language of the surrounding text, so the regional format does not apply.
+ */
+export function formatList(
+  items: readonly string[],
+  type: "conjunction" | "disjunction" = "conjunction",
+): string {
+  return new Intl.ListFormat(preferredLanguage.current, { style: "long", type }).format(items);
 }
 
 /** Whether times render in 12-hour form under the viewer's time-format preference. */

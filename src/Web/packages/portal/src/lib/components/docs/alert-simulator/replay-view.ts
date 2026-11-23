@@ -6,12 +6,15 @@ import {
 	type AlertRuleResponse,
 	type DashboardChartData,
 	type FactSnapshotPoint,
-} from "@nocturne/app/api-client";
+} from "@nocturne/api-client";
 import { transformChartData, type TransformedChartData } from "@nocturne/charts/core";
 import { wirePayload, type ConditionNode, type ReplayResult, type ReplayTick, type Severity, type SimRule } from "./wire";
 import { carbsOnBoard, insulinOnBoard, tickTimes, type Scenario } from "./fixtures";
 
-/** The engine's own event kinds, less `cleared`, which the app's replay does not report. */
+/**
+ * The engine's own event kinds the app's replay reports: an excursion opening and its
+ * auto-resolve, not the hysteresis transitions or a close by hysteresis.
+ */
 const EVENT_KINDS: Partial<Record<ReplayResult["events"][number]["kind"], AlertReplayEventKind>> = {
 	fired: AlertReplayEventKind.Fired,
 	suppressed_by_dnd: AlertReplayEventKind.SuppressedByDnd,

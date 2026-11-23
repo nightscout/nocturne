@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models.Authorization;
@@ -386,6 +387,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = (await _therapyRepo.GetAsync(
             from,
@@ -458,8 +461,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var makeDefault = model.IsDefault;
         model.IsDefault = false;
         var created = await _therapyRepo.CreateAsync(model, WriteOrigin.Live, ct);
@@ -496,8 +499,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var stored = await _therapyRepo.GetByIdAsync(id, ct);
         model.DocumentDefaultProfile = stored?.DocumentDefaultProfile;
         TherapySettings updated;
@@ -595,8 +598,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _basalRepo.CreateAsync(model, WriteOrigin.Live, ct);
         await _tempBasalRates.AfterSchedulesWrittenAsync([(created.ProfileName, created.Timestamp)], ct);
         return CreatedAtAction(nameof(GetBasalScheduleById), new { id = created.Id }, created);
@@ -619,8 +622,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var stored = await _basalRepo.GetByIdAsync(id, ct);
         BasalSchedule updated;
         try
@@ -715,8 +718,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _carbRatioRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbRatioScheduleById), new { id = created.Id }, created);
     }
@@ -742,8 +745,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _carbRatioRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
@@ -826,8 +829,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _sensitivityRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetSensitivityScheduleById),
@@ -857,8 +860,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _sensitivityRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
@@ -944,8 +947,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         var created = await _targetRangeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetTargetRangeScheduleById),
@@ -975,8 +978,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         CancellationToken ct = default
     )
     {
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
         try
         {
             var updated = await _targetRangeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);

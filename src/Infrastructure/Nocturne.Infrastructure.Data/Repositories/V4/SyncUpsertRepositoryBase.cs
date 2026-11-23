@@ -31,11 +31,10 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
-        IV4RecordBroadcaster<TModel>? broadcaster = null,
+        IRecordChangePublisher? changes = null,
         IDataEventSink<Entry>? entrySink = null,
-        ILegacyReadCacheInvalidation? legacyReads = null,
         IDuplicateLinker? linker = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads, linker)
+        : base(contextFactory, auditContext, logger, changes, entrySink, linker)
     {
     }
 

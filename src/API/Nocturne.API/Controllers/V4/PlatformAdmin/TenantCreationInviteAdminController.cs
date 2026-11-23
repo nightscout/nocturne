@@ -65,12 +65,12 @@ public class PlatformPolicyController(IPlatformPolicyRepository policies) : Cont
     [ProducesResponseType(typeof(PlatformPolicy), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPolicy(CancellationToken ct) => Ok(await policies.GetAsync(ct));
 
+    /// <summary>
+    /// Sets the switches the body names; a switch the body leaves out keeps its saved value.
+    /// </summary>
     [HttpPut]
     [RemoteCommand(Invalidates = ["GetPolicy"])]
     [ProducesResponseType(typeof(PlatformPolicy), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SetPolicy([FromBody] PlatformPolicy policy, CancellationToken ct)
-    {
-        await policies.SaveAsync(policy, ct);
-        return Ok(policy);
-    }
+    public async Task<IActionResult> SetPolicy([FromBody] PlatformPolicyUpdate policy, CancellationToken ct) =>
+        Ok(await policies.UpdateAsync(policy, ct));
 }

@@ -149,11 +149,7 @@ public partial class TreatmentBatchEquivalenceTests : ApiIntegrationTestBase
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await using (var truncate = conn.CreateCommand())
-        {
-            truncate.CommandText = $"TRUNCATE TABLE {string.Join(", ", Tables)}, linked_records CASCADE";
-            await truncate.ExecuteNonQueryAsync();
-        }
+        await DecomposedRows.TruncateAsync(conn, Tables);
 
         var treatments = sequence.Select(json => JsonSerializer.Deserialize<Treatment>(json)!).ToList();
         await WithTenantScopeAsync(async services =>

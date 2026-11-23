@@ -49,7 +49,7 @@ public class BolusController(
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Bolus", "bolus", "boluses");
+    protected override V4BulkNaming BulkNaming => new("Bolus", "boluses");
 
     /// <inheritdoc/>
     /// <remarks>
@@ -88,13 +88,8 @@ public class BolusController(
     /// <summary>Maps a <see cref="CreateBolusRequest"/> to a new <see cref="Bolus"/> domain model.</summary>
     /// <param name="request">The inbound create request.</param>
     /// <returns>A new <see cref="Bolus"/> with all fields populated from the request. <see cref="V4RecordBase.CorrelationId"/> defaults to a new UUID v7 when not supplied.</returns>
-    protected override Bolus MapCreateToModel(CreateBolusRequest request) => new()
+    protected override Bolus MapCreateToModel(CreateBolusRequest request) => new Bolus
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Insulin = request.Insulin,
         Programmed = request.Programmed,
         Delivered = request.Delivered,
@@ -108,21 +103,16 @@ public class BolusController(
         BolusCalculationId = request.BolusCalculationId,
         ApsSnapshotId = request.ApsSnapshotId,
         CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>Maps an <see cref="UpdateBolusRequest"/> onto a <see cref="Bolus"/> domain model, preserving immutable fields from the existing record.</summary>
     /// <param name="id">The bolus ID to carry forward.</param>
     /// <param name="request">The inbound update request.</param>
     /// <param name="existing">The existing <see cref="Bolus"/> record; immutable fields (<c>BolusType</c>, <c>Kind</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PumpRecordId</c>, <c>DeviceId</c>, <c>AdditionalProperties</c>) are copied from here.</param>
     /// <returns>A fully-populated <see cref="Bolus"/> ready for persistence.</returns>
-    protected override Bolus MapUpdateToModel(Guid id, UpdateBolusRequest request, Bolus existing) => new()
+    protected override Bolus MapUpdateToModel(Guid id, UpdateBolusRequest request, Bolus existing) => new Bolus
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Insulin = request.Insulin,
         Programmed = request.Programmed,
         Delivered = request.Delivered,
@@ -141,7 +131,7 @@ public class BolusController(
         PumpRecordId = existing.PumpRecordId,
         DeviceId = existing.DeviceId,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <inheritdoc/>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(

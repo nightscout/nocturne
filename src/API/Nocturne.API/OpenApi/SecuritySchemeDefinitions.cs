@@ -33,8 +33,8 @@ public static class SecuritySchemeDefinitions
         + "All clients are public — PKCE is mandatory, no client secrets.";
 
     public const string BearerDescription =
-        "Paste an existing token: an OAuth access token (JWT), "
-        + "OIDC token, or a direct grant token (prefixed `noc_`).";
+        "Paste an existing token: an OAuth access token (JWT) "
+        + "or a direct grant token (prefixed `noc_`).";
 
     public const string InstanceKeyDescription =
         "Platform-internal instance key. Grants full admin permissions "
@@ -71,6 +71,8 @@ public static class SecuritySchemeDefinitions
             [Scope.SleepReadWrite] = "Read and write sleep sessions",
             [Scope.FoodRead] = "Read food records",
             [Scope.FoodReadWrite] = "Read and write food records",
+            [Scope.ConnectorsRead] = "View which data sources are connected and whether they are syncing",
+            [Scope.ConnectorsReadWrite] = "Connect, change and remove data sources. Data from a connected source is added to your record",
             [Scope.AlertsRead] = "Read alert configuration",
             [Scope.AlertsReadWrite] = "Read and write alert configuration",
             [Scope.AlertsAcknowledge] = "Silence an alarm for everyone for a time",

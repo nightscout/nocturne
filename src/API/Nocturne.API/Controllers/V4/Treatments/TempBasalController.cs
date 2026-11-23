@@ -2,99 +2,77 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Temporary basal insulin rates, each with a start and end time. Read temp basals, and write them in bulk.
+/// Temporary basal insulin rates, each with a start and end time. List, read, create (one or in bulk),
+/// update and delete temp basals. List deleted temp basals and restore them.
 /// </summary>
 /// <remarks>
-/// Read access plus a bulk write endpoint for native uploaders. Previously temp basals were only written by the
-/// legacy v1 treatment decomposer and connectors.
-///
 /// Temp basals are span records (<see cref="TempBasal.StartTimestamp"/>/<see cref="TempBasal.EndTimestamp"/>),
-/// not point events. The write endpoint accepts both new spans and cancels: a cancel truncates the
-/// span active at its timestamp. Overlapping spans are not auto-truncated on create — the basal
-/// timeline resolves overlaps at read time, matching the decomposer-written data.
+/// not point events. Overlapping spans are not auto-truncated on write: the basal timeline resolves
+/// overlaps at read time, matching the decomposer-written data. Only <see cref="CreateBulk"/> takes a
+/// cancel, which truncates the span active at its timestamp.
+///
+/// On update, <see cref="TempBasal.LegacyId"/>, <see cref="TempBasal.CreatedAt"/>, <see cref="TempBasal.PumpRecordId"/>,
+/// <see cref="TempBasal.DeviceId"/>, <see cref="TempBasal.InsulinContext"/> and
+/// <see cref="TempBasal.AdditionalProperties"/> are preserved from the existing record, and so is
+/// <see cref="TempBasal.Origin"/> unless the request supplies one. <see cref="TempBasal.PatientDeviceId"/> is
+/// preserved unless <see cref="TempBasal.Device"/> changes, which attributes the span afresh.
+/// <see cref="TempBasal.ScheduledRate"/> is replaced by the request like <see cref="TempBasal.Rate"/>,
+/// so an update that omits it clears it.
+/// <see cref="TempBasal.CorrelationId"/> falls back to the existing value if the request does not supply one.
 /// </remarks>
 /// <seealso cref="ITempBasalRepository"/>
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="CreateTempBasalRequest"/>
+/// <seealso cref="UpdateTempBasalRequest"/>
 [ApiController]
 [System.ComponentModel.DisplayName("Temp Basals")]
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 [ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class TempBasalController(
     ITempBasalRepository repo,
-    IPatientDeviceStamper deviceStamper) : ControllerBase
+    IPatientDeviceStamper deviceStamper)
+    : V4CrudControllerBase<TempBasal, CreateTempBasalRequest, UpdateTempBasalRequest, ITempBasalRepository>(repo)
 {
-    /// <summary>
-    /// Lists temp basal spans, newest-first by default.
-    /// Responses are never cached, so a just-started or just-cancelled span appears at once.
-    /// </summary>
+    /// <inheritdoc/>
+    /// <remarks>Temp basals are treatments; the legacy equivalent is a v1 temp basal treatment.</remarks>
+    public override string WriteScope => Scope.TreatmentsReadWrite;
+
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Temp basal", "temp basals");
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
     /// or just-cancelled span must not be invisible until a cached list body expires.
     /// </remarks>
-    /// <param name="from">Start of the time range to list. Unbounded when omitted.</param>
-    /// <param name="to">End of the time range to list. Unbounded when omitted.</param>
-    /// <param name="limit">Maximum number of spans to return. Defaults to `100`.</param>
-    /// <param name="offset">Number of spans to skip before the first one returned. Defaults to `0`.</param>
-    /// <param name="sort">Order by span time: `timestamp_desc` or `timestamp_asc`. Defaults to `timestamp_desc`.</param>
-    /// <param name="device">Return only spans from this device.</param>
-    /// <param name="source">Return only spans from this data source.</param>
-    /// <param name="includeTotal">Count every record the filters match and return it as `pagination.total`. Defaults to `false`.</param>
-    /// <param name="ct">Cancels the operation.</param>
-    [HttpGet]
-    [RequireScope(Scope.TreatmentsRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    [ProducesResponseType(typeof(PaginatedResponse<TempBasal>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaginatedResponse<TempBasal>>> GetAll(
+    public override Task<ActionResult<PaginatedResponse<TempBasal>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         [FromQuery] string sort = "timestamp_desc",
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         [FromQuery] bool includeTotal = false,
         CancellationToken ct = default)
-    {
-        if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
-            return invalid;
-
-        var data = (await repo.GetAsync(from, to, device, source, limit, offset, descending, ct)).ToList();
-        var pagination = await PaginationInfo.ForPageAsync(limit, offset, data.Count, includeTotal, () => repo.CountAsync(from, to, device, source, ct));
-        return Ok(new PaginatedResponse<TempBasal> { Data = data, Pagination = pagination });
-    }
+        => base.GetAll(from, to, limit, offset, sort, device, source, includeTotal, ct);
 
     /// <summary>
-    /// Returns a single temp basal span by ID.
+    /// Writes temp basal spans and cancels in bulk (max 1000).
     /// </summary>
-    [HttpGet("{id:guid}")]
-    [RequireScope(Scope.TreatmentsRead)]
-    [ProducesResponseType(typeof(TempBasal), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TempBasal>> GetById(Guid id, CancellationToken ct = default)
-    {
-        var result = await repo.GetByIdAsync(id, ct);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    /// <summary>
-    /// Write temp basal spans and cancels in bulk (max 1000).
-    /// Items are processed in timestamp order, so a batch may start a temp basal and cancel it later in the same request. Processing is per item, not all-or-nothing.
-    /// A regular item with both `dataSource` and `syncIdentifier` updates the existing row matching that pair; any other item is inserted. A regular item whose pair belongs to a span the owner deleted is skipped and left out of the response, even in a one-item array, which returns `201 Created` with an empty array.
-    /// A cancel (`isCancel: true`) ends the temp basal active at its timestamp at that instant; with none active it does nothing.
-    /// A validation failure rejects the whole request with `400 Bad Request` and stores nothing. The response lists every record written or truncated, in processing order.
-    /// </summary>
+    /// <param name="requests">The spans and cancels to write, at most 1000 of them.</param>
     /// <remarks>
     /// Items are processed in timestamp order, one at a time, so a batch may start a temp basal
     /// and cancel it later in the same request. Semantics are per-item, not all-or-nothing:
@@ -104,47 +82,35 @@ public class TempBasalController(
     /// - A regular item whose pair is held by a span the owner deleted is skipped: it is not
     ///   re-created and is absent from the response, and the items around it are still written.
     ///   This holds for a one-item array too, which answers `201 Created` with an empty array
-    ///   rather than `409 Conflict`, matching `POST bulk` on the other v4 record types: an array
-    ///   endpoint reports a refused item by leaving it out, so a resending uploader is never
-    ///   stuck retrying it. Restore the span instead to bring it back.
+    ///   rather than `409 Conflict`. Restore the span instead to bring it back.
     /// - A cancel (`isCancel: true`) truncates the temp basal active at its timestamp by setting
     ///   the span end to that instant; with no active temp basal it is a no-op.
     ///
     /// Validation failures reject the whole request with `400 Bad Request` before anything is
     /// persisted. The response contains every record written or truncated, in processing order.
     /// </remarks>
-    [HttpPost]
-    [RequireScope(Scope.TreatmentsReadWrite)]
-    [ProducesResponseType(typeof(TempBasal[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<TempBasal[]>> CreateTempBasals(
-        [FromBody] CreateTempBasalRequest[] requests,
-        CancellationToken ct = default)
+    public override async Task<ActionResult<TempBasal[]>> CreateBulk(
+        [FromBody] IReadOnlyList<CreateTempBasalRequest> requests, CancellationToken ct = default)
     {
-        if (await this.ValidateBulkAsync(requests, "Temp basal", "temp basal", "temp basals", ct) is { } invalid)
+        var naming = BulkNaming;
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
             return invalid;
 
-        if (requests.Any(r => !r.IsCancel && (r.Rate < 0 || r.DurationMinutes < 0)))
-            return Problem(detail: "Rate and duration must not be negative", statusCode: 400, title: "Bad Request");
-
-        var results = new List<TempBasal>(requests.Length);
+        var results = new List<TempBasal>(requests.Count);
         foreach (var request in requests.OrderBy(r => r.Timestamp))
         {
             if (request.IsCancel)
             {
-                var truncated = await CancelActiveAtAsync(request.Timestamp.UtcDateTime, ct);
-                if (truncated is not null)
+                if (await CancelActiveAtAsync(request.Timestamp.UtcDateTime, ct) is { } truncated)
                     results.Add(truncated);
                 continue;
             }
 
-            var model = MapToModel(request);
-            // Attribute like the sensor-glucose native path — otherwise direct API records stay
-            // unstamped and only ever surface as pseudo-devices.
-            await deviceStamper.StampAsync([model], DeviceAttributionCategories.TempBasal, model.DataSource, ct);
+            var model = MapCreateToModel(request);
+            await StampDeviceAsync(model, ct);
             try
             {
-                results.Add(await repo.CreateAsync(model, WriteOrigin.Live, ct));
+                results.Add(await Repository.CreateAsync(model, WriteOrigin.Live, ct));
             }
             catch (RecreationBlockedException)
             {
@@ -152,33 +118,39 @@ public class TempBasalController(
             }
         }
 
-        return StatusCode(201, results.ToArray());
+        var written = results.ToArray();
+        await EnrichCommittedAsync(written, ct);
+        return StatusCode(StatusCodes.Status201Created, written);
     }
 
-    /// <summary>
-    /// Truncates the temp basal active at <paramref name="at"/>, or returns null when none is
-    /// active (a cancel with nothing running is a no-op, matching pump behaviour).
-    /// </summary>
-    private async Task<TempBasal?> CancelActiveAtAsync(DateTime at, CancellationToken ct)
+    /// <inheritdoc/>
+    /// <remarks>A cancel is written through <see cref="CreateBulk"/>, which orders it among the spans around it.</remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(
+        TempBasal model, CreateTempBasalRequest request, CancellationToken ct)
     {
-        var active = await repo.GetActiveAtAsync(at, ct);
-        if (active is null)
-            return null;
+        if (request.IsCancel)
+            return Problem(detail: "A cancel is written through the bulk endpoint", statusCode: 400, title: "Bad Request");
 
-        active.EndTimestamp = at;
-        return await repo.UpdateAsync(active.Id, active, WriteOrigin.Live, ct);
+        await StampDeviceAsync(model, ct);
+        return null;
     }
 
-    private static TempBasal MapToModel(CreateTempBasalRequest request) => new()
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        TempBasal model, UpdateTempBasalRequest request, TempBasal existing, CancellationToken ct)
     {
-        StartTimestamp = request.Timestamp.UtcDateTime,
-        EndTimestamp = request.DurationMinutes is { } duration
-            ? request.Timestamp.UtcDateTime.AddMinutes(duration)
-            : null,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
+        if (model.Device != existing.Device)
+        {
+            model.PatientDeviceId = null;
+            await StampDeviceAsync(model, ct);
+        }
+
+        return null;
+    }
+
+    protected override TempBasal MapCreateToModel(CreateTempBasalRequest request) => new TempBasal
+    {
+        EndTimestamp = EndOf(request.Timestamp, request.DurationMinutes),
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         Rate = request.Rate,
@@ -190,5 +162,53 @@ public class TempBasalController(
         AdditionalProperties = request.Origin is { } origin
             ? TempBasalAutomaticFlag.Keep(null, TempBasalAutomaticFlag.Of(origin))
             : null,
-    };
+    }.WithHeaderFrom(request);
+
+    protected override TempBasal MapUpdateToModel(Guid id, UpdateTempBasalRequest request, TempBasal existing) => new TempBasal
+    {
+        Id = id,
+        EndTimestamp = EndOf(request.Timestamp, request.DurationMinutes),
+        SyncIdentifier = request.SyncIdentifier,
+        CorrelationId = request.CorrelationId ?? existing.CorrelationId,
+        Rate = request.Rate,
+        ScheduledRate = request.ScheduledRate,
+        Origin = request.Origin ?? existing.Origin,
+        OriginEvidence = request.Origin is null ? existing.OriginEvidence : TempBasalOriginEvidence.Reported,
+        PumpRecordId = existing.PumpRecordId,
+        ApsSnapshotId = request.ApsSnapshotId,
+        LegacyId = existing.LegacyId,
+        CreatedAt = existing.CreatedAt,
+        DeviceId = existing.DeviceId,
+        PatientDeviceId = existing.PatientDeviceId,
+        InsulinContext = existing.InsulinContext,
+        AdditionalProperties = request.Origin is { } origin
+            ? TempBasalAutomaticFlag.Keep(
+                existing.AdditionalProperties is null ? null : new(existing.AdditionalProperties),
+                TempBasalAutomaticFlag.Of(origin))
+            : existing.AdditionalProperties,
+    }.WithHeaderFrom(request);
+
+    private static DateTime? EndOf(DateTimeOffset start, double? durationMinutes)
+        => durationMinutes is { } duration ? start.UtcDateTime.AddMinutes(duration) : null;
+
+    /// <summary>
+    /// Attributes the span to the patient's device like the sensor-glucose native path; otherwise
+    /// direct API records stay unstamped and only ever surface as pseudo-devices.
+    /// </summary>
+    private Task StampDeviceAsync(TempBasal model, CancellationToken ct)
+        => deviceStamper.StampAsync([model], DeviceAttributionCategories.TempBasal, model.DataSource, ct);
+
+    /// <summary>
+    /// Truncates the temp basal active at <paramref name="at"/>, or returns null when none is
+    /// active (a cancel with nothing running is a no-op, matching pump behaviour).
+    /// </summary>
+    private async Task<TempBasal?> CancelActiveAtAsync(DateTime at, CancellationToken ct)
+    {
+        var active = await Repository.GetActiveAtAsync(at, ct);
+        if (active is null)
+            return null;
+
+        active.EndTimestamp = at;
+        return await Repository.UpdateAsync(active.Id, active, WriteOrigin.Live, ct);
+    }
 }

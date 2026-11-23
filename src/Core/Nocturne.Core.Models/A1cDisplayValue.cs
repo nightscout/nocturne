@@ -36,8 +36,8 @@ public class A1cTargetState
 
     /// <summary>
     /// The value as the web app shows it. Fixed-point formatting rounds the exact binary value, as
-    /// JavaScript's <c>toFixed</c> does, where <see cref="Math.Round(double, int)"/> rounds the
-    /// scaled value and can land on the other side of a tie such as 6.995.
+    /// JavaScript's <c>toFixed</c> does, where <see cref="ScaledRounding.Round"/> rounds the scaled
+    /// value and can land on the other side of a tie such as 6.995.
     /// </summary>
     private static decimal Shown(double value, int decimals) =>
         decimal.Parse(value.ToString("F" + decimals, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);

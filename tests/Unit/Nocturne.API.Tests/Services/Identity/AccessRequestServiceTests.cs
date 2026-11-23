@@ -44,13 +44,13 @@ public sealed class AccessRequestServiceTests : IDisposable
             .ReturnsAsync(RoleGrantValidation.Valid);
 
         _service = new AccessRequestService(
-            new SubjectRepository(_dbContext.AsFactory()),
-            new TenantMembershipRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _roles.Object,
             _notifications.Object,
             TimeProvider.System,
-            NullLogger<AccessRequestService>.Instance);
+            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off);
 
         _dbContext.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
         _dbContext.SaveChanges();

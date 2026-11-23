@@ -15,7 +15,7 @@ import {
 	UpsertDeviceEventRequestSchema,
 	CreateBasalInjectionRequestSchema,
 	UpdateBasalInjectionRequestSchema,
-} from '#lib/api/generated/schemas.js';
+} from '@nocturne/api-client/schemas';
 import { DateRangeSchema, resolveReportRange } from '#lib/api/report-range.js';
 
 async function fetchEntries(startDate: string, endDate: string) {
@@ -29,7 +29,7 @@ async function fetchEntries(startDate: string, endDate: string) {
 		basalInjectionResponse,
 	] = await Promise.all([
 		apiClient.bolus.getAll(startDate, endDate, 10000),
-		apiClient.nutrition.getCarbIntakes(startDate, endDate, 10000),
+		apiClient.carbIntake.getAll(startDate, endDate, 10000),
 		apiClient.bGCheck.getAll(startDate, endDate, 10000),
 		apiClient.note.getAll(startDate, endDate, 10000),
 		apiClient.deviceEvent.getAll(startDate, endDate, 10000),
@@ -85,7 +85,7 @@ export const deleteEntryForm = form(
 					await apiClient.bolus.delete(entryId);
 					break;
 				case 'carbs':
-					await apiClient.nutrition.deleteCarbIntake(entryId);
+					await apiClient.carbIntake.delete(entryId);
 					break;
 				case 'bgCheck':
 					await apiClient.bGCheck.delete(entryId);
@@ -137,7 +137,7 @@ export const bulkDeleteEntries = command(
 						await apiClient.bolus.delete(item.id);
 						break;
 					case 'carbs':
-						await apiClient.nutrition.deleteCarbIntake(item.id);
+						await apiClient.carbIntake.delete(item.id);
 						break;
 					case 'bgCheck':
 						await apiClient.bGCheck.delete(item.id);
@@ -199,7 +199,7 @@ export const updateEntry = command(
 			case 'bolus':
 				return await apiClient.bolus.update(input.id, input.data);
 			case 'carbs':
-				return await apiClient.nutrition.updateCarbIntake(input.id, input.data);
+				return await apiClient.carbIntake.update(input.id, input.data);
 			case 'bgCheck':
 				return await apiClient.bGCheck.update(input.id, input.data);
 			case 'note':
@@ -239,7 +239,7 @@ export const createEntry = command(
 			case 'bolus':
 				return await apiClient.bolus.create(input.data);
 			case 'carbs':
-				return await apiClient.nutrition.createCarbIntake(input.data);
+				return await apiClient.carbIntake.create(input.data);
 			case 'bgCheck':
 				return await apiClient.bGCheck.create(input.data);
 			case 'note':

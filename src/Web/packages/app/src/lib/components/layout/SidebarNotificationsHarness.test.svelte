@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
-  import type { InAppNotificationDto } from "#lib/api/generated/nocturne-api-client.js";
+  import type { InAppNotificationDto } from "@nocturne/api-client";
   import SidebarNotifications from "./SidebarNotifications.svelte";
 
   let { notifications }: { notifications: InAppNotificationDto[] } = $props();

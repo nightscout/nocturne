@@ -1,9 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { WidgetId } from "@nocturne/api-client";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 

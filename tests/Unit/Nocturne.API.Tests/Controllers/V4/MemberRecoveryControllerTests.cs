@@ -2,7 +2,10 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
+using Nocturne.API.Middleware;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
@@ -55,19 +58,24 @@ public sealed class MemberRecoveryControllerTests : IDisposable
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LoginCode("issued", DateTime.UtcNow.AddHours(24)));
 
+        _controller = Controller(AccountLinkRoutes.Off, new ControllerContext { HttpContext = new DefaultHttpContext() });
+        SignIn(AuthType.SessionCookie, Scope.MembersManage, Scope.GlucoseRead);
+    }
+
+    private MemberRecoveryController Controller(IAccountLinkRoute linkRoute, ControllerContext context)
+    {
         var contexts = _context.AsFactory();
-        _controller = new MemberRecoveryController(
+        return new MemberRecoveryController(
             contexts,
-            new TenantMembershipRepository(contexts),
+            new TenantMembershipRepository(contexts, linkRoute),
             MockTenantAccessor.Create(_tenantId).Object,
             _roles.Object,
-            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts))),
+            new MemberRecoveryEligibility(new TenantMemberService(new TenantMembershipRepository(contexts, linkRoute), TimeProvider.System), linkRoute),
             _recoveryCodes.Object,
             _loginCodes.Object)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = context,
         };
-        SignIn(AuthType.SessionCookie, Scope.MembersManage, Scope.GlucoseRead);
     }
 
     public void Dispose()
@@ -155,15 +163,17 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         NoCodeIssued();
     }
 
-    [Fact]
-    public async Task A_caller_without_member_management_is_refused()
+    [Theory]
+    [InlineData(nameof(MemberRecoveryController.IssueRecoveryCode))]
+    [InlineData(nameof(MemberRecoveryController.GetLockedOutMembers))]
+    public void A_caller_without_member_management_is_refused(string action)
     {
-        SignIn(AuthType.SessionCookie, Scope.GlucoseRead);
-
-        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        NoCodeIssued();
+        ActionGate.Evaluate(
+                typeof(MemberRecoveryController),
+                action,
+                new HashSet<string> { Scope.GlucoseRead },
+                new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie })
+            .ShouldBeScopeRefusal(Scope.MembersManage);
     }
 
     [Fact]
@@ -178,6 +188,190 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         NoCodeIssued();
     }
 
+    private void CallerAccessEndsAt(DateTime accessEndsAt) =>
+        new RequestMembership(
+                _adminId,
+                _tenantId,
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, accessEndsAt), null))
+            .StoreOn(_controller.ControllerContext.HttpContext);
+
+    private void OrphanAccessEndsAt(DateTime? accessEndsAt)
+    {
+        _context.TenantMembers.Single(m => m.Id == _orphanMemberId).AccessEndsAt = accessEndsAt;
+        _context.SaveChanges();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(11)]
+    public async Task A_caller_whose_access_ends_cannot_recover_a_member_whose_access_outlasts_theirs(int? orphanEndsInDays)
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(orphanEndsInDays is { } days ? now.AddDays(days) : null);
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(HttpContextExtensions.AccessEndCeilingDetail);
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task A_caller_whose_access_ends_can_recover_a_member_whose_access_ends_no_later()
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(now.AddDays(10));
+
+        (await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None)).Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_history_clamped_caller_cannot_recover_a_member_who_sees_more_history()
+    {
+        CallerIsHistoryClamped();
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(HttpContextExtensions.HistoryCeilingDetail);
+        NoCodeIssued();
+    }
+
+    private async Task<LockedOutMember> Listed() =>
+        (await _controller.GetLockedOutMembers(CancellationToken.None))
+            .Should().BeOfType<OkObjectResult>().Which.Value.As<List<LockedOutMember>>().Single();
+
+    private void CallerIsHistoryClamped() =>
+        _controller.ControllerContext.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+    private void OrphanIsLimitedTo24Hours()
+    {
+        _context.TenantMembers.Single(m => m.Id == _orphanMemberId).LimitTo24Hours = true;
+        _context.SaveChanges();
+    }
+
+    private void CallerAccessEndsInTenDaysAndOrphanLastsLonger()
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(now.AddDays(11));
+    }
+
+    [Theory]
+    [InlineData(RecoveryIssueRefusal.OperatorOnly)]
+    [InlineData(RecoveryIssueRefusal.MissingPermissions)]
+    [InlineData(RecoveryIssueRefusal.HistoryClamped)]
+    [InlineData(RecoveryIssueRefusal.AccessOutlasts)]
+    public async Task The_list_gives_the_reason_the_issue_refuses_with(RecoveryIssueRefusal refusal)
+    {
+        switch (refusal)
+        {
+            case RecoveryIssueRefusal.OperatorOnly:
+                GiveOrphanAnotherTenant();
+                break;
+            case RecoveryIssueRefusal.MissingPermissions:
+                _roles.Setup(r => r.GetEffectivePermissionsAsync(_orphanMemberId, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync([Scope.FullAccess]);
+                break;
+            case RecoveryIssueRefusal.HistoryClamped:
+                CallerIsHistoryClamped();
+                break;
+            case RecoveryIssueRefusal.AccessOutlasts:
+                CallerAccessEndsInTenDaysAndOrphanLastsLonger();
+                break;
+        }
+
+        var listed = await Listed();
+        var issued = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        listed.Refusal.Should().Be(refusal);
+        issued.Should().BeAssignableTo<IActionResult>().Which.Should().NotBeOfType<OkObjectResult>();
+        NoCodeIssued();
+    }
+
+    [Fact]
+    public async Task The_list_offers_a_code_exactly_when_the_issue_gives_one()
+    {
+        var listed = await Listed();
+        var issued = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        listed.Refusal.Should().BeNull();
+        issued.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_history_clamped_caller_may_recover_a_member_who_is_clamped_too()
+    {
+        CallerIsHistoryClamped();
+        OrphanIsLimitedTo24Hours();
+
+        var listed = await Listed();
+        var issued = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        listed.Refusal.Should().BeNull();
+        issued.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task A_caller_whose_access_ends_can_recover_a_member_whose_access_ends_no_later_and_is_offered_it()
+    {
+        var now = DateTime.UtcNow;
+        CallerAccessEndsAt(now.AddDays(10));
+        OrphanAccessEndsAt(now.AddDays(10));
+
+        (await Listed()).Refusal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_member_with_no_end_date_outlasts_a_caller_whose_access_ends()
+    {
+        CallerAccessEndsAt(DateTime.UtcNow.AddDays(10));
+        OrphanAccessEndsAt(null);
+
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.AccessOutlasts);
+    }
+
+    [Fact]
+    public async Task The_operator_only_reason_comes_before_every_other()
+    {
+        GiveOrphanAnotherTenant();
+        _roles.Setup(r => r.GetEffectivePermissionsAsync(_orphanMemberId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Scope.FullAccess]);
+        CallerIsHistoryClamped();
+
+        (await Listed()).Refusal.Should().Be(RecoveryIssueRefusal.OperatorOnly);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task A_member_with_a_confirmed_address_is_left_to_the_emailed_link_only_while_delivery_is_configured(
+        bool delivery, bool lockedOut)
+    {
+        var orphan = await _context.Subjects.FindAsync(_orphanId);
+        orphan!.SetEmail("orphan@example.test");
+        orphan.ConfirmEmail("orphan@example.test", DateTime.UtcNow);
+        await _context.SaveChangesAsync();
+        var controller = Controller(AccountLinkRoutes.Of(delivery), _controller.ControllerContext);
+
+        var listed = await controller.GetLockedOutMembers(CancellationToken.None);
+        var issued = await controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        listed.Should().BeOfType<OkObjectResult>().Which.Value.As<List<LockedOutMember>>()
+            .Select(m => m.SubjectId).Should().Equal(lockedOut ? [_orphanId] : []);
+        if (lockedOut)
+            issued.Should().BeOfType<OkObjectResult>();
+        else
+        {
+            issued.Should().BeOfType<NotFoundResult>();
+            NoCodeIssued();
+        }
+    }
+
     [Fact]
     public async Task The_locked_out_members_are_listed_with_who_can_recover_them()
     {
@@ -187,6 +381,6 @@ public sealed class MemberRecoveryControllerTests : IDisposable
         var result = await _controller.GetLockedOutMembers(CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(
-            new[] { new LockedOutMember(_orphanId, "Orphan", "orphan", HasRecoveryCodes: true, OperatorOnly: true) });
+            new[] { new LockedOutMember(_orphanId, "Orphan", "orphan", HasRecoveryCodes: true, Refusal: RecoveryIssueRefusal.OperatorOnly) });
     }
 }

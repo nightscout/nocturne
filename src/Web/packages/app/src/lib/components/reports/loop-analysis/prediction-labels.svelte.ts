@@ -1,6 +1,6 @@
 import { PredictionContext, PredictionCurve } from "#lib/api/index.js";
 import { plural } from "#lib/utils/plural.js";
-import { formatLocale } from "#lib/utils/formatting.js";
+import { formatList } from "#lib/utils/formatting.js";
 import { hoursText } from "./settings-evidence-labels.svelte";
 
 /** Built per call so wuchale reads them in the current locale. */
@@ -68,5 +68,5 @@ export function horizonLabel(minutes: number | undefined): string {
 
 /** The served settings-signal horizons as a list, e.g. "+30 min and +60 min". */
 export function horizonList(minutes: number[]): string {
-  return new Intl.ListFormat(formatLocale(), { type: "conjunction" }).format(minutes.map(horizonLabel));
+  return formatList(minutes.map(horizonLabel));
 }

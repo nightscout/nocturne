@@ -92,10 +92,12 @@ public class TenantDirectGrantControllerTests : IDisposable
                 new Mock<ILogger<AuthAuditService>>().Object),
             new GrantRevocationService(
                 new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            TimeProvider.System,
             new Mock<ILogger<DirectGrantService>>().Object);
-        var tenantMemberService = new TenantMemberService(new TenantMembershipRepository(factory.Object.AsNocturneFactory()));
+        var tenantMemberService = new TenantMemberService(new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System);
 
-        _controller = new TenantDirectGrantController(tenantMemberService, directGrantService)
+        _controller = new TenantDirectGrantController(
+            tenantMemberService, directGrantService, new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -168,6 +170,33 @@ public class TenantDirectGrantControllerTests : IDisposable
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
+        Assert.False(await _dbContext.OAuthGrants.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Create_ForAMemberWhoIsNotActive_AnswersAsForANonMemberAndMintsNothing()
+    {
+        var nonMember = await _controller.Create(_tenantId, new AdminCreateDirectGrantRequest
+        {
+            SubjectId = _nonMemberSubjectId,
+            Label = "Should Not Exist",
+            Scopes = ["glucose.read"],
+        }, CancellationToken.None);
+        var member = await _dbContext.Subjects.SingleAsync(s => s.Id == _memberSubjectId);
+        member.IsActive = false;
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.Create(_tenantId, new AdminCreateDirectGrantRequest
+        {
+            SubjectId = _memberSubjectId,
+            Label = "Should Not Exist",
+            Scopes = ["glucose.read"],
+        }, CancellationToken.None);
+
+        var refusal = Assert.IsType<ObjectResult>(result.Result);
+        var nonMemberRefusal = Assert.IsType<ObjectResult>(nonMember.Result);
+        Assert.Equal(nonMemberRefusal.StatusCode, refusal.StatusCode);
+        Assert.Equivalent(nonMemberRefusal.Value, refusal.Value, strict: true);
         Assert.False(await _dbContext.OAuthGrants.AnyAsync());
     }
 

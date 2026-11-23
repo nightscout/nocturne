@@ -99,7 +99,7 @@ public class ApiKeyHandler : IAuthHandler
         {
             _ = DirectGrantTokenHandler.RecordLastUsedAsync(
                 _grants, _logger, grant.Id, tenantCtx.TenantId,
-                context.Connection.RemoteIpAddress?.ToString(),
+                context.GetClientAddress(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }
 

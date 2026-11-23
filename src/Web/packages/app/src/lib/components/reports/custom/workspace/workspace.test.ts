@@ -1,10 +1,11 @@
 import { EventAnchorKind } from "#lib/api/index.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import { STARTERS, starter } from "./starters.js";
+import { preferredLanguage, regionFormat } from "#lib/stores/appearance-store.svelte.js";
 import { Workspace, fromDisplay } from "./workspace.svelte.js";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 
 /** The live catalogue as a tenant that reads glucose in mmol/L sees it. */
 function mmolCatalogue(): CustomReportCatalogue {
@@ -602,7 +603,7 @@ describe("relate", () => {
       mark: "line",
     });
     expect(ws.captionText()).toBe(
-      "Basal delivered, insulin on board and insulin on board divided by basal delivered as a timeline over the last 7 days"
+      "Basal delivered, insulin on board, and insulin on board divided by basal delivered as a timeline over the last 7 days"
     );
     ws.toggleSignal("basal");
     expect(ws.combos).toEqual([]);
@@ -668,8 +669,28 @@ describe("the caption", () => {
       "Glucose around sensor starts, 1 hour before to 8 hours after over the last 90 days, without illness and manual mode"
     );
     expect(text("reservoir-batteries")).toBe(
-      "Reservoir, pump battery and uploader battery as a timeline over the last 7 days"
+      "Reservoir, pump battery, and uploader battery as a timeline over the last 7 days"
     );
+  });
+
+  it("joins a list with the word of the interface language, whatever the regional format", () => {
+    const language = vi.spyOn(preferredLanguage, "current", "get");
+    const region = regionFormat.current;
+    try {
+      language.mockReturnValue("de");
+      regionFormat.current = "en-GB";
+      expect(text("reservoir-batteries")).toBe(
+        "Reservoir, pump battery und uploader battery as a timeline over the last 7 days"
+      );
+      language.mockReturnValue("en");
+      regionFormat.current = "de-DE";
+      expect(text("reservoir-batteries")).toBe(
+        "Reservoir, pump battery, and uploader battery as a timeline over the last 7 days"
+      );
+    } finally {
+      language.mockRestore();
+      regionFormat.current = region;
+    }
   });
 });
 

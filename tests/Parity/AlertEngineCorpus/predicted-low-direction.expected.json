@@ -14,10 +14,18 @@
               "value": true
             }
           ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 15,
+              "value": 65
+            }
+          ],
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -32,8 +40,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         }
       ]
@@ -50,10 +57,18 @@
               "value": true
             }
           ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 30,
+              "value": 64
+            }
+          ],
           "transition": "continues",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -66,10 +81,18 @@
               "value": true
             }
           ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "default",
+              "offset_minutes": 30,
+              "value": 64
+            }
+          ],
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           }
         }

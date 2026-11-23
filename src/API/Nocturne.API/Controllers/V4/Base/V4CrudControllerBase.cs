@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
@@ -98,8 +99,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var model = MapCreateToModel(request);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeCreateAsync(model, request, ct) is { } result)
             return result;
@@ -123,8 +124,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="requests">The records to write, at most 1000 of them.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, basal
-    /// injections, sensor glucose, notes, device events and BG checks upsert on the sync key: an item
+    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, carb
+    /// intakes, basal injections, sensor glucose, notes, device events, BG checks and temp basals upsert on the sync key: an item
     /// carrying both `dataSource` and `syncIdentifier` updates in place the row already matched by
     /// that pair, and an item whose pair is held by a record the owner deleted is skipped. Every other
     /// type — calibrations, meter readings and bolus calculations — inserts, as does any item not
@@ -145,7 +146,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         [FromBody] IReadOnlyList<TCreateRequest> requests, CancellationToken ct = default)
     {
         var naming = BulkNaming;
-        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
             return invalid;
 
         var models = new List<TModel>(requests.Count);
@@ -159,7 +160,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         await RecordUpsertTargetsAsync(footprint, models, ct);
         var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
         footprint?.AddRange(written.Select(w => w.Timestamp));
-        return StatusCode(StatusCodes.Status201Created, await OnAfterBulkCreateAsync(written, ct));
+        var returned = await OnAfterBulkCreateAsync(written, ct);
+        await EnrichCommittedAsync(returned, ct);
+        return StatusCode(StatusCodes.Status201Created, returned);
     }
 
     /// <summary>
@@ -189,8 +192,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         var model = MapUpdateToModel(id, request, existing);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+        if (TimestampRule.IsMissing(model.Timestamp))
+            return this.TimestampRequiredProblem();
 
         if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } result)
             return result;
@@ -199,6 +202,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         {
             var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.AddRange([existing.Timestamp, updated.Timestamp]);
+            await EnrichCommittedAsync([updated], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -256,7 +260,8 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
 
-        var data = await Repository.GetDeletedAsync(limit, offset, ct);
+        var data = (await Repository.GetDeletedAsync(limit, offset, ct)).ToList();
+        await OnBeforeReturnAsync(data, ct);
         var total = await Repository.CountDeletedAsync(ct);
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
@@ -289,6 +294,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
             var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.Add(restored.Timestamp);
             await OnAfterRestoreAsync(restored, ct);
+            await EnrichCommittedAsync([restored], ct);
             return Ok(restored);
         }
         catch (KeyNotFoundException)
@@ -324,8 +330,18 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
         TenantCacheWriteFootprint.Of(HttpContext)?.AddRange(result.Restored.Select(r => r.Timestamp));
+        await EnrichCommittedAsync([.. result.Restored], ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Runs <see cref="V4ReadOnlyControllerBase{TModel, TRepository}.OnBeforeReturnAsync"/> for an action
+    /// that has already committed its write, and logs a failure of it instead of throwing.
+    /// </summary>
+    /// <param name="records">The records the action returns.</param>
+    /// <param name="ct">Cancellation token. A cancellation of the request is not swallowed.</param>
+    protected Task EnrichCommittedAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)
+        => CommittedWriteEnrichment.RunAsync(this, records, () => OnBeforeReturnAsync(records, ct), ct);
 
     /// <summary>
     /// Records in <paramref name="footprint"/> the stored timestamps of the rows a create of

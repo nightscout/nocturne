@@ -41,13 +41,15 @@ access:
 |------|------------------|
 | Viewer | Read-only: blood glucose and the whole Reports section. For a quick glance. |
 | Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
-| Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
+| Caretaker | Everything a Clinician sees. They can also log treatments, manage alerts, and set up data sources: connect, change, sync, and remove them. For someone who actively helps day to day. |
 | Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
 | Owner | You. Full control of the account; can't be removed. |
 
-If a role is close but not quite right, you can adjust an individual member's
-**permissions** on top of it, switching a particular kind of access on or off for
-that one person, without changing what the role means for everyone else.
+If a role is close but not quite right, you can give an individual member extra
+**permissions** on top of it, without changing what the role means for everyone
+else. Extra permissions only add access. To give one person less than a role
+gives, give them a different role, or make a role of your own with only the
+access they need.
 
 You can also tick **Only last 24 hours** (when you invite them, or later) to
 limit that member to recent data, the same way the public link's time window
@@ -59,10 +61,46 @@ works.
   things. Invite the <strong>teacher as a Viewer</strong>; they just need to
   glance at the current glucose during class. Invite the
   <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
-  or manage an alert if they step in. Each has their own login, you can see them
-  in your member list, and when the year ends you remove them in one click.
+  or manage an alert if they step in. A Caretaker can also set up data sources.
+  If the nurse must not do that, give them a role of your own without data source
+  setup, or remove data source setup from the Caretaker role, which changes it for
+  every Caretaker. Each has their
+  own login, you can see them in your member list, and when the year ends you
+  remove them in one click.
 
 </Callout>
+
+## Access end date
+
+A membership can end on a day that you choose. Use an end date for a person who needs access
+for a limited time, such as a school term.
+
+To set the day, use the **Access ends (optional)** field in one of these places:
+
+- The invite form, before you create the invite.
+- The approval of a membership request, before you approve it.
+- A member row. Select **Edit**, pick the day, and select **Save changes**.
+
+To remove an end date from a member, select **Edit** on the member row, then select
+**Remove the end date** and **Save changes**.
+
+The rules for an end date:
+
+- **Access holds through the end of that day.** The end date is the last day of access. The day
+  follows the time zone of the device you use when you pick it.
+- **You cannot pick a day that has passed.** To end access now, remove the member.
+- **Nothing is revoked.** When the day ends, the membership stops giving access, but the member
+  keeps the same roles and permissions. If you set a later date, the member has the same access again.
+- **An owner has no end date.** An owner's access does not end. Before you give a member the
+  Owner role, remove their end date.
+- **A person whose own access ends cannot give access that lasts longer.** If your access ends
+  on a date, you cannot pick a later day. You cannot remove the end date of a member either.
+  An invite or an approval with no day ends on the same day as your access. You also cannot
+  change a member whose access lasts longer than yours, or change public sharing.
+
+The member list shows **Until** and the date for a member whose access will end. After the date,
+it shows **Ended** and the date. A person who opens an invite sees the day their access ends on
+the join page.
 
 ## Membership requests
 

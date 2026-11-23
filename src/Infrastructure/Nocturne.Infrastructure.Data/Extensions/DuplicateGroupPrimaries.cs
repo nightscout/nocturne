@@ -414,6 +414,7 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await ctx.PlanForEachArrayAsync(recordIds.Count, ct);
         await LockStreamsAsync(ctx, recordType, ct);
         var key = RecordTypeKeys.Key(recordType);
         var repaired = 0;
@@ -481,6 +482,15 @@ internal static class DuplicateGroupPrimaries
     /// lock would invert the order the other glucose writers take them in (<see cref="GlucoseStreamFlags"/>
     /// says why, and why a deferred delete locks).
     /// </summary>
+    /// <remarks>
+    /// The groups are read in one statement and their links locked in the next, each joining its id
+    /// array to the links. With the read folded into the lock as a subquery, a planner without
+    /// statistics for the tenant can nest one scan of the tenant's links inside another. Planned for
+    /// its array, which the callers' transactions ask for (<see cref="ArrayFilterPlans"/>), a join to
+    /// the array is a hash join on the link column or a probe of an index of it, which
+    /// <c>SourceDeleteGroupLockPlanTests</c> pins; neither bounds the cost by the ids, since a hash
+    /// join reads every link of the tenant.
+    /// </remarks>
     public static async Task LockGroupsOfAsync(
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
@@ -491,14 +501,22 @@ internal static class DuplicateGroupPrimaries
 
         var key = RecordTypeKeys.Key(recordType);
         var ids = recordIds.ToArray();
+        var canonicals = await ctx.Database.SqlQuery<Guid>($"""
+            SELECT DISTINCT l.canonical_id AS "Value"
+            FROM unnest({ids}) AS r(id)
+            JOIN linked_records l ON l.record_id = r.id
+            WHERE l.tenant_id = {ctx.TenantId} AND l.record_type = {key}
+            """).ToArrayAsync(ct);
+        if (canonicals.Length == 0)
+            return;
+
         await ctx.Database.ExecuteSqlAsync($"""
-            SELECT id FROM linked_records
-            WHERE tenant_id = {ctx.TenantId} AND record_type = {key}
-              AND canonical_id IN (
-                  SELECT canonical_id FROM linked_records
-                  WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({ids}))
-            ORDER BY record_id
-            FOR UPDATE
+            SELECT l.id
+            FROM unnest({canonicals}) AS g(id)
+            JOIN linked_records l ON l.canonical_id = g.id
+            WHERE l.tenant_id = {ctx.TenantId} AND l.record_type = {key}
+            ORDER BY l.record_id
+            FOR UPDATE OF l
             """, ct);
     }
 

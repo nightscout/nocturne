@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Health;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
@@ -124,7 +125,7 @@ public class ActivityController : ControllerBase
             {
                 if (UploaderTimestamp.TryParse(latestActivity.CreatedAt, out var createdDate))
                 {
-                    Response.Headers.Append("Last-Modified", createdDate.ToString("R"));
+                    Response.Headers.Append("Last-Modified", createdDate.ToString("R", CultureInfo.InvariantCulture));
                 }
             }
         }
@@ -185,6 +186,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -240,6 +242,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -275,6 +278,7 @@ public class ActivityController : ControllerBase
         Scope.HeartRateReadWrite,
         Scope.StepCountReadWrite,
         Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

@@ -233,6 +233,22 @@ public class EngineAlarmRelayTests
     }
 
     [Fact]
+    public async Task A_reading_dated_ahead_is_left_out_of_the_replayed_alarm()
+    {
+        await _tenant.SeedAsync(AlertRuleSeverity.Critical);
+        _tenant.Canonical
+            .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose { Timestamp = AlarmTestTenant.Now.AddHours(1), Mgdl = 300 });
+        _tenant.Canonical
+            .Setup(c => c.GetLatestAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose { Timestamp = AlarmTestTenant.Now.AddMinutes(-2), Mgdl = 50 });
+
+        var alarm = await _tenant.Relay().HighestAlarmingAsync(CancellationToken.None);
+
+        alarm!.Notify.Message.Should().Be("BG Now: 50 mg/dL");
+    }
+
+    [Fact]
     public async Task A_stale_reading_is_left_out_of_the_replayed_alarm()
     {
         await _tenant.SeedAsync(AlertRuleSeverity.Critical);

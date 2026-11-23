@@ -369,7 +369,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new InstanceKeyCheck(root, _key),
             new OwnerNoticeLedger(root),
             new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            new TenantMembershipRepository(root),
+            new TenantMembershipRepository(root, AccountLinkRoutes.Off),
             _clock,
             _log);
     }
@@ -576,6 +576,17 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         public Task<bool> ArchiveBySourceAsync(
             string userId, string type, string sourceId, NotificationArchiveReason reason,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> ReplaceMetadataBySourceAsync(
+            string userId, string type, string sourceId, Dictionary<string, object> metadata,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> CreateNotificationUnlessActiveAsync(
+            string userId, string type, string title, string sourceId, NotificationCategory? category = null,
+            string? source = null, string? subtitle = null, Dictionary<string, object>? metadata = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

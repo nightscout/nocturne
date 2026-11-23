@@ -98,6 +98,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// The client opens <c>AuthorizeUrl</c> in a new tab.
     /// </summary>
     [HttpPost("start")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand]
     [ProducesResponseType(typeof(CareLinkConnectStartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -106,7 +107,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectStartRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         var server = string.IsNullOrWhiteSpace(request.Server) ? "EU" : request.Server.Trim().ToUpperInvariant();
         if (server != "EU" && server != "US")
@@ -134,6 +135,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// connector secret. Returns the discovered username/country for auto-filling the config form.
     /// </summary>
     [HttpPost("complete")]
+    [ScopeDecidedBy(typeof(CareLinkConnectController), nameof(CanConfigureConnectors))]
     [RemoteCommand(Invalidates = ["Configuration_GetConfiguration", "Configuration_GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -142,7 +144,7 @@ public partial class CareLinkConnectController : ControllerBase
         [FromBody] CareLinkConnectCompleteRequest request, CancellationToken ct)
     {
         if (!CanConfigureConnectors())
-            return Forbid();
+            return this.ForbiddenForScope(Scope.TenantSettings);
 
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { message = "Both code and state are required." });
@@ -172,7 +174,7 @@ public partial class CareLinkConnectController : ControllerBase
         if (!string.IsNullOrEmpty(result.Audience))
             secrets["audience"] = result.Audience;
 
-        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", ct);
+        await _configService.SaveSecretsAsync(ConnectorName, secrets, User.Identity?.Name ?? "carelink-connect", saver: null, ct);
 
         // Best-effort: auto-fill username/country from the profile so setup is one click.
         string? username = null, country = null;
@@ -249,8 +251,9 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
     /// token as the connector secret and writes the signed-in account into the connector
-    /// configuration, so it takes the same <see cref="Scope.TenantSettings"/> as the
-    /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
+    /// configuration. It is a browser ceremony for the person who administers the tenant, so it takes
+    /// <see cref="Scope.TenantSettings"/> and not a connector scope an app can be given; or a desktop
+    /// link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
     /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
     /// </summary>

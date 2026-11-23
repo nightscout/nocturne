@@ -88,8 +88,8 @@ public class SetupControllerTests : IDisposable
         _platformOptions = new PlatformOptions();
         _platformAdminBootstrap = new PlatformAdminBootstrapService(
             new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
-            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
-            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             Options.Create(_platformOptions),
             NullLogger<PlatformAdminBootstrapService>.Instance);
 
@@ -102,22 +102,23 @@ public class SetupControllerTests : IDisposable
     private SetupController BuildController(
         OperatorConfiguration operatorConfig,
         IHttpClientFactory httpClientFactory,
-        ILogger<SetupController> logger) =>
+        ILogger<SetupController> logger,
+        PlatformAdminBootstrapService? platformAdminBootstrap = null) =>
         new(
             _tenantService.Object,
             _passkeyService.Object,
             _recoveryCodeService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            new SubjectRepository(_dbFactory.Object.AsNocturneFactory()),
+            new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
-            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             _oidcOptions,
             _oidcAuthService.Object,
             Options.Create(operatorConfig),
             httpClientFactory,
-            _platformAdminBootstrap,
-            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory())),
+            platformAdminBootstrap ?? _platformAdminBootstrap,
+            new InstanceSetupState(new TenantRepository(_dbFactory.Object.AsNocturneFactory()), new SubjectRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off)),
             logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
@@ -444,10 +445,11 @@ public class SetupControllerTests : IDisposable
             TenantId = tenantId,
             SubjectId = subjectId,
         });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
 
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         // Act
@@ -460,6 +462,40 @@ public class SetupControllerTests : IDisposable
         var response = ok.Value.Should().BeOfType<SetupOwnerOptionsResponse>().Subject;
         response.ChallengeToken.Should().Be("challenge-token");
         response.TenantId.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenAnotherMemberHoldsTheUsername_Returns400AndIssuesNoOptions()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var candidateId = Guid.Parse("00000000-0000-7000-8000-000000000001");
+        var formerId = Guid.Parse("00000000-0000-7000-8000-000000000002");
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Subjects.AddRange(
+            new SubjectEntity { Id = candidateId, Name = "Candidate", Username = "candidate", IsActive = true },
+            new SubjectEntity { Id = formerId, Name = "Former", Username = "taken", IsActive = true });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = formerId, Username = "taken",
+        });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "taken", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Subject.Detail.Should().Be("This username is already taken");
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.TenantMembers.CountAsync()).Should().Be(1, "the refusal writes no membership");
     }
 
     [Fact]
@@ -493,7 +529,7 @@ public class SetupControllerTests : IDisposable
         var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
         conflict.Value.Should().BeEquivalentTo(new { error = "no_tenant_exists" });
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
     }
 
     [Fact]
@@ -508,12 +544,13 @@ public class SetupControllerTests : IDisposable
         {
             Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
         });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
 
         Guid enrolling = default;
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
-            .Callback((Guid subjectId, string _) => enrolling = subjectId)
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
+            .Callback((Guid subjectId, string _, PasskeyRegistrationFlow _) => enrolling = subjectId)
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         var result = await _controller.OwnerOptions(
@@ -541,13 +578,10 @@ public class SetupControllerTests : IDisposable
         {
             Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
         });
-        _dbContext.Set<TenantRoleEntity>().Add(new TenantRoleEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenantId, Name = "Owner", Slug = RoleSeeds.Owner, IsSystem = true,
-        });
+        _dbContext.Set<TenantRoleEntity>().Add(OwnerRole(tenantId));
         await _dbContext.SaveChangesAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         await _controller.OwnerOptions(
@@ -556,7 +590,17 @@ public class SetupControllerTests : IDisposable
 
         var context = FreshContext();
         var owner = await context.TenantMembers.SingleAsync(m => m.TenantId == tenantId);
-        var row = (await context.AuthAuditLog.ToListAsync()).Should().ContainSingle().Subject;
+        var rows = await context.AuthAuditLog.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.MemberJoined,
+            TargetSubjectId = (Guid?)owner.SubjectId,
+            ActorSubjectId = (Guid?)owner.SubjectId,
+            ActorCredential = (string?)null,
+            DetailsJson = """{"kind":"tenant","how":"setup"}""",
+        });
+        var row = rows[1];
         row.Should().BeEquivalentTo(new
         {
             EventType = AuthAuditEventType.RoleAssigned,
@@ -565,6 +609,78 @@ public class SetupControllerTests : IDisposable
             ActorCredential = (string?)null,
             DetailsJson = """{"role":"owner","kind":"tenant"}""",
         });
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenTheTenantHasNoOwnerRole_AnswersAnErrorAndCreatesNothing()
+    {
+        var logger = new Mock<ILogger<SetupController>>();
+        var controller = BuildController(
+            new OperatorConfiguration(), new Mock<IHttpClientFactory>().Object, logger.Object);
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+
+        var result = await controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(500);
+        problem.Value.Should().BeOfType<ProblemDetails>().Subject.Detail
+            .Should().NotContain(tenantId.ToString());
+        await AssertNothingWrittenAsync(tenantId);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner), Times.Never);
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains(tenantId.ToString())),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenTheTenantHasNoOwnerRole_LeavesTheRecordedSetupOwnerUnchanged()
+    {
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+        var subjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = "First Name", Username = "first", IsActive = true,
+        });
+        (await _dbContext.Set<TenantEntity>().SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId = subjectId;
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "second", DisplayName = "Second Name" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.Name.Should().Be("First Name");
+        subject.Username.Should().Be("first");
+        await AssertNothingWrittenAsync(tenantId, expectedSubjects: 1);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenRetriedBySubjectAlreadyMember_StillSucceedsWithTheSameSubject()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner", PasskeyRegistrationFlow.SetupOwner), Times.Once);
+        var context = FreshContext();
+        (await context.TenantMembers.CountAsync(m => m.TenantId == tenantId)).Should().Be(1);
+        (await context.Subjects.CountAsync()).Should().Be(1);
     }
 
     // SoftLock_TenantWithOnlySystemMembers_OwnerOptionsSucceeds is an integration test — it
@@ -670,6 +786,57 @@ public class SetupControllerTests : IDisposable
         VerifyOutageReported(logger, Times.Once());
     }
 
+    [Fact]
+    public async Task ValidateUsername_WhenTheWebhookDoesNotAnswerInTime_AdmitsTheName()
+    {
+        var controller = BuildSilentWebhookController(TimeSpan.FromMilliseconds(50));
+        await SeedConfiguredTenantAsync("test", "Test");
+
+        var result = await controller.ValidateUsername("owner-one", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<SlugValidationResult>()
+            .Which.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ValidateUsername_WhenTheCallerCancels_DoesNotTreatItAsAWebhookOutage()
+    {
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var controller = BuildSilentWebhookController(TimeSpan.FromSeconds(30), arrived);
+        await SeedConfiguredTenantAsync("test", "Test");
+        using var cts = new CancellationTokenSource();
+
+        var call = controller.ValidateUsername("owner-one", cts.Token);
+        await arrived.Task;
+        await cts.CancelAsync();
+
+        await FluentActions.Awaiting(() => call).Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private SetupController BuildSilentWebhookController(TimeSpan timeout, TaskCompletionSource? arrived = null)
+    {
+        var handler = new SilentHandler(arrived);
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(f => f.CreateClient(OperatorWebhook.UsernameValidationClient))
+            .Returns(() => new HttpClient(handler, disposeHandler: false) { Timeout = timeout });
+
+        return BuildController(
+            new OperatorConfiguration { UsernameValidationWebhookUrl = "https://webhook.invalid/validate" },
+            httpClientFactory.Object,
+            new Mock<ILogger<SetupController>>().Object);
+    }
+
+    private sealed class SilentHandler(TaskCompletionSource? arrived) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            arrived?.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
     private SetupController BuildWebhookController(
         Mock<ILogger<SetupController>> logger, params HttpStatusCode[] responses)
     {
@@ -728,7 +895,7 @@ public class SetupControllerTests : IDisposable
         problem.StatusCode.Should().Be(400);
         _passkeyService.Verify(
             s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), ownerSubjectId, It.IsAny<string?>()),
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), ownerSubjectId, It.IsAny<string?>()),
             Times.Once,
             "the enrolling subject comes from the server's lookup, not from the challenge token");
         _sessionService.Verify(
@@ -758,6 +925,30 @@ public class SetupControllerTests : IDisposable
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeOfType<SetupOwnerCompleteResponse>().Subject.Success.Should().BeTrue();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(ownerSubjectId), Times.Once);
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenTheSignInTimeCannotBeRecorded_IssuesNoSessionAndSetsNoCookie()
+    {
+        var ownerSubjectId = await SeedOwnerlessTenantWithOwnerSubjectAsync();
+        StubRegistrationChallengeMintedFor(ownerSubjectId);
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(ownerSubjectId))
+            .ThrowsAsync(new DbUpdateException("the update failed"));
+
+        var result = await _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-owner",
+            },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Subject.StatusCode.Should().Be(400);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
     [Fact]
@@ -781,7 +972,7 @@ public class SetupControllerTests : IDisposable
         problem.StatusCode.Should().Be(400);
         _passkeyService.Verify(
             s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
             Times.Never,
             "with no subject to resolve there is nothing to enrol onto");
     }
@@ -821,6 +1012,22 @@ public class SetupControllerTests : IDisposable
             CancellationToken.None);
 
         result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task OwnerOidc_WhenTheTenantHasNoOwnerRole_AnswersAnErrorAndCreatesNothing()
+    {
+        var tenantId = await SeedTenantWithoutOwnerRoleAsync();
+
+        var result = await _controller.OwnerOidc(
+            new SetupOwnerOidcRequest { Username = "owner", DisplayName = "Owner", ProviderId = Guid.CreateVersion7() },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+        await AssertNothingWrittenAsync(tenantId);
+        _oidcAuthService.Verify(
+            s => s.GenerateSetupAuthorizationUrlAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>()),
+            Times.Never);
     }
 
     // OwnerOidc field-validation cases (empty username, empty ProviderId) are left to
@@ -869,7 +1076,7 @@ public class SetupControllerTests : IDisposable
         // and lock the instance out permanently.
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         await _controller.OwnerOptions(
@@ -951,6 +1158,71 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task OwnerComplete_EndsTheSetupOwnerRecord()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<OkObjectResult>();
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_HasAlreadyEndedTheSetupOwnerRecord()
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+        var failingSubjects = new Mock<ISubjectRepository>();
+        failingSubjects
+            .Setup(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("grant failed"));
+        var controller = BuildController(
+            new OperatorConfiguration(),
+            new Mock<IHttpClientFactory>().Object,
+            new Mock<ILogger<SetupController>>().Object,
+            new PlatformAdminBootstrapService(
+                new TenantRepository(_dbFactory.Object.AsNocturneFactory()),
+                new TenantMembershipRepository(_dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
+                failingSubjects.Object,
+                Options.Create(_platformOptions),
+                NullLogger<PlatformAdminBootstrapService>.Instance));
+
+        var result = await controller.OwnerComplete(
+            new SetupOwnerCompleteRequest { AttestationResponseJson = "{}", ChallengeToken = "challenge-token" },
+            CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        failingSubjects.Verify(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()), Times.Once);
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OidcCallback_EndsTheSetupOwnerRecordOnlyWhenSetupCompletes(bool succeeds)
+    {
+        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                "auth-code", "expected-state", "expected-state",
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(succeeds
+                ? OidcSetupCallbackResult.Succeeded(
+                    subjectId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 })
+                : OidcSetupCallbackResult.Failed("invalid_grant"));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId
+            .Should().Be(succeeds ? null : subjectId);
+    }
+
+    [Fact]
     public async Task OidcCallback_WhenSetupAlreadyComplete_DoesNotProcessTheCallback()
     {
         // Every sibling setup endpoint dead-ends once an owner holds credentials. Without the
@@ -1006,6 +1278,31 @@ public class SetupControllerTests : IDisposable
 
     private NocturneDbContext FreshContext() => _db.CreateContext();
 
+    private static TenantRoleEntity OwnerRole(Guid tenantId) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = tenantId, Name = "Owner", Slug = RoleSeeds.Owner, IsSystem = true,
+    };
+
+    /// <summary>Seeds the sole tenant of a damaged install: it holds no owner role.</summary>
+    private async Task<Guid> SeedTenantWithoutOwnerRoleAsync()
+    {
+        var tenantId = Guid.CreateVersion7();
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        await _dbContext.SaveChangesAsync();
+        return tenantId;
+    }
+
+    private async Task AssertNothingWrittenAsync(Guid tenantId, int expectedSubjects = 0)
+    {
+        var context = FreshContext();
+        (await context.Subjects.CountAsync()).Should().Be(expectedSubjects, "a refused step creates no subject");
+        (await context.TenantMembers.CountAsync(m => m.TenantId == tenantId)).Should().Be(0, "a refused step grants nothing");
+        _subjectService.Verify(s => s.AssignRoleAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+    }
+
     /// <summary>
     /// Drives the passkey completion step with the mocks it needs to reach the grant.
     /// </summary>
@@ -1022,7 +1319,7 @@ public class SetupControllerTests : IDisposable
     {
         _passkeyService
             .Setup(s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
             .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
         _recoveryCodeService
             .Setup(s => s.GenerateCodesAsync(subjectId))
@@ -1090,7 +1387,7 @@ public class SetupControllerTests : IDisposable
     /// <summary>
     /// Seeds the state a fresh install reaches after tenant creation and a first pass
     /// through owner setup: a sole tenant whose credential-less member holds the owner
-    /// role, written directly.
+    /// role and is the tenant's recorded setup owner, written directly.
     /// </summary>
     private async Task<(Guid TenantId, Guid SubjectId)> SeedSoleTenantWithOwnerRoleAsync()
     {
@@ -1099,14 +1396,14 @@ public class SetupControllerTests : IDisposable
         var memberId = Guid.CreateVersion7();
         var ownerRoleId = Guid.CreateVersion7();
 
-        _dbContext.Set<TenantEntity>().Add(new TenantEntity
-        {
-            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
-        });
         _dbContext.Subjects.Add(new SubjectEntity
         {
             Id = subjectId, Name = "Owner", Username = "owner",
             IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance", SetupOwnerSubjectId = subjectId,
         });
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
@@ -1129,28 +1426,8 @@ public class SetupControllerTests : IDisposable
     /// Seeds the sole tenant plus the credential-less owner subject and membership that
     /// <c>owner/options</c> leaves behind, and returns the subject id.
     /// </summary>
-    private async Task<Guid> SeedOwnerlessTenantWithOwnerSubjectAsync()
-    {
-        var tenantId = Guid.CreateVersion7();
-        var subjectId = Guid.CreateVersion7();
-
-        _dbContext.Set<TenantEntity>().Add(new TenantEntity
-        {
-            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
-        });
-        _dbContext.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId, Name = "Owner", Username = "owner",
-            IsActive = true, IsSystemSubject = false,
-        });
-        _dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId,
-        });
-        await _dbContext.SaveChangesAsync();
-
-        return subjectId;
-    }
+    private async Task<Guid> SeedOwnerlessTenantWithOwnerSubjectAsync() =>
+        (await SeedSoleTenantWithOwnerRoleAsync()).SubjectId;
 
     /// <summary>
     /// Makes the passkey service behave as the real one does for a challenge token minted for
@@ -1161,8 +1438,8 @@ public class SetupControllerTests : IDisposable
     {
         _passkeyService
             .Setup(s => s.CompleteRegistrationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
-            .ReturnsAsync((string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync((string _, string _, PasskeyRegistrationFlow _, Guid _, Guid expectedSubjectId, string? _) =>
                 expectedSubjectId == subjectId
                     ? new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId)
                     : throw new InvalidOperationException(

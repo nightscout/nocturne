@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.EntityConfigurations;
@@ -28,6 +29,16 @@ internal sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenan
         entity
             .HasIndex(t => t.LastReadingAt)
             .HasDatabaseName("ix_tenants_last_reading_at");
+
+        entity
+            .HasOne<SubjectEntity>()
+            .WithMany()
+            .HasForeignKey(t => t.SetupOwnerSubjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity
+            .HasIndex(t => t.SetupOwnerSubjectId)
+            .HasDatabaseName("ix_tenants_setup_owner_subject_id");
     }
 }
 
@@ -38,6 +49,11 @@ internal sealed class TenantMemberEntityConfiguration : IEntityTypeConfiguration
         entity
             .HasIndex(tm => tm.SubjectId)
             .HasDatabaseName("ix_tenant_members_subject_id");
+
+        entity
+            .HasIndex(tm => tm.NextReasonLapseAt)
+            .HasDatabaseName("ix_tenant_members_next_reason_lapse_at")
+            .HasFilter("next_reason_lapse_at IS NOT NULL");
 
         entity
             .HasOne(tm => tm.Tenant)
@@ -83,6 +99,69 @@ internal sealed class TenantMemberRoleEntityConfiguration : IEntityTypeConfigura
     public void Configure(EntityTypeBuilder<TenantMemberRoleEntity> entity)
     {
         entity.HasIndex(e => new { e.TenantMemberId, e.TenantRoleId }).IsUnique();
+    }
+}
+
+internal sealed class TenantMemberReasonEntityConfiguration : IEntityTypeConfiguration<TenantMemberReasonEntity>
+{
+    public void Configure(EntityTypeBuilder<TenantMemberReasonEntity> entity)
+    {
+        entity
+            .HasOne(e => e.TenantMember)
+            .WithMany(m => m.Reasons)
+            .HasForeignKey(e => e.TenantMemberId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // No action, so deleting a team's access that a reason still names fails: whatever stops the
+        // access must take its reasons away first. ClientNoAction keeps EF from nulling a tracked
+        // reason's source to let the delete through.
+        entity
+            .HasOne(e => e.TeamAccess)
+            .WithMany()
+            .HasForeignKey(e => e.SourceId)
+            .OnDelete(DeleteBehavior.ClientNoAction);
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_tenant_member_reasons_team_source",
+            $"(kind = '{MembershipReasonKind.Team}') = (source_id IS NOT NULL)"));
+
+        entity
+            .HasOne(e => e.CreatedFromInvite)
+            .WithMany()
+            .HasForeignKey(e => e.CreatedFromInviteId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasIndex(e => e.TenantMemberId, "ix_tenant_member_reasons_tenant_member_id");
+
+        entity
+            .HasIndex(e => e.TenantMemberId, "ix_tenant_member_reasons_one_direct")
+            .IsUnique()
+            .HasFilter($"kind = '{MembershipReasonKind.Direct}'");
+
+        entity
+            .HasIndex(e => new { e.TenantMemberId, e.Kind, e.SourceId }, "ix_tenant_member_reasons_one_per_source")
+            .IsUnique()
+            .HasFilter("source_id IS NOT NULL");
+    }
+}
+
+internal sealed class TenantMemberReasonRoleEntityConfiguration : IEntityTypeConfiguration<TenantMemberReasonRoleEntity>
+{
+    public void Configure(EntityTypeBuilder<TenantMemberReasonRoleEntity> entity)
+    {
+        entity
+            .HasOne(e => e.TenantMemberReason)
+            .WithMany(r => r.ReasonRoles)
+            .HasForeignKey(e => e.TenantMemberReasonId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity
+            .HasOne(e => e.TenantRole)
+            .WithMany()
+            .HasForeignKey(e => e.TenantRoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TenantMemberReasonId, e.TenantRoleId }).IsUnique();
     }
 }
 

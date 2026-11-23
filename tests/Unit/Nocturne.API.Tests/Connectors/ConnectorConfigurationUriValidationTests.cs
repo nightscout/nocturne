@@ -61,6 +61,9 @@ public class ConnectorConfigurationUriValidationTests
     {
         var configService = new Mock<IConnectorConfigurationService>();
         configService
+            .Setup(s => s.GetBoundKeysAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, Type> { ["baseUrl"] = typeof(string) });
+        configService
             .Setup(s => s.GetSchemaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse(
                 """{"properties":{"baseUrl":{"type":"string","format":"uri"}}}"""));

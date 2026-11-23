@@ -21,6 +21,7 @@ public sealed class GoogleHealthSessionStore(
     ITenantAccessor tenants,
     IGoogleHealthPlatformSettings platform,
     ILogger<GoogleHealthSessionStore> logger,
+    TimeProvider time,
     TimeSpan? revokeTimeout = null)
 {
     private const string RefreshTokenKey = "refreshToken";
@@ -144,7 +145,7 @@ public sealed class GoogleHealthSessionStore(
         secrets[RefreshTokenKey] = session.RefreshToken;
         secrets[GrantedScopesKey] = string.Join(' ', session.Scopes.Distinct(StringComparer.Ordinal));
         secrets[AccountKey] = accountKey;
-        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), ct);
+        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), saver: null, ct);
     }
 
     /// <summary>
@@ -169,7 +170,7 @@ public sealed class GoogleHealthSessionStore(
         secrets.Remove(SessionClientIdKey);
         secrets.Remove(LegacyClientSecretKey);
         if (removeAccount) secrets.Remove(AccountKey);
-        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject?.ToString(), ct);
+        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject?.ToString(), saver: null, ct);
         // Released before the revocation asks who else holds the account, so two tenants clearing
         // at once cannot each see the other and both keep the grant.
         await holders.ReleaseAsync(TenantId, ct);
@@ -216,9 +217,9 @@ public sealed class GoogleHealthSessionStore(
     {
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(revokeTimeout ?? TimeSpan.FromSeconds(5));
-            return await oauth.RevokeAsync(refreshToken, timeout.Token);
+            using var deadline = new CancellationTokenSource(revokeTimeout ?? TimeSpan.FromSeconds(5), time);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+            return await oauth.RevokeAsync(refreshToken, linked.Token);
         }
         catch (HttpRequestException)
         {

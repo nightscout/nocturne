@@ -13,7 +13,7 @@ import type {
   CustomReportWorkspaceMark,
   CustomReportWorkspaceSection,
   CustomReportWorkspaceSignal,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 export type SignalId = CustomReportWorkspaceSignal["id"];
 export type LensId = CustomReportWorkspace["lenses"][number];

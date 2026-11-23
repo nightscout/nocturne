@@ -35,7 +35,7 @@ public class EntryServiceUploadTests
     }
 
     [Fact]
-    public async Task NothingStored_WritesAndEchoesEveryEntryAndMovesTheGlucoseOfEach()
+    public async Task NothingStored_WritesAndEchoesEveryEntry()
     {
         var batch = new[]
         {
@@ -47,7 +47,6 @@ public class EntryServiceUploadTests
 
         _written.Should().Equal(batch);
         upload.Response.Should().Equal(batch);
-        upload.GlucoseMoved.Should().Equal(batch);
     }
 
     [Fact]
@@ -118,7 +117,6 @@ public class EntryServiceUploadTests
             null);
 
         upload.Response.Should().ContainSingle().Which.Should().BeSameAs(stored);
-        upload.GlucoseMoved.Should().BeEmpty();
         _written.Should().BeEmpty();
     }
 
@@ -164,24 +162,6 @@ public class EntryServiceUploadTests
         written.Rssi.Should().Be(100);
     }
 
-    [Theory]
-    [InlineData(164, 164, false)]
-    [InlineData(170, 170, true)]
-    [InlineData(170, 164, true)]
-    [InlineData(164, 170, false)]
-    public async Task Resend_MovesGlucoseOnlyWhenTheStoredValueChanges(double sgv, double staleMgdl, bool moved)
-    {
-        var stored = new Entry { Id = "stored-1", Sgv = 164, Mgdl = 164, Mills = 1000, Device = "Dexcom G7", Type = "sgv" };
-        StubStoredAt((1000L, stored));
-
-        var upload = await _sut.UpsertUploadAsync(
-            [new Entry { Id = "sent", Sgv = sgv, Mgdl = staleMgdl, Mills = 1000, Device = "Dexcom G7", Type = "sgv" }],
-            null);
-
-        upload.GlucoseMoved.Should().HaveCount(moved ? 1 : 0);
-        upload.GlucoseMoved.Select(e => e.Id).Should().OnlyContain(id => id == "stored-1");
-    }
-
     [Fact]
     public async Task MixedDuplicateAndNew_KeepsOneResponsePerEntryInOrder()
     {
@@ -198,7 +178,6 @@ public class EntryServiceUploadTests
 
         upload.Response.Select(e => e.Id).Should().Equal("new-1", "stored-dup", "new-3");
         _written.Select(e => e.Id).Should().Equal("new-1", "stored-dup", "new-3");
-        upload.GlucoseMoved.Select(e => e.Id).Should().Equal("new-1", "new-3");
     }
 
     [Fact]

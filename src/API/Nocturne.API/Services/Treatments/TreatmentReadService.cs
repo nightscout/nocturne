@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
@@ -316,7 +315,7 @@ internal class TreatmentReadService : ITreatmentStore
 
     /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
     private static bool Stops(Exception ex) =>
-        ex is DbUpdateException or DbException or TimeoutException or InvalidOperationException or OperationCanceledException;
+        StoreFailure.Is(ex) || ex is TimeoutException or InvalidOperationException or OperationCanceledException;
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Treatment?>> ReadBackAsync(

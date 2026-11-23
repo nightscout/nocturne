@@ -33,6 +33,7 @@ internal sealed class AlertRuleEntityConfiguration : IEntityTypeConfiguration<Al
             new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>());
         entity.Property(e => e.ClientConfiguration).HasColumnType("jsonb").HasDefaultValue("{}");
         entity.Property(e => e.IsEnabled).HasDefaultValue(true);
+        entity.Property(e => e.OnUnknown).HasDefaultValue(Core.Models.Alerts.AlertRuleOnUnknown.Hold);
     }
 }
 
@@ -50,6 +51,20 @@ internal sealed class AlertConditionTimerEntityConfiguration : IEntityTypeConfig
     }
 }
 
+internal sealed class AlertConditionNotTrueEntityConfiguration : IEntityTypeConfiguration<AlertConditionNotTrueEntity>
+{
+    public void Configure(EntityTypeBuilder<AlertConditionNotTrueEntity> entity)
+    {
+        entity.ToTable("alert_condition_not_true");
+        entity.HasKey(e => new { e.AlertRuleId, e.ConditionPath });
+
+        entity.HasOne(e => e.AlertRule)
+            .WithMany()
+            .HasForeignKey(e => e.AlertRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfiguration<AlertTrackerStateEntity>
 {
     public void Configure(EntityTypeBuilder<AlertTrackerStateEntity> entity)
@@ -58,6 +73,8 @@ internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfigur
         entity.HasKey(e => e.AlertRuleId);
         entity.Property(e => e.AlertRuleId).ValueGeneratedNever();
         entity.Property(e => e.State).HasDefaultValue("idle");
+        // Kept one release so a rollback to the image that still writes it works; a later release drops it (#3798).
+        entity.Property<int>("ConfirmationCount").HasColumnName("confirmation_count").HasDefaultValue(0);
 
         entity.HasOne(e => e.AlertRule)
             .WithOne(r => r.TrackerState)
@@ -68,6 +85,16 @@ internal sealed class AlertTrackerStateEntityConfiguration : IEntityTypeConfigur
             .WithMany()
             .HasForeignKey(e => e.ActiveExcursionId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+internal sealed class AlertEvaluatedReadingEntityConfiguration : IEntityTypeConfiguration<AlertEvaluatedReadingEntity>
+{
+    public void Configure(EntityTypeBuilder<AlertEvaluatedReadingEntity> entity)
+    {
+        entity.ToTable("alert_evaluated_readings");
+        entity.HasKey(e => e.TenantId);
+        entity.Property(e => e.TenantId).ValueGeneratedNever();
     }
 }
 

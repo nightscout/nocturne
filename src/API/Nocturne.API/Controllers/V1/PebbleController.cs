@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
@@ -94,7 +95,7 @@ public class PebbleController : ControllerBase
             "Pebble endpoint requested with units: {Units}, count: {Count} from {RemoteIpAddress}",
             units,
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try

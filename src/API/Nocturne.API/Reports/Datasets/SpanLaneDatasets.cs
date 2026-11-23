@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Reports.Datasets;
 
@@ -118,6 +119,7 @@ internal sealed class AlertExcursionsDataset : LaneDataset
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.AlertExcursions.AsNoTracking()
+            .OfCondition()
             .Where(e => e.StartedAt < end && (e.EndedAt == null || e.EndedAt > start))
             .OrderBy(e => e.StartedAt).Take(limit)
             .Select(e => new { e.StartedAt, e.EndedAt, e.AcknowledgedAt, Rule = e.AlertRule!.Name, Severity = (AlertRuleSeverity?)e.AlertRule.Severity })
@@ -176,7 +178,8 @@ internal sealed class AlertInstancesDataset : LaneDataset
         var (start, end) = (Utc(from), Utc(to));
         await using var db = await request.Services.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
         var rows = await db.AlertInstances.AsNoTracking()
-            .Where(i => !i.IsTest && i.TriggeredAt >= start && i.TriggeredAt < end)
+            .OfCondition()
+            .Where(i => i.TriggeredAt >= start && i.TriggeredAt < end)
             .OrderBy(i => i.TriggeredAt).Take(limit)
             .Select(i => new
             {

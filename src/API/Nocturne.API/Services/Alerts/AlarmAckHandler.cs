@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -51,6 +52,7 @@ internal sealed class AlarmAckHandler(
         {
             instanceIds = await db.AlertInstances
                 .AsNoTracking()
+                .OfCondition(includeTest: true)
                 .Where(i => i.AlertExcursionId == excursionId && i.ResolvedAt == null)
                 .Select(i => i.Id)
                 .ToListAsync(ct);

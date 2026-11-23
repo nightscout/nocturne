@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
@@ -128,7 +130,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var result = await _deviceStatuses.GetDeviceStatusByIdAsync(id, cancellationToken);
@@ -301,7 +303,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         var updated = await _deviceStatuses.ReplaceDeviceStatusAsync(id, deviceStatus, cancellationToken);
@@ -341,7 +343,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (!await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
@@ -402,7 +404,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure DeviceStatus has required properties for V3 compatibility
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
     }
 

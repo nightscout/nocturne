@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import type { CustomReportSpecError } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CustomReportSpecError } from "@nocturne/api-client";
 
   interface Props {
     errors: CustomReportSpecError[];

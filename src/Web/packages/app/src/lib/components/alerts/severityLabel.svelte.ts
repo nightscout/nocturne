@@ -1,4 +1,4 @@
-import { AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertRuleSeverity } from "@nocturne/api-client";
 
 /** What a severity does, for the person who chooses one. */
 export function severityDescription(s: AlertRuleSeverity): string {

@@ -51,6 +51,19 @@ public static class CorpusJson
             writer.WriteStringValue(value.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
         }
     }
+
+    /// <summary>
+    /// Writes a UTC instant the engine reports on its 100 ns tick grid, such as a next change,
+    /// with as many fractional digits as it needs.
+    /// </summary>
+    public sealed class TickInstantConverter : JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+            reader.GetDateTime().ToUniversalTime();
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
+            writer.WriteStringValue(value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,9 +101,6 @@ public sealed record ScenarioRule
     [JsonPropertyName("condition_params")]
     public required JsonElement ConditionParams { get; init; }
 
-    [JsonPropertyName("confirmation_readings")]
-    public int ConfirmationReadings { get; init; } = 1;
-
     [JsonPropertyName("hysteresis_minutes")]
     public int HysteresisMinutes { get; init; }
 
@@ -100,6 +110,18 @@ public sealed record ScenarioRule
     /// <summary>A full ConditionNode object (<c>{"type": …, …}</c>), or null.</summary>
     [JsonPropertyName("auto_resolve_params")]
     public JsonElement? AutoResolveParams { get; init; }
+
+    /// <summary><c>hold</c>, <c>met</c> or <c>not_met</c>; absent is <c>hold</c>.</summary>
+    [JsonPropertyName("on_unknown")]
+    public string? OnUnknown { get; init; }
+
+    /// <summary>A whole number of minutes from 1 to 1440; absent is the engine's default.</summary>
+    [JsonPropertyName("glucose_freshness_minutes")]
+    public int? GlucoseFreshnessMinutes { get; init; }
+
+    /// <summary>When the rule was last enabled; absent is not recorded.</summary>
+    [JsonPropertyName("enabled_at")]
+    public DateTime? EnabledAt { get; init; }
 }
 
 public sealed record ScenarioTick
@@ -119,6 +141,7 @@ public sealed record ScenarioContext
 {
     [JsonPropertyName("latest_value")] public decimal? LatestValue { get; init; }
     [JsonPropertyName("latest_timestamp")] public DateTime? LatestTimestamp { get; init; }
+    [JsonPropertyName("latest_received_at")] public DateTime? LatestReceivedAt { get; init; }
     [JsonPropertyName("trend_rate")] public decimal? TrendRate { get; init; }
     [JsonPropertyName("last_reading_at")] public DateTime? LastReadingAt { get; init; }
     /// <summary>Wire form of TrendBucket (<c>rising_fast</c> … <c>unknown</c>).</summary>
@@ -130,6 +153,9 @@ public sealed record ScenarioContext
     [JsonPropertyName("last_site_change_at")] public DateTime? LastSiteChangeAt { get; init; }
     [JsonPropertyName("last_sensor_start_at")] public DateTime? LastSensorStartAt { get; init; }
     public List<ScenarioPrediction>? Predictions { get; init; }
+    /// <summary>Named curves by wire name; a name the host has no member for is not read.</summary>
+    [JsonPropertyName("prediction_curves")] public Dictionary<string, List<ScenarioPrediction>>? PredictionCurves { get; init; }
+    [JsonPropertyName("aps_determination")] public ScenarioApsDetermination? ApsDetermination { get; init; }
     [JsonPropertyName("active_alerts")] public List<ScenarioActiveAlert>? ActiveAlerts { get; init; }
     [JsonPropertyName("last_aps_cycle_at")] public DateTime? LastApsCycleAt { get; init; }
     [JsonPropertyName("last_aps_enacted_at")] public DateTime? LastApsEnactedAt { get; init; }
@@ -150,14 +176,28 @@ public sealed record ScenarioContext
     [JsonPropertyName("has_ever_aps_sensitivity")] public bool HasEverApsSensitivity { get; init; }
     /// <summary>Wire form of GlucoseBucket (<c>very_low</c> … <c>very_high</c>).</summary>
     [JsonPropertyName("glucose_bucket")] public string? GlucoseBucket { get; init; }
+    [JsonPropertyName("target_low")] public decimal? TargetLow { get; init; }
+    [JsonPropertyName("target_high")] public decimal? TargetHigh { get; init; }
     [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
     [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
     [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
-    [JsonPropertyName("active_pump_state")] public ScenarioPumpState? ActivePumpState { get; init; }
+    [JsonPropertyName("active_pump_modes")] public List<ScenarioPumpMode>? ActivePumpModes { get; init; }
     [JsonPropertyName("active_state_spans")] public List<ScenarioStateSpan>? ActiveStateSpans { get; init; }
     [JsonPropertyName("active_trackers")] public List<ScenarioTrackerReference>? ActiveTrackers { get; init; }
     [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
+    [JsonPropertyName("sensor_state")] public ScenarioSensorState? SensorState { get; init; }
 }
+
+/// <summary>State uses the snake_case wire form of SensorState (<c>"warming_up"</c>, <c>"no_value"</c>, …).</summary>
+public sealed record ScenarioSensorState(
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("since")] DateTime? Since,
+    [property: JsonPropertyName("until")] DateTime? Until = null);
+
+public sealed record ScenarioApsDetermination(
+    [property: JsonPropertyName("at")] DateTime At,
+    [property: JsonPropertyName("eventual_mgdl")] decimal? EventualMgdl,
+    [property: JsonPropertyName("carbs_required_grams")] decimal? CarbsRequiredGrams);
 
 public sealed record ScenarioPrediction(
     [property: JsonPropertyName("offset_minutes")] int OffsetMinutes,
@@ -182,7 +222,7 @@ public sealed record ScenarioDoNotDisturb(
     [property: JsonPropertyName("source")] string Source);
 
 /// <summary>Mode uses the PascalCase wire form of PumpModeState (<c>"Automatic"</c>, <c>"EaseOff"</c>, …).</summary>
-public sealed record ScenarioPumpState(
+public sealed record ScenarioPumpMode(
     [property: JsonPropertyName("mode")] string Mode,
     [property: JsonPropertyName("started_at")] DateTime StartedAt);
 
@@ -233,11 +273,28 @@ public sealed record ExpectedRuleResult
     /// </summary>
     public bool? Skipped { get; init; }
 
-    /// <summary>Root condition truth for this tick.</summary>
+    /// <summary>Root condition truth for this tick; false when <see cref="Unknown"/>.</summary>
     public bool? Root { get; init; }
+
+    /// <summary>The root is unknown; carried only when true.</summary>
+    public bool? Unknown { get; init; }
+
+    /// <summary>
+    /// The facts whose unknown reached the root, each with its reason; carried exactly when
+    /// <see cref="Unknown"/> (docs/alerts/engine-semantics.md §2.4).
+    /// </summary>
+    [JsonPropertyName("unknown_facts")]
+    public List<ExpectedUnknownFact>? UnknownFacts { get; init; }
 
     /// <summary>Per-leaf force-eval truths, ordered by leaf id (replay/leaf-log semantics).</summary>
     public List<ExpectedLeaf>? Leaves { get; init; }
+
+    /// <summary>
+    /// What each true forecast or loop leaf met its comparison with; carried only when one did
+    /// (docs/alerts/engine-semantics.md §3, met by).
+    /// </summary>
+    [JsonPropertyName("met_by")]
+    public List<ExpectedMetPoint>? MetBy { get; init; }
 
     /// <summary>
     /// Tracker transition: <c>none | opened | continues | hysteresis_started |
@@ -248,6 +305,10 @@ public sealed record ExpectedRuleResult
     /// <summary>Close reason wire form (<c>hysteresis | auto | manual | …</c>) when transition is closed.</summary>
     [JsonPropertyName("close_reason")]
     public string? CloseReason { get; init; }
+
+    /// <summary>The evaluation's hold reached the engine's bound (§6.4); carried only when true.</summary>
+    [JsonPropertyName("held_too_long")]
+    public bool? HeldTooLong { get; init; }
 
     public ExpectedTrackerState? Tracker { get; init; }
 
@@ -261,18 +322,49 @@ public sealed record ExpectedRuleResult
     /// </summary>
     [JsonPropertyName("timer_ops")]
     public List<ExpectedTimerOp>? TimerOps { get; init; }
+
+    /// <summary>
+    /// When an evaluation from the state this one left can next differ with only the clock
+    /// moving; pinned only by a snapshot that carries it (see the corpus README).
+    /// </summary>
+    [JsonPropertyName("next_change_at"), JsonConverter(typeof(CorpusJson.TickInstantConverter))]
+    public DateTime? NextChangeAt { get; init; }
+
+    /// <summary>
+    /// The anchors read more than 5 minutes ahead of the tick (docs/alerts/engine-semantics.md
+    /// §5.4); carried only when there is one.
+    /// </summary>
+    [JsonPropertyName("clock_anomaly")]
+    public List<ExpectedClockAnomaly>? ClockAnomaly { get; init; }
 }
 
+public sealed record ExpectedMetPoint(
+    [property: JsonPropertyName("leaf_id")] int LeafId,
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("curve")] string? Curve,
+    [property: JsonPropertyName("offset_minutes")] int? OffsetMinutes,
+    [property: JsonPropertyName("value")] decimal Value,
+    [property: JsonPropertyName("limit")] decimal? Limit = null,
+    [property: JsonPropertyName("limit_fact")] string? LimitFact = null,
+    [property: JsonPropertyName("limit_offset")] decimal? LimitOffset = null);
+
+public sealed record ExpectedClockAnomaly(
+    [property: JsonPropertyName("fact")] string Fact,
+    [property: JsonPropertyName("ahead_ms")] long AheadMs);
+
+public sealed record ExpectedUnknownFact(
+    [property: JsonPropertyName("fact")] string Fact,
+    [property: JsonPropertyName("reason")] string Reason);
+
+/// <summary><see cref="Value"/> is false when <see cref="Unknown"/>, which is carried only when true.</summary>
 public sealed record ExpectedLeaf(
     [property: JsonPropertyName("leaf_id")] int LeafId,
-    [property: JsonPropertyName("value")] bool Value);
+    [property: JsonPropertyName("value")] bool Value,
+    [property: JsonPropertyName("unknown")] bool? Unknown = null);
 
 public sealed record ExpectedTrackerState
 {
     public required string State { get; init; }
-
-    [JsonPropertyName("confirmation_count")]
-    public required int ConfirmationCount { get; init; }
 
     /// <summary>
     /// Stable ordinal of the active excursion within the scenario (1-based, in creation
@@ -288,9 +380,13 @@ public sealed record ExpectedTrackerState
     /// <summary>Present, as true, only while an auto-resolved rule awaits a false evaluation.</summary>
     [JsonPropertyName("awaiting_rearm")]
     public bool? AwaitingRearm { get; init; }
+
+    /// <summary>When the rule's current hold began; present only while it is held (§6.4).</summary>
+    [JsonPropertyName("held_since")]
+    public DateTime? HeldSince { get; init; }
 }
 
 public sealed record ExpectedTimerOp(
     [property: JsonPropertyName("op")] string Op,
     [property: JsonPropertyName("path")] string Path,
-    [property: JsonPropertyName("at")] DateTime? At);
+    [property: JsonPropertyName("at"), JsonRequired] DateTime At);

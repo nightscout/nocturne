@@ -1,8 +1,13 @@
+using System.Net;
+using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
@@ -38,6 +43,20 @@ internal static class AuthContextKeys
 /// </remarks>
 public static class HttpContextExtensions
 {
+    /// <summary>
+    /// The address to record for whoever made this request: what
+    /// <see cref="ClientAddressResolver"/> resolved, falling back to the connection's address for a
+    /// request that did not pass <see cref="ClientAddressMiddleware"/>. Never the unverified header.
+    /// </summary>
+    public static string? GetClientAddress(this HttpContext context) =>
+        (context.Items[ClientAddressItemKey] as IPAddress ?? context.Connection.RemoteIpAddress)
+        ?.ToString();
+
+    private const string ClientAddressItemKey = "ClientAddress";
+
+    internal static void SetClientAddress(this HttpContext context, IPAddress? address) =>
+        context.Items[ClientAddressItemKey] = address;
+
     /// <summary>
     /// Get the new-style authentication context from the request
     /// </summary>
@@ -207,6 +226,132 @@ public static class HttpContextExtensions
     /// </summary>
     public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
         requested || context.IsCallerHistoryClamped();
+
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads when an action would give someone
+    /// access that lasts longer.
+    /// </summary>
+    public const string AccessEndCeilingDetail =
+        "Your access ends on a date, so you cannot give anyone access that lasts longer than yours.";
+
+    /// <summary>
+    /// The refusal a caller whose own access ends on a date reads on any change to public sharing,
+    /// in either direction: a public link carries no end date, so it could outlast the caller.
+    /// </summary>
+    public const string PublicSharingEndDateDetail =
+        "Your access ends on a date, so you cannot change public sharing.";
+
+    /// <summary>
+    /// The 403 for a change to public sharing by a caller whose access ends
+    /// (<see cref="CallerAccessEndsAt"/>), or null when the caller may go on. Checked before anything is
+    /// written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? PublicSharingEndDateRefusal(this ControllerBase controller) =>
+        controller.HttpContext.CallerAccessEndsAt() is null
+            ? null
+            : controller.Problem(detail: PublicSharingEndDateDetail, statusCode: StatusCodes.Status403Forbidden);
+
+    /// <summary>
+    /// When the caller's own membership of the request's tenant ends, read from the membership the
+    /// request authenticated with; null when it does not end or the credential is held to no
+    /// membership (the instance key, platform access). This is the caller's access ceiling, as
+    /// <see cref="IsCallerHistoryClamped"/> is the history ceiling: a membership the caller creates
+    /// inherits it, and the caller may not set an end later than it, or none.
+    /// </summary>
+    public static DateTime? CallerAccessEndsAt(this HttpContext context) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
+            ? RequestMembership.Of(context, subjectId, tenantId)?.Membership?.Access.AccessEndsAt
+            : null;
+
+    /// <summary>
+    /// Whether the request's subject was read as inactive when the request authenticated. A session or
+    /// OAuth access token outlives its subject's deactivation by up to its lifetime, so an action that
+    /// mints a credential refuses that caller here, from the read the request already made, and
+    /// answers it with <see cref="ControllerBase.Challenge()"/>, as it answers an anonymous caller,
+    /// or as the action answers a refused request where it has such an answer.
+    /// </summary>
+    public static bool IsCallerInactive(this HttpContext context) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
+        && RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true };
+
+    /// <summary>
+    /// The maker a device credential this caller creates is stamped with, or null when no subject is
+    /// authenticated. Its end is the earlier of the caller's own access end
+    /// (<see cref="CallerAccessEndsAt"/>) and the expiry of the grant the request presented, so a
+    /// credential cannot make one that outlasts itself. A presented grant that a member made for
+    /// another subject, a device credential, passes its maker on, so the member stays the one whose
+    /// end date and removal reach what it makes.
+    /// </summary>
+    public static async Task<CredentialMaker?> CredentialMakerAsync(this HttpContext context, CancellationToken ct)
+    {
+        if (context.GetAuthContext() is not { SubjectId: { } subjectId } auth)
+            return null;
+
+        var accessEndsAt = context.CallerAccessEndsAt();
+        if (auth is not { TokenId: { } grantId, TenantId: { } tenantId }
+            || await context.RequestServices.GetRequiredService<IOAuthGrantRepository>()
+                .GetStateAsync(tenantId, grantId, ct) is not { } presented)
+            return new CredentialMaker(subjectId, accessEndsAt);
+
+        var endsAt = Earlier(accessEndsAt, presented.ExpiresAt);
+        return presented.CreatedBySubjectId is { } maker && maker != subjectId
+            ? new CredentialMaker(maker, endsAt)
+            : new CredentialMaker(subjectId, endsAt);
+    }
+
+    private static DateTime? Earlier(DateTime? first, DateTime? second) =>
+        first is { } a && second is { } b ? (a < b ? a : b) : first ?? second;
+
+    /// <summary>
+    /// Whether the caller may remove the expiry of a device credential, so it outlasts the member who
+    /// set it up: an interactive session (<see cref="RequireInteractiveSessionAttribute"/>) of a caller
+    /// who manages the members and whose own access does not end (<see cref="CallerAccessEndsAt"/>).
+    /// The keep endpoint and the connections list's <c>CanKeep</c> both read this.
+    /// </summary>
+    public static bool MayKeepDeviceCredentials(this HttpContext context) =>
+        !RequireInteractiveSessionAttribute.Refuses(context)
+        && context.HasScope(Scope.MembersManage)
+        && context.CallerAccessEndsAt() is null;
+
+
+    /// <summary>
+    /// The refusal a caller whose own access ends reads when they try to keep a device credential.
+    /// </summary>
+    public const string KeepDeviceCredentialEndDateDetail =
+        "Your access ends on a date, so you cannot keep a connection after the date it stops.";
+
+    /// <summary>The end a membership this caller creates carries: the requested one, or the caller's own (<see cref="CallerAccessEndsAt"/>).</summary>
+    public static DateTime? InheritAccessEnd(this HttpContext context, DateTime? requested) =>
+        requested ?? context.CallerAccessEndsAt();
+
+    /// <summary>
+    /// Whether <paramref name="requested"/> would outlast the caller's own access: later than
+    /// <see cref="CallerAccessEndsAt"/>, or no end at all, for a caller whose access ends.
+    /// </summary>
+    public static bool OutlastsCallerAccess(this HttpContext context, DateTime? requested) =>
+        MembershipLiveness.Outlasts(context.CallerAccessEndsAt(), requested);
+
+    /// <summary>The refusal a caller whose access ends reads on a member whose access outlasts the caller's.</summary>
+    public const string MemberOutlastsCallerDetail = "This member's access lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on an invite that would give access that outlasts the caller's.</summary>
+    public const string InviteOutlastsCallerDetail = "This invite gives access that lasts longer than yours.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role held by a member whose access outlasts the caller's.</summary>
+    public const string RoleHeldPastCallerDetail = "A member whose access lasts longer than yours has this role.";
+
+    /// <summary>The refusal a caller whose access ends reads on a role a live invite gives, where the invite's access outlasts the caller's.</summary>
+    public const string RoleInvitedPastCallerDetail = "An invite that gives access longer than yours uses this role.";
+
+    /// <summary>
+    /// The 403 for a change to a member whose access ends at <paramref name="memberEnd"/>, or null
+    /// when the caller may go on (<see cref="OutlastsCallerAccess"/>). Checked before anything is
+    /// written or evicted, so a refusal changes nothing.
+    /// </summary>
+    public static ObjectResult? MemberOutlastsCallerRefusal(this ControllerBase controller, DateTime? memberEnd) =>
+        controller.HttpContext.OutlastsCallerAccess(memberEnd)
+            ? controller.Problem(detail: MemberOutlastsCallerDetail, statusCode: StatusCodes.Status403Forbidden)
+            : null;
 
     private const string ReaderItemKey = "TenantReader";
 

@@ -314,8 +314,6 @@ public class ConnectorPollingRegistrationTests
 
         public List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
 
-        public Task<bool> AuthenticateAsync() => Task.FromResult(true);
-
         public Task<SyncResult> SyncDataAsync(
             SyncRequest request,
             PollingTestConfiguration config,

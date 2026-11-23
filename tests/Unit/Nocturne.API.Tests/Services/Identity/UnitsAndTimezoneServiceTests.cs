@@ -200,7 +200,7 @@ public class UnitsAndTimezoneServiceTests
     private UnitsAndTimezoneService Service()
     {
         return new UnitsAndTimezoneService(
-            new SubjectRepository(new TestNocturneDbContextFactory(Context())), _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
+            new SubjectRepository(new TestNocturneDbContextFactory(Context()), AccountLinkRoutes.Off), _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
 
             NullLogger<UnitsAndTimezoneService>.Instance);
     }

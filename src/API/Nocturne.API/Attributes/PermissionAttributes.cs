@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Attributes;
 
@@ -97,4 +98,52 @@ public class RequireSuperuserAttribute : RequirePermissionAttribute
 {
     public RequireSuperuserAttribute()
         : base(false, "*") { }
+}
+
+/// <summary>
+/// Requires standing over the whole instance, for a write to something every tenant reads, such as
+/// the global roles whose definitions are read when any tenant's sessions and Nightscout tokens are
+/// minted. Full access on one tenant is standing over the instance only when that tenant is the
+/// instance's only tenant (<see cref="Services.Auth.InstanceStanding.IsOnlyTenantAsync"/>).
+/// Otherwise the caller must be a platform admin
+/// (<see cref="Nocturne.Core.Models.Authorization.AuthContext.IsPlatformAdmin"/>, which the instance
+/// key carries).
+/// </summary>
+/// <remarks>
+/// Adds to the action's other requirements rather than replacing them: an unauthenticated caller is
+/// left to them, and a refusal is the <see cref="ForbidResult"/> a caller without the permission gets.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequireInstanceStandingAttribute : Attribute, IAsyncAuthorizationFilter
+{
+    /// <summary>
+    /// Refuses an authenticated caller that has no standing over the instance.
+    /// </summary>
+    /// <param name="context">The authorization filter context.</param>
+    public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+    {
+        var httpContext = context.HttpContext;
+        if (!httpContext.IsAuthenticated() || await HoldsInstanceStandingAsync(httpContext))
+        {
+            return;
+        }
+
+        context.Result = new ForbidResult();
+    }
+
+    private static async Task<bool> HoldsInstanceStandingAsync(HttpContext httpContext) =>
+        httpContext.GetAuthContext()?.IsPlatformAdmin == true
+        || await IsSoleTenantAsync(httpContext);
+
+    private static async Task<bool> IsSoleTenantAsync(HttpContext httpContext)
+    {
+        var tenant = httpContext.RequestServices.GetRequiredService<ITenantAccessor>();
+        if (!tenant.IsResolved)
+        {
+            return false;
+        }
+
+        return await Services.Auth.InstanceStanding.IsOnlyTenantAsync(
+            httpContext.RequestServices.GetRequiredService<ITenantRepository>(), tenant.TenantId, httpContext.RequestAborted);
+    }
 }

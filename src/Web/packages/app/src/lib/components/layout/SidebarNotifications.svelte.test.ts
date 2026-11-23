@@ -1,16 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 
 const server = vi.hoisted(() => ({
   answer: (): Promise<unknown> => Promise.resolve(),
   executed: [] as string[],
+  read: [] as string[],
 }));
 
 vi.mock("#lib/api/generated/notifications.generated.remote.js", () => ({
@@ -18,7 +19,10 @@ vi.mock("#lib/api/generated/notifications.generated.remote.js", () => ({
     server.executed.push(actionId);
     return server.answer();
   },
-  markAsRead: () => server.answer(),
+  markAsRead: (id: string) => {
+    server.read.push(id);
+    return server.answer();
+  },
   markAllAsRead: () => server.answer(),
 }));
 
@@ -54,6 +58,32 @@ describe("SidebarNotifications", () => {
     vi.mocked(goto).mockClear();
     server.answer = () => Promise.resolve();
     server.executed = [];
+    server.read = [];
+  });
+
+  it("marks an alert channel notice read when its link is followed, and runs no server action", async () => {
+    render(Harness, {
+      notifications: [
+        {
+          id: "ch1",
+          type: "alerts.channelNotSending",
+          urgency: NotificationUrgency.Warn,
+          title: "alert_channel_stopped",
+          createdAt: new Date().toISOString(),
+          metadata: { alertRuleId: "rule-7", state: "stopped", channelType: "webhook" },
+        },
+      ],
+    });
+
+    const stayOnPage = (e: Event) => e.preventDefault();
+    document.addEventListener("click", stayOnPage);
+    onTestFinished(() => document.removeEventListener("click", stayOnPage));
+
+    await page.getByRole("button", { name: "Notifications" }).click();
+    await page.getByRole("link", { name: "Edit this alert" }).click();
+
+    await expect.poll(() => server.read).toEqual(["ch1"]);
+    expect(server.executed).toEqual([]);
   });
 
   it("lists what to enter again after an instance key change and opens the alerts", async () => {

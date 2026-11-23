@@ -39,7 +39,6 @@ public class GlookoStepCountMapperTests
         result.Should().ContainSingle();
         result[0].Metric.Should().Be(6718);
         result[0].Source.Should().Be(1, "the daily routine total is an absolute count (bit 0 set), not a delta");
-        result[0].DataSource.Should().Be("glooko-connector");
     }
 
     [Fact]

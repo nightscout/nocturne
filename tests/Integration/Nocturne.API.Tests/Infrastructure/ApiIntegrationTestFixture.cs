@@ -11,12 +11,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Jobs;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
@@ -56,6 +58,21 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         public string? ServiceUrl => null;
     }
 
+    /// <summary>
+    /// The <see cref="IAccountLinkRoute"/> the API reads, which answers as its link delivery does
+    /// unless a test sets <see cref="Configured"/>. Only readers of the route see the override; the
+    /// delivery itself still sends nothing.
+    /// </summary>
+    public sealed class ControllableAccountLinkRoute : IAccountLinkRoute
+    {
+        internal IAccountLinkRoute? Delivery { get; set; }
+
+        /// <summary>The answer in place of the delivery's, or null for the delivery's own.</summary>
+        public bool? Configured { get; set; }
+
+        public bool IsConfigured => Configured ?? Delivery?.IsConfigured ?? false;
+    }
+
     /// <summary>The instance key the API runs with.</summary>
     public const string InstanceKey = "test-secret-for-integration-tests";
 
@@ -72,6 +89,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     private TestDatabase? _database;
 
     public ControllableDemoModeService DemoModeService { get; } = new();
+
+    public ControllableAccountLinkRoute LinkRoute { get; } = new();
 
     /// <summary>
     /// The clock the API issues and validates JWTs on, and nothing else. A test shifts it to age a
@@ -175,7 +194,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     /// <summary>
     /// Gives <paramref name="client"/> a client address of its own, signed with the instance key
-    /// as the web server signs the address it forwards (<c>ClientRateLimitKey</c>). Every request
+    /// as the web server signs the address it forwards (<c>ClientAddressResolver</c>). Every request
     /// otherwise arrives from loopback, one partition of the per-client rate limits, so the suite
     /// as a whole would exhaust a limit no single test comes near.
     /// </summary>
@@ -387,7 +406,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     }
 
     /// <summary>The tables <see cref="CleanupDatabaseAsync"/> empties between tests.</summary>
-    private static string[] DataTables => [.. RecordTables, .. CredentialTables];
+    private static string[] DataTables => [.. RecordTables, .. CredentialTables, .. TeamTables];
 
     /// <summary>
     /// The tables holding a tenant's records, as opposed to its members and their credentials.
@@ -400,7 +419,9 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "alert_invites",
         "alert_rule_channels",
         "alert_condition_timers",
+        "alert_condition_not_true",
         "alert_tracker_state",
+        "alert_evaluated_readings",
         "alert_rules",
         "dnd_windows",
         "tenant_alert_settings",
@@ -436,6 +457,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "pump_snapshots",
         "uploader_snapshots",
         "device_status_extras",
+        "sensor_state_reports",
         // The devices those records are attributed to: a device one test registers would otherwise
         // show up in a later test's device reads and attributions.
         "patient_devices",
@@ -452,6 +474,13 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "migration_runs",
         "migration_sources",
     ];
+
+    /// <summary>
+    /// Teams, which belong to no tenant and outlive one: a team one test makes would be in the next
+    /// test's list of the same subject's teams.
+    /// </summary>
+    private static readonly string[] TeamTables =
+        ["team_tenant_access_roles", "team_tenant_access", "team_access_links", "team_invites", "team_members", "teams"];
 
     /// <summary>The tables holding credentials, which the fixture restores its own into.</summary>
     private static readonly string[] CredentialTables =
@@ -478,16 +507,35 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<IDemoModeService>(DemoModeService);
+                services.Replace(ServiceDescriptor.Singleton<IAccountLinkRoute>(sp =>
+                {
+                    LinkRoute.Delivery = sp.GetRequiredService<IAccountLinkDelivery>();
+                    return LinkRoute;
+                }));
                 services.Replace(ServiceDescriptor.Scoped<IJwtService>(sp => new JwtService(
                     sp.GetRequiredService<IOptions<JwtOptions>>(),
                     sp.GetRequiredService<ILogger<JwtService>>(),
                     JwtClock)));
                 ContextOpenLog.Register(services);
+                RemoveJobScheduler(services);
             });
         });
         factory.UseKestrel(options => options.ListenLocalhost(port));
         return factory;
     }
+
+    /// <summary>
+    /// Takes <see cref="JobScheduler"/> out of a test host. A test that needs a job runs it itself.
+    /// </summary>
+    /// <remarks>
+    /// The cleanup's TRUNCATE takes its locks one table at a time while the scheduler's alert sweep
+    /// writes, and no order of the table list is safe from both of the sweep's orders. Its transition
+    /// (<see cref="Nocturne.API.Services.Alerts.ExcursionTransitionWriter"/>) reads a rule, then its
+    /// tracker state, then its timers and excursion: parent before child. Its lone insert of an alert
+    /// instance or delivery locks the child, then the parent in the foreign key check.
+    /// </remarks>
+    internal static void RemoveJobScheduler(IServiceCollection services) =>
+        services.Remove(services.Single(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(JobScheduler)));
 
     private static int FreeLoopbackPort()
     {

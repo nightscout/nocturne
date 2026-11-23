@@ -169,8 +169,7 @@ internal static class ReportDataSources
                 var (start, end) = (Mills(from), Mills(to));
                 return db.SystemEvents.AnyAsync(e => e.Mills >= start && e.Mills < end, ct);
             },
-            [Trackers] = (db, r, from, to, _, ct) =>
-                db.TrackerInstances.AnyAsync(e => e.StartedAt < to && (e.CompletedAt == null || e.CompletedAt >= from), ct),
+            [Trackers] = (db, r, from, to, _, ct) => r.Trackers.AnyRunInAsync(from, to, ct),
             [SleepStage] = (db, r, from, to, _, ct) => r.Sleep.AnyStageOverlappingAsync(from, to, ct),
             [SleepBiometrics] = (db, r, from, to, _, ct) => r.Sleep.AnyBiometricSampleInAsync(from, to, ct),
             [LabHbA1c] = (db, r, from, to, zone, ct) =>
@@ -182,9 +181,9 @@ internal static class ReportDataSources
             [BodyFat] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.BodyFat, ct),
             [LeanMass] = (db, r, from, to, _, ct) => r.Weight.AnyMeasuredInAsync(from, to, BodyWeightMeasure.LeanMass, ct),
             [AlertExcursions] = (db, r, from, to, _, ct) =>
-                db.AlertExcursions.AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
+                db.AlertExcursions.OfCondition().AnyAsync(e => e.StartedAt < to && (e.EndedAt == null || e.EndedAt >= from), ct),
             [AlertInstances] = (db, r, from, to, _, ct) =>
-                db.AlertInstances.AnyAsync(e => !e.IsTest && e.TriggeredAt >= from && e.TriggeredAt < to, ct),
+                db.AlertInstances.OfCondition().AnyAsync(e => e.TriggeredAt >= from && e.TriggeredAt < to, ct),
             [Dnd] = (db, r, from, to, _, ct) => r.Dnd.AnyTouchingAsync(from, to, ct),
             [SensorTrendRates] = (db, r, from, to, _, ct) =>
                 Canonical(db).AnyAsync(e => e.Timestamp >= from && e.Timestamp < to && e.TrendRate != null, ct),
@@ -279,4 +278,5 @@ internal sealed record ReportSourceRepositories(
     IObservedHealthSeriesRepository<StepCount> Steps,
     IBodyWeightRepository Weight,
     ISleepSessionRepository Sleep,
-    IDndWindowRepository Dnd);
+    IDndWindowRepository Dnd,
+    ITrackerRepository Trackers);

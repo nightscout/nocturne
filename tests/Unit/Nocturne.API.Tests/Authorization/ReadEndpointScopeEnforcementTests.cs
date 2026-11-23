@@ -58,31 +58,11 @@ public class ReadEndpointScopeEnforcementTests
             // turn that documented degradation into a 403, and site notices are not a data category.
             ["NotificationsController.GetAdminNotifies"] = "service authorizes internally and degrades",
 
-            // The collection is a route or query value, so an attribute here would be an OR across
-            // every collection the route serves and would admit a caller holding one category to
-            // all of them. LegacyStorageReadScopes resolves the governing scope per request inside
-            // the action instead. LegacyStorageReadScopeTests covers the mapping and
-            // TimeQueryStorageGateTests drives the actions.
-            ["TimeQueryController.GetTimeQueryEcho"] = PerRequestStorageScope,
-            ["TimeQueryController.GetTimeQueryEchoWithPrefix"] = PerRequestStorageScope,
-            ["TimeQueryController.GetTimeQueryEchoWithPrefixAndRegex"] = PerRequestStorageScope,
-            ["TimeQueryController.GetSlicedData"] = PerRequestStorageScope,
-            ["TimeQueryController.GetSlicedDataWithType"] = PerRequestStorageScope,
-            ["TimeQueryController.GetSlicedDataWithTypeAndPrefix"] = PerRequestStorageScope,
-            ["TimeQueryController.GetSlicedDataWithAll"] = PerRequestStorageScope,
-            ["CountController.CountGeneric"] = PerRequestStorageScope,
-
-            // Merges four categories into one number, so it cannot be filtered and requires every
-            // category's read scope. Read from ActivityReadScopeGuard.AdmissionScopes in the action.
-            ["CountController.CountActivity"] = "every activity category, checked in the action",
-
             // Every caller with a credential may ask; the answer lists only the collections its
             // scopes read, through LegacyStorageReadScopes in StatusService.
             ["StatusController.GetStatus"] = CallerNarrowedAnswer,
             ["LastModifiedController.GetLastModified"] = CallerNarrowedAnswer,
         };
-
-    private const string PerRequestStorageScope = "storage-derived scope, checked in the action";
 
     private const string CallerNarrowedAnswer = "answer narrowed to the caller's read scopes";
 
@@ -92,6 +72,9 @@ public class ReadEndpointScopeEnforcementTests
     {
         /// <summary>Rows keyed by the caller's own subject id or memberships; nothing another member holds is read.</summary>
         public const string OwnData = "caller's own data, keyed by their subject";
+
+        /// <summary>The caller's own private data, refused to every credential but the person's own sign-in by [RequireInteractiveSession].</summary>
+        public const string OwnDataInteractiveOnly = "caller's own data, only for the person's own sign-in";
 
         /// <summary>The action, or the service it calls, checks the scope or the share and guest access itself and answers Forbid, NotFound or a narrowed result.</summary>
         public const string ActionChecksAccess = "scope or share access checked in the action or its service";
@@ -128,29 +111,24 @@ public class ReadEndpointScopeEnforcementTests
             ["ChatIdentityController.GetLinks"] = V4Reason.OwnData,
             ["ChatIdentityController.GetPending"] = V4Reason.CapabilityToken,
             ["BackupSignInPromptController.GetBackupSignInPrompt"] = V4Reason.OwnData,
+            ["RecoveryEmailController.GetRecoveryEmail"] = V4Reason.OwnDataInteractiveOnly,
+            ["RecoveryEmailPromptController.GetRecoveryEmailPrompt"] = V4Reason.OwnData,
             ["MembershipRequestController.GetMyRequest"] = V4Reason.OwnData,
             ["MyPermissionsController.GetMyPermissions"] = V4Reason.OwnData,
             ["MyTenantsController.GetMyTenants"] = V4Reason.OwnData,
+            ["TeamsController.GetMyTeams"] = V4Reason.OwnDataInteractiveOnly,
+            ["TeamsController.GetTeam"] = V4Reason.OwnDataInteractiveOnly,
+            ["TeamsController.GetInviteInfo"] = V4Reason.CapabilityToken,
+            ["TeamsController.GetAccessLinkInfo"] = V4Reason.CapabilityToken,
             ["MyTenantsController.GetOverview"] = V4Reason.ActionChecksAccess,
+            ["MyTenantsController.GetReview"] = V4Reason.ActionChecksAccess,
+            ["MyTenantsController.GetPerson"] = V4Reason.ActionChecksAccess,
+            ["OverviewAdmissionController.GetOverviewAdmission"] = V4Reason.ActionChecksAccess,
             ["PlatformController.GetTenants"] = V4Reason.OwnData,
             ["FoodsController.GetFavorites"] = V4Reason.OwnData,
             ["NotificationsController.GetNotifications"] = V4Reason.OwnData,
             ["TrackersController.GetPresets"] = V4Reason.TenantTrackers,
 
-            ["MemberInviteController.ListInvites"] = V4Reason.ActionChecksAccess,
-            ["MemberInviteController.GetEffectivePermissions"] = V4Reason.ActionChecksAccess,
-            ["MemberRecoveryController.GetLockedOutMembers"] = V4Reason.ActionChecksAccess,
-            ["MembershipRequestController.GetPendingRequests"] = V4Reason.ActionChecksAccess,
-            ["MembershipRequestController.GetMembershipRequestSettings"] = V4Reason.ActionChecksAccess,
-            ["RoleController.GetRoles"] = V4Reason.ActionChecksAccess,
-            ["ShareLinkController.GetShareLink"] = V4Reason.ActionChecksAccess,
-            ["GuestLinkController.GetGuestLinkScopeOptions"] = V4Reason.ActionChecksAccess,
-            ["TenantSettingsController.GetTenantSettings"] = V4Reason.ActionChecksAccess,
-            ["TenantSettingsController.GetSubdomain"] = V4Reason.ActionChecksAccess,
-            ["ReleasesController.GetReleaseStatus"] = V4Reason.ActionChecksAccess,
-            ["AuditController.GetMutationAuditLog"] = V4Reason.ActionChecksAccess,
-            ["AuditController.GetReadAccessAuditLog"] = V4Reason.ActionChecksAccess,
-            ["AuditController.GetAuditConfig"] = V4Reason.ActionChecksAccess,
             ["TenantAppearanceController.GetTenantAppearance"] = V4Reason.ActionChecksAccess,
 
             ["TrackersController.GetDefinitions"] = V4Reason.TenantTrackers,
@@ -185,11 +163,8 @@ public class ReadEndpointScopeEnforcementTests
 
             ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
 
-            // UISettingsSection.ReadScope per section; StateSpanReadScopeGuard per category.
+            // Drops the sections whose UISettingsSection.ReadScope the caller does not hold.
             ["UISettingsController.GetUISettings"] = V4Reason.CallerNarrowedAnswer,
-            ["UISettingsController.GetSectionSettings"] = V4Reason.CallerNarrowedAnswer,
-            ["StateSpansController.GetStateSpans"] = V4Reason.CallerNarrowedAnswer,
-            ["StateSpansController.GetStateSpan"] = V4Reason.CallerNarrowedAnswer,
         };
 
     [Fact]
@@ -209,7 +184,7 @@ public class ReadEndpointScopeEnforcementTests
             .ToList();
 
         violations.Should().BeEmpty(
-            "every V1/V2/V3 read endpoint must carry [RequireScope] or [RequirePermission] so a " +
+            "every V1/V2/V3 read endpoint must carry [RequireScope], [RequirePermission] or [ScopeDecidedBy] so a " +
             "grant scoped to one data category cannot read every other category. " +
             "Unprotected: " + string.Join("; ", violations));
     }
@@ -235,7 +210,7 @@ public class ReadEndpointScopeEnforcementTests
             .ToList();
 
         violations.Should().BeEmpty(
-            "every V4 read endpoint must carry [RequireScope] or [RequirePermission], or be named in " +
+            "every V4 read endpoint must carry [RequireScope], [RequirePermission] or [ScopeDecidedBy], or be named in " +
             "V4ExemptReadActions with the mechanism that governs it. Unprotected: " +
             string.Join("; ", violations));
     }
@@ -362,6 +337,7 @@ public class ReadEndpointScopeEnforcementTests
 
     private static bool HasReadGate(Type controller, MethodInfo action) =>
         action.GetCustomAttribute<RequireScopeAttribute>() != null
+        || action.GetCustomAttributes<ScopeDecidedByAttribute>().Any()
         || action.GetCustomAttribute<RequirePermissionAttribute>() != null
         || controller.GetCustomAttribute<RequireScopeAttribute>() != null
         || controller.GetCustomAttribute<RequirePermissionAttribute>() != null;

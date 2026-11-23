@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 
@@ -19,6 +20,8 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 /// </summary>
 public class GlookoSettingsProfileMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     /// <summary>Glucose values in the SSV2 settings feed are encoded as mg/dL × 100.</summary>
     private const double GlucoseScale = 100.0;
 
@@ -129,15 +132,15 @@ public class GlookoSettingsProfileMapper
         // timestamp — both mappers derive mills the same way). This makes the current profile upsert the
         // SAME Profile row whether it came from the v3 devices_and_settings path or the SSV2 pumps/settings
         // path, instead of creating a parallel/duplicate profile when UseSsv2Sync is toggled.
-        var id = $"glooko_{mills}";
+        var id = LegacyIds.Of(mills);
 
         return new Profile
         {
             Id = id,
             DefaultProfile = defaultProfile,
-            StartDate = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = mills,
-            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dL",
             EnteredBy = "Glooko",
             IsExternallyManaged = true,

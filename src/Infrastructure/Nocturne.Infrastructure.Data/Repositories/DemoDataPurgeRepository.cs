@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -26,7 +27,7 @@ public class DemoDataPurgeRepository(
     INocturneDbContextFactory contexts,
     TimeProvider time,
     IServiceScopeFactory scopes,
-    ILegacyReadCacheInvalidation? legacyReads = null) : IDemoDataPurge
+    IRecordChangePublisher? changes = null) : IDemoDataPurge
 {
     private const string AuditEndpoint = "service:demo-purge";
 
@@ -58,7 +59,7 @@ public class DemoDataPurgeRepository(
         }
         finally
         {
-            await ReportAsync(written, legacyReads);
+            await ReportAsync(written, changes);
         }
     }
 
@@ -164,8 +165,10 @@ public class DemoDataPurgeRepository(
         }
     }
 
-    private static Task ReportAsync(HashSet<Type> written, ILegacyReadCacheInvalidation? target) =>
-        written.Count == 0 ? Task.CompletedTask : target?.WrittenAsync([.. written]) ?? Task.CompletedTask;
+    private static Task ReportAsync(HashSet<Type> written, IRecordChangePublisher? target) =>
+        written.Count == 0
+            ? Task.CompletedTask
+            : target?.PublishAsync(RecordsChanged.Written(written), CancellationToken.None) ?? Task.CompletedTask;
 
     private async Task ReportInTenantAsync(HashSet<Type> written, TenantContext tenant)
     {
@@ -173,6 +176,6 @@ public class DemoDataPurgeRepository(
             return;
 
         await using var job = TenantJobScope.Open(scopes, tenant, AuditEndpoint);
-        await ReportAsync(written, job.ServiceProvider.GetRequiredService<ILegacyReadCacheInvalidation>());
+        await ReportAsync(written, job.ServiceProvider.GetRequiredService<IRecordChangePublisher>());
     }
 }

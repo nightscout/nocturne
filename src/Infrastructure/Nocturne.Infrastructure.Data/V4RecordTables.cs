@@ -43,6 +43,9 @@ internal static class V4RecordTables
     private static readonly V4RecordTable<UploaderSnapshotEntity> UploaderSnapshots =
         TimeSeries<UploaderSnapshotEntity>(SourceDataTypes.DeviceStatus, typeof(UploaderSnapshot), V4RecordKind.DeviceStatus, db => db.UploaderSnapshots, discovered: false);
 
+    private static readonly V4RecordTable<SensorStateReportEntity> SensorStateReports =
+        TimeSeries<SensorStateReportEntity>(SourceDataTypes.DeviceStatus, typeof(SensorStateReport), V4RecordKind.DeviceStatus, db => db.SensorStateReports, discovered: false);
+
     /// <summary>
     /// The tables in their declaration order, which is the order of a source's counts, discovery
     /// buckets and purge counts: each reaches a response as an ordered map.
@@ -68,6 +71,7 @@ internal static class V4RecordTables
         ApsSnapshots,
         PumpSnapshots,
         UploaderSnapshots,
+        SensorStateReports,
         TimeSeries<TempBasalEntity>(SourceDataTypes.TempBasals, typeof(TempBasal), V4RecordKind.Treatment, db => db.TempBasals)
             .LinkedAs(RecordType.TempBasal, MatchCriteriaMapper.From),
         TimeSeries<BasalInjectionEntity>(SourceDataTypes.BasalInjections, typeof(BasalInjection), V4RecordKind.Treatment, db => db.BasalInjections),
@@ -95,30 +99,30 @@ internal static class V4RecordTables
     ];
 
     /// <summary>
-    /// The extras rows of the device statuses <paramref name="selector"/> names a snapshot of, deleted or
-    /// not, that have no live snapshot left. An extras row has no source of its own: it is a part of its
-    /// status, deleted and released with the status's last snapshot, as the delete of one status deletes
-    /// it by its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>.
+    /// The extras rows of the device statuses <paramref name="selector"/> names a row of, deleted or
+    /// not, in any device status table, that have no live row left in one. An extras row has no source
+    /// of its own: it is a part of its status, deleted and released with the status's last sourced row,
+    /// as the delete of one status deletes it by its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>.
     /// </summary>
     /// <remarks>
-    /// Reading the deleted snapshots lifts the soft-delete filter for the whole query, so each live
-    /// test is written out. The selector's tests are correlated on the extras row, not a set of the
-    /// selected statuses: <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteAsync{T}"/> runs
-    /// this query again for each chunk of ids, and a set would be rebuilt from the whole history of
-    /// the source or writers for every chunk.
+    /// Reading the deleted rows lifts the soft-delete filter for the whole query, so each live test is
+    /// written out.
     /// </remarks>
     internal static IQueryable<DeviceStatusExtrasEntity> StatusExtrasLeftBy(NocturneDbContext db, RecordSelector selector)
     {
         var aps = ApsSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
         var pump = PumpSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
         var uploader = UploaderSnapshots.SelectedPerRow(db, selector).IncludingDeleted();
+        var sensorStates = SensorStateReports.SelectedPerRow(db, selector).IncludingDeleted();
         return db.DeviceStatusExtras.Where(e => e.TenantId == db.TenantId
             && (aps.Any(s => s.CorrelationId == e.CorrelationId)
                 || pump.Any(s => s.CorrelationId == e.CorrelationId)
-                || uploader.Any(s => s.CorrelationId == e.CorrelationId))
+                || uploader.Any(s => s.CorrelationId == e.CorrelationId)
+                || sensorStates.Any(s => s.CorrelationId == e.CorrelationId))
             && !db.ApsSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null)
             && !db.PumpSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null)
-            && !db.UploaderSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null));
+            && !db.UploaderSnapshots.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null)
+            && !db.SensorStateReports.Any(s => s.CorrelationId == e.CorrelationId && s.DeletedAt == null));
     }
 
     /// <summary>
@@ -131,6 +135,7 @@ internal static class V4RecordTables
         [typeof(ProfileActivationEntity)] = "profile activations are not yet counted with the state spans that share their type, in a source's stats or in the overview",
         [typeof(PumpSnapshotEntity)] = "a device status is one APS snapshot in a source's stats and in the overview, and its pump snapshot is a part of it",
         [typeof(UploaderSnapshotEntity)] = "a device status is one APS snapshot in a source's stats and in the overview, and its uploader snapshot is a part of it",
+        [typeof(SensorStateReportEntity)] = "a device status is one APS snapshot in a source's stats and in the overview, and its sensor state report is a part of it",
     };
 
     /// <summary>
@@ -204,8 +209,14 @@ internal static class V4RecordTables
     private static readonly Dictionary<Type, RecordType> RecordTypes =
         All.Where(t => t.Deduplication is not null).ToDictionary(t => t.Entity, t => t.Deduplication!.RecordType);
 
+    private static readonly Dictionary<RecordType, Type> ModelsByRecordType =
+        All.Where(t => t.Deduplication is not null).ToDictionary(t => t.Deduplication!.RecordType, t => t.Model);
+
     /// <summary>The deduplicated table of <paramref name="recordType"/>, or null for a value outside the enum.</summary>
     internal static DeduplicatedTable? Of(RecordType recordType) => ByRecordType.GetValueOrDefault(recordType);
+
+    /// <summary>The model type the rows linked under <paramref name="recordType"/> are served as.</summary>
+    internal static Type ModelOf(RecordType recordType) => ModelsByRecordType[recordType];
 
     /// <summary>The record type rows of <paramref name="entity"/> are linked under, or null.</summary>
     internal static RecordType? RecordTypeOf(Type entity) =>

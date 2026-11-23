@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Models.LoopAnalysis;
 
 namespace Nocturne.API.Controllers.V4.Analytics;

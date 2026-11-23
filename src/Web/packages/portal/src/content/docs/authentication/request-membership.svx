@@ -50,6 +50,25 @@ owner gets a notification. They see the name, the note, and when it was sent, an
 with a role or deny it. When they approve it, your account becomes active and your passkey
 signs you in. When they deny it, your account stays inactive.
 
+## Access end date
+
+When the owner approves a request, they can set an end date in the **Access ends (optional)**
+field. Access then ends on a day that the owner chooses. If the owner leaves the field empty, the
+access has no end date.
+
+The rules for an end date:
+
+- **Access holds through the end of that day.** The end date is the last day of access. The day
+  follows the time zone of the device that the approver uses.
+- **Nothing is revoked.** After the end date, your account stops giving access, but it keeps the
+  same role. If the owner sets a later date, you have the same access again.
+- **An owner has no end date.** An owner's access does not end.
+- **A person whose own access ends cannot give access that lasts longer.** If an approver's access
+  ends on a date, the access that they approve ends on that day or on an earlier day.
+
+For how to set, change, or remove an end date, see
+[Member accounts and invites](/docs/sharing/members#access-end-date).
+
 <Callout type="tip" title="Approve deliberately">
 
   A request tells you what someone says about themselves, and nothing more. If a request is

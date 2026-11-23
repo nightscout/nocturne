@@ -13,7 +13,7 @@ using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -91,12 +91,7 @@ public class OutboundSinkGuardTests
         services.AddSingleton<IHttpClientFactory>(factory);
 
         using var provider = services.BuildServiceProvider();
-        var migration = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            provider,
-            EmptyConfiguration(),
-            new Nocturne.API.Services.TenantRunGuard(),
-            TimeProvider.System);
+        var migration = Nocturne.API.Tests.Migration.MigrationJobHarness.CreateService(provider, EmptyConfiguration());
 
         await migration.TestConnectionAsync(new TestMigrationConnectionRequest
         {

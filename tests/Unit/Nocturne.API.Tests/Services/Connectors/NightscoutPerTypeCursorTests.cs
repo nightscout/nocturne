@@ -33,12 +33,19 @@ public class NightscoutPerTypeCursorTests
         DateTime? latestEntry = null,
         DateTime? latestTreatment = null,
         DateTime? latestDeviceStatus = null,
-        DateTime? latestActivity = null)
+        DateTime? latestActivity = null,
+        bool entriesAdvanceTheWatermark = false)
     {
+        var storedEntry = latestEntry;
         var glucose = new Mock<IGlucosePublisher>();
         glucose.Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(latestEntry);
+            .ReturnsAsync(() => storedEntry);
         glucose.Setup(p => p.PublishEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Entry>, string, WriteOrigin, CancellationToken>((entries, _, _, _) =>
+            {
+                if (entriesAdvanceTheWatermark)
+                    storedEntry = DateTimeOffset.FromUnixTimeMilliseconds(entries.Max(e => e.Mills)).UtcDateTime;
+            })
             .ReturnsAsync(true);
 
         var treatments = new Mock<ITreatmentPublisher>();
@@ -237,6 +244,35 @@ public class NightscoutPerTypeCursorTests
         await service.SyncDataAsync(request, config, CancellationToken.None);
         ExtractCursor(handler.RequestUrls.First(u => u.Contains("devicestatus.json")))
             .Should().BeCloseTo(newest.AddMinutes(-5), TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunAsksForGlucoseOnlyFromTheFirstRunsNewestEntry()
+    {
+        var newest = DateTime.UtcNow.AddHours(-1);
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
+        handler.Enqueue(JsonResponse(new[] { new Entry { Mills = newest.ToMills(), Sgv = 120, Type = "sgv" } }));
+
+        var config = Config();
+        var service = CreateService(handler, config, entriesAdvanceTheWatermark: true);
+
+        (await service.SyncDataAsync(config, CancellationToken.None)).Success.Should().BeTrue();
+        handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"))
+            .Should().NotContain("$gte", "nothing was stored, so the first run reads the whole history");
+
+        handler.RequestUrls.Clear();
+        (await service.SyncDataAsync(config, CancellationToken.None)).Success.Should().BeTrue();
+        var scheduled = handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"));
+
+        // The wire bound reaches below the resume point by the recent re-read window, so the
+        // second run is compared with a catch-up a caller started from the resume point itself.
+        handler.RequestUrls.Clear();
+        await service.SyncDataAsync(
+            new SyncRequest { From = newest.AddMinutes(-5), DataTypes = [SyncDataType.Glucose] }, config, CancellationToken.None);
+        var fromResumePoint = handler.RequestUrls.First(u => u.Contains("entries.json") && u.Contains($"count={MaxCount}"));
+
+        Uri.UnescapeDataString(scheduled).Should().Contain("$gte").And.Be(Uri.UnescapeDataString(fromResumePoint));
     }
 
     private static HttpResponseMessage JsonResponse<T>(T data) =>

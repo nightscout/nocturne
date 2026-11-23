@@ -32,6 +32,12 @@ public sealed class BodyWeightRepository
 
     protected override void Apply(BodyWeightEntity entity, BodyWeight model) => BodyWeightMapper.UpdateEntity(entity, model);
 
+    protected override BodyWeight AnswerHiddenRow(BodyWeight stored, BodyWeight sent)
+    {
+        stored.CreatedAt = sent.CreatedAt;
+        return stored;
+    }
+
     protected override IOrderedQueryable<BodyWeightEntity> NewestFirst(IQueryable<BodyWeightEntity> query) =>
         query.OrderByDescending(b => b.Mills);
 

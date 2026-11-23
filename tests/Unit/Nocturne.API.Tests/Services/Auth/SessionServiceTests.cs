@@ -139,8 +139,8 @@ public class SessionServiceTests
         _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
                 _subjectId, It.IsAny<string?>(), contextWithoutSession.DeviceDescription,
                 contextWithoutSession.IpAddress, contextWithoutSession.UserAgent))
-            .Callback<Guid, string?, string?, string?, string?>(
-                (_, sid, _, _, _) => capturedSessionId = sid)
+            .Callback<Guid, string?, string?, string?, string?, Guid?>(
+                (_, sid, _, _, _, _) => capturedSessionId = sid)
             .ReturnsAsync(TestRefreshToken);
 
         var service = CreateService();
@@ -162,8 +162,8 @@ public class SessionServiceTests
         _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
                 _subjectId, It.IsAny<string?>(), _context.DeviceDescription,
                 _context.IpAddress, _context.UserAgent))
-            .Callback<Guid, string?, string?, string?, string?>(
-                (_, sid, _, _, _) => capturedSessionId = sid)
+            .Callback<Guid, string?, string?, string?, string?, Guid?>(
+                (_, sid, _, _, _, _) => capturedSessionId = sid)
             .ReturnsAsync(TestRefreshToken);
 
         var service = CreateService();
@@ -182,14 +182,14 @@ public class SessionServiceTests
         string? family = null;
         _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
                 _subjectId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Callback<Guid, string?, string?, string?, string?>((_, sid, _, _, _) => family = sid)
+            .Callback<Guid, string?, string?, string?, string?, Guid?>((_, sid, _, _, _, _) => family = sid)
             .ReturnsAsync(TestRefreshToken);
         string? claimed = null;
         _jwtService.Setup(j => j.GenerateAccessToken(
                 It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string?>(), It.IsAny<TimeSpan?>()))
-            .Callback<SubjectInfo, IEnumerable<string>, IEnumerable<string>, string?, TimeSpan?>(
-                (_, _, _, sid, _) => claimed = sid)
+            .Callback<SubjectInfo, IEnumerable<string>, IEnumerable<string>, string?, TimeSpan?, bool>(
+                (_, _, _, sid, _, _) => claimed = sid)
             .Returns(TestAccessToken);
 
         await CreateService().IssueSessionAsync(_subjectId, _context with { OidcSessionId = null });
@@ -364,6 +364,40 @@ public class SessionServiceTests
         _jwtService.Verify(j => j.GenerateAccessToken(
             It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
             "family-a", It.IsAny<TimeSpan?>()), Times.Once);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RotateSessionAsync_AccessTokenKeepsTheChainsHandOff(bool handedOff)
+    {
+        _refreshTokenService.Setup(r => r.FindOwnerAsync(TestRefreshToken))
+            .ReturnsAsync(new RefreshTokenSession(_subjectId, "family-a", handedOff));
+        var service = CreateService();
+
+        await service.RotateSessionAsync(TestRefreshToken, _context);
+
+        _jwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+            "family-a", It.IsAny<TimeSpan?>(), handedOff), Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task IssueSessionAsync_FromALoginCode_MarksTheAccessTokenAndTheRefreshChain()
+    {
+        var codeId = Guid.CreateVersion7();
+        var service = CreateService();
+
+        await service.IssueSessionAsync(_subjectId, _context with { LoginCodeId = codeId });
+
+        _jwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string?>(), It.IsAny<TimeSpan?>(), true), Times.Once);
+        _refreshTokenService.Verify(r => r.CreateRefreshTokenAsync(
+            _subjectId, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), codeId),
+            Times.Once);
     }
 
     #endregion

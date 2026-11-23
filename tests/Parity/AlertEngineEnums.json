@@ -40,7 +40,10 @@
     "state_span_active",
     "sleep_session_active",
     "tracker_age",
-    "transmitter_battery"
+    "transmitter_battery",
+    "sensor_state",
+    "eventual_glucose",
+    "carbs_required"
   ],
   "AlertWeekday": [
     "sunday",
@@ -101,13 +104,39 @@
     "falling",
     "falling_fast"
   ],
+  "SensorState": [
+    "warming_up",
+    "ok",
+    "calibration_needed",
+    "error",
+    "expired",
+    "no_value"
+  ],
+  "ForecastCurve": [
+    "default",
+    "iob",
+    "cob",
+    "uam",
+    "zt"
+  ],
+  "AlertLimitFact": [
+    "latest_glucose",
+    "target_low",
+    "target_high"
+  ],
   "PayloadFields": {
     "alert_state": [
       "alert_id",
       "for_minutes",
       "state"
     ],
+    "carbs_required": [
+      "clear_margin",
+      "operator",
+      "value"
+    ],
     "cob": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -122,10 +151,17 @@
       "for_minutes",
       "is_active"
     ],
+    "eventual_glucose": [
+      "clear_margin",
+      "operator",
+      "value",
+      "value_from"
+    ],
     "glucose_bucket": [
       "buckets"
     ],
     "iob": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -145,11 +181,17 @@
       "is_active"
     ],
     "predicted": [
+      "clear_margin",
+      "curve",
+      "max_of",
+      "min_of",
       "operator",
       "value",
+      "value_from",
       "within_minutes"
     ],
     "pump_battery": [
+      "clear_margin",
       "operator",
       "value"
     ],
@@ -163,20 +205,27 @@
       "is_active"
     ],
     "rate_of_change": [
+      "clear_margin",
       "direction",
       "rate"
     ],
     "reservoir": [
+      "clear_margin",
       "operator",
       "value"
     ],
     "sensitivity_ratio": [
+      "clear_margin",
       "operator",
       "value"
     ],
     "sensor_age": [
       "operator",
       "value"
+    ],
+    "sensor_state": [
+      "for_minutes",
+      "states"
     ],
     "signal_loss": [
       "timeout_minutes"
@@ -203,13 +252,16 @@
       "minutes"
     ],
     "temp_basal": [
+      "clear_margin",
       "metric",
       "operator",
       "value"
     ],
     "threshold": [
+      "clear_margin",
       "direction",
-      "value"
+      "value",
+      "value_from"
     ],
     "time_of_day": [
       "from",
@@ -230,6 +282,7 @@
       "tracker_definition_id"
     ],
     "transmitter_battery": [
+      "clear_margin",
       "metric",
       "operator",
       "value"
@@ -238,6 +291,7 @@
       "bucket"
     ],
     "uploader_battery": [
+      "clear_margin",
       "operator",
       "value"
     ]

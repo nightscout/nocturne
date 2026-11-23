@@ -49,13 +49,13 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory()), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), new TenantRepository(dbFactory.Object.AsNocturneFactory()), new TenantMembershipRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(dbFactory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             _tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             _time,
-            _logger.Object);
+            _logger.Object, AccountLinkRoutes.Off);
     }
 
     [Fact]

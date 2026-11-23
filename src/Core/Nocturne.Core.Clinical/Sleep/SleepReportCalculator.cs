@@ -289,7 +289,7 @@ public static class SleepReportCalculator
         return new SleepNightSummary
         {
             SessionId          = sessionId,
-            Date               = session.StartTime.ToString("MMM d"),
+            Date               = session.StartTime.ToString("MMM d", CultureInfo.InvariantCulture),
             DisplayDate        = NightDate(session).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             Weekday            = session.StartTime.DayOfWeek.ToString()[..3],
             InBedAt            = session.StartTime,
@@ -505,7 +505,7 @@ public static class SleepReportCalculator
             {
                 WeekStart         = weekStart,
                 WeekEnd           = weekEnd,
-                Label             = $"{weekStart:MMM d} – {weekEnd:MMM d}",
+                Label             = $"{weekStart.ToString("MMM d", CultureInfo.InvariantCulture)} – {weekEnd.ToString("MMM d", CultureInfo.InvariantCulture)}",
                 NightCount        = weekNights.Count,
                 // Floored at NightCount so spillover weeks never report more nights than days.
                 DaysInRange       = Math.Max(overlapDays, weekNights.Count),

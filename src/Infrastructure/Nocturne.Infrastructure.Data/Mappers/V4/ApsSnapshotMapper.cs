@@ -43,6 +43,7 @@ public static class ApsSnapshotMapper
             PredictedUamJson = model.PredictedUamJson,
             PredictedStartTimestamp = model.PredictedStartTimestamp,
             LoopJson = model.LoopJson,
+            OverrideJson = model.OverrideJson,
             AidVersion = model.AidVersion,
         }.WithHeaderFrom(model);
     }
@@ -83,6 +84,7 @@ public static class ApsSnapshotMapper
             PredictedUamJson = entity.PredictedUamJson,
             PredictedStartTimestamp = entity.PredictedStartTimestamp,
             LoopJson = entity.LoopJson,
+            OverrideJson = entity.OverrideJson,
             AidVersion = entity.AidVersion,
         }.WithHeaderFrom(entity);
     }
@@ -121,6 +123,7 @@ public static class ApsSnapshotMapper
         entity.PredictedUamJson = model.PredictedUamJson;
         entity.PredictedStartTimestamp = model.PredictedStartTimestamp;
         entity.LoopJson = model.LoopJson;
+        entity.OverrideJson = model.OverrideJson;
         entity.AidVersion = model.AidVersion;
     }
 }

@@ -87,8 +87,9 @@ public class AlertReplayServiceLeafLogTests
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.IProfileActivationResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver>().Object,
             new Mock<Nocturne.Core.Contracts.Sleep.ISleepService>().Object,
-            new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
+            new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             new Mock<Nocturne.API.Services.Devices.IReservoirEstimationService>().Object,
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,
@@ -105,6 +106,7 @@ public class AlertReplayServiceLeafLogTests
             Options.Create(new AlertEvaluationOptions()),
             new RustAlertReplayEngine(new AlertEngineErrors(
                 new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)),
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()),
             TimeProvider.System);
     }
 
@@ -129,6 +131,7 @@ public class AlertReplayServiceLeafLogTests
     {
         Id = Guid.NewGuid(),
         Timestamp = at,
+        CreatedAt = at,
         Mgdl = mgdl,
     };
 

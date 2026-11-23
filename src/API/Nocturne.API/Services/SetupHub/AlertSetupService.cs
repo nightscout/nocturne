@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Identity;
@@ -105,10 +107,12 @@ public class AlertSetupService(
         {
             var rule = starters.GetValueOrDefault(kind);
             var start = startingPoints[kind];
-            var mgdl = rule is null ? start.Mgdl : ThresholdOf(kind, rule);
+            var mgdl = rule is null ? start.Mgdl : StoredMgdl(kind, rule);
+            var threshold = Starters[kind].Direction is not null;
             return new StarterAlertRule(
                 kind, rule?.Rule.Id, rule?.IsEnabled ?? start.IsEnabled,
-                Starters[kind].Direction is null ? null : Display(mgdl, units));
+                threshold && mgdl is { } shown ? Display(shown, units) : null,
+                SetInRuleEditor: threshold && mgdl is null);
         }).ToList();
         var thresholdsFrom = startingPoints.Values.Any(p => p.FromNightscout)
             ? AlertThresholdSource.Nightscout
@@ -127,7 +131,7 @@ public class AlertSetupService(
 
         return new AlertSetupStatus(
             routing, units, starters.Count > 0, starterRules, thresholdsFrom, toThisDevice,
-            toThisDevice ? [] : primary.Select(ToResponse).ToList(),
+            toThisDevice ? [] : primary.Select(AlertRuleResponses.Channel).ToList(),
             ChannelTypesOffered,
             primary.Any(c => AlertDeliveryCheck.DeliversWhileClosed(c.ChannelType)),
             routing == AlertRouting.ToYouAsCaregiver,
@@ -139,7 +143,10 @@ public class AlertSetupService(
     /// Creates the starter rules, or updates the ones already made, with the thresholds, switches
     /// and destination given. A threshold is read in the caller's units and stored in mg/dL; one
     /// that reads the same as the stored value keeps the stored value, so a round trip through
-    /// mmol/L never moves it.
+    /// mmol/L never moves it. A changed threshold changes only the stored <c>value</c>, so a clear
+    /// margin stays. A rule the rule editor made into more than a numeric threshold keeps its
+    /// conditions and resolve condition as they are, and a threshold sent for it is ignored. A channel with a typed-in destination
+    /// stops at <paramref name="callerAccessEndsAt"/>, when the caller's access ends.
     /// </summary>
     /// <remarks>
     /// Urgent low always sounds through Do Not Disturb, and every rule does for a caregiver. Two
@@ -148,28 +155,30 @@ public class AlertSetupService(
     /// </remarks>
     /// <exception cref="ArgumentException">A threshold is missing or out of range, or a channel cannot deliver.</exception>
     /// <exception cref="InvalidOperationException">The onboarder is a helper, who leaves alerts to the recipient.</exception>
-    public async Task<AlertSetupStatus> SaveAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    public async Task<AlertSetupStatus> SaveAsync(
+        Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         try
         {
-            return await SaveOnceAsync(callerId, request, ct);
+            return await SaveOnceAsync(callerId, callerAccessEndsAt, request, ct);
         }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            return await SaveOnceAsync(callerId, request, ct);
+            return await SaveOnceAsync(callerId, callerAccessEndsAt, request, ct);
         }
     }
 
-    private async Task<AlertSetupStatus> SaveOnceAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    private async Task<AlertSetupStatus> SaveOnceAsync(
+        Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         await using (var unit = await DbUnitOfWork.OpenAsync(contexts, ct))
-            await SaveStartersAsync(unit, callerId, request, ct);
+            await SaveStartersAsync(unit, callerId, callerAccessEndsAt, request, ct);
 
         return await GetAsync(callerId, ct);
     }
 
     private async Task SaveStartersAsync(
-        DbUnitOfWork unit, Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+        DbUnitOfWork unit, Guid callerId, DateTime? callerAccessEndsAt, SaveAlertSetupRequest request, CancellationToken ct)
     {
         var db = unit.Context;
         var routing = await RoutingAsync(db, ct);
@@ -180,14 +189,14 @@ public class AlertSetupService(
 
         var channelRequests = ChannelsFor(callerId, request.Channels);
         if (await _channels.ResolveAndValidateAsync(
-            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, ct) is { } badChannel)
+            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, members, callerId, time.GetUtcNow().UtcDateTime, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
         var units = await UnitsAsync(callerId, ct);
         var writer = new AlertRuleRepository(unit, time);
         var starters = await writer.GetStarterRulesAsync(ct);
         var tenantId = db.TenantId;
-        var channelWrites = _channels.ToWrites(channelRequests);
+        var channelWrites = await _channels.ToWritesAsync(channelRequests, callerId, callerAccessEndsAt, db, ct);
         var rearmed = new List<Guid>();
         var retired = new List<Guid>();
 
@@ -198,15 +207,25 @@ public class AlertSetupService(
             var rule = starters.GetValueOrDefault(kind);
 
             var enabled = asked?.IsEnabled ?? rule?.IsEnabled ?? true;
-            var stored = rule is null ? defaultMgdl : ThresholdOf(kind, rule);
-            var mgdl = direction is null || asked is null || (asked.Threshold is null && !enabled)
-                ? stored
-                : ToMgdl(kind, asked.Threshold, stored, units);
+            var stored = rule is null ? defaultMgdl : StoredMgdl(kind, rule);
             var conditionType = preset.ConditionType!.Value;
-            var conditionParams = direction is null
-                ? preset.ConditionParams!
-                : JsonSerializer.Serialize(new { direction, value = mgdl });
-            var autoResolve = preset.AutoResolve && direction is not null ? OppositeOf(direction, mgdl) : null;
+            string conditionParams;
+            string? autoResolve;
+            if (direction is null || stored is not { } storedMgdl)
+            {
+                conditionParams = rule?.Rule.ConditionParams ?? preset.ConditionParams!;
+                autoResolve = null;
+            }
+            else
+            {
+                var mgdl = asked is null || (asked.Threshold is null && !enabled)
+                    ? storedMgdl
+                    : ToMgdl(kind, asked.Threshold, storedMgdl, units);
+                conditionParams = rule is null
+                    ? JsonSerializer.Serialize(new { direction, value = mgdl })
+                    : WithValue(rule.Rule.ConditionParams, storedMgdl, mgdl);
+                autoResolve = preset.AutoResolve ? OppositeOf(direction, mgdl) : null;
+            }
 
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
@@ -233,8 +252,10 @@ public class AlertSetupService(
             // A resolve condition that is still the opposite of the stored threshold follows the new
             // one. One the owner edited or switched off in the rule editor stays as they left it.
             var resolveFollows = direction is not null
+                && autoResolve is not null
+                && stored is { } before
                 && rule.Rule.AutoResolveEnabled
-                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, stored));
+                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, before));
             await writer.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
             {
                 ConditionParams = conditionParams,
@@ -271,7 +292,7 @@ public class AlertSetupService(
 
         var channels = PrimaryChannels(rule, callerId).ToList();
         var instanceId = await delivery.TestFireAsync(
-            rule.Rule.Id, channels, AlertRulesController.BuildTestPayload(rule.Rule, db.TenantId), ct);
+            rule.Rule.Id, channels, AlertPayloads.Test(rule.Rule.ConditionType, rule.Rule.Name, rule.Rule.Severity, db.TenantId, time.GetUtcNow().UtcDateTime), ct);
 
         return await GetTestAsync(instanceId, ct);
     }
@@ -354,7 +375,7 @@ public class AlertSetupService(
         var destination = memberId.ToString();
         var existing = urgentLow.Channels.FirstOrDefault(c => c.ChannelType == ChannelType.InApp && c.Destination == destination);
         if (alerted && existing is null)
-            await rules.AddChannelAsync(urgentLow.Rule.Id, new AlertRuleChannelWrite(ChannelType.InApp, destination), ct);
+            await rules.AddChannelAsync(urgentLow.Rule.Id, new AlertRuleChannelWrite(ChannelType.InApp, destination, AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null), ct);
         else if (!alerted && existing is not null)
             await rules.RemoveChannelAsync(urgentLow.Rule.Id, existing.Id, ct);
 
@@ -460,7 +481,7 @@ public class AlertSetupService(
             .Select(c => c.Destination)
             .ToHashSet() ?? [];
 
-        var people = await members.ListPeopleAsync(db.TenantId, ct);
+        var people = await members.ListLivePeopleAsync(db.TenantId, time.GetUtcNow().UtcDateTime, ct);
 
         return people
             .Where(m => m.SubjectId != callerId)
@@ -482,12 +503,37 @@ public class AlertSetupService(
         && Guid.TryParse(channel.Destination, out var subjectId)
         && subjectId != callerId;
 
-    private static decimal ThresholdOf(StarterAlertKind kind, AlertRuleRecord rule)
+    /// <summary>
+    /// A threshold starter's stored level in mg/dL, or null when the rule editor made it into something the
+    /// setup step cannot write a number back into: another root kind, a limit read from a fact (known to
+    /// this build or not), or a value that is not a number.
+    /// </summary>
+    private static decimal? StoredMgdl(StarterAlertKind kind, AlertRuleRecord rule)
     {
+        if (rule.Rule.ConditionType != Starters[kind].Preset.ConditionType)
+            return null;
         using var json = JsonDocument.Parse(rule.Rule.ConditionParams);
-        return json.RootElement.TryGetProperty("value", out var value) && value.TryGetDecimal(out var mgdl)
+        var root = json.RootElement;
+        return root.ValueKind == JsonValueKind.Object
+               && !root.TryGetProperty("value_from", out _)
+               && root.TryGetProperty("value", out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetDecimal(out var mgdl)
             ? mgdl
-            : Starters[kind].DefaultMgdl;
+            : null;
+    }
+
+    /// <summary>
+    /// <paramref name="conditionParams"/> with only <c>value</c> set to <paramref name="mgdl"/>; the
+    /// params unchanged, byte for byte, when the number did not change.
+    /// </summary>
+    private static string WithValue(string conditionParams, decimal stored, decimal mgdl)
+    {
+        if (mgdl == stored)
+            return conditionParams;
+        var node = JsonNode.Parse(conditionParams) as JsonObject ?? new JsonObject();
+        node["value"] = mgdl;
+        return node.ToJsonString();
     }
 
     private static decimal Display(decimal mgdl, string units) =>
@@ -511,15 +557,4 @@ public class AlertSetupService(
                 $"The {Starters[kind].Name} alert's threshold must be between "
                 + $"{Display(MinThresholdMgdl, units)} and {Display(MaxThresholdMgdl, units)}.");
     }
-
-    private static AlertRuleChannelResponse ToResponse(AlertRuleChannelSnapshot c) => new()
-    {
-        Id = c.Id,
-        ChannelType = c.ChannelType,
-        Destination = c.Destination,
-        DestinationLabel = c.DestinationLabel,
-        SortOrder = c.SortOrder,
-        Metadata = c.Metadata is null ? null : JsonSerializer.Deserialize<JsonElement>(c.Metadata),
-        HasSecret = c.Secret is not null,
-    };
 }

@@ -6,6 +6,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Hubs;
 
@@ -81,16 +82,7 @@ public class OverviewHub : Hub
 
             if (authContext is { IsAuthenticated: true, SubjectId: not null })
             {
-                // The hub is reachable on tenant subdomains as well as the apex, so the upgrade
-                // request may carry a credential that only ever authorized one tenant: a
-                // tenant-pinned OAuth token, a noc_ direct grant, an api-secret, a guest code, a
-                // platform-access grant. Joining the subject's every glucose-readable tenant would
-                // widen such a credential past the tenant it was issued for, so only credentials
-                // that are the human's own login are accepted here — the same set
-                // MemberScopeResolver treats as carrying no grant of their own, because "presents
-                // no scope ceiling" and "is not a per-tenant grant" are the same property. A type
-                // absent from the set is rejected, so a new credential type fails closed.
-                if (!MemberScopeResolver.UnscopedCredentialTypes.Contains(authContext.AuthType))
+                if (!OverviewCredential.Admits(authContext))
                 {
                     return OverviewAuthorizeResponse.Failed(
                         "This credential is bound to a single tenant; the overview hub requires a subject-scoped credential.");
@@ -165,7 +157,7 @@ public class OverviewHub : Hub
 
             return new OverviewAuthorizeResponse { Success = true, TenantIds = tenantIds };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogError(
                 ex, "Error during overview authorization for client {ConnectionId}",

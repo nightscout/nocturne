@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -322,7 +324,7 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var food = await _foods.GetFoodByIdAsync(id, cancellationToken);
@@ -466,7 +468,7 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food update endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -570,7 +572,7 @@ public class FoodController : BaseV3Controller<Food>
         _logger.LogDebug(
             "V3 food delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var deleted = await _foodService.DeleteFoodAsync(id, cancellationToken);
@@ -633,7 +635,7 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         // Add timestamp for uniqueness
-        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture));
 
         // If we have identifying parts, create a hash-based identifier
         if (identifierParts.Any())

@@ -17,7 +17,7 @@
     type ConnectorStatusDto,
     type SyncResult,
     type UploaderApp,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -52,13 +52,15 @@
     type ConnectorStatusWithDescription,
   } from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog from "#lib/components/connectors/ManualSyncDialog.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import DataSourceManageDialog from "#lib/components/connectors/DataSourceManageDialog.svelte";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { toast } from "svelte-sonner";
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
@@ -78,36 +80,48 @@
     icon: Database,
   };
 
+  // The connections list names the credentials it was given, and an app connects through a token
+  // or a device approval, so only the person's own sign-in reads the one or makes the others. A
+  // session opened from a sign-in link is offered that sign-in in their place; adding a cloud
+  // account stays open to it.
+  const handedOff = $derived(page.data.isHandedOffSession === true);
+
   // Queries — fire on the server during SSR; results land in cache for hydration.
-  const connectionsQuery = getConnections();
+  const connectionsQuery = $derived(handedOff ? null : getConnections());
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
   );
   const googleHealthQuery = $derived(canManage ? getGoogleHealth() : null);
 
-  const overview = $derived(connectionsQuery.current ?? null);
+  const overview = $derived(connectionsQuery?.current ?? null);
   const connections = $derived(overview?.connections ?? []);
   const otherSources = $derived(overview?.otherSources ?? []);
   const windowDays = $derived(overview?.windowDays);
   const activeWithinMinutes = $derived(overview?.activeWithinMinutes);
   const loadError = $derived(
-    connectionsQuery.error == null
+    connectionsQuery?.error == null
       ? null
       : remoteErrorMessage(
           connectionsQuery.error,
           "Could not load your connections."
         )
   );
-  const isLoading = $derived(overview === null && loadError === null);
+  const isLoading = $derived(!handedOff && overview === null && loadError === null);
   let isRefreshing = $state(false);
   let dismissedLoadError = $state<unknown>(null);
   const showLoadError = $derived(
-    loadError !== null && connectionsQuery.error !== dismissedLoadError
+    loadError !== null && connectionsQuery?.error !== dismissedLoadError
   );
 
   function isNotInUse(connection: Connection): boolean {
@@ -269,7 +283,7 @@
   async function loadConnections() {
     isRefreshing = true;
     try {
-      await connectionsQuery.refresh();
+      await connectionsQuery?.refresh();
     } catch {
       // `connectionsQuery.error` carries the failure to the page.
     } finally {
@@ -509,7 +523,7 @@
             variant="ghost"
             size="icon"
             aria-label="Dismiss"
-            onclick={() => (dismissedLoadError = connectionsQuery.error)}
+            onclick={() => (dismissedLoadError = connectionsQuery?.error)}
           >
             <X class="size-4" aria-hidden="true" />
           </Button>
@@ -520,8 +534,8 @@
 
   {#if isLoading}
     <SettingsPageSkeleton cardCount={3} />
-  {:else if overview}
-    {#if hasNoConnections && canMoveFromNightscout}
+  {:else if overview || handedOff}
+    {#if hasNoConnections && !handedOff && canMoveFromNightscout}
       <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
 
@@ -534,7 +548,7 @@
         </Card.Description>
         <Card.Action>
           <div class="flex flex-wrap justify-end gap-2">
-            {#if canManage && hasConnector}
+            {#if canSetUp && hasConnector}
               <Button
                 variant="outline"
                 size="sm"
@@ -557,11 +571,13 @@
         </Card.Action>
       </Card.Header>
       <Card.Content class="space-y-4">
-        {#if hasNoConnections}
+        {#if handedOff}
+          <SignInGate reason="Sign in again to see your connections, connect an app, or create an API token." />
+        {:else if hasNoConnections}
           <EmptyState
             art="plug"
             title="No connections"
-            body={canManage
+            body={canSetUp
               ? "Add an app or a cloud account to send data to Nocturne."
               : "Add an app to send data to Nocturne."}
           />
@@ -700,7 +716,7 @@
 
     <ClientDevices />
 
-    {#if !hasNoConnections && canMoveFromNightscout}
+    {#if (!hasNoConnections || handedOff) && canMoveFromNightscout}
       <SettingsLinkCard link={moveFromNightscoutLink} />
     {/if}
   {/if}
@@ -708,7 +724,8 @@
 
 <AddConnectionDialog
   bind:open={showAddDialog}
-  canAddCloudAccount={canManage}
+  canAddCloudAccount={canSetUp}
+  signInRequiredForApps={handedOff}
   uploaderApps={servicesOverview ? (servicesOverview.uploaderApps ?? []) : undefined}
   connectors={unconfiguredConnectors}
   listFailed={servicesFailed}
@@ -743,6 +760,7 @@
   {windowDays}
   {activeWithinMinutes}
   {canManage}
+  {canSetUp}
   syncing={isSyncing(selectedConnection)}
   quickSyncing={!!selectedConnectorId && quickSyncingById[selectedConnectorId] === true}
   supportsManualSync={selectedConnectorCapabilities?.supportsManualSync ?? true}

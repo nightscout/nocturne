@@ -21,7 +21,7 @@ public class GlookoNoteMapperTests
     {
         var logger = Mock.Of<ILogger>();
         var timeMapper = new GlookoTimeMapper(new GlookoConnectorConfiguration(), logger);
-        _mapper = new GlookoNoteMapper("glooko-connector", timeMapper, logger, TimeProvider.System);
+        _mapper = new GlookoNoteMapper("glooko-connector", timeMapper, logger);
     }
 
     private static GlookoSsv2Note Note(
@@ -47,7 +47,6 @@ public class GlookoNoteMapperTests
         n.Text.Should().Be("Versehentliche doppelte Eingabe der KH (16g)");
         // Default config (offset 0, no timeline) → fake-UTC wall-clock preserved.
         n.Timestamp.Should().Be(new DateTime(2023, 6, 20, 12, 55, 0, DateTimeKind.Utc));
-        n.DataSource.Should().Be("glooko-connector");
     }
 
     [Fact]

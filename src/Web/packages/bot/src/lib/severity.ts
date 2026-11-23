@@ -1,22 +1,22 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { statusHex, statusRgb, type StatusToken } from "@nocturne/ui/tokens";
-import type { AlertSeverity } from "../types.js";
+import { AlertRuleSeverity } from "@nocturne/api-client";
 import { createLogger } from "./logger.js";
 
 const logger = createLogger();
 
-export const isKnownSeverity = (value: unknown): value is AlertSeverity =>
-  value === "critical" || value === "warning" || value === "info";
+export const isKnownSeverity = (value: unknown): value is AlertRuleSeverity =>
+  Object.values<unknown>(AlertRuleSeverity).includes(value);
 
 /**
  * The design-system token each severity is coloured from. The annotation is the
  * drift guard: a severity with no token of that name fails to compile, and the
  * value itself lives once, in `@nocturne/ui/tokens`.
  */
-const TOKEN_BY_SEVERITY: Record<AlertSeverity, StatusToken> = {
-  critical: "critical",
-  warning: "warning",
-  info: "info",
+const TOKEN_BY_SEVERITY: Record<AlertRuleSeverity, StatusToken> = {
+  [AlertRuleSeverity.Critical]: "critical",
+  [AlertRuleSeverity.Warning]: "warning",
+  [AlertRuleSeverity.Info]: "info",
 };
 
 export interface AlertAccent {

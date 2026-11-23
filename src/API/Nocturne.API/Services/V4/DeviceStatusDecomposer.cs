@@ -22,7 +22,10 @@ namespace Nocturne.API.Services.V4;
 /// Decomposes legacy <see cref="DeviceStatus"/> records into typed v4 snapshot tables.
 /// Extracts APS (<see cref="V4Models.ApsSnapshot"/> for OpenAPS/AAPS/Trio and Loop), pump
 /// (<see cref="V4Models.PumpSnapshot"/>), and uploader (<see cref="V4Models.UploaderSnapshot"/>)
-/// snapshots, and persists them with idempotent create-or-update via <c>LegacyId</c> matching.
+/// snapshots, and persists them with idempotent create-or-update via <c>LegacyId</c> matching. The
+/// sections no snapshot holds go to <see cref="V4Models.DeviceStatusExtras"/>, and a sensor state the
+/// status reports (<see cref="ReportedSensorStates"/>) to a <see cref="V4Models.SensorStateReport"/>
+/// written with them.
 /// Device override state is folded into one <see cref="StateSpanCategory.Override"/> span per
 /// override period.
 /// </summary>
@@ -33,6 +36,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private readonly IPumpSnapshotRepository _pumpRepo;
     private readonly IUploaderSnapshotRepository _uploaderRepo;
     private readonly IDeviceStatusExtrasRepository _extrasRepo;
+    private readonly ISensorStateReportRepository _sensorStateRepo;
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
     private readonly IAuditContext _auditContext;
@@ -50,6 +54,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         IPumpSnapshotRepository pumpRepo,
         IUploaderSnapshotRepository uploaderRepo,
         IDeviceStatusExtrasRepository extrasRepo,
+        ISensorStateReportRepository sensorStateRepo,
         IStateSpanService stateSpanService,
         IDeviceService deviceService,
         IAuditContext auditContext,
@@ -62,6 +67,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         _pumpRepo = pumpRepo;
         _uploaderRepo = uploaderRepo;
         _extrasRepo = extrasRepo;
+        _sensorStateRepo = sensorStateRepo;
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
         _auditContext = auditContext;
@@ -86,6 +92,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         NormalizeMills(ds);
         ds.Id = group.LegacyId;
+        group = group with { OverrideRebuilt = await IsRebuiltOverrideAsync(group, ds.Override, ct) };
 
         using (SystemAttributedBatchWrites(_auditContext))
         {
@@ -96,6 +103,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             if (group.Uploader is { } uploader && ds.Uploader == null && !ds.UploaderBattery.HasValue)
                 await _uploaderRepo.DeleteAsync(uploader.Id, origin, ct);
             await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+            await _sensorStateRepo.DeleteByCorrelationIdAsync(group.CorrelationId, origin, ct);
             await RetractOverrideAsync(group, ct);
         }
 
@@ -292,7 +300,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         DateTime Timestamp,
         V4Models.ApsSnapshot? Aps,
         V4Models.PumpSnapshot? Pump,
-        V4Models.UploaderSnapshot? Uploader);
+        V4Models.UploaderSnapshot? Uploader,
+        bool OverrideRebuilt = false);
 
     /// <summary>
     /// Resolves <paramref name="storedId"/>, the id a projected status carries (its legacy id, else its
@@ -363,6 +372,33 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             ?? (V4Models.IV4Record?)records.OfType<V4Models.PumpSnapshot>().FirstOrDefault()
             ?? records.OfType<V4Models.UploaderSnapshot>().FirstOrDefault();
         return anchor is null ? null : StoredKey(anchor);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="submitted"/> is the override the read rebuilds from the span of a status stored
+    /// without an override object. A client that edits such a status sends that rebuild back, and it must not be
+    /// stored as if Loop had uploaded it.
+    /// </summary>
+    private async Task<bool> IsRebuiltOverrideAsync(StoredGroup group, OverrideStatus? submitted, CancellationToken ct)
+    {
+        if (submitted is null || group.Aps is not { OverrideJson: null })
+            return false;
+
+        var span = (await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.Override,
+                from: group.Timestamp,
+                to: group.Timestamp,
+                count: int.MaxValue,
+                cancellationToken: ct))
+            .FirstOrDefault(s => IsUploaderSpan(s, group.Aps.Device)
+                && s.StartTimestamp <= group.Timestamp
+                && (!s.EndTimestamp.HasValue || s.EndTimestamp.Value > group.Timestamp));
+        if (span is null)
+            return false;
+
+        var rebuilt = new DeviceStatus();
+        DeviceStatusProjectionService.ProjectOverrideData(rebuilt, span);
+        return JsonSerializer.Serialize(rebuilt.Override, JsonOptions) == JsonSerializer.Serialize(submitted, JsonOptions);
     }
 
     /// <summary>
@@ -477,7 +513,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         V4Models.ApsSnapshot? Aps,
         V4Models.PumpSnapshot? Pump,
         V4Models.UploaderSnapshot? Uploader,
-        V4Models.DeviceStatusExtras? Extras);
+        V4Models.DeviceStatusExtras? Extras,
+        V4Models.SensorStateReport? SensorState);
 
     /// <remarks>
     /// <paramref name="group"/> is the stored group a replacement rewrites row by row, or
@@ -566,6 +603,9 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             aps.PatientDeviceId = links.Resolve(pumpDeviceId, status.Mills);
             if (group is not null)
                 (aps.DataSource, aps.SyncIdentifier) = (group.Aps?.DataSource, group.Aps?.SyncIdentifier);
+            // The edited document holds the read's span rebuild, not an override Loop sent.
+            if (group is { OverrideRebuilt: true })
+                aps.OverrideJson = null;
         }
 
         V4Models.UploaderSnapshot? uploader = null;
@@ -577,13 +617,18 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 (uploader.DataSource, uploader.SyncIdentifier) = (group.Uploader?.DataSource, group.Uploader?.SyncIdentifier);
         }
 
-        return new BatchModels(aps, pump, uploader, BuildExtras(ds, correlationId));
+        var extras = BuildExtras(ds, correlationId);
+        var statusSource = group is null
+            ? source
+            : group.Pump?.DataSource ?? group.Uploader?.DataSource ?? group.Aps?.DataSource;
+        return new BatchModels(
+            aps, pump, uploader, extras, extras is null ? null : ReportedSensorStates.Of(ds, extras, statusSource));
     }
 
     /// <summary>
-    /// One bulk upsert per snapshot table, then the extras of the groups still holding a snapshot. A
-    /// replacement writes its group's rows by their stored ids instead: a row may carry no legacy id,
-    /// or another one, for the bulk upsert to match it by.
+    /// One bulk upsert per snapshot table, then the extras of the groups still holding a snapshot, each
+    /// with its sensor state report. A replacement writes its group's rows by their stored ids
+    /// instead: a row may carry no legacy id, or another one, for the bulk upsert to match it by.
     /// </summary>
     private async Task WriteSnapshotsAsync(
         IReadOnlyList<BatchModels> models, StoredGroup? group, V4Models.DecompositionResult result,
@@ -593,6 +638,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var pumpList = models.Select(m => m.Pump).OfType<V4Models.PumpSnapshot>().ToList();
         var uploaderList = models.Select(m => m.Uploader).OfType<V4Models.UploaderSnapshot>().ToList();
         var extrasList = models.Select(m => m.Extras).OfType<V4Models.DeviceStatusExtras>().ToList();
+        var sensorStates = models.Select(m => m.SensorState).OfType<V4Models.SensorStateReport>().ToList();
 
         if (group is not null)
         {
@@ -602,7 +648,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 await WriteOntoStoredAsync(_apsRepo, group.Aps, aps, result, origin, ct);
             foreach (var uploader in uploaderList)
                 await WriteOntoStoredAsync(_uploaderRepo, group.Uploader, uploader, result, origin, ct);
-            await BulkCreateAsync(_extrasRepo, Unheld(extrasList), result, origin, ct);
+            await WriteExtrasAsync(Unheld(extrasList));
             return;
         }
 
@@ -611,7 +657,17 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             await BulkUpsertAsync(_apsRepo, apsList, result, origin, ct);
             await BulkUpsertAsync(_pumpRepo, pumpList, result, origin, ct);
             await BulkUpsertAsync(_uploaderRepo, uploaderList, result, origin, ct);
-            await BulkCreateAsync(_extrasRepo, await UnstoredAsync(Unheld(extrasList)), result, origin, ct);
+            await WriteExtrasAsync(await UnstoredAsync(Unheld(extrasList)));
+        }
+
+        // A sensor state report is a part of its status's extras: written only with them, under the
+        // correlation id its repository holds a re-send off by.
+        async Task WriteExtrasAsync(List<V4Models.DeviceStatusExtras> extras)
+        {
+            await BulkCreateAsync(_extrasRepo, extras, result, origin, ct);
+            var groups = extras.Select(e => e.CorrelationId).ToHashSet();
+            await BulkCreateAsync(
+                _sensorStateRepo, [.. sensorStates.Where(s => s.CorrelationId is { } id && groups.Contains(id))], result, origin, ct);
         }
 
         // A group with no snapshot has no legacy-keyed row to keep its correlation id, so its re-send
@@ -1081,6 +1137,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         };
         ApsSnapshotCurves.FillColumns(snapshot, ds.Loop);
         snapshot.LoopJson = ApsSnapshotCurves.SerializeLoop(ds.Loop, snapshot, JsonOptions);
+        snapshot.OverrideJson = ds.Override is null ? null : JsonSerializer.Serialize(ds.Override, JsonOptions);
         return snapshot;
     }
 
@@ -1253,6 +1310,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         deleted += await DeleteUnkeyedAsync(_pumpRepo, group.Pump, group.LegacyId, origin, ct);
         deleted += await DeleteUnkeyedAsync(_uploaderRepo, group.Uploader, group.LegacyId, origin, ct);
         deleted += await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+        deleted += await _sensorStateRepo.DeleteByCorrelationIdAsync(group.CorrelationId, origin, ct);
         deleted += await RetractOverrideAsync(group, ct);
 
         if (deleted > 0)

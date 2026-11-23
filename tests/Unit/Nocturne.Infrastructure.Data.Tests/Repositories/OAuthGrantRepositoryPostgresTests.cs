@@ -44,11 +44,15 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
             ValueTask.FromResult(create(scope));
     }
 
-    private NocturneDbContext Context(Guid tenant) =>
+    private NocturneDbContext Context(Guid tenant) => Context(tenant, null);
+
+    private NocturneDbContext Context(Guid tenant, StatementRecorder? recorder) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                 maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
-            .AddInterceptors(new TenantConnectionInterceptor())
+            .AddInterceptors(recorder is null
+                ? [new TenantConnectionInterceptor()]
+                : [new TenantConnectionInterceptor(), recorder])
             .Options) { TenantId = tenant };
 
     private sealed record Seeded(Guid Tenant, Guid Subject, Guid Grant, string TokenHash);
@@ -107,6 +111,35 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
             b.Tenant, new DirectGrantLookup.ByTokenHash([a.TokenHash]), Now, CancellationToken.None)).Should().BeNull();
         (await readingAsNoOne.GetStateAsync(a.Tenant, a.Grant, CancellationToken.None)).Should().NotBeNull();
         (await readingAsNoOne.GetStateAsync(b.Tenant, a.Grant, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PinnedToATenant_FindsNoGrantOfAnInactiveSubjectInTheSameSingleStatement()
+    {
+        var a = await SeedTenantAsync("inactive");
+        var recorder = new StatementRecorder();
+        var grants = new OAuthGrantRepository(new Factory(_ => Context(Guid.Empty, recorder), Guid.Empty));
+        var lookup = new DirectGrantLookup.ByTokenHash([a.TokenHash]);
+
+        (await grants.FindLiveDirectGrantAsync(a.Tenant, lookup, Now, CancellationToken.None)).Should().NotBeNull();
+        recorder.Count("SELECT").Should().Be(1);
+
+        await SetActiveAsync(a.Subject, false);
+        recorder.Clear();
+
+        (await grants.FindLiveDirectGrantAsync(a.Tenant, lookup, Now, CancellationToken.None)).Should().BeNull();
+        recorder.Count("SELECT").Should().Be(1);
+    }
+
+    private async Task SetActiveAsync(Guid subject, bool isActive)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE subjects SET is_active = @active WHERE id = @id";
+        cmd.Parameters.Add(new NpgsqlParameter("@active", isActive));
+        cmd.Parameters.Add(new NpgsqlParameter("@id", subject));
+        await cmd.ExecuteNonQueryAsync();
     }
 
     [Fact]

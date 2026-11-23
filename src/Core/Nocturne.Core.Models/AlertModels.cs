@@ -23,6 +23,12 @@ public record SensorContext
     public required DateTime? LatestTimestamp { get; init; }
 
     /// <summary>
+    /// When the host stored the most recent reading. Its glucose facts' age runs from here
+    /// (docs/alerts/engine-semantics.md §3); null runs it from <see cref="LatestTimestamp"/>.
+    /// </summary>
+    public DateTime? LatestReceivedAt { get; init; }
+
+    /// <summary>
     /// Rate of glucose change in mg/dL per minute. Positive = rising, negative = falling.
     /// </summary>
     [ReplayFact("trend_rate", Scope.GlucoseRead, decimals: 2)]
@@ -79,9 +85,23 @@ public record SensorContext
     public DateTime? LastSensorStartAt { get; init; }
 
     /// <summary>
-    /// Forward-looking glucose predictions used by the predicted condition.
+    /// The <see cref="ForecastCurve.Default"/> forecast series: whatever series the prediction
+    /// source has always returned as its main curve.
     /// </summary>
     public IReadOnlyList<PredictedGlucosePoint> Predictions { get; init; } = Array.Empty<PredictedGlucosePoint>();
+
+    /// <summary>
+    /// The named forecast curves other than <see cref="ForecastCurve.Default"/>, each as the
+    /// source returned it; a curve the source has none of is absent.
+    /// </summary>
+    public IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>> PredictionCurves { get; init; }
+        = new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>();
+
+    /// <summary>
+    /// The loop's newest determination, or null with none. Read by the <c>eventual_glucose</c> and
+    /// <c>carbs_required</c> conditions.
+    /// </summary>
+    public ApsDetermination? ApsDetermination { get; init; }
 
     /// <summary>
     /// Live state of other alerts for this tenant, keyed by alert (rule) id. Used by the alert-state condition.
@@ -198,6 +218,17 @@ public record SensorContext
     /// </summary>
     public GlucoseBucket? GlucoseBucket { get; init; }
 
+    /// <summary>
+    /// The low end of the profile's target range in effect at the evaluation instant, in mg/dL: the
+    /// entry <see cref="GlucoseBucket"/> is placed with. Null when the profile has no target range,
+    /// where the bucket falls back to its defaults and this never does
+    /// (docs/alerts/engine-semantics.md §4).
+    /// </summary>
+    public decimal? TargetLow { get; init; }
+
+    /// <summary>The high end of the range <see cref="TargetLow"/> is the low end of.</summary>
+    public decimal? TargetHigh { get; init; }
+
     /// <summary>Timestamp of the latest carb-bearing treatment, or null when none observed.</summary>
     [ReplayFact("time_since_last_carb_minutes", Scope.TreatmentsRead, decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastCarbAt { get; init; }
@@ -214,10 +245,11 @@ public record SensorContext
     public string? TenantTimeZoneId { get; init; }
 
     /// <summary>
-    /// Currently active pump-mode StateSpan, or null when no pump-mode span is active. Pump
-    /// modes are mutually exclusive per StateSpan semantics, so this is a single snapshot.
+    /// Every active pump-mode StateSpan. Spans of different modes overlap: a Suspended span runs
+    /// on top of an Automatic or Manual one. Populated by the enricher when a rule reads
+    /// <c>pump_state</c>; empty when no pump-mode span is active.
     /// </summary>
-    public PumpStateSnapshot? ActivePumpState { get; init; }
+    public IReadOnlyList<PumpModeSnapshot> ActivePumpModes { get; init; } = [];
 
     /// <summary>
     /// Active state-span snapshots keyed by <c>(Category, State)</c>. Populated by the
@@ -241,7 +273,23 @@ public record SensorContext
     /// </summary>
     public IReadOnlyDictionary<Guid, ActiveTrackerReference> ActiveTrackers { get; init; }
         = new Dictionary<Guid, ActiveTrackerReference>();
+
+    /// <summary>
+    /// The sensor's state, or null when nothing is known of it, which the glucose leaves read as
+    /// they would without it. <see cref="Alerts.SensorState.NoValue"/> when the newest reading has
+    /// no glucose value and no source reports a state other than ok.
+    /// </summary>
+    public SensorStateSnapshot? SensorState { get; init; }
+
+    /// <summary>
+    /// Where the newest reading came from, which a reported sensor state must match to describe it.
+    /// The host reads it; it is not sent to the engine.
+    /// </summary>
+    public ReadingSource? LatestSource { get; init; }
 }
+
+/// <summary>The device and data source a reading was written under.</summary>
+public sealed record ReadingSource(string? DataSource, string? Device);
 
 /// <summary>A tracker definition's active instance, as the <c>tracker_age</c> leaf reads it.</summary>
 /// <param name="ReferenceAt">Start time for a Duration tracker, scheduled time for an Event tracker.</param>
@@ -286,18 +334,31 @@ public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? 
 // ----- Condition parameter records (deserialized from JSONB) -----
 
 /// <summary>
-/// Threshold-based alert condition. Triggers when glucose crosses <paramref name="Value"/> in the specified <paramref name="Direction"/>.
+/// Threshold-based alert condition. Triggers when glucose crosses its limit in the specified <paramref name="Direction"/>.
 /// </summary>
 /// <param name="Direction">Comparison direction: "above" or "below".</param>
-/// <param name="Value">Glucose threshold in mg/dL.</param>
-public record ThresholdCondition(string Direction, decimal Value);
+/// <param name="Value">Glucose threshold in mg/dL; exactly one of it and <paramref name="ValueFrom"/>.</param>
+/// <param name="ClearMargin">How far past its limit the condition stays true while the rule's alert
+/// is open, in the unit of its value; absent or 0 for none (docs/alerts/engine-semantics.md §3).</param>
+/// <param name="ValueFrom">The fact whose value, plus its offset, is the limit (docs/alerts/engine-semantics.md
+/// §3, a limit from a fact). Never <see cref="AlertLimitFact.LatestGlucose"/>, which would compare the
+/// reading with itself.</param>
+public record ThresholdCondition(
+    string Direction,
+    decimal? Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
 
 /// <summary>
 /// Rate-of-change alert condition. Triggers when glucose change rate exceeds <paramref name="Rate"/> in the specified <paramref name="Direction"/>.
 /// </summary>
 /// <param name="Direction">Rate direction: "rising" or "falling".</param>
 /// <param name="Rate">Rate threshold in mg/dL per minute.</param>
-public record RateOfChangeCondition(string Direction, decimal Rate);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, in mg/dL per minute.</param>
+public record RateOfChangeCondition(
+    string Direction,
+    decimal Rate,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Signal loss alert condition. Triggers when no CGM reading is received for <paramref name="TimeoutMinutes"/>.
@@ -333,12 +394,51 @@ public record SustainedCondition(int Minutes, ConditionNode Child);
 public record StalenessCondition(string Operator, int Value);
 
 /// <summary>
-/// Predicted glucose comparison within a forecast horizon.
+/// Predicted glucose comparison within a forecast horizon, over the series at most one of
+/// <paramref name="Curve"/>, <paramref name="MinOf"/> and <paramref name="MaxOf"/> selects; none reads
+/// <see cref="ForecastCurve.Default"/> (docs/alerts/engine-semantics.md §3, forecast curves).
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
-/// <param name="Value">Glucose value in mg/dL to compare against.</param>
+/// <param name="Value">Glucose value in mg/dL to compare against; exactly one of it and <paramref name="ValueFrom"/>.</param>
 /// <param name="WithinMinutes">Forecast horizon in minutes.</param>
-public record PredictedCondition(string Operator, decimal Value, [property: JsonPropertyName("within_minutes")] int WithinMinutes);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, for every point.</param>
+/// <param name="Curve">One named series.</param>
+/// <param name="MinOf">The lowest of these series at each offset they all have.</param>
+/// <param name="MaxOf">The highest of these series at each offset they all have.</param>
+/// <param name="ValueFrom">As <see cref="ThresholdCondition.ValueFrom"/>; any of the facts.</param>
+public record PredictedCondition(
+    string Operator,
+    decimal? Value,
+    [property: JsonPropertyName("within_minutes")] int WithinMinutes,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("curve")] ForecastCurve? Curve = null,
+    [property: JsonPropertyName("min_of")] List<ForecastCurve>? MinOf = null,
+    [property: JsonPropertyName("max_of")] List<ForecastCurve>? MaxOf = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
+
+/// <summary>
+/// The glucose the loop's newest determination expected at the end of its forecast, in mg/dL,
+/// compared with <paramref name="Value"/>. Unknown with no determination, or one older than the
+/// rule's glucose freshness bound.
+/// </summary>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+/// <param name="ValueFrom">As <see cref="PredictedCondition.ValueFrom"/>.</param>
+public record EventualGlucoseCondition(
+    string Operator,
+    decimal? Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
+    [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
+
+/// <summary>
+/// The carbohydrate the loop's newest determination said it needed, in grams, compared with
+/// <paramref name="Value"/>. Unknown as <see cref="EventualGlucoseCondition"/> is, and for a loop
+/// that does not report it.
+/// </summary>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record CarbsRequiredCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Trend condition matching a coarse direction bucket.
@@ -359,21 +459,33 @@ public record TimeOfDayCondition(string From, string To, string? Timezone);
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">IOB in units to compare against.</param>
-public record IobCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record IobCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Carbs-on-board comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">COB in grams to compare against.</param>
-public record CobCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record CobCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Pump-reservoir comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Reservoir level in units to compare against.</param>
-public record ReservoirCondition(string Operator, decimal Value);
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record ReservoirCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
 /// Infusion-site age comparison.
@@ -412,19 +524,35 @@ public record PumpSuspendedCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
-/// <summary>Pump battery comparison (percent).</summary>
-public record PumpBatteryCondition(string Operator, decimal Value);
+/// <summary>Pump battery comparison (percent). <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record PumpBatteryCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Active temp basal comparison. Metric selects rate (U/hr) or percent of scheduled.
-/// Returns false when no temp basal is active — the condition concerns active temps only.</summary>
-public record TempBasalCondition(TempBasalMetric Metric, string Operator, decimal Value);
+/// Returns false when no temp basal is active — the condition concerns active temps only.
+/// <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record TempBasalCondition(
+    TempBasalMetric Metric,
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
-/// <summary>Uploader (phone) battery comparison (percent).</summary>
-public record UploaderBatteryCondition(string Operator, decimal Value);
+/// <summary>Uploader (phone) battery comparison (percent). <c>ClearMargin</c> as
+/// <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record UploaderBatteryCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>CGM transmitter battery comparison. Metric selects the reading; a reading no uploader
-/// has reported is false.</summary>
-public record TransmitterBatteryCondition(TransmitterBatteryMetric Metric, string Operator, decimal Value);
+/// has reported is false. <c>ClearMargin</c> as <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record TransmitterBatteryCondition(
+    TransmitterBatteryMetric Metric,
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
 public record OverrideActiveCondition(
@@ -432,8 +560,12 @@ public record OverrideActiveCondition(
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
-/// silently false on Loop iOS via null-suppression.</summary>
-public record SensitivityRatioCondition(string Operator, decimal Value);
+/// silently false on Loop iOS via null-suppression. <c>ClearMargin</c> as
+/// <see cref="ThresholdCondition.ClearMargin"/>.</summary>
+public record SensitivityRatioCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>Tenant Do Not Disturb state. Active when DND is on by manual toggle
 /// (with optional auto-expire) or by scheduled window. Optional ForMinutes
@@ -543,7 +675,7 @@ public enum TransmitterBatteryMetric
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state | eventual_glucose | carbs_required</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -581,19 +713,22 @@ public record ConditionNode(
     [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null,
     [property: JsonPropertyName("sleep_session_active")] SleepSessionActiveCondition? SleepSessionActive = null,
     [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null,
-    [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null
+    [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null,
+    [property: JsonPropertyName("sensor_state")] SensorStateCondition? SensorState = null,
+    [property: JsonPropertyName("eventual_glucose")] EventualGlucoseCondition? EventualGlucose = null,
+    [property: JsonPropertyName("carbs_required")] CarbsRequiredCondition? CarbsRequired = null
 );
 
 /// <summary>
 /// State machine states for excursion tracking within an <see cref="AlertTrackerState"/>.
 /// </summary>
-public enum TrackerState { Idle, Confirming, Active, Hysteresis }
+public enum TrackerState { Idle, Active, Hysteresis }
 
 // ----- Domain models for alert tracker persistence -----
 
 /// <summary>
 /// Per-rule state machine tracker. Maps 1:1 with an <see cref="AlertRule"/>.
-/// States: idle -> confirming -> active -> hysteresis -> idle.
+/// States: idle -> active -> hysteresis -> idle.
 /// </summary>
 /// <seealso cref="AlertRule"/>
 /// <seealso cref="AlertExcursion"/>
@@ -605,15 +740,10 @@ public class AlertTrackerState
     public Guid AlertRuleId { get; set; }
 
     /// <summary>
-    /// Current state machine state. One of: "idle", "confirming", "active", "hysteresis".
+    /// Current state machine state. One of: "idle", "active", "hysteresis".
     /// </summary>
     /// <seealso cref="TrackerState"/>
     public string State { get; set; } = "idle";
-
-    /// <summary>
-    /// Number of consecutive readings that have confirmed the condition during the "confirming" state.
-    /// </summary>
-    public int ConfirmationCount { get; set; }
 
     /// <summary>
     /// The currently active <see cref="AlertExcursion"/> ID, set when state transitions to "active".
@@ -636,10 +766,40 @@ public class AlertTrackerState
     /// nothing until an evaluation finds its condition false (docs/alerts/engine-semantics.md §6.3).
     /// </summary>
     public bool AwaitingRearm { get; set; }
+
+    /// <summary>
+    /// The next change (docs/alerts/engine-semantics.md §5.3) the rule's last full evaluation
+    /// reported, null when it reported none. Read only while <see cref="NextChangeKnown"/>.
+    /// </summary>
+    public DateTime? NextChangeAt { get; set; }
+
+    /// <summary>
+    /// Whether <see cref="NextChangeAt"/> was recorded by a full evaluation of the rule as it now
+    /// stands, with nothing but such an evaluation writing the state since.
+    /// </summary>
+    public bool NextChangeKnown { get; set; }
+
+    /// <summary>
+    /// The glucose facts of the context <see cref="NextChangeAt"/> was computed from: it holds
+    /// only while a context carries the same ones.
+    /// </summary>
+    public string? NextChangeGlucose { get; set; }
+
+    /// <summary>
+    /// When the rule's current hold began: the first of an unbroken run of evaluations whose
+    /// unknown root it holds (docs/alerts/engine-semantics.md §6.4). Null while it is not held.
+    /// </summary>
+    public DateTime? HeldSince { get; set; }
+
+    /// <summary>
+    /// The facts the hold is waiting for, as <see cref="Alerts.HeldFacts.Format"/> writes them; set
+    /// only with <see cref="HeldSince"/>.
+    /// </summary>
+    public string? HeldFacts { get; set; }
 }
 
 /// <summary>
-/// A composable alert rule with condition tree, hysteresis, and confirmation settings.
+/// A composable alert rule with condition tree and hysteresis settings.
 /// </summary>
 /// <seealso cref="AlertTrackerState"/>
 /// <seealso cref="AlertExcursion"/>
@@ -664,9 +824,6 @@ public class AlertRule
     /// <summary>Minutes to wait after condition clears before transitioning back to idle.</summary>
     public int HysteresisMinutes { get; set; }
 
-    /// <summary>Number of consecutive readings required to confirm the condition before triggering.</summary>
-    public int ConfirmationReadings { get; set; } = 1;
-
     /// <summary>Severity level of alerts generated by this rule.</summary>
     /// <seealso cref="Alerts.AlertRuleSeverity"/>
     public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
@@ -677,6 +834,9 @@ public class AlertRule
     /// <summary>Whether this rule is actively being evaluated.</summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>When the rule was last enabled; null when not recorded.</summary>
+    public DateTime? EnabledAt { get; set; }
+
     /// <summary>Display order among rules.</summary>
     public int SortOrder { get; set; }
 
@@ -685,6 +845,15 @@ public class AlertRule
 
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
+
+    /// <summary>What an unknown root means to the tracker: one of <see cref="AlertRuleOnUnknown"/>.</summary>
+    public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+
+    /// <summary>
+    /// How many minutes old a reading may be before the rule's reading-driven leaves read it
+    /// unknown; null is the engine's default (docs/alerts/engine-semantics.md §3).
+    /// </summary>
+    public int? GlucoseFreshnessMinutes { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -726,7 +895,37 @@ public class AlertExcursion
 /// <seealso cref="AlertExcursion"/>
 public record AlertPayload
 {
-    public required AlertConditionType AlertType { get; init; }
+    /// <summary>
+    /// What the payload tells its recipients, so a webhook or other consumer can tell a notice
+    /// that the rule cannot run from an excursion. Serialised as <c>"excursion"</c> or
+    /// <c>"unevaluable"</c>; an <see cref="Alerts.AlertPayloadKind.Unevaluable"/> payload has no
+    /// <see cref="GlucoseValue"/>, <see cref="Trend"/> or <see cref="TrendRate"/>, and its
+    /// <see cref="ReadingTimestamp"/> is the time of the notice. Documented for webhook receivers
+    /// in the portal's alert rule docs (docs/alerts/building-rules).
+    /// </summary>
+    public Alerts.AlertPayloadKind Kind { get; init; } = Alerts.AlertPayloadKind.Excursion;
+
+    /// <summary>
+    /// On a <see cref="Alerts.AlertPayloadKind.Held"/> or <see cref="Alerts.AlertPayloadKind.HeldClosed"/>
+    /// notice, the facts the rule is waiting for; absent on every other kind.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Alerts.HeldFact>? HeldFacts { get; init; }
+
+    /// <summary>
+    /// On an excursion its evaluation opened, what each true <c>predicted</c>,
+    /// <c>eventual_glucose</c> and <c>carbs_required</c> condition of the rule met its comparison
+    /// with: the forecast curve and point, or the loop's value. Absent when there is none, and on a
+    /// dispatch the sweep finishes for an evaluation that did not, which has no evaluation to read.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Alerts.AlertMetPoint>? MetBy { get; init; }
+
+    /// <summary>
+    /// The rule's condition type; null in the notice for a rule whose stored condition type is not
+    /// one the engine knows.
+    /// </summary>
+    public required AlertConditionType? AlertType { get; init; }
 
     /// <summary>Human-readable name of the <see cref="AlertRule"/> that fired.</summary>
     public required string RuleName { get; init; }

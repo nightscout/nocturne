@@ -61,6 +61,10 @@ public class AlertSweepJobSnoozeTests
             .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _readings.MaxBy(r => r.Timestamp));
         _canonical
+            .Setup(c => c.GetLatestAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime notAfter, CancellationToken _) =>
+                _readings.Where(r => r.Timestamp <= notAfter).MaxBy(r => r.Timestamp));
+        _canonical
             .Setup(c => c.GetStreamPredecessorAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => _readings
                 .Where(r => r.Timestamp < reading.Timestamp && r.Timestamp >= since)
@@ -111,8 +115,13 @@ public class AlertSweepJobSnoozeTests
         services.AddSingleton<TimeProvider>(clock);
         services.AddSingleton(_repository.Object);
         services.AddSingleton(_canonical.Object);
+        services.AddSingleton(EvaluatedReadings.EveryNewest(_canonical.Object, clock));
         services.AddSingleton(enricher.Object);
         services.AddSingleton(_orchestrator.Object);
+        services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
+        services.AddSingleton(NoHeldRules.Notice());
+        services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
+        services.AddSingleton(Mock.Of<IAlertChannelNotice>());
         services.AddSingleton<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(
             new InMemoryTrackerRepository(instances.Select(i => new AlertRule
             {
@@ -141,6 +150,7 @@ public class AlertSweepJobSnoozeTests
         services.AddMetrics();
         services.AddSingleton<AlertEngineErrors>();
         services.AddSingleton<ConditionVersionLog>();
+        services.AddSingleton<NotTrueRecordingFloor>();
         services.AddScoped<IAlertEvaluationEngine, RustBackedAlertEngine>();
 
         await using var provider = services.BuildServiceProvider();
@@ -191,6 +201,18 @@ public class AlertSweepJobSnoozeTests
         await SweepAsync(instance);
 
         ShouldBeExtended(instance, minutes: 7);
+    }
+
+    [NativeFact]
+    public async Task LowSnooze_AReadingDatedAhead_DoesNotReachTheTrendGate()
+    {
+        FiveMinuteReadings(58, 60, 65);
+        _readings.Add(Reading(-60, 40));
+        var instance = Instance(SmartOn);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
     }
 
     [NativeFact]
@@ -343,11 +365,11 @@ public class AlertSweepJobSnoozeTests
     {
         _readings = [Reading(7, 82), Reading(2, 72)];
         _repository
-            .Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([
+            .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnabledAlertRules([
                 new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "Signal loss", AlertConditionType.SignalLoss,
                     """{"timeout_minutes": 15}""", AlertRuleSeverity.Warning, "{}", 0, false, null),
-            ]);
+            ], []));
         SensorContext? wallClock = null;
         _orchestrator
             .Setup(o => o.EvaluateRulesAsync(
@@ -451,6 +473,18 @@ public class AlertSweepJobSnoozeTests
     public async Task ThresholdCondition_ReadsTheLastUsableValue_NotAnErrorReading()
     {
         _readings = [Reading(1, 0), Reading(4, 72)];
+        var instance = Instance(ExtendWhileAbove65);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
+        _enricherInputs.Should().ContainSingle().Which.LatestValue.Should().Be(72m);
+    }
+
+    [NativeFact]
+    public async Task ThresholdCondition_ReadsTheLastUsableValue_NotOneDatedAhead()
+    {
+        _readings = [Reading(1, 0), Reading(4, 72), Reading(-60, 300)];
         var instance = Instance(ExtendWhileAbove65);
 
         await SweepAsync(instance);

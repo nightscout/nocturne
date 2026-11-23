@@ -116,7 +116,7 @@ public static class AuditedBulkDeleteExtensions
                 context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
                 await context.SaveChangesAsync(token);
 
-                var deleted = await query
+                var deleted = await context.Set<T>().IncludingDeleted()
                     .Where(e => ids.Contains(EF.Property<Guid>(e, "Id")))
                     .ExecuteDeleteAsync(token);
                 return (Count: deleted, FirstId: ids[0]);
@@ -308,23 +308,27 @@ public static class AuditedBulkDeleteExtensions
             return (updated, 0, []);
         }
 
-        // The match set is read once and then updated by primary key a group at a time: re-running
-        // the filtered, ordered read for every group would rescan the remaining set each time.
-        var live = query.Where(e => e.DeletedAt == null);
-        var ids = await live.Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        // The match set is read once and each group is then stamped by its ids alone. An update that
+        // joins back to the caller's selection can be planned as tenant rows times chunk when the
+        // table's statistics are stale; by ids alone, a chunk costs at most one pass over the tenant's
+        // rows (when the table has no statistics) and a primary key probe per id otherwise.
+        var ids = await query.Where(e => e.DeletedAt == null)
+            .Select(e => EF.Property<Guid>(e, "Id")).OrderBy(id => id).ToListAsync(ct);
+        await context.PlanForEachArrayAsync(ids.Count + hidden.Count, ct);
         using var wide = typeof(T) == typeof(SensorGlucoseEntity)
             ? await GlucoseStreamFlags.DeferIfWideAsync(context, ids.Count + hidden.Count, ct)
             : null;
         if (recordType is { } linked && duplicates == DuplicateDelete.PromoteSurvivor)
             await DuplicateGroupPrimaries.LockGroupsOfAsync(context, linked, ids, ct);
         var groups = ids.Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
-        var total = await StampAsync(live, groups, 0, ct);
+        var unstamped = context.Set<T>().Where(e => e.DeletedAt == null);
+        var total = await StampAsync(unstamped, groups, 0, ct);
         var hiddenTotal = 0;
         if (hidden.Count > 0)
         {
             var hiddenGroups = hidden.Order().Chunk(NocturneDbContext.SystemTimestampGroupSize).ToList();
             hiddenTotal = await context.WriteWithHistoryClampLiftedAsync(
-                token => StampAsync(context.Set<T>().Where(e => e.DeletedAt == null), hiddenGroups, groups.Count, token),
+                token => StampAsync(unstamped, hiddenGroups, groups.Count, token),
                 ct);
         }
 

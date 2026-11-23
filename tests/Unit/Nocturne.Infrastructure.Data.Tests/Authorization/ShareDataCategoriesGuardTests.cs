@@ -22,7 +22,7 @@ public class ShareDataCategoriesGuardTests
     {
         // Configuration that applies to all of history rather than to rows of it: therapy and
         // profile schedules, alert and tracker setup, devices and connector settings.
-        "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_tracker_state",
+        "alert_condition_not_true", "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_tracker_state",
         "basal_schedules", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "connector_configurations", "data_source_metadata", "devices", "patient_devices",
         "patient_insulins", "patient_records", "sensitivity_schedules", "settings", "target_range_schedules",
@@ -38,8 +38,9 @@ public class ShareDataCategoriesGuardTests
         "oauth_authorization_codes", "oauth_clients", "oauth_device_codes", "oauth_grants", "oauth_refresh_tokens",
         "read_access_log",
 
-        // Internal bookkeeping.
-        "dedup_reconcile_state",
+        // Internal bookkeeping. The evaluated reading's key is the newest reading's, which the
+        // evaluation that wrote it read in full, so it is not history.
+        "alert_evaluated_readings", "dedup_reconcile_state",
 
         // The owner's onboarding state.
         "setup_hub_additions", "setup_hub_items",

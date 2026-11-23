@@ -2,6 +2,7 @@
   import { untrack, type ComponentProps } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -16,7 +17,6 @@
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
-    setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
   } from "#routes/(unauthenticated)/auth/auth.remote.js";
@@ -25,7 +25,7 @@
     loginOptions,
     loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
-  import { invalidateAll } from "$app/navigation";
+  import { getTrustedDevicePolicy } from "#lib/api/generated/totps.generated.remote.js";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";
@@ -34,6 +34,7 @@
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
+  import { settleSignIn, type SignInResult } from "./sign-in-result";
   import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
@@ -78,6 +79,11 @@
   );
   const passkeyLastUsed = $derived(isLastUsed(lastSignIn, "passkey"));
 
+  /** How long the API trusts a device for. 0 when it does not offer to, so nothing is shown. */
+  const trustPolicyQuery = getTrustedDevicePolicy();
+  const trustDays = $derived(trustPolicyQuery.current?.days ?? 0);
+  let trustDevice = $state(false);
+
   // UI mode
   type LoginMode = "default" | "username" | "recovery" | "totp";
   let mode = $state<LoginMode>(
@@ -116,47 +122,22 @@
    */
   let stepUpToken = $state(untrack(() => pendingStepUpToken ?? ""));
 
-  async function handleAuthResult(result: {
-    success?: boolean;
-    accessToken?: string;
-    refreshToken?: string;
-    expiresIn?: number;
-    refreshExpiresIn?: number;
-    totpRequired?: boolean;
-    stepUpToken?: string | null;
-    error?: string;
-  }) {
-    if (!result.success) {
-      passkeyError =
-        result.error ?? "Could not sign you in. Try again.";
+  async function handleAuthResult(result: SignInResult) {
+    const outcome = await settleSignIn(result);
+
+    if (outcome.state === "refused") {
+      passkeyError = outcome.message;
       return;
     }
 
-    // The passkey was accepted but this account also has an authenticator, so there is
-    // no session yet — collect the code and finish there.
-    if (result.totpRequired) {
-      if (!result.stepUpToken) {
-        passkeyError = "Could not sign you in. Try again.";
-        return;
-      }
-      stepUpToken = result.stepUpToken;
+    // No session yet: collect the authenticator code and finish there.
+    if (outcome.state === "second-factor") {
+      stepUpToken = outcome.stepUpToken;
       totpCode = "";
       authenticator.clear();
       mode = "totp";
       return;
     }
-
-    // Set auth cookies via server-side command
-    if (result.accessToken) {
-      await setAuthCookies({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresIn: result.expiresIn,
-        refreshExpiresIn: result.refreshExpiresIn,
-      });
-    }
-
-    await invalidateAll();
 
     if (onSuccess) {
       onSuccess();
@@ -249,6 +230,7 @@
     if (newMode !== "totp") {
       stepUpToken = "";
       totpCode = "";
+      trustDevice = false;
     }
   }
 </script>
@@ -474,8 +456,6 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
-
         <FormError issues={recovery.error} focusOnShow />
 
         <FormField
@@ -565,6 +545,32 @@
         <p class="text-sm text-muted-foreground">
           Enter the current code from your authenticator app to finish signing in.
         </p>
+
+        <!-- Above the code field: a complete code submits the form by itself. -->
+        {#if trustDays > 0}
+          <div class="flex items-start gap-2">
+            <Checkbox
+              id="totp-trust-device"
+              class="mt-0.5"
+              name={signInWithAuthenticator.fields.trustDevice.as("checkbox").name}
+              aria-describedby="totp-trust-device-help"
+              bind:checked={trustDevice}
+            />
+            <div class="space-y-1">
+              <Label for="totp-trust-device">
+                {#if trustDays === 1}
+                  Trust this device for 1 day
+                {:else}
+                  Trust this device for {trustDays} days
+                {/if}
+              </Label>
+              <p id="totp-trust-device-help" class="text-xs text-muted-foreground">
+                You will not need a code on this device during that time.
+                Select this only on a device that only you use.
+              </p>
+            </div>
+          </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="totp-code-input">Authenticator code</Label>

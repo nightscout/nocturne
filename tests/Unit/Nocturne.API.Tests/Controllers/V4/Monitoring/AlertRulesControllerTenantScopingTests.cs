@@ -103,7 +103,8 @@ public class AlertRulesControllerTenantScopingTests
 
         return new AlertRulesController(
             factory,
-            new TenantMembershipRepository(factory),
+            new TenantMembershipRepository(factory, AccountLinkRoutes.Off),
+            new SubjectRepository(factory, AccountLinkRoutes.Off),
             new AlertRepository(factory),
             new AlertRuleRepository(factory),
             MockTenantAccessor.Create(tenantId).Object,
@@ -113,8 +114,8 @@ public class AlertRulesControllerTenantScopingTests
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
     }
 
     private static List<AlertRuleResponse> OkValue(ActionResult<List<AlertRuleResponse>> result)

@@ -107,8 +107,8 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId),
-            _auditContext, $"correlation_id={correlationId}", ct);
+            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId), _auditContext,
+            $"correlation_id={correlationId}", ct);
     }
 
     /// <inheritdoc />

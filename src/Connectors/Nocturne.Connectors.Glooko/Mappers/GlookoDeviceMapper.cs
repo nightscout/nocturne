@@ -85,7 +85,6 @@ public class GlookoDeviceMapper
                 StartDate = null,
                 EndDate = null,
                 Notes = null,
-                CreatedAt = now,
                 ModifiedAt = ParseLastSync(device.LastSyncTimestamp) ?? now,
             });
         }

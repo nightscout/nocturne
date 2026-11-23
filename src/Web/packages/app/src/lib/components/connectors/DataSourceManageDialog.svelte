@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { ConnectionStream } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ConnectionStream } from "@nocturne/api-client";
   import { deleteDataSourceData as deleteDataSourceDataRemote } from "#lib/api/generated/services.generated.remote.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import { formatNumber } from "#lib/utils/formatting.js";
@@ -32,7 +33,14 @@
   }: Props = $props();
 
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -89,6 +97,12 @@
             <p class="font-medium">{formatNumber(source.totalRecords)}</p>
           {/if}
         </div>
+
+        {#if canSetUp && !canManage && source.canDelete}
+          <p class="text-muted-foreground" data-testid="data-source-delete-reason">
+            Only members who can manage this site's settings can delete synced data.
+          </p>
+        {/if}
       </div>
 
       <Dialog.Footer>

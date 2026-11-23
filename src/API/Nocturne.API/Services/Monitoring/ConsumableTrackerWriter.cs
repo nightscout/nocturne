@@ -4,8 +4,8 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -15,9 +15,9 @@ namespace Nocturne.API.Services.Monitoring;
 /// <param name="Run">Its first run, or null when no event started one.</param>
 /// <param name="StartEvent">The device event <paramref name="Run"/> started at.</param>
 public sealed record CreatedConsumableTracker(
-    TrackerDefinitionEntity Definition,
+    TrackerDefinition Definition,
     ConsumableTrackerSpec Spec,
-    TrackerInstanceEntity? Run,
+    TrackerInstance? Run,
     DeviceEvent? StartEvent);
 
 /// <summary>
@@ -25,7 +25,7 @@ public sealed record CreatedConsumableTracker(
 /// provisioner and the setup hub all do: the definition, its managed alert rules when it has a
 /// ladder, and a first run started at the latest device event that restarts it, in the caller's
 /// transaction under the consumable lock
-/// (<see cref="ITrackerRepository.ExecuteUnderConsumableLockAsync{T}"/>), then announced after the
+/// (<see cref="ITrackerConsumableLock"/>), then announced after the
 /// commit.
 /// </summary>
 public sealed class ConsumableTrackerWriter(
@@ -58,7 +58,7 @@ public sealed class ConsumableTrackerWriter(
         CancellationToken ct)
     {
         var definition = await tx.CreateDefinitionAsync(
-            ConsumableTrackerSpecs.ToDefinition(spec, createdBy, withAlerts), ct);
+            ConsumableTrackerSpecs.ToDefinition(spec, createdBy, timeProvider.GetUtcNow().UtcDateTime, withAlerts), ct);
         if (withAlerts)
             await ruleSync.CreateRulesAsync(unit, definition.Id, ct);
 
@@ -69,6 +69,7 @@ public sealed class ConsumableTrackerWriter(
         var succession = await TrackerSuccession.StartAsync(
             tx,
             broadcast: null,
+            timeProvider,
             logger,
             definition,
             latest.Timestamp,
@@ -101,12 +102,12 @@ public sealed class ConsumableTrackerWriter(
     /// transaction was open found no committed tracker to advance.
     /// </summary>
     /// <returns>The definition and its running instance after the catch-up.</returns>
-    public async Task<(TrackerDefinitionEntity Definition, TrackerInstanceEntity? Run)?> PublishAsync(
+    public async Task<(TrackerDefinition Definition, TrackerInstance? Run)?> PublishAsync(
         ITrackerRepository trackers, CreatedConsumableTracker created, CancellationToken ct)
     {
         await broadcast.BroadcastTrackerDefinitionUpdateAsync(created.Definition.Id);
         if (created.Run is not null && await trackers.GetInstanceByIdAsync(created.Run.Id, ct) is { } started)
-            await broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, TrackerInstanceDto.FromEntity(started));
+            await broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, TrackerInstanceDto.From(started, timeProvider.GetUtcNow().UtcDateTime));
 
         if (await LatestEventAsync(created.Spec, ct) is { } latest
             && latest.Id != created.StartEvent?.Id

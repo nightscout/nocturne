@@ -19,7 +19,7 @@ vi.mock("$app/server", () => ({
     locals: {
       apiClient: {
         bolus: { getAll: () => page(boluses) },
-        nutrition: { getCarbIntakes: () => page(carbIntakes) },
+        carbIntake: { getAll: () => page(carbIntakes) },
         bGCheck: { getAll: () => page(bgChecks) },
         note: { getAll: () => page(notes) },
         deviceEvent: { getAll: () => page([]) },

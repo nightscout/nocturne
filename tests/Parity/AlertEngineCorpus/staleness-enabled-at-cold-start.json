@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "name": "staleness-enabled-at-cold-start",
+  "description": "with no reading history staleness compares the minutes since the rule's enabled_at with its operator and value, at the bound exactly and either side; without enabled_at it stays unknown; with a reading it measures from the reading whatever enabled_at says",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": ">=",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": ">",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": "<",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": "<=",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": "==",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "enabled_at": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": ">=",
+        "value": 20
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:19:59Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:20:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:20:30Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:21:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-03-02T12:20:45Z",
+        "last_reading_at": "2026-03-02T12:20:45Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

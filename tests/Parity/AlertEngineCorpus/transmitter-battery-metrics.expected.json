@@ -8,61 +8,93 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:00:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:00:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:00:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:00:00Z"
           }
         }
       ]
@@ -81,8 +113,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -96,8 +127,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -111,8 +141,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -126,8 +155,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         }
       ]
@@ -147,7 +175,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 1
           }
         },
@@ -162,8 +189,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -177,8 +203,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -192,8 +217,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         }
       ]
@@ -213,7 +237,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:15:00Z"
           }
@@ -230,7 +253,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 2
           }
         },
@@ -245,8 +267,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -260,8 +281,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         }
       ]
@@ -281,8 +301,7 @@
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -297,7 +316,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 2,
             "hysteresis_started_at": "2026-01-05T12:20:00Z"
           }
@@ -314,7 +332,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 3
           }
         },
@@ -329,8 +346,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         }
       ]
@@ -349,8 +365,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -365,25 +380,31 @@
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
-          "transition": "hysteresis_started",
+          "transition": "none",
           "tracker": {
-            "state": "hysteresis",
-            "confirmation_count": 0,
+            "state": "active",
             "excursion": 3,
-            "hysteresis_started_at": "2026-01-05T12:25:00Z"
+            "held_since": "2026-01-05T12:25:00Z"
           }
         },
         {
@@ -398,7 +419,6 @@
           "transition": "opened",
           "tracker": {
             "state": "active",
-            "confirmation_count": 0,
             "excursion": 4
           }
         }
@@ -418,8 +438,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -433,8 +452,7 @@
           ],
           "transition": "none",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "idle"
           }
         },
         {
@@ -446,11 +464,11 @@
               "value": false
             }
           ],
-          "transition": "closed",
-          "close_reason": "hysteresis",
+          "transition": "hysteresis_started",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "hysteresis",
+            "excursion": 3,
+            "hysteresis_started_at": "2026-01-05T12:30:00Z"
           }
         },
         {
@@ -465,7 +483,6 @@
           "transition": "hysteresis_started",
           "tracker": {
             "state": "hysteresis",
-            "confirmation_count": 0,
             "excursion": 4,
             "hysteresis_started_at": "2026-01-05T12:30:00Z"
           }
@@ -478,62 +495,95 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:35:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
           "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:35:00Z"
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000003",
           "root": false,
-          "leaves": [
+          "unknown": true,
+          "unknown_facts": [
             {
-              "leaf_id": 0,
-              "value": false
+              "fact": "transmitter",
+              "reason": "absent"
             }
           ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false
+              "value": false,
+              "unknown": true
             }
           ],
           "transition": "closed",
           "close_reason": "hysteresis",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "held_since": "2026-01-05T12:35:00Z"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "transmitter",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "closed",
+          "close_reason": "hysteresis",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:35:00Z"
           }
         }
       ]

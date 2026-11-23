@@ -9,9 +9,12 @@
 	import { getPending, claimLink } from "#lib/api/generated/chatIdentities.generated.remote.js";
 	import { retainQuery } from "#lib/api/retain-query.svelte.js";
 	import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+	import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
+	import SignInGate from "#lib/components/auth/SignInGate.svelte";
 
 	// Read state token from URL
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
+	const handedOff = $derived(page.data.isHandedOffSession === true);
 
 	// Get context (apex vs tenant)
 	const contextQuery = getBotAuthorizeContext();
@@ -78,6 +81,7 @@
 			await claimLink({ token: stateToken });
 			goto(resolve('auth/bot/authorize/done'));
 		} catch(err) {
+			confirmIdentity.askAfterRefusal(err);
 			const status = errorStatus(err);
 			claimError =
 				status === 409
@@ -160,12 +164,16 @@
 			{#if claimError}
 				<p class="text-destructive">{claimError}</p>
 			{/if}
-			<Button onclick={handleClaim} disabled={isClaiming}>
-				{#if isClaiming}
-					<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
-				{/if}
-				Connect
-			</Button>
+			{#if handedOff}
+				<SignInGate reason="Sign in again to connect your chat account." />
+			{:else}
+				<Button onclick={handleClaim} disabled={isClaiming}>
+					{#if isClaiming}
+						<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
+					{/if}
+					Connect
+				</Button>
+			{/if}
 		{/if}
 	</div>
 {/if}

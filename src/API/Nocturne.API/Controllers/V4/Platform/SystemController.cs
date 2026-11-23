@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Models.Alerts;
 
@@ -12,7 +13,8 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// <remarks>
 /// <c>POST /heartbeat</c> is called by the <c>@nocturne/bot</c> process on each polling cycle
 /// to report which platforms (Discord, Telegram, etc.) are currently online. The
-/// <see cref="BotHealthService"/> records these timestamps for health-check display in the admin UI.
+/// <see cref="BotHealthService"/> records the time of the last heartbeat, and <c>GET /channels</c>
+/// derives each channel's status from it for the alert channel components.
 /// </remarks>
 /// <seealso cref="BotHealthService"/>
 [ApiController]
@@ -22,6 +24,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 public class SystemController(BotHealthService botHealth) : ControllerBase
 {
     [HttpPost("heartbeat")]
+    [RequireInstanceKeyAuth]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult Heartbeat([FromBody] HeartbeatRequest request)
     {

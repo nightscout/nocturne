@@ -20,7 +20,7 @@ internal sealed class BGCheckHandler : IMyLifeHandler
         if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var glucose))
             return [];
 
-        var bgCheck = MyLifeFactory.CreateBGCheck(ev, context.Now, glucose);
+        var bgCheck = MyLifeFactory.CreateBGCheck(ev, glucose);
         return [bgCheck];
     }
 }

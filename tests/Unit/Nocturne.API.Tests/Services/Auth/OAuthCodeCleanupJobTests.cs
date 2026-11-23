@@ -241,6 +241,28 @@ public class OAuthCodeCleanupJobTests : IDisposable
             .Should().ContainSingle().Which.Should().BeAfter(DateTime.UtcNow);
     }
 
+    [Fact]
+    public async Task TrustedDeviceCleanup_DeletesOnlyExpiredDevices()
+    {
+        await using (var db = _db.CreateContext(Guid.Empty))
+        {
+            db.TrustedDevices.AddRange(
+                new TrustedDeviceEntity { Id = Guid.CreateVersion7(), SubjectId = _subjectId, TokenHash = "expired", ExpiresAt = LongAgo },
+                new TrustedDeviceEntity { Id = Guid.CreateVersion7(), SubjectId = _subjectId, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddDays(5) });
+            await db.SaveChangesAsync();
+        }
+
+        await using var services = new ServiceCollection().AddSingleton(_seed.AsFactory()).BuildServiceProvider();
+        var started = DateTimeOffset.UtcNow;
+        var outcome = await new TrustedDeviceCleanupJob(NullLogger<TrustedDeviceCleanupJob>.Instance)
+            .RunAsync(JobRuns.Platform(services, started), CancellationToken.None);
+
+        outcome.Should().Be(JobOutcome.Resume(null, started + TimeSpan.FromHours(24)));
+        await using var check = _db.CreateContext(Guid.Empty);
+        (await check.TrustedDevices.Select(d => d.TokenHash).ToListAsync())
+            .Should().Equal("live");
+    }
+
     public void Dispose()
     {
         _seed.Dispose();

@@ -1,7 +1,50 @@
 using System.Text.Json;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Contracts.Connectors;
+
+/// <summary>What a secrets save did with a Nightscout API secret it carried.</summary>
+public class ConnectorSecretsSaveResult
+{
+    /// <summary>
+    /// Whether a live credential already held the API secret, so the save adopted nothing and that
+    /// credential still governs.
+    /// </summary>
+    public bool SecretAlreadyInUse { get; set; }
+
+    /// <summary>When the credential that already holds the secret stops; null when it does not.</summary>
+    public DateTime? SecretInUseStopsAt { get; set; }
+
+    /// <summary>
+    /// Whether the save carried an API secret that the caller may not make into a credential
+    /// (<see cref="ConnectorSecretSaver.MayAdopt"/>), so the connector keeps it for its own use only
+    /// and no credential was made, changed or stopped.
+    /// </summary>
+    public bool NotAdopted { get; set; }
+}
+
+/// <summary>
+/// The caller saving a connector's secrets, as far as adopting a Nightscout API secret goes: the
+/// maker of the credential it would become, and what the caller holds on the site.
+/// </summary>
+/// <param name="Maker">The member the adopted credential is stamped with.</param>
+/// <param name="GrantedScopes">The caller's resolved scopes on the site.</param>
+/// <param name="HistoryClamped">Whether the caller's reads are limited to the last 24 hours.</param>
+public sealed record ConnectorSecretSaver(CredentialMaker Maker, IReadOnlySet<string> GrantedScopes, bool HistoryClamped)
+{
+    /// <summary>
+    /// Whether the caller may make the secret into a credential. The credential carries
+    /// <see cref="Scope.HealthReadWrite"/> with no history limit, so only a caller who may change the
+    /// site's settings, and so may make credentials anyway, and whose own reads are not limited,
+    /// makes one: nothing a caller makes is wider than the caller.
+    /// </summary>
+    public bool MayAdopt => MayAdoptFor(GrantedScopes, HistoryClamped);
+
+    /// <summary>The rule <see cref="MayAdopt"/> applies, for a caller with no maker yet.</summary>
+    public static bool MayAdoptFor(IReadOnlySet<string> grantedScopes, bool historyClamped) =>
+        Scope.Satisfies(grantedScopes, Scope.TenantSettings) && !historyClamped;
+}
 
 /// <summary>
 /// Response model for connector configuration retrieval.
@@ -51,6 +94,13 @@ public class ConnectorConfigurationResponse
     public DateTime? LastErrorAt { get; set; }
 
     public bool IsHealthy { get; set; } = true;
+
+    /// <summary>
+    /// The configuration keys the caller may not change: a destination while the connector holds a
+    /// secret or sends records, and a records-sending option that is off. Empty for a caller who may
+    /// change the site's settings at their own sign-in.
+    /// </summary>
+    public IReadOnlyList<string> LockedKeys { get; set; } = [];
 }
 
 public class ConnectorStatusInfo
@@ -97,6 +147,20 @@ public interface IConnectorConfigurationService
     Task<ConnectorConfigurationResponse> SaveConfigurationAsync(string connectorName, JsonDocument configuration, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The keys of <paramref name="configuration"/> a guarded caller (a delegated credential, or a
+    /// caller who may not change the site's settings) may not save over the stored configuration: a
+    /// changed destination while the connector holds a secret, or a property that sends the tenant's
+    /// records out turned on. The whole configuration is refused when the connector is unknown.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetGuardedRefusalsAsync(string connectorName, JsonDocument configuration, CancellationToken ct = default);
+
+    /// <summary>
+    /// The keys of the stored configuration a guarded caller may not change, whatever they save
+    /// (<c>DelegatedConfigurationGuard.LockedKeys</c>). Empty for an unknown connector.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetGuardedKeysAsync(string connectorName, CancellationToken ct = default);
+
+    /// <summary>
     /// The top-level keys a connector's configuration type binds, secrets and sync toggles
     /// included, each with its property type, or null when the connector or its type is unknown.
     /// The enabled flag is in the map only as <c>enabled</c>; <see cref="ConnectorEnabledKey"/>
@@ -110,8 +174,19 @@ public interface IConnectorConfigurationService
     /// </summary>
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="modifiedBy">Who is making the change</param>
+    /// <param name="saver">
+    /// The caller saving a Nightscout API secret. When they may (<see cref="ConnectorSecretSaver.MayAdopt"/>),
+    /// the secret is adopted as a device credential that stops when their access ends. With no saver
+    /// no secret is adopted.
+    /// </param>
+    /// <returns>What the save did with a Nightscout API secret it carried.</returns>
     /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
-    Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
+    Task<ConnectorSecretsSaveResult> SaveSecretsAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        string? modifiedBy,
+        ConnectorSecretSaver? saver,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Saves the secrets a connector rotates or derives during its own run, attributed to

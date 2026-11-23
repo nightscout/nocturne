@@ -4,6 +4,7 @@
     "module": "NodeNext",
     "lib": ["ES2022"],
     "outDir": "./dist",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
@@ -20,5 +21,6 @@
     "jsxImportSource": "chat"
   },
   "include": ["src/**/*"],
+  "references": [{ "path": "../api-client" }],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test-utils.ts"]
 }

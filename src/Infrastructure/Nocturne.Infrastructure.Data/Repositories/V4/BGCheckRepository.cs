@@ -28,9 +28,8 @@ public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,
-        IV4RecordBroadcaster<BGCheck>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 

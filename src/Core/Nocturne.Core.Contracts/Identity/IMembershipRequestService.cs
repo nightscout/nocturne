@@ -22,7 +22,11 @@ public record CreateMembershipRequestResult(CreateMembershipRequestOutcome Outco
     public bool Success => Outcome == CreateMembershipRequestOutcome.Created;
 }
 
-public record DecideMembershipRequestResult(bool Success, string? Error);
+public record DecideMembershipRequestResult(bool Success, string? Error)
+{
+    /// <summary>The problem code of a refusal the client tells apart; null for any other outcome.</summary>
+    public string? Code { get; init; }
+}
 
 public interface IMembershipRequestService
 {
@@ -52,9 +56,14 @@ public interface IMembershipRequestService
     /// Whether the new member may read only the last 24 hours: the approver's own ceiling, which a
     /// membership it confers inherits. Refused when the roles would exempt the member.
     /// </param>
+    /// <param name="accessEndsAt">
+    /// When the new membership ends, in UTC; null when it does not. Refused with the owner role. A
+    /// requester whose membership has ended gets a new one in place of it.
+    /// </param>
     Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
         Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        DateTime? accessEndsAt,
         bool limitTo24Hours = false,
         CancellationToken ct = default);
 

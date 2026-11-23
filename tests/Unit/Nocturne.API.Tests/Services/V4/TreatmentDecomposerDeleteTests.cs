@@ -51,6 +51,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly RecordingLegacyReads _legacyReads = new();
+    private readonly RecordingRecordChangeSubscriber _published = new();
 
     /// <summary>Every table a legacy treatment decomposes into, which a delete here sweeps around the repositories.</summary>
     private static readonly Type[] DecomposedModels =
@@ -105,7 +106,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         TempBasalTestDeps.Unscheduled(),
         auditContext,
         logger ?? NullLogger<TreatmentDecomposer>.Instance,
-        legacyReads: _legacyReads);
+        changes: _legacyReads.AsRecordChanges(_published));
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>
     /// <param name="legacyIdFor">
@@ -495,10 +496,25 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
     }
 
-    [Fact]
-    public async Task BulkDelete_ReportsEveryTableItSweptAndTheServedSpans()
+    /// <summary>One row in every table a delete here sweeps, the served state spans included.</summary>
+    private void SeedEveryTable()
     {
         SeedOneOfEachType();
+        SeedActivation("activation-1", null, Inside);
+        SeedStateSpan("span-1", "Override", "loop", """{"collection":"treatments","utcOffset":0}""", Inside);
+    }
+
+    private async Task<int> DeleteFromSourceAsync(params string[] legacyIds)
+    {
+        await using var ctx = NewContext();
+        return await CreateDecomposer(ctx, SystemAuditContext.ForService("connector:aaps"))
+            .DeleteFromSourceAsync("aaps", legacyIds.ToHashSet());
+    }
+
+    [Fact]
+    public async Task BulkDelete_ClearsTheLegacyReadsOfEveryTableThatLostRows()
+    {
+        SeedEveryTable();
 
         await BulkDeleteAsync(_userAuditContext);
 
@@ -506,9 +522,10 @@ public class TreatmentDecomposerDeleteTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteByLegacyId_ReportsEveryTableItSwept()
+    public async Task DeleteByLegacyId_ClearsTheLegacyReadsOfEveryTableThatLostRows()
     {
         SeedOneOfEachType(_ => LegacyTreatmentId);
+        SeedActivation(LegacyTreatmentId, null, Inside);
 
         await DeleteByLegacyIdAsync(_userAuditContext);
 
@@ -516,15 +533,109 @@ public class TreatmentDecomposerDeleteTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteFromSource_ReportsEveryTableItSweptAndTheServedSpans()
+    public async Task DeleteFromSource_ClearsTheLegacyReadsOfEveryTableThatLostRows()
     {
         SeedActivation("ps-1", "aaps", Inside);
+        SeedStateSpan("override-1", "Override", "aaps", """{"collection":"treatments","utcOffset":0}""", Inside);
 
-        await using var ctx = NewContext();
-        await CreateDecomposer(ctx, SystemAuditContext.ForService("connector:aaps"))
-            .DeleteFromSourceAsync("aaps", new HashSet<string> { "ps-1" });
+        await DeleteFromSourceAsync("ps-1", "override-1");
 
-        _legacyReads.Models.Should().Contain([.. DecomposedModels, typeof(StateSpan)]);
+        _legacyReads.Models.Should().Contain([typeof(Nocturne.Core.Models.V4.ProfileActivation), typeof(StateSpan)]);
+    }
+
+    /// <summary>
+    /// The deletes around the repositories announce once, after the commit and type by type, the tables
+    /// that lost rows, as a repository's write does, so the alert rules over a deleted site change are
+    /// evaluated and a table that lost nothing moves no fact.
+    /// </summary>
+    [Fact]
+    public async Task BulkDelete_AnnouncesEveryTableThatLostRowsOnceNamingNoRecord()
+    {
+        SeedEveryTable();
+
+        await BulkDeleteAsync(_userAuditContext);
+
+        _published.ShouldHaveAnnouncedOnly([.. DecomposedModels, typeof(StateSpan)]);
+    }
+
+    [Fact]
+    public async Task BulkDelete_OfAWindowWithOnlyABolusAnnouncesBolusOnly()
+    {
+        await using (var db = NewContext())
+        {
+            db.Boluses.Add(new BolusEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "bolus-1", Timestamp = Inside, Insulin = 1 });
+            await db.SaveChangesAsync();
+        }
+
+        await BulkDeleteAsync(_userAuditContext);
+
+        _published.ShouldHaveAnnouncedOnly(typeof(Nocturne.Core.Models.V4.Bolus));
+    }
+
+    /// <summary>
+    /// A V1 delete of a bolus moves the insulin rules' facts and not glucose: before it named every
+    /// table, its profile activation moved glucose with no reading, which evaluates at once, undebounced.
+    /// </summary>
+    [Fact]
+    public async Task A_v1_delete_of_a_bolus_announces_bolus_only_and_moves_no_glucose()
+    {
+        SeedOneOfEachType(type => type == "bolus" ? LegacyTreatmentId : $"{type}-1");
+        SeedActivation("activation-1", null, Inside);
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        _published.ShouldHaveAnnouncedOnly(typeof(Nocturne.Core.Models.V4.Bolus));
+        var moved = Nocturne.API.Services.Alerts.ContextFactWrites.MovedIn(_published.Batches.Single());
+        moved.Facts.Should().NotContain(Nocturne.API.Services.Alerts.ContextFactWrites.Glucose);
+        moved.GlucoseWithoutReading.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_v1_delete_of_a_site_change_announces_device_event_only()
+    {
+        SeedOneOfEachType(type => type == "devevent" ? LegacyTreatmentId : $"{type}-1");
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        _published.ShouldHaveAnnouncedOnly(typeof(Nocturne.Core.Models.V4.DeviceEvent));
+    }
+
+    [Fact]
+    public async Task A_v1_delete_of_a_profile_switch_announces_profile_activation_only()
+    {
+        SeedOneOfEachType();
+        SeedActivation(LegacyTreatmentId, null, Inside);
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        _published.ShouldHaveAnnouncedOnly(typeof(Nocturne.Core.Models.V4.ProfileActivation));
+    }
+
+    [Fact]
+    public async Task DeleteFromSource_AnnouncesTheTablesThatLostRowsAndTheServedSpansOnceNamingNoRecord()
+    {
+        SeedActivation("ps-1", "aaps", Inside);
+        SeedStateSpan("override-1", "Override", "aaps", """{"collection":"treatments","utcOffset":0}""", Inside);
+
+        await DeleteFromSourceAsync("ps-1", "override-1");
+
+        _published.ShouldHaveAnnouncedOnly(typeof(Nocturne.Core.Models.V4.ProfileActivation), typeof(StateSpan));
+    }
+
+    [Fact]
+    public async Task A_delete_that_matches_nothing_announces_nothing()
+    {
+        SeedEveryTable();
+
+        (await DeleteByLegacyIdAsync(_userAuditContext)).Should().Be(0);
+        (await DeleteFromSourceAsync("absent")).Should().Be(0);
+        await using (var ctx = NewContext())
+            (await CreateDecomposer(ctx, _userAuditContext).BulkDeleteAsync(
+                "find[created_at][$gte]=2020-01-01T00:00:00.000Z&find[created_at][$lte]=2020-01-02T00:00:00.000Z",
+                WriteOrigin.Live)).Should().Be(0);
+
+        _published.Batches.Should().BeEmpty();
+        _legacyReads.Models.Should().BeEmpty();
     }
 
     [Fact]

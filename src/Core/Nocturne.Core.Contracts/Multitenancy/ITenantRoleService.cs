@@ -25,6 +25,12 @@ public interface ITenantRoleService
         Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
 
     /// <summary>
+    /// Who holds the roles of <paramref name="tenantId"/>, from one read of its members and, when
+    /// <paramref name="callerEnd"/> is not null, its invites. See <see cref="RoleHolders"/>.
+    /// </summary>
+    Task<RoleHolders> GetRoleHoldersAsync(Guid tenantId, DateTime? callerEnd, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns a role by its ID within <paramref name="tenantId"/>, or null if the tenant has
     /// no such role. A role ID belonging to another tenant resolves to null.
     /// </summary>
@@ -47,7 +53,8 @@ public interface ITenantRoleService
     /// Updates a role's name, description, and permissions. Returns null when
     /// <paramref name="tenantId"/> has no role with that ID. A new name whose slug is reserved or
     /// already used by another role of the tenant is refused with <see cref="SaveRoleResult"/>; a
-    /// name that keeps the role's own slug is not.
+    /// name that keeps the role's own slug is not. <paramref name="editorSubjectId"/> is the person
+    /// making the edit: only an owner may widen a role a team holds.
     /// </summary>
     Task<SaveRoleResult?> UpdateRoleAsync(
         Guid tenantId,
@@ -56,6 +63,7 @@ public interface ITenantRoleService
         string? description,
         List<string> permissions,
         IReadOnlyCollection<string> granterScopes,
+        Guid? editorSubjectId,
         CancellationToken ct = default);
 
     /// <summary>
@@ -123,11 +131,33 @@ public record RoleGrantValidation(bool Ok, string? ErrorCode, string? ErrorDescr
 }
 
 /// <summary>
+/// The roles held, by group, for a caller whose access ends at a given instant.
+/// </summary>
+/// <param name="HeldPast">Roles held by a member whose access outlasts the caller's, which includes the Public member since its access never ends. Empty for a caller whose access does not end.</param>
+/// <param name="InvitedPast">Roles a live invite gives, where the invite's access outlasts the caller's. Empty for a caller whose access does not end.</param>
+/// <param name="HeldByPublic">Roles the Public member holds, for any caller.</param>
+/// <param name="HeldByTeam">Roles a team's access gives, for any caller.</param>
+public sealed record RoleHolders(
+    HashSet<Guid> HeldPast, HashSet<Guid> InvitedPast, HashSet<Guid> HeldByPublic, IReadOnlySet<Guid> HeldByTeam)
+{
+    /// <summary>Whether the caller may not change <paramref name="roleId"/>.</summary>
+    public bool Outlasts(Guid roleId) => HeldPast.Contains(roleId) || InvitedPast.Contains(roleId);
+}
+
+/// <summary>
 /// Projection of a tenant role including its permission set and member count.
 /// </summary>
 /// <param name="CanGrant">
 /// Whether the caller the role was read for may confer it: what
 /// <see cref="ITenantRoleService.ValidateRoleGrantAsync"/> would say for this role alone.
+/// </param>
+/// <param name="OutlastsCaller">
+/// Whether the caller the role was read for has an end date and a member whose access outlasts it
+/// holds this role, so the caller may not change or delete it. Always false when read for no caller.
+/// </param>
+/// <param name="InviteOutlastsCaller">
+/// Whether the caller has an end date and a live invite whose access outlasts it gives this role,
+/// so the caller may not change or delete it. Always false when read for no caller.
 /// </param>
 public record TenantRoleDto(
     Guid Id,
@@ -138,10 +168,36 @@ public record TenantRoleDto(
     bool IsSystem,
     int MemberCount,
     DateTime SysCreatedAt,
-    bool CanGrant
+    bool CanGrant,
+    bool OutlastsCaller = false,
+    bool InviteOutlastsCaller = false
 )
 {
     public RoleAccessLevel? AccessLevel => RoleAccessLevels.Of(Permissions);
+
+    /// <summary>
+    /// Whether a team's access gives this role, so it may not be deleted or given a permission that
+    /// runs the site (<see cref="Scope.IsDataOnly"/>).
+    /// </summary>
+    public bool HeldByTeam { get; init; }
+
+    /// <summary>
+    /// Whether a team's access gives this role and the caller it was read for is not an owner of the
+    /// site, so the caller may remove permissions from it but not add any.
+    /// </summary>
+    public bool OnlyOwnersMayWiden { get; init; }
+
+    /// <summary>
+    /// The permissions no one may give this role while a team holds it, which are the
+    /// <see cref="Scope.AdministrativePermissions"/>. Empty when no team holds the role.
+    /// </summary>
+    public IReadOnlyList<string> TeamRefusedPermissions { get; init; } = [];
+
+    /// <summary>
+    /// Every permission atom the role's permissions already satisfy (<see cref="Scope.Satisfies(IEnumerable{string}, string)"/>),
+    /// which is all the caller may choose when <see cref="OnlyOwnersMayWiden"/> holds. Null otherwise.
+    /// </summary>
+    public IReadOnlyList<string>? CoveredPermissions { get; init; }
 }
 
 /// <summary>
@@ -156,6 +212,15 @@ public record SaveRoleResult(TenantRoleDto? Role, string? ErrorCode, string? Err
     /// <summary>The slug belongs to a seed role, whether or not the tenant still holds it.</summary>
     public const string NameReserved = "role_name_reserved";
 
+    /// <summary>
+    /// A team's access gives the role, and the change would give it a permission that runs the site,
+    /// or delete it.
+    /// </summary>
+    public const string RoleHeldByTeam = "role_held_by_team";
+
+    /// <summary>A team's access gives the role, and only an owner of the site may add to it.</summary>
+    public const string RoleHeldByTeamOwnerOnly = "role_held_by_team_owner_only";
+
     public static SaveRoleResult Saved(TenantRoleDto role) => new(role, null, null);
 
     public static SaveRoleResult Taken { get; } =
@@ -163,6 +228,12 @@ public record SaveRoleResult(TenantRoleDto? Role, string? ErrorCode, string? Err
 
     public static SaveRoleResult Reserved { get; } =
         new(null, NameReserved, "This name is reserved.");
+
+    public static SaveRoleResult HeldByTeam { get; } =
+        new(null, RoleHeldByTeam, "A team has this role, so it can hold only permissions for data.");
+
+    public static SaveRoleResult HeldByTeamOwnerOnly { get; } =
+        new(null, RoleHeldByTeamOwnerOnly, "A team has this role, so only an owner can add permissions to it.");
 }
 
 /// <summary>

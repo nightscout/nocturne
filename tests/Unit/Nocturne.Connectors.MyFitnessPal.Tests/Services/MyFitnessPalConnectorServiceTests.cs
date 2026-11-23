@@ -10,10 +10,10 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.MyFitnessPal.Tests.Services;
 
@@ -57,6 +57,23 @@ public class MyFitnessPalConnectorServiceTests
         });
     }
 
+    /// <summary>
+    /// The food diary has no stored record to resume from, so every scheduled run reads the diary's
+    /// own lookback window, the second as the first, and nothing older.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_EachRunReadsOnlyTheLookbackWindow()
+    {
+        var fixture = new ServiceFixture(
+            new MyFitnessPalFakeHandler { OlderEntryDaysAgo = 30 }, publishSucceeds: true);
+
+        (await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None)).Success.Should().BeTrue();
+        (await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None)).Success.Should().BeTrue();
+
+        fixture.Published.Should().HaveCount(2)
+            .And.OnlyContain(run => run.Count == 1, "the entry thirty days back is outside the seven-day lookback");
+    }
+
     [Fact]
     public async Task SyncDataAsync_WhenPersistingTheConnectorStateTimesOut_StillSucceeds()
     {
@@ -95,21 +112,21 @@ public class MyFitnessPalConnectorServiceTests
     {
         internal MyFitnessPalConnectorService Service { get; }
         internal MyFitnessPalConnectorConfiguration Config { get; }
+        internal List<List<ConnectorFoodEntryImport>> Published { get; }
 
         internal ServiceFixture(
             MyFitnessPalFakeHandler handler,
             bool publishSucceeds,
             Action<CancellationToken>? onSaveSecrets = null)
         {
+            Published = [];
             Config = new MyFitnessPalConnectorConfiguration
             {
                 Username = "user@example.com",
                 Password = "secret",
             };
 
-            var tenantAccessor = new Mock<ITenantAccessor>();
-            tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-            tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var tenantAccessor = ResolvedTenant.Accessor();
 
             var serverResolver = new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(
                 null, null, null);
@@ -118,7 +135,7 @@ public class MyFitnessPalConnectorServiceTests
                 new HttpClient(handler),
                 new ConnectorTokenCache(),
                 serverResolver,
-                tenantAccessor.Object,
+                tenantAccessor,
                 NullLogger<MyFitnessPalAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>());
 
@@ -142,6 +159,8 @@ public class MyFitnessPalConnectorServiceTests
                     It.IsAny<string>(),
                     It.IsAny<WriteOrigin>(),
                     It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<ConnectorFoodEntryImport>, string, WriteOrigin, CancellationToken>(
+                    (imports, _, _, _) => Published.Add(imports.ToList()))
                 .ReturnsAsync(publishSucceeds ? new List<ConnectorFoodEntry>() : null);
 
             var publisher = new Mock<IConnectorPublisher>();
@@ -169,6 +188,9 @@ public class MyFitnessPalConnectorServiceTests
             DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         internal bool HasDiaryEntry { get; init; } = true;
+
+        /// <summary>How many days before today a second entry is dated, or none.</summary>
+        internal int? OlderEntryDaysAgo { get; init; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -201,6 +223,23 @@ public class MyFitnessPalConnectorServiceTests
                     }
                     """
                 : "";
+
+            if (OlderEntryDaysAgo is { } daysAgo)
+            {
+                var date = DateTime.UtcNow.AddDays(-daysAgo).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                edges += (edges.Length > 0 ? "," : "") + $$"""
+                    {
+                      "node": {
+                        "__typename": "ActiveFoodDiaryEntry",
+                        "id": "entry-old",
+                        "date": "{{date}}",
+                        "consumedAt": "12:00:00",
+                        "quantity": 1
+                      },
+                      "syncEdgeInfo": { "operation": "UPSERT" }
+                    }
+                    """;
+            }
 
             return $$"""
                 {

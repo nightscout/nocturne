@@ -1,13 +1,13 @@
-using System.Data.Common;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -23,6 +23,9 @@ public class MembershipRequestService : IMembershipRequestService
 {
     private static readonly DecideMembershipRequestResult AlreadyAMember =
         new(false, "The subject is already a member.");
+
+    private static readonly DecideMembershipRequestResult OwnRequest =
+        new(false, SelfAdmission.OwnRequestDetail) { Code = SelfAdmission.OwnRequestCode };
 
     private static readonly DecideMembershipRequestResult NoLongerPending =
         new(false, "Request is no longer pending.");
@@ -42,6 +45,8 @@ public class MembershipRequestService : IMembershipRequestService
     private readonly IAuthAuditService _audit;
     private readonly TimeProvider _time;
     private readonly ILogger<MembershipRequestService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
+    private readonly GrantRevocationService _grantRevocation;
 
     public MembershipRequestService(
         ITenantRepository tenants,
@@ -52,7 +57,9 @@ public class MembershipRequestService : IMembershipRequestService
         IInAppNotificationService notificationService,
         IAuthAuditService audit,
         TimeProvider timeProvider,
-        ILogger<MembershipRequestService> logger)
+        ILogger<MembershipRequestService> logger,
+        IAccountLinkRoute linkRoute,
+        GrantRevocationService grantRevocation)
     {
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
         _members = members ?? throw new ArgumentNullException(nameof(members));
@@ -63,6 +70,8 @@ public class MembershipRequestService : IMembershipRequestService
         _audit = audit;
         _time = timeProvider;
         _logger = logger;
+        _linkRoute = linkRoute;
+        _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
     }
 
     /// <inheritdoc />
@@ -75,7 +84,7 @@ public class MembershipRequestService : IMembershipRequestService
         if (!tenant.AllowAccessRequests)
             return new CreateMembershipRequestResult(CreateMembershipRequestOutcome.Refused, "This profile is not accepting membership requests.");
 
-        if (await _members.IsMemberAsync(tenantId, subjectId, ct))
+        if (await _members.IsDirectMemberAsync(tenantId, subjectId, _time.GetUtcNow().UtcDateTime, ct))
             return new CreateMembershipRequestResult(CreateMembershipRequestOutcome.AlreadyMember, "You are already a member.");
 
         if (await _members.AnyPendingRequestAsync(tenantId, subjectId, ct))
@@ -128,6 +137,7 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
         Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        DateTime? accessEndsAt,
         bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
@@ -141,6 +151,11 @@ public class MembershipRequestService : IMembershipRequestService
                 await _tenantRoleService.GetRolePermissionsAsync(tenantId, roleIds, ct)))
             return new DecideMembershipRequestResult(false, MemberScopeResolver.ExemptFromHistoryClampDetail);
 
+        if (accessEndsAt is not null
+            && await _members.FindRoleIdBySlugAsync(tenantId, RoleSeeds.Owner, ct) is { } ownerRole
+            && roleIds.Contains(ownerRole))
+            return new DecideMembershipRequestResult(false, AccessEndRequest.OwnerDetail);
+
         var request = await _members.GetRequestAsync(tenantId, requestId, ct);
 
         if (request == null)
@@ -149,42 +164,58 @@ public class MembershipRequestService : IMembershipRequestService
         if (request.Status != MembershipRequestRecord.Pending)
             return NoLongerPending;
 
-        DecideMembershipRequestResult? refusal;
+        DecideMembershipRequestResult? refusal = null;
+        IReadOnlyList<OAuthGrantRecord> revoked = [];
         var activated = false;
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, tenantId, ct))
         {
-            var members = new TenantMembershipRepository(unit);
-            var subjects = new SubjectRepository(unit, _time);
+            var members = new TenantMembershipRepository(unit, _linkRoute);
+            var subjects = new SubjectRepository(unit, _linkRoute, _time);
             try
             {
-                refusal = await unit.CommitAsync<DecideMembershipRequestResult?>(async token =>
+                await unit.CommitAsync(async token =>
                 {
                     activated = false;
                     switch (await subjects.GetAsync(request.SubjectId, token))
                     {
                         case null:
-                            return RequesterGone;
+                            throw new RefusedCommitException<DecideMembershipRequestResult>(RequesterGone);
                         case { ApprovalStatus: nameof(ApprovalStatus.Pending), IsActive: false }:
                             await subjects.UpdateAsync(request.SubjectId, SubjectEdit.AccessApproved, token);
                             activated = true;
                             break;
                         case { IsActive: false }:
-                            return RequesterInactive;
+                            throw new RefusedCommitException<DecideMembershipRequestResult>(RequesterInactive);
                     }
 
-                    if (!await members.AddMemberAsync(
-                            new NewTenantMember(tenantId, request.SubjectId, roleIds, LimitTo24Hours: limitTo24Hours), token))
-                        return AlreadyAMember;
+                    revoked = await MembershipRemoval.ReplaceEndedAsync(
+                            unit, members, _grantRevocation, tenantId, request.SubjectId, _time.GetUtcNow().UtcDateTime, token)
+                        ?? throw new RefusedCommitException<DecideMembershipRequestResult>(AlreadyAMember);
+
+                    if (request.SubjectId == decidedBySubjectId
+                        && await members.FindMemberAsync(tenantId, request.SubjectId, token) is { DirectReason: null })
+                        throw new RefusedCommitException<DecideMembershipRequestResult>(OwnRequest);
+
+                    if (!await members.AddDirectMemberAsync(
+                            new NewTenantMember(
+                                tenantId, request.SubjectId, roleIds, LimitTo24Hours: limitTo24Hours, AccessEndsAt: accessEndsAt)
+                                { How = MembershipJoinHow.Request, By = decidedBySubjectId },
+                            _time.GetUtcNow().UtcDateTime,
+                            token))
+                        throw new RefusedCommitException<DecideMembershipRequestResult>(AlreadyAMember);
 
                     if (!await members.DecideRequestAsync(
                             tenantId, requestId,
                             new MembershipRequestDecision(MembershipRequestRecord.Approved, decidedBySubjectId, _time.GetUtcNow().UtcDateTime, roleIds),
                             token))
-                        return NoLongerPending;
+                        throw new RefusedCommitException<DecideMembershipRequestResult>(NoLongerPending);
 
                     await unit.Context.SaveChangesAsync(token);
-                    return null;
-                }, ct: ct);
+                }, ct);
+            }
+            catch (RefusedCommitException<DecideMembershipRequestResult> refused)
+            {
+                refusal = refused.Refusal;
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -198,6 +229,8 @@ public class MembershipRequestService : IMembershipRequestService
 
         if (refusal is not null)
             return refusal;
+
+        _grantRevocation.EvictSessions(revoked);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId} decided_by={DecidedBy}",
@@ -233,8 +266,8 @@ public class MembershipRequestService : IMembershipRequestService
         var denied = false;
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(_contexts, tenantId, ct))
         {
-            var members = new TenantMembershipRepository(unit);
-            var subjects = new SubjectRepository(unit, _time);
+            var members = new TenantMembershipRepository(unit, _linkRoute);
+            var subjects = new SubjectRepository(unit, _linkRoute, _time);
             decided = await unit.CommitAsync(async token =>
             {
                 denied = false;
@@ -302,7 +335,7 @@ public class MembershipRequestService : IMembershipRequestService
         {
             var subjectName = (await _subjects.GetManyAsync([subjectId], CancellationToken.None)).SingleOrDefault()?.Name ?? "Someone";
 
-            var membersToNotify = (await _members.ListPeopleAsync(tenantId, CancellationToken.None))
+            var membersToNotify = (await _members.ListLivePeopleAsync(tenantId, _time.GetUtcNow().UtcDateTime, CancellationToken.None))
                 .Where(m => m.Holds(Scope.MembersManage))
                 .Select(m => m.SubjectId)
                 .Distinct()
@@ -319,15 +352,7 @@ public class MembershipRequestService : IMembershipRequestService
                     cancellationToken: CancellationToken.None);
             }
         }
-        catch (DbUpdateException ex)
-        {
-            LogDecidersNotTold(ex, tenantId, requestId);
-        }
-        catch (DbException ex)
-        {
-            LogDecidersNotTold(ex, tenantId, requestId);
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogDecidersNotTold(ex, tenantId, requestId);
         }

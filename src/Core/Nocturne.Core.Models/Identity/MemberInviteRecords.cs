@@ -11,7 +11,8 @@ public sealed record NewMemberInvite(
     bool LimitTo24Hours,
     DateTime ExpiresAt,
     int? MaxUses,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? AccessEndsAt);
 
 /// <summary>A stored invite. The token hash stays in the store.</summary>
 /// <param name="TenantDisplayName">Null when the tenant row was not read.</param>
@@ -32,7 +33,8 @@ public sealed record MemberInviteRecord(
     int UseCount,
     DateTime? RevokedAt,
     DateTime CreatedAt,
-    IReadOnlyList<MemberInviteUse> Uses)
+    IReadOnlyList<MemberInviteUse> Uses,
+    DateTime? AccessEndsAt)
 {
     /// <summary>Whether the invite is expired at <paramref name="now"/>; the expiry instant itself is expired.</summary>
     public bool IsExpiredAt(DateTime now) => now >= ExpiresAt;
@@ -47,6 +49,16 @@ public sealed record MemberInviteRecord(
 
 /// <summary>A membership created through an invite.</summary>
 public sealed record MemberInviteUse(Guid SubjectId, string? SubjectName, DateTime JoinedAt);
+
+/// <summary>What taking a use of an invite found.</summary>
+public enum MemberInviteClaim
+{
+    Claimed,
+    Exhausted,
+
+    /// <summary>The invite is revoked, or its maker is no longer a member in force.</summary>
+    Revoked,
+}
 
 /// <summary>What revoking an invite found.</summary>
 public enum MemberInviteRevocation

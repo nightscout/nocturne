@@ -27,9 +27,10 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal static class RustEnvelopeMapper
 {
     /// <summary>
-    /// Sentinel ordinal sent for "this rule has an active excursion". The actual value is
-    /// irrelevant to the engine's semantics (it only checks presence and echoes it back);
-    /// the next-ordinal is set above it so a same-call open never collides.
+    /// The ordinal sent for "this rule has an active excursion". The engine only checks that one is
+    /// present and echoes it back. The host identifies an excursion by its row id, which the
+    /// transition writer maps from the transition, so it stores no engine ordinal and sends no
+    /// last ordinal: the engine reads the active one as the last, so an open never reuses it.
     /// </summary>
     private const int ActiveExcursionSentinel = 1;
 
@@ -60,10 +61,12 @@ internal static class RustEnvelopeMapper
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
         ConditionParams = ParseJson(rule.ConditionParams),
-        ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveEnabled ? RuleTrees.AutoResolve(rule.AutoResolveParams) : null,
+        OnUnknown = rule.OnUnknown,
+        GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
+        EnabledAt = rule.EnabledAt,
     };
 
     /// <summary>
@@ -77,12 +80,11 @@ internal static class RustEnvelopeMapper
             : new RustTrackerState
             {
                 State = state.State,
-                ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionOrdinal = state.ActiveExcursionId is null ? null : ActiveExcursionSentinel,
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
                 HysteresisStartedAt = Utc(state.HysteresisStartedAt),
                 AwaitingRearm = state.AwaitingRearm,
-                NextExcursionOrdinal = ActiveExcursionSentinel + 1,
+                HeldSince = Utc(state.HeldSince),
             };
 
     public static JsonElement ParseJson(string json)
@@ -122,7 +124,7 @@ internal static class RustEnvelopeMapper
     private static readonly ConditionalWeakTable<SensorContext, object> ContextElementCache = new();
 
     /// <summary>
-    /// Copies persisted sustained timers into the envelope with every instant pinned to
+    /// Copies one map of persisted sustained state into the envelope with every instant pinned to
     /// <see cref="DateTimeKind.Utc"/>.
     /// </summary>
     /// <remarks>
@@ -155,6 +157,7 @@ internal static class RustEnvelopeMapper
         {
             LatestValue = ctx.LatestValue,
             LatestTimestamp = Utc(ctx.LatestTimestamp),
+            LatestReceivedAt = Utc(ctx.LatestReceivedAt),
             TrendRate = ctx.TrendRate,
             LastReadingAt = Utc(ctx.LastReadingAt),
             TrendBucket = ctx.TrendBucket is { } tb ? WireEnum(tb) : null,
@@ -164,9 +167,16 @@ internal static class RustEnvelopeMapper
             ReservoirIsLowerBound = ctx.ReservoirIsLowerBound ? true : null,
             LastSiteChangeAt = Utc(ctx.LastSiteChangeAt),
             LastSensorStartAt = Utc(ctx.LastSensorStartAt),
-            Predictions = ctx.Predictions.Count == 0
+            Predictions = ctx.Predictions.Count == 0 ? null : WirePoints(ctx.Predictions),
+            PredictionCurves = ctx.PredictionCurves.Count == 0
                 ? null
-                : ctx.Predictions.Select(p => new WirePrediction(p.OffsetMinutes, p.Mgdl)).ToList(),
+                : ctx.PredictionCurves
+                    .Where(kv => kv.Key != ForecastCurve.Default)
+                    .ToDictionary(kv => WireEnum(kv.Key), kv => WirePoints(kv.Value), StringComparer.Ordinal),
+            ApsDetermination = ctx.ApsDetermination is { } determination
+                ? new WireApsDetermination(
+                    Utc(determination.At)!.Value, determination.EventualMgdl, determination.CarbsRequiredGrams)
+                : null,
             ActiveAlerts = ctx.ActiveAlerts.Count == 0
                 ? null
                 : ctx.ActiveAlerts
@@ -199,14 +209,18 @@ internal static class RustEnvelopeMapper
             HasEverUploaderSnapshot = ctx.HasEverUploaderSnapshot,
             HasEverApsSensitivity = ctx.HasEverApsSensitivity,
             GlucoseBucket = ctx.GlucoseBucket is { } gb ? WireEnum(gb) : null,
+            TargetLow = ctx.TargetLow,
+            TargetHigh = ctx.TargetHigh,
             LastCarbAt = Utc(ctx.LastCarbAt),
             LastBolusAt = Utc(ctx.LastBolusAt),
             TenantTimeZoneId = ctx.TenantTimeZoneId is { Length: > 0 } tenantZone
                 ? TimeZoneHelper.ToIanaIdIfWindows(tenantZone)
                 : ctx.TenantTimeZoneId,
-            ActivePumpState = ctx.ActivePumpState is { } pump
-                ? new WirePumpState(WireEnum(pump.Mode), Utc(pump.StartedAt)!.Value)
-                : null,
+            ActivePumpModes = ctx.ActivePumpModes.Count == 0
+                ? null
+                : ctx.ActivePumpModes
+                    .Select(m => new WirePumpMode(m.Mode, Utc(m.StartedAt)!.Value))
+                    .ToList(),
             // Serialise from the dictionary KEYS (not the snapshot's echoed fields) so the
             // engine reconstructs the exact same (category, state) lookup — including
             // null-state "any of category" keys.
@@ -223,14 +237,67 @@ internal static class RustEnvelopeMapper
                         kv.Key, Utc(kv.Value.ReferenceAt)!.Value, Utc(kv.Value.RecordedAt), kv.Value.IsScheduled))
                     .ToList(),
             SleepSessionActive = ctx.SleepSessionActive,
+            SensorState = ctx.SensorState is { } sensor
+                ? new WireSensorState(WireEnum(sensor.State), Utc(sensor.Since), Utc(sensor.Until))
+                : null,
         };
 
         return JsonSerializer.SerializeToElement(wire, AlertEnvelopeJson.Options);
     }
 
+    private static List<WirePrediction> WirePoints(IReadOnlyList<PredictedGlucosePoint> points) =>
+        points.Select(p => new WirePrediction(p.OffsetMinutes, p.Mgdl)).ToList();
+
     // -----------------------------------------------------------------------
     // Response mapping
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The engine's <c>met_by</c> as typed points. An entry whose kind, curve or limit fact this host
+    /// has no member for is dropped: it can only come from an engine newer than the host, and the payload
+    /// member is optional.
+    /// </summary>
+    public static IReadOnlyList<AlertMetPoint> MetByFromWire(IReadOnlyList<RustMetPoint>? wire)
+    {
+        if (wire is null || wire.Count == 0)
+            return [];
+        var points = new List<AlertMetPoint>(wire.Count);
+        foreach (var point in wire)
+        {
+            if (AlertConditionTypeNames.FromWireString(point.Kind) is not { } kind)
+                continue;
+            ForecastCurve? curve = null;
+            if (point.Curve is { } curveName)
+            {
+                if (FromWireEnum<ForecastCurve>(curveName) is not { } known)
+                    continue;
+                curve = known;
+            }
+            AlertLimitFact? limitFact = null;
+            if (point.LimitFact is { } factName)
+            {
+                if (FromWireEnum<AlertLimitFact>(factName) is not { } known)
+                    continue;
+                limitFact = known;
+            }
+            points.Add(new AlertMetPoint(
+                point.LeafId, kind, curve, point.OffsetMinutes, point.Value, point.Limit, limitFact,
+                limitFact is null ? null : point.LimitOffset));
+        }
+        return points;
+    }
+
+    private static TEnum? FromWireEnum<TEnum>(string wire) where TEnum : struct, Enum
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<TEnum>($"\"{wire}\"", EnumWireOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     public static ExcursionTransitionType TransitionFromWire(RustTransition wire) => wire switch
     {
@@ -249,6 +316,7 @@ internal static class RustEnvelopeMapper
         RustCloseReason.Auto => ExcursionCloseReason.AutoResolve,
         RustCloseReason.Manual => ExcursionCloseReason.Manual,
         RustCloseReason.RuleDisabled => ExcursionCloseReason.RuleDisabled,
+        RustCloseReason.HoldBound => ExcursionCloseReason.HoldBound,
         _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
@@ -258,23 +326,25 @@ internal static class RustEnvelopeMapper
         ExcursionCloseReason.AutoResolve => RustCloseReason.Auto,
         ExcursionCloseReason.Manual => RustCloseReason.Manual,
         ExcursionCloseReason.RuleDisabled => RustCloseReason.RuleDisabled,
+        ExcursionCloseReason.HoldBound => RustCloseReason.HoldBound,
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
     };
 
     /// <summary>
     /// The engine's post-state as a <see cref="TrackerPostState"/>, or <see langword="null"/> when
-    /// it holds no per-rule state.
+    /// it holds no per-rule state. <paramref name="heldFacts"/> are kept only while it is held.
     /// </summary>
-    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker) =>
+    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker, string? heldFacts) =>
         tracker.State is null
             ? null
             : new TrackerPostState(
                 tracker.State,
-                tracker.ConfirmationCount,
                 tracker.ActiveExcursionOrdinal is not null,
                 tracker.UpdatedAt!.Value,
                 tracker.HysteresisStartedAt,
-                tracker.AwaitingRearm);
+                tracker.AwaitingRearm,
+                Utc(tracker.HeldSince),
+                tracker.HeldSince is null ? null : heldFacts);
 
     private static DateTime? Utc(DateTime? value) =>
         value is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;
@@ -290,6 +360,7 @@ internal static class RustEnvelopeMapper
     {
         [JsonPropertyName("latest_value")] public decimal? LatestValue { get; init; }
         [JsonPropertyName("latest_timestamp")] public DateTime? LatestTimestamp { get; init; }
+        [JsonPropertyName("latest_received_at")] public DateTime? LatestReceivedAt { get; init; }
         [JsonPropertyName("trend_rate")] public decimal? TrendRate { get; init; }
         [JsonPropertyName("last_reading_at")] public DateTime? LastReadingAt { get; init; }
         [JsonPropertyName("trend_bucket")] public string? TrendBucket { get; init; }
@@ -300,6 +371,8 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("last_site_change_at")] public DateTime? LastSiteChangeAt { get; init; }
         [JsonPropertyName("last_sensor_start_at")] public DateTime? LastSensorStartAt { get; init; }
         [JsonPropertyName("predictions")] public List<WirePrediction>? Predictions { get; init; }
+        [JsonPropertyName("prediction_curves")] public Dictionary<string, List<WirePrediction>>? PredictionCurves { get; init; }
+        [JsonPropertyName("aps_determination")] public WireApsDetermination? ApsDetermination { get; init; }
         [JsonPropertyName("active_alerts")] public List<WireActiveAlert>? ActiveAlerts { get; init; }
         [JsonPropertyName("last_aps_cycle_at")] public DateTime? LastApsCycleAt { get; init; }
         [JsonPropertyName("last_aps_enacted_at")] public DateTime? LastApsEnactedAt { get; init; }
@@ -319,14 +392,27 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("has_ever_uploader_snapshot")] public bool HasEverUploaderSnapshot { get; init; }
         [JsonPropertyName("has_ever_aps_sensitivity")] public bool HasEverApsSensitivity { get; init; }
         [JsonPropertyName("glucose_bucket")] public string? GlucoseBucket { get; init; }
+        [JsonPropertyName("target_low")] public decimal? TargetLow { get; init; }
+        [JsonPropertyName("target_high")] public decimal? TargetHigh { get; init; }
         [JsonPropertyName("last_carb_at")] public DateTime? LastCarbAt { get; init; }
         [JsonPropertyName("last_bolus_at")] public DateTime? LastBolusAt { get; init; }
         [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
-        [JsonPropertyName("active_pump_state")] public WirePumpState? ActivePumpState { get; init; }
+        [JsonPropertyName("active_pump_modes")] public List<WirePumpMode>? ActivePumpModes { get; init; }
         [JsonPropertyName("active_state_spans")] public List<WireStateSpan>? ActiveStateSpans { get; init; }
         [JsonPropertyName("active_trackers")] public List<WireTrackerReference>? ActiveTrackers { get; init; }
         [JsonPropertyName("sleep_session_active")] public bool SleepSessionActive { get; init; }
+        [JsonPropertyName("sensor_state")] public WireSensorState? SensorState { get; init; }
     }
+
+    private sealed record WireSensorState(
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("since")] DateTime? Since,
+        [property: JsonPropertyName("until")] DateTime? Until);
+
+    private sealed record WireApsDetermination(
+        [property: JsonPropertyName("at")] DateTime At,
+        [property: JsonPropertyName("eventual_mgdl")] decimal? EventualMgdl,
+        [property: JsonPropertyName("carbs_required_grams")] decimal? CarbsRequiredGrams);
 
     private sealed record WirePrediction(
         [property: JsonPropertyName("offset_minutes")] int OffsetMinutes,
@@ -350,7 +436,7 @@ internal static class RustEnvelopeMapper
         [property: JsonPropertyName("started_at")] DateTime StartedAt,
         [property: JsonPropertyName("source")] string Source);
 
-    private sealed record WirePumpState(
+    private sealed record WirePumpMode(
         [property: JsonPropertyName("mode")] string Mode,
         [property: JsonPropertyName("started_at")] DateTime StartedAt);
 

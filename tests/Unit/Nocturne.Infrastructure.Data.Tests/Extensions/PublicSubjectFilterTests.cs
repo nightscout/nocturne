@@ -32,12 +32,15 @@ public class PublicSubjectFilterTests
             IsSystemSubject: system,
             IsDemoSubject: false,
             IsPlatformAdmin: false,
+            HasConfirmedEmail: false,
             Roles: [],
             DirectPermissions: null,
             Label: null,
             Username: null,
             LimitTo24Hours: false,
+            AccessEndsAt: null,
             LastUsedAt: null,
             CreatedFromInviteId: null,
-            SysCreatedAt: DateTime.UtcNow);
+            SysCreatedAt: DateTime.UtcNow,
+            Reasons: []);
 }

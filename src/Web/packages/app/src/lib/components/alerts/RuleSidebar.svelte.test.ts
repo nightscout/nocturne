@@ -14,7 +14,7 @@ import {
 	AlertConditionType,
 	AlertRuleSeverity,
 	type AlertRuleResponse,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import type { ConditionNode } from "./types";
 
 function leaf(uid: string): ConditionNode {

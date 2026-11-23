@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;

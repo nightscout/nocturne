@@ -11,6 +11,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -60,6 +61,7 @@ public class ClockFaceAlertsController(
             .AsNoTracking()
             .Include(e => e.AlertRule)
             .Include(e => e.Instances)
+            .OfCondition(includeTest: true)
             .Where(e => e.EndedAt == null)
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(ct);

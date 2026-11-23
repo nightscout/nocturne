@@ -42,11 +42,18 @@ public interface IOidcAuthService
     /// <remarks>
     /// This is the only part of the state readable before the callback is handled, and it goes
     /// through the same protector as the rest of the payload — the redirect target is therefore
-    /// derived from data this instance signed, not from a caller-supplied value. Deliberately
-    /// exposes only the slug: nothing else in the state is safe to act on before the full
-    /// callback validation in <see cref="HandleCallbackAsync"/> has run.
+    /// derived from data this instance signed, not from a caller-supplied value. Besides
+    /// <see cref="IsRecoveryState"/>, it exposes only the slug: nothing else in the state is safe
+    /// to act on before the full callback validation in <see cref="HandleCallbackAsync"/> has run.
     /// </remarks>
     string? TryReadTenantSlug(string state);
+
+    /// <summary>
+    /// Whether a protected link state was issued by
+    /// <see cref="GenerateRecoveryLinkAuthorizationUrlAsync"/>, so the link callback knows which
+    /// proof of identity to require. It picks the validation only; the callback still runs all of it.
+    /// </summary>
+    bool IsRecoveryState(string state);
 
     /// <summary>
     /// Handle the OIDC callback - exchange code for tokens and create session
@@ -59,6 +66,10 @@ public interface IOidcAuthService
     /// The tenant the login is being performed against (the resolved subdomain tenant).
     /// When set, the resolved subject must be a member of this tenant or no session is issued.
     /// </param>
+    /// <param name="trustedDeviceToken">
+    /// The trusted-device cookie the callback request carried, if any. See
+    /// <see cref="ITotpService.GetSecondFactorRequirementAsync"/>.
+    /// </param>
     /// <returns>Authentication result with session tokens</returns>
     Task<OidcCallbackResult> HandleCallbackAsync(
         string code,
@@ -66,7 +77,8 @@ public interface IOidcAuthService
         string expectedState,
         string? ipAddress = null,
         string? userAgent = null,
-        Guid? currentTenantId = null
+        Guid? currentTenantId = null,
+        string? trustedDeviceToken = null
     );
 
     /// <param name="ipAddress">Client IP address</param>
@@ -120,6 +132,27 @@ public interface IOidcAuthService
         string? ipAddress = null, string? userAgent = null);
 
     /// <summary>
+    /// Generate an authorisation URL for linking an identity to <paramref name="subjectId"/> under
+    /// the recovery session that names it. The callback is the link callback, and its state
+    /// completes only with that recovery session (<see cref="HandleRecoveryLinkCallbackAsync"/>).
+    /// </summary>
+    /// <param name="providerId">The provider to link; it must be enabled.</param>
+    /// <param name="subjectId">The subject the recovery session is for.</param>
+    /// <param name="returnUrl">URL to return to after the flow completes.</param>
+    /// <param name="tenantSlug">The tenant the recovery session belongs to.</param>
+    Task<OidcAuthorizationRequest> GenerateRecoveryLinkAuthorizationUrlAsync(
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null);
+
+    /// <summary>
+    /// Handle the link callback of a flow started by <see cref="GenerateRecoveryLinkAuthorizationUrlAsync"/>:
+    /// attaches the identity to <paramref name="recoverySubjectId"/>, the subject of the recovery
+    /// session the callback presents, when the state was issued for a recovery link for that
+    /// subject. An identity already linked to another subject is refused.
+    /// </summary>
+    Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
+        string code, string state, string expectedState, Guid recoverySubjectId);
+
+    /// <summary>
     /// Generate an authorization URL for OIDC-based owner creation during setup.
     /// Encodes the pre-created subject ID in state so the callback can link the identity.
     /// </summary>
@@ -146,8 +179,15 @@ public class OidcLinkResult
     public Guid? IdentityId { get; set; }
     public string? ReturnUrl { get; set; }
 
-    public static OidcLinkResult Succeeded(Guid identityId, string? returnUrl = null)
-        => new() { Success = true, IdentityId = identityId, ReturnUrl = returnUrl };
+    /// <summary>The provider the linked identity belongs to; set on success.</summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>Whether the link added the identity, rather than finding it already on the account.</summary>
+    public bool Added { get; set; }
+
+    public static OidcLinkResult Succeeded(
+        Guid identityId, string? returnUrl = null, Guid? providerId = null, bool added = true)
+        => new() { Success = true, IdentityId = identityId, ReturnUrl = returnUrl, ProviderId = providerId, Added = added };
     public static OidcLinkResult Failed(string error, string? description = null)
         => new() { Success = false, Error = error, ErrorDescription = description };
 }
@@ -219,6 +259,12 @@ public class OidcCallbackResult
     public bool IsAccessDenied { get; set; }
 
     /// <summary>
+    /// True when the sign-in completion refused the subject and already wrote the refusal's
+    /// <c>FailedAuth</c> row, so the caller writes none.
+    /// </summary>
+    public bool RefusalAudited { get; set; }
+
+    /// <summary>
     /// Subject resolved from the OIDC identity, when known. Set for successful and
     /// access-denied results so the caller can write an accurate audit entry.
     /// </summary>
@@ -237,11 +283,18 @@ public class OidcCallbackResult
     /// </summary>
     public string? StepUpToken { get; set; }
 
+    /// <summary>
+    /// True when the subject has an authenticator enrolled and the session was issued without a
+    /// code because the callback came from a device the subject trusted.
+    /// </summary>
+    public bool UsedTrustedDevice { get; set; }
+
     public static OidcCallbackResult Succeeded(
         OidcTokenResponse tokens,
         OidcUserInfo userInfo,
         string? returnUrl = null,
-        Guid? providerId = null
+        Guid? providerId = null,
+        bool usedTrustedDevice = false
     ) =>
         new()
         {
@@ -251,6 +304,7 @@ public class OidcCallbackResult
             ReturnUrl = returnUrl,
             SubjectId = tokens.SubjectId,
             ProviderId = providerId,
+            UsedTrustedDevice = usedTrustedDevice,
         };
 
     public static OidcCallbackResult Failed(string error, string? description = null) =>
@@ -274,15 +328,25 @@ public class OidcCallbackResult
         };
 
     /// <summary>
-    /// Create an access-denied result for an authenticated identity that is not a member
-    /// of the tenant being logged into. No session is issued.
+    /// SHA-256 hex digest of the issuer and sub claim of an identity refused as not a member
+    /// that has no subject to name. Null when <see cref="SubjectId"/> names the person.
     /// </summary>
-    public static OidcCallbackResult NotAMember(Guid subjectId, string? returnUrl = null) =>
+    public string? ExternalIdentityDigest { get; set; }
+
+    /// <summary>
+    /// Create an access-denied result for an authenticated identity that is not a member
+    /// of the tenant being logged into. No session is issued, and an identity the instance has
+    /// not seen has no subject, so <paramref name="subjectId"/> is null for it.
+    /// </summary>
+    public static OidcCallbackResult NotAMember(
+        Guid? subjectId, Guid providerId, string? externalIdentityDigest, string? returnUrl = null) =>
         new()
         {
             Success = false,
             IsAccessDenied = true,
             SubjectId = subjectId,
+            ProviderId = providerId,
+            ExternalIdentityDigest = externalIdentityDigest,
             Error = "not_a_member",
             ErrorDescription = "You are not a member of this account.",
             ReturnUrl = returnUrl,

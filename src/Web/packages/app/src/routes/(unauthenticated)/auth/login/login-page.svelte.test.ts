@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   url: new URL("http://sam.localhost/auth/login"),
   isAuthenticated: false,
   unreadable: false,
+  emailRecoveryOffered: false,
   goto: vi.fn(async (_url: string, _options?: unknown) => {}),
 }));
 
@@ -32,7 +33,8 @@ vi.mock("../auth.remote", () => ({
     ),
 }));
 vi.mock("#lib/api/generated/index.js", () => ({
-  getAuthStatus: () => remoteQuery(() => ({ allowAccessRequests: true })),
+  getAuthStatus: () =>
+    remoteQuery(() => ({ allowAccessRequests: true, emailRecoveryOffered: state.emailRecoveryOffered })),
 }));
 vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   accessRequestOptions: vi.fn(),
@@ -57,11 +59,31 @@ const DRAFT_KEY = "nocturne.member.custom-report-draft.dev.s.new";
 beforeEach(() => {
   state.isAuthenticated = false;
   state.unreadable = false;
+  state.emailRecoveryOffered = false;
   localStorage.clear();
   state.goto.mockClear();
 });
 
 describe("Login page", () => {
+  it("offers Cannot sign in? in the footer, outside the sign-in methods, when email recovery is offered", async () => {
+    state.emailRecoveryOffered = true;
+    loginWith("/calendar");
+
+    const link = page.getByTestId("cant-sign-in-link");
+    await expect.element(link).toHaveAttribute("href", "/auth/recovery/email");
+    const terms = page.getByRole("link", { name: "terms of service" }).element();
+    expect(terms.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(terms.parentElement?.parentElement?.parentElement).toBe(link.element().parentElement?.parentElement?.parentElement);
+    await expect.element(page.getByText("Having trouble signing in?")).not.toBeInTheDocument();
+  });
+
+  it("keeps the help footer exactly as it was when email recovery is not offered", async () => {
+    loginWith("/calendar");
+
+    await expect.element(page.getByRole("link", { name: "Get help" })).toHaveAttribute("href", "/auth/help");
+    await expect.element(page.getByTestId("cant-sign-in-link")).not.toBeInTheDocument();
+  });
+
   it("opens the membership request dialog in place, without leaving for sign-in", async () => {
     loginWith("/calendar");
 

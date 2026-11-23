@@ -88,6 +88,11 @@ block, so ordinary resyncs still work.
 Carb entries live under `/api/v4/nutrition/carbs`, with the usual list, fetch,
 create, update and delete, plus a bulk create for importers and a delete keyed
 on a source's own sync identifier for apps that never learned Nocturne's IDs.
+The API keeps a list of deleted entries. You can restore one entry or many.
+The deleted list and the restore calls need the `treatments.readwrite` scope.
+A read-only credential or a share link cannot use them.
+A restore fails with a conflict (409) when a live entry has the same data source
+and sync identifier. The entry stays deleted.
 
 They are gated by the `treatments.read` and `treatments.readwrite` scopes, the
 same as boluses — a share link or connected app that can see treatments can see

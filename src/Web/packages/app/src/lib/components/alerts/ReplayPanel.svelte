@@ -26,7 +26,7 @@
     AlertReplayResult,
     AlertRuleResponse,
     ReplayRuleDefinition,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { formatRange } from "./alertTime.svelte";
   import { formatMediumDate } from "#lib/utils/formatting.js";
   import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";

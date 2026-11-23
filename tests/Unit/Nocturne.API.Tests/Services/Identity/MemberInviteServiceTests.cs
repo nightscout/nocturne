@@ -1,3 +1,6 @@
+using Nocturne.API.Extensions;
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Services.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -54,13 +57,14 @@ public class MemberInviteServiceTests : IDisposable
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
-            new TenantMembershipRepository(_dbContext.AsFactory()), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory()),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _jwtService.Object,
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory()), _time),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
-            logger.Object);
+            logger.Object, AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
         // Seed tenant and subjects
         SeedData();
@@ -87,6 +91,14 @@ public class MemberInviteServiceTests : IDisposable
             Name = "Acceptor User",
         });
 
+        // An invite lives only while its maker is a member in force.
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = _creatorSubjectId,
+        });
+
         // Seed a follower role for the tenant
         _followerRoleId = Guid.CreateVersion7();
         _dbContext.TenantRoles.Add(new TenantRoleEntity
@@ -111,13 +123,76 @@ public class MemberInviteServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptInviteAsync_givesTheMembershipTheInvitesEndAndListsItOnTheInvite()
+    {
+        var end = _time.GetUtcNow().UtcDateTime.AddDays(30);
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], accessEndsAt: end);
+
+        (await _service.GetInvitesForTenantAsync(_tenantId)).Should().ContainSingle().Which.AccessEndsAt.Should().Be(end);
+        (await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId)).Success.Should().BeTrue();
+
+        (await _dbContext.TenantMembers.AsNoTracking().SingleAsync(m => m.SubjectId == _acceptorSubjectId))
+            .AccessEndsAt.Should().Be(end);
+    }
+
+    [Fact]
+    public async Task AcceptInviteAsync_byASubjectWhoseMembershipHasEnded_replacesItWithOneNewMembership()
+    {
+        var endedId = Guid.CreateVersion7();
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = endedId,
+            TenantId = _tenantId,
+            SubjectId = _acceptorSubjectId,
+            AccessEndsAt = _time.GetUtcNow().UtcDateTime.AddDays(-1),
+        });
+        await _dbContext.SaveChangesAsync();
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null);
+
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        result.Success.Should().BeTrue();
+        var rows = await _dbContext.TenantMembers.AsNoTracking().Where(m => m.SubjectId == _acceptorSubjectId).ToListAsync();
+        rows.Should().ContainSingle().Which.Should().Match<TenantMemberEntity>(m => m.Id != endedId && m.AccessEndsAt == null);
+    }
+
+    [Fact]
+    public async Task AcceptInviteAsync_whenTheAccessItGivesHasAlreadyEnded_isRefused()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], accessEndsAt: _time.GetUtcNow().UtcDateTime.AddHours(1));
+        _time.Advance(TimeSpan.FromHours(1));
+
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        result.ErrorCode.Should().Be("access_ended");
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CreateInviteAsync_refusesAnOwnerInviteWithAnEnd()
+    {
+        var ownerRole = Guid.CreateVersion7();
+        _dbContext.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = ownerRole, TenantId = _tenantId, Name = "Owner", Slug = RoleSeeds.Owner, Permissions = [Scope.FullAccess], IsSystem = true,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var act = () => _service.CreateInviteAsync(
+            _tenantId, _creatorSubjectId, OwnerPermissions, [ownerRole], accessEndsAt: _time.GetUtcNow().UtcDateTime.AddDays(1));
+
+        (await act.Should().ThrowAsync<ArgumentException>()).Which.Message.Should().Be(AccessEndRequest.OwnerDetail);
+    }
+
+    [Fact]
     public async Task CreateInviteAsync_ReturnsTokenAndUrl()
     {
         var result = await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         result.Token.Should().Be(FakeToken);
         result.InviteUrl.Should().Be($"https://{BaseDomain}/join?token={FakeToken}");
@@ -140,7 +215,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            []);
+            [], null);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*At least one role or direct permission*");
@@ -154,6 +229,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [],
+            null,
             directPermissions: [Scope.GlucoseRead]);
 
         result.Token.Should().Be(FakeToken);
@@ -171,6 +247,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             [Scope.MembersInvite, Scope.MembersManage],
             [],
+            null,
             directPermissions: [Scope.FullAccess]);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -187,6 +264,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             [Scope.MembersInvite, Scope.GlucoseRead],
             [],
+            null,
             directPermissions: [Scope.TreatmentsReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -201,6 +279,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [],
+            null,
             directPermissions: ["glucose.destroy"]);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -216,7 +295,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             [Scope.MembersInvite],
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*Cannot grant*");
@@ -236,6 +315,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             maxUses: 1);
 
         // The tracked entity keeps use_count = 0, so the in-memory checks pass and only the
@@ -263,6 +343,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             directPermissions: [Scope.DevicesRead],
             limitTo24Hours: true);
         var inviteId = (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).Id;
@@ -276,6 +357,7 @@ public class MemberInviteServiceTests : IDisposable
             && a.TenantId == _tenantId);
         rows.Select(a => (a.EventType, a.DetailsJson)).Should().BeEquivalentTo(new[]
         {
+            (AuthAuditEventType.MemberJoined, $$"""{"kind":"tenant","how":"invite","invite":"{{inviteId}}","by":"{{_creatorSubjectId}}"}"""),
             (AuthAuditEventType.RoleAssigned, $$"""{"role":"follower","kind":"tenant","invite":"{{inviteId}}"}"""),
             (AuthAuditEventType.RoleAssigned, $$"""{"permission":"devices.read","kind":"tenant","invite":"{{inviteId}}"}"""),
             (AuthAuditEventType.HistoryLimitChanged, $$"""{"history_limit":"24_hours","kind":"tenant","invite":"{{inviteId}}"}"""),
@@ -293,6 +375,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             maxUses: 1);
 
         var first = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
@@ -325,6 +408,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             expiresInDays: expiresInDays);
 
         await act.Should().ThrowAsync<ArgumentException>();
@@ -337,7 +421,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
         invite.ExpiresAt = _time.GetUtcNow().UtcDateTime.AddDays(-1);
@@ -360,6 +444,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             expiresInDays: 7);
         _time.SetUtcNow(new DateTimeOffset(created.ExpiresAt, TimeSpan.Zero).AddSeconds(secondsFromExpiry));
 
@@ -374,7 +459,7 @@ public class MemberInviteServiceTests : IDisposable
     public async Task GetInviteByTokenAsync_ReportsExpiryFromTheClock()
     {
         var created = await _service.CreateInviteAsync(
-            _tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], expiresInDays: 7);
+            _tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null, expiresInDays: 7);
 
         (await _service.GetInviteByTokenAsync(FakeToken, _tenantId))!.IsValid.Should().BeTrue();
 
@@ -392,7 +477,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
         invite.RevokedAt = _time.GetUtcNow().UtcDateTime;
@@ -412,6 +497,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             maxUses: 1);
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
@@ -431,7 +517,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
@@ -461,7 +547,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         var result = await _service.AcceptInviteAsync(
             FakeToken, _acceptorSubjectId, tenantId: Guid.CreateVersion7());
@@ -484,7 +570,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         (await _service.GetInviteByTokenAsync(FakeToken, Guid.CreateVersion7())).Should().BeNull();
         (await _service.GetInviteByTokenAsync(FakeToken, _tenantId)).Should().NotBeNull();
@@ -498,6 +584,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             directPermissions: [Scope.SleepRead]);
 
         var info = await _service.GetInviteByTokenAsync(FakeToken, _tenantId);
@@ -519,6 +606,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             directPermissions: [Scope.SleepRead]);
 
         _dbContext.TenantRoles.Remove(await _dbContext.TenantRoles.SingleAsync(r => r.Id == _followerRoleId));
@@ -537,7 +625,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         var invites = await _service.GetInvitesForTenantAsync(_tenantId);
 
@@ -554,7 +642,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
 
         var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
@@ -584,6 +672,7 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [_followerRoleId],
+            null,
             maxUses: 1);
         var unknownSubject = Guid.CreateVersion7();
 
@@ -641,7 +730,7 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             OwnerPermissions,
-            [_followerRoleId]);
+            [_followerRoleId], null);
 
         var result = await _service.RevokeInviteAsync(createResult.Id, _tenantId);
 

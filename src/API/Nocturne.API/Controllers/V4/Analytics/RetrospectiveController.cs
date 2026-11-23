@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -149,7 +150,7 @@ public class RetrospectiveController : ControllerBase
         var response = new RetrospectiveDataResponse
         {
             Time = time,
-            TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss"),
+            TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             Glucose = glucoseData,
             Iob = new IobData
             {
@@ -238,7 +239,7 @@ public class RetrospectiveController : ControllerBase
                 Time = pointTime,
                 Hour = timestamp.Hour,
                 Minute = timestamp.Minute,
-                TimeLabel = timestamp.ToString("HH:mm"),
+                TimeLabel = timestamp.ToString("HH:mm", CultureInfo.InvariantCulture),
                 Glucose = glucose?.Value,
                 GlucoseDirection = glucose?.Direction,
                 Iob = ScaledRounding.Round(tick.Iob, 3),
@@ -311,7 +312,7 @@ public class RetrospectiveController : ControllerBase
                 Time = pointTime,
                 Hour = timestamp.Hour,
                 Minute = timestamp.Minute,
-                TimeLabel = timestamp.ToString("HH:mm"),
+                TimeLabel = timestamp.ToString("HH:mm", CultureInfo.InvariantCulture),
                 Rate = basal.Rate,
                 IsTemp = basal.IsTemp
             });

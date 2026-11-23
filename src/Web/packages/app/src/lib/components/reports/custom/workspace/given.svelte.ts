@@ -8,7 +8,8 @@ import type {
   CustomReportCatalogue,
   CustomReportDataset,
   CustomReportDatasetMark,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
+import { formatList } from "#lib/utils/formatting.js";
 import { bindingsOf, type Cell } from "./catalogue-vocabulary.js";
 import type { Reason } from "./workspace.svelte.js";
 
@@ -255,7 +256,7 @@ function layerName(catalogue: CustomReportCatalogue, layer: Json): string {
   const fields = [...strings(bindings.y), ...(strings(bindings.y).length === 0 ? strings(bindings.edges) : [])];
   const labels = fields.map((f) => fieldLabel(catalogue, layer.dataset, f));
   if (labels.length === 0) return ds?.label ?? String(asObject(layer.dataset)?.name ?? "");
-  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+  return labels.length === 1 ? labels[0] : formatList(labels);
 }
 
 function rangeHoursOf(range: unknown): number | null {
@@ -555,7 +556,7 @@ export function givenCaption(catalogue: CustomReportCatalogue, panel: Json): str
   switch (givenKind(panel)) {
     case "chart": {
       const names = allLayers(panel).map((l) => layerName(catalogue, l));
-      return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+      return names.length <= 1 ? (names[0] ?? "") : formatList(names);
     }
     case "comparison":
       return "Two periods side by side";

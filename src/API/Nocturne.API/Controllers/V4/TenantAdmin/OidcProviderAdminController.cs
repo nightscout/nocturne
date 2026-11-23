@@ -260,9 +260,9 @@ public class OidcProviderAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Refuses with 409 when deleting or disabling the provider would leave any account with no
-    /// sign-in method (<c>OrphanedSubjectFilter</c>): one whose only passkey-free way in is
-    /// this provider. Returns <see langword="null"/> when the operation strands nobody.
+    /// Refuses with 409 when deleting or disabling the provider would leave any account unable to
+    /// sign in (<see cref="ISubjectRepository.CountStrandedByProviderAsync"/>). Returns
+    /// <see langword="null"/> when the operation strands nobody.
     /// </summary>
     /// <remarks>
     /// The caller can pass <c>force</c> to go ahead anyway, e.g. to switch off a compromised

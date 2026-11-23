@@ -87,6 +87,23 @@ public class GlookoConnectorServiceBackgroundWindowTests
             .Should().BeFalse("the walk that just completed is what the next run stands on");
     }
 
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunReachesBackOnlyTheShortWindow()
+    {
+        var store = new FakeCursorStore();
+        var first = new GlookoEndpointHandler();
+        var second = new GlookoEndpointHandler();
+
+        (await Scheduled(Service(first, cursorStore: store), ScheduledConfig())).Success.Should().BeTrue();
+        (await Scheduled(Service(second, cursorStore: store), ScheduledConfig())).Success.Should().BeTrue();
+
+        first.WindowCount.Should().Be(FullWalkChunks());
+        second.WindowCount.Should().Be(1);
+        Parse(second.Windows[0].Start).Should().Be(
+            Instant.UtcDateTime - GlookoConstants.ShortWindow - TimeSpan.FromDays(1),
+            "the first run's walk and lookback cover everything older");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

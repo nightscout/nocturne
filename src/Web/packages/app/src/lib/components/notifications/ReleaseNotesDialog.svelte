@@ -8,7 +8,7 @@
   import {
     AutoUpdateMode,
     type InAppNotificationDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { formatLongDate } from "#lib/utils/formatting.js";
   import InstallTiming from "./InstallTiming.svelte";
 

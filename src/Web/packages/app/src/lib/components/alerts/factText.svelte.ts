@@ -64,6 +64,12 @@ export function factLabel(kind: LeafKind): string {
       return "Day of week";
     case "alert_state":
       return "Other rule state";
+    case "sensor_state":
+      return "Sensor state";
+    case "eventual_glucose":
+      return "Eventual glucose";
+    case "carbs_required":
+      return "Carbs needed";
     default: {
       const unhandled: never = kind;
       return unhandled;
@@ -135,6 +141,12 @@ export function factDescription(kind: LeafKind): string {
       return "The day is one of the weekdays you select";
     case "alert_state":
       return "A different alert is active, or acknowledged";
+    case "sensor_state":
+      return "The CGM sensor reports a state, for example warm-up or an error";
+    case "eventual_glucose":
+      return "The glucose that the loop expects at the end of its forecast is above or below a level";
+    case "carbs_required":
+      return "The grams of carbs that the loop says are necessary to prevent a low";
     default: {
       const unhandled: never = kind;
       return unhandled;

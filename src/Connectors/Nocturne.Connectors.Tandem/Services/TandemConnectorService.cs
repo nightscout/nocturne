@@ -44,9 +44,17 @@ public class TandemConnectorService
     public override string ServiceName => "Tandem Source";
 
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    /// <summary>
+    ///     The run starts at the earlier of the glucose and treatment points, which only an
+    ///     open-ended request reads.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TandemConnectorConfiguration config) =>
+        request.To is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments] : [];
+
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         TandemConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -55,15 +63,8 @@ public class TandemConnectorService
 
         try
         {
-            var token = await ValidTokenAsync(config, cancellationToken);
-            if (token is null)
-            {
-                _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
-                return AuthenticationFailedResult();
-            }
-
-            var session = await TokenProvider.GetCachedSessionAsync();
-            var pumperId = session?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
+            var cached = await TokenProvider.GetCachedSessionAsync();
+            var pumperId = cached?.Metadata?.GetValueOrDefault(TandemAuthTokenProvider.PumperIdKey);
             if (string.IsNullOrEmpty(pumperId))
             {
                 _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
@@ -72,7 +73,7 @@ public class TandemConnectorService
                 return result;
             }
 
-            var pumper = await _apiClient.GetPumperAsync(region, token, pumperId, cancellationToken);
+            var pumper = await _apiClient.GetPumperAsync(region, session.Token, pumperId, cancellationToken);
             var pumps = pumper?.Pumps ?? [];
             var device = ChooseDevice(pumps, config.PumpSerialNumber);
             if (device == null)
@@ -102,7 +103,7 @@ public class TandemConnectorService
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
             var unclosed = await SyncEventsAsync(
-                request, region, pumperId, device, activeTypes, time, result, config, cancellationToken);
+                request, region, pumperId, device, activeTypes, time, result, config, session, cancellationToken);
 
             // Assigned here, after everything that can fail: on a run that did, Message is the
             // failure summary the tenant's card reads and must not be a coverage notice instead.
@@ -193,14 +194,14 @@ public class TandemConnectorService
     private async Task<string?> SyncEventsAsync(
         SyncRequest request, TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
-        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+        TandemConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
         // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
         var now = Clock.GetUtcNow().UtcDateTime;
         var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? now;
         var end = request.To is { } until && until < ceiling ? until : ceiling;
 
-        var start = await ResolveStartAsync(request, config, device, time);
+        var start = ResolveStart(request, device, time);
         if (start >= end)
         {
             _logger.LogInformation(
@@ -248,7 +249,7 @@ public class TandemConnectorService
 
             var response = await FetchWindowAsync(
                 region, pumperId, device.AssignmentId, windowStart, windowEnd, eventIdsFilter,
-                config, cancellationToken);
+                config, session, cancellationToken);
             foreach (var logEvent in response?.Events ?? [])
                 if (seen.Add((logEvent.SequenceGroup, logEvent.SequenceNumber)))
                     allEvents.Add(TandemEventDecoder.Decode(logEvent, _logger));
@@ -267,7 +268,7 @@ public class TandemConnectorService
         var fetchedThrough = fetchTo < ceiling ? null : (DateTime?)ceiling;
 
         return await PublishEventsAsync(
-            groups, activeTypes, fetchedThrough, window, now, cgm, bolus, basal, deviceEvents,
+            groups, activeTypes, fetchedThrough, window, cgm, bolus, basal, deviceEvents,
             systemEvents, userMode, deviceStatus, result, config, cancellationToken);
     }
 
@@ -297,7 +298,7 @@ public class TandemConnectorService
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window, DateTime now,
+        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
@@ -311,11 +312,11 @@ public class TandemConnectorService
 
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
             await PublishRecordTypeAsync(result, activeTypes,
-                cgm.Map(cgmEvents, now), config, cancellationToken);
+                cgm.Map(cgmEvents), config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
-            var decomposed = bolus.Map(bolusEvents, now);
+            var decomposed = bolus.Map(bolusEvents);
             await PublishRecordTypeAsync(result, activeTypes,
                 Inside(decomposed.Boluses, record => record.Timestamp),
                 config, cancellationToken);
@@ -330,7 +331,7 @@ public class TandemConnectorService
         string? unclosed = null;
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
         {
-            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal, now);
+            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal);
 
             // The padded day held no further delivery event, so this span ran longer than the day
             // the fetch reached past the window and is the tenant's to chase, not silently absent.
@@ -346,7 +347,7 @@ public class TandemConnectorService
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
         await PublishRecordTypeAsync(result, activeTypes,
-            deviceEvents.Map(devEvents, now), config, cancellationToken);
+            deviceEvents.Map(devEvents), config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
         await PublishRecordTypeAsync(result, activeTypes,
@@ -367,16 +368,12 @@ public class TandemConnectorService
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(
         TandemConstants.RegionUrls region, string pumperId, string deviceAssignmentId,
         DateTime windowStart, DateTime windowEnd, int[]? eventIdsFilter,
-        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+        TandemConnectorConfiguration config, TokenSession session, CancellationToken cancellationToken)
     {
-        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
-            return null;
-
         return await ExecuteWithRetryAsync(
             () => _apiClient.GetPumpLogsAsync(
-                region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
-            ReauthenticateWith(config, t => token = t, cancellationToken),
+                region, session.Token, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
+            session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchPumpEvents",
             cancellationToken: cancellationToken);
@@ -386,30 +383,29 @@ public class TandemConnectorService
     /// Resolves the start of the sync window from the caller's bound and the pump's own resume
     /// point — the earliest catch-up point across glucose and treatments, so no active data type is
     /// missed — never earlier than the pump's first event, which is where <see cref="ClampNotice"/>
-    /// reports a bound below.
+    /// reports a caller's bound below.
     /// </summary>
-    private async Task<DateTime> ResolveStartAsync(
-        SyncRequest request, TandemConnectorConfiguration config, TandemBffPump device,
-        TandemTimeResolver time)
+    private DateTime ResolveStart(SyncRequest request, TandemBffPump device, TandemTimeResolver time)
     {
-        var glucoseSince = await CalculateSinceTimestampAsync(config);
-        var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config);
-
-        var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
-        var resume = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+        DateTime ResumePoint()
+        {
+            var candidates = new[] { request.Resume.Point(ResumeFamily.Glucose), request.Resume.Point(ResumeFamily.Treatments) }
+                .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+            return candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+        }
 
         // The pump's own range is how far back this source goes, and the floor a range naming no
         // lower bound resolves to — named, rather than left to the clamp below to arrive at.
         var first = FirstEvent(device, time);
-        var start = ResumeFrom(request, resume, first ?? DefaultInitialSyncFloor());
+        var start = ResumeFrom(request, ResumePoint, first ?? DefaultInitialSyncFloor());
 
         return Later(start, first);
     }
 
     /// <summary>
-    /// What the run says when it covered less than it was asked for: the pump serves nothing before
-    /// its available range begins, and a success over a range that was silently narrowed reads the
-    /// same as one that covered it.
+    /// What the run says when it covered less than its caller asked for: the pump serves nothing
+    /// before its available range begins, and a success over a range that was silently narrowed reads
+    /// the same as one that covered it. A scheduled run names no bound, so it is never told.
     /// </summary>
     private static string? ClampNotice(
         SyncRequest request, TandemBffPump device, TandemTimeResolver time) =>

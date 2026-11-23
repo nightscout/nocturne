@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -44,6 +46,7 @@ public class GuestLinkController : ControllerBase
     [RequireInteractiveSession]
     [Authorize]
     [DenyDemoSubject]
+    [RequireScope(Scope.SharingGuest)]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -56,8 +59,8 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HttpContext.HasScope(Scope.SharingGuest))
-            return Forbid();
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
 
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
         var baseUrl = $"{Request.PublicScheme()}://{Request.Host}";
@@ -70,6 +73,7 @@ public class GuestLinkController : ControllerBase
                 request.Label,
                 baseUrl,
                 HttpContext.GetGrantedScopes(),
+                HttpContext.CallerAccessEndsAt(),
                 request.Scopes,
                 limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
                 ct: ct);
@@ -99,14 +103,12 @@ public class GuestLinkController : ControllerBase
     [HttpGet("scope-options")]
     [Authorize]
     [DenyDemoSubject]
+    [RequireScope(Scope.SharingGuest)]
     [RemoteQuery]
     [ProducesResponseType(typeof(GuestLinkScopeOptions), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<GuestLinkScopeOptions> GetGuestLinkScopeOptions()
     {
-        if (!HttpContext.HasScope(Scope.SharingGuest))
-            return Forbid();
-
         return Ok(GuestLinkService.ScopeOptions(HttpContext.GetGrantedScopes()));
     }
 
@@ -186,13 +188,14 @@ public class GuestLinkController : ControllerBase
     [HttpPost("activate")]
     [AllowAnonymous]
     [EnableRateLimiting("guest-activate")]
+    [LimitGuestActivationsPerTenant]
     [ProducesResponseType(typeof(ActivateGuestLinkResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateGuestLink(
         [FromBody] ActivateGuestLinkRequest request,
         CancellationToken ct)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientAddress();
         var userAgent = Request.Headers.UserAgent.FirstOrDefault();
 
         var result = await _guestLinkService.ActivateAsync(request.Code, ip, userAgent, ct);

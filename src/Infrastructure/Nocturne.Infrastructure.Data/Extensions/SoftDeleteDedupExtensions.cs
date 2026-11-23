@@ -268,9 +268,9 @@ public static class SoftDeleteDedupExtensions
     }
 
     /// <summary>
-    /// Sibling of <see cref="GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, HashSet{string}, CancellationToken)"/> for entities keyed
-    /// by <c>CorrelationId</c> (Guid) instead of <c>LegacyId</c> (string). Currently
-    /// used by <c>DeviceStatusExtrasEntity</c> only.
+    /// Sibling of <see cref="GetBlockingLegacyIdsAsync{TEntity}(NocturneDbContext, HashSet{string}, CancellationToken)"/> for
+    /// <c>DeviceStatusExtrasEntity</c>, keyed by its <c>CorrelationId</c> (Guid) instead of a
+    /// <c>LegacyId</c> (string).
     /// </summary>
     public static async Task<RecreationBlocks<Guid>> GetBlockingCorrelationIdsAsync(
         this NocturneDbContext ctx,
@@ -284,6 +284,28 @@ public static class SoftDeleteDedupExtensions
             .Where(e => correlationIds.Contains(e.CorrelationId))
             .WhereBlocksRecreation()
             .Select(e => new { Key = e.CorrelationId, Live = e.DeletedAt == null })
+            .ToListAsync(ct);
+
+        return RecreationBlocks<Guid>.From(blocking.Select(b => (b.Key, b.Live)));
+    }
+
+    /// <summary>
+    /// <see cref="GetBlockingCorrelationIdsAsync(NocturneDbContext, HashSet{Guid}, CancellationToken)"/>
+    /// for a V4 record table whose rows are keyed by the status they came from rather than a legacy id.
+    /// </summary>
+    public static async Task<RecreationBlocks<Guid>> GetBlockingCorrelationIdsAsync<TEntity>(
+        this NocturneDbContext ctx,
+        HashSet<Guid> correlationIds,
+        CancellationToken ct = default)
+        where TEntity : class, IV4Entity, ISoftDeletable
+    {
+        if (correlationIds.Count == 0)
+            return RecreationBlocks<Guid>.None;
+
+        var blocking = await ctx.Set<TEntity>().IncludingDeleted().AsNoTracking()
+            .Where(e => e.CorrelationId != null && correlationIds.Contains(e.CorrelationId.Value))
+            .WhereBlocksRecreation()
+            .Select(e => new { Key = e.CorrelationId!.Value, Live = e.DeletedAt == null })
             .ToListAsync(ct);
 
         return RecreationBlocks<Guid>.From(blocking.Select(b => (b.Key, b.Live)));

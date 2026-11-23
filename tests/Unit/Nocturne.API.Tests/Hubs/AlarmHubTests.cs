@@ -11,6 +11,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -51,7 +52,7 @@ public class AlarmHubTests
 
     private static string AlarmRoom => TenantAwareHub.FormatTenantGroup(Tenant.ToString(), "alarm-subscribers");
 
-    private AlarmHub Hub(HubAuthorization? granted = null)
+    private AlarmHub Hub(HubAuthorization? granted = null, bool connectionAborted = false)
     {
         _tokenAuthorizer
             .Setup(a => a.AuthorizeInstanceKey(InstanceKeyHash, Tenant))
@@ -66,7 +67,7 @@ public class AlarmHubTests
         context.SetupGet(c => c.ConnectionId).Returns("bridge");
         context.SetupGet(c => c.Features).Returns(features);
         context.SetupGet(c => c.Items).Returns(new Dictionary<object, object?>());
-        context.SetupGet(c => c.ConnectionAborted).Returns(CancellationToken.None);
+        context.SetupGet(c => c.ConnectionAborted).Returns(new CancellationToken(connectionAborted));
         if (granted is not null) HubAuthorizationState.Grant(context.Object, granted);
 
         var groups = new Mock<IGroupManager>();
@@ -122,14 +123,8 @@ public class AlarmHubTests
         _sentToCaller.Should().BeEmpty();
     }
 
-    public static TheoryData<Exception> ReplayFailures => new()
-    {
-        new InvalidOperationException("database down"),
-        new OperationCanceledException(),
-    };
-
     [Theory]
-    [MemberData(nameof(ReplayFailures))]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
     public async Task A_replay_that_fails_still_reports_the_subscribe_as_successful(Exception failure)
     {
         _relay.Setup(r => r.HighestAlarmingAsync(It.IsAny<CancellationToken>())).ThrowsAsync(failure);
@@ -138,6 +133,94 @@ public class AlarmHubTests
 
         Succeeded(result).Should().BeTrue();
         _calls.Should().Equal($"join {AlarmRoom}");
+    }
+
+    [Fact]
+    public async Task A_replay_cancelled_by_the_closing_connection_still_reports_the_subscribe_as_successful()
+    {
+        _relay
+            .Setup(r => r.HighestAlarmingAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var result = await Hub(connectionAborted: true).Subscribe(new AlarmSubscribeRequest { Secret = InstanceKeyHash });
+
+        Succeeded(result).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_replay_cancelled_while_the_connection_lives_is_not_swallowed()
+    {
+        _relay
+            .Setup(r => r.HighestAlarmingAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var attempt = () => Hub().Subscribe(new AlarmSubscribeRequest { Secret = InstanceKeyHash });
+
+        await attempt.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task A_replay_failing_in_a_way_the_hub_has_no_answer_for_is_not_swallowed()
+    {
+        _relay
+            .Setup(r => r.HighestAlarmingAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => Hub().Subscribe(new AlarmSubscribeRequest { Secret = InstanceKeyHash });
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task A_subscribe_whose_credential_check_fails_is_answered_as_failed(Exception failure)
+    {
+        _tokenAuthorizer
+            .Setup(a => a.AuthorizeTokenAsync("jwt", Tenant, Scope.GlucoseRead))
+            .ThrowsAsync(failure);
+
+        var result = await Hub().Subscribe(new AlarmSubscribeRequest { JwtToken = "jwt" });
+
+        Succeeded(result).Should().BeFalse();
+        _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_subscribe_failing_in_a_way_the_hub_has_no_answer_for_is_not_swallowed()
+    {
+        _tokenAuthorizer
+            .Setup(a => a.AuthorizeTokenAsync("jwt", Tenant, Scope.GlucoseRead))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => Hub().Subscribe(new AlarmSubscribeRequest { JwtToken = "jwt" });
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task An_ack_that_fails_is_answered_with_a_failed_confirmation(Exception failure)
+    {
+        _ackHandler
+            .Setup(h => h.AckAsync(2, "default", 1_000, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        await Hub(Authorization(HubCredentialKind.Infrastructure)).Ack(2, "default", 1_000);
+
+        _sentToCaller.Should().ContainSingle(s => s.Method == "ackConfirm");
+    }
+
+    [Fact]
+    public async Task An_ack_failing_in_a_way_the_hub_has_no_answer_for_is_not_swallowed()
+    {
+        _ackHandler
+            .Setup(h => h.AckAsync(2, "default", 1_000, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => Hub(Authorization(HubCredentialKind.Infrastructure)).Ack(2, "default", 1_000);
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
+        _sentToCaller.Should().BeEmpty();
     }
 
     [Fact]

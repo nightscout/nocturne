@@ -35,8 +35,8 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
     private TenantService Provisioner() => new(
         new SharedSqliteFactory(_db.Options).AsNocturneFactory(),
         new TenantRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
-        new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
-        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
+        new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -44,7 +44,7 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         new GrantRevocationService(
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
-        NullLogger<TenantService>.Instance);
+        NullLogger<TenantService>.Instance, AccountLinkRoutes.Off);
 
     private async Task<Guid> SeedSubjectAsync(string email)
     {
@@ -53,10 +53,10 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             Name = email,
-            Email = email,
             IsActive = true,
             ApprovalStatus = "Approved",
         };
+        subject.SetEmail(email);
         db.Subjects.Add(subject);
         await db.SaveChangesAsync();
         return subject.Id;
@@ -139,5 +139,18 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
                 "Google", "google-sub", "https://accounts.google.com/", "owner@gmail.com", SubjectId: null));
 
         result.SubjectId.Should().Be(linked);
+    }
+
+    [Fact]
+    public async Task The_address_given_for_a_new_owner_is_stored_unconfirmed()
+    {
+        var result = await Provisioner().ProvisionWithOwnerAsync(
+            "alpha", "Alpha", "alpha-owner", "owner@example.test",
+            Passkey(Guid.CreateVersion7()), oidcIdentity: null);
+
+        await using var db = _db.CreateContext();
+        var owner = await db.Subjects.AsNoTracking().SingleAsync(s => s.Id == result.SubjectId);
+        owner.Email.Should().Be("owner@example.test");
+        owner.EmailConfirmedAt.Should().BeNull();
     }
 }

@@ -108,7 +108,7 @@ public class CountController : ControllerBase
             "Count entries endpoint requested with find: {Find}, type: {Type} from {RemoteIpAddress}",
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _entryService.CountEntriesAsync(find, type, cancellationToken);
@@ -137,7 +137,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count treatments endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _treatmentService.CountTreatmentsAsync(
@@ -167,7 +167,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count device status endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _deviceStatuses.CountDeviceStatusesAsync(
@@ -194,6 +194,7 @@ public class CountController : ControllerBase
     /// <c>IActivityService</c>.
     /// </remarks>
     [HttpGet("activity/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     public async Task<ActionResult<LegacyCountResult[]>> CountActivity(
@@ -207,7 +208,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
@@ -236,6 +237,8 @@ public class CountController : ControllerBase
     /// for another. <c>activity</c> merges four categories and keeps the AND below.
     /// </remarks>
     [HttpGet("{storage}/where")]
+    [ScopeDecidedBy(typeof(ActivityReadScopeGuard))]
+    [ScopeDecidedBy(typeof(LegacyStorageReadScopes), nameof(LegacyStorageReadScopes.RefuseRead))]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [ProducesResponseType(400)]
@@ -273,7 +276,7 @@ public class CountController : ControllerBase
             storage,
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         long count;

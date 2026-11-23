@@ -77,6 +77,7 @@ public class StateSpansController : ControllerBase
     /// </para>
     /// </remarks>
     [HttpGet]
+    [ScopeDecidedBy(typeof(StateSpanReadScopeGuard))]
     [RemoteQuery]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
@@ -95,6 +96,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var granted = HttpContext.GetGrantedScopes();
         if (category is { } requested && !StateSpanReadScopeGuard.CanRead(granted, requested))
@@ -251,6 +254,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.PrepareListPage(sort, ref limit, ref offset, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         var data = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
@@ -282,6 +287,8 @@ public class StateSpansController : ControllerBase
     {
         if (this.RejectInvalidSort(sort, out var descending) is { } invalid)
             return invalid;
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         offset = V4ReadLimits.ClampOffset(offset);
         limit = V4ReadLimits.ClampMergedPage(limit, offset);
@@ -313,6 +320,7 @@ public class StateSpansController : ControllerBase
     /// Get a specific state span by ID
     /// </summary>
     [HttpGet("{id}")]
+    [ScopeDecidedBy(typeof(StateSpanReadScopeGuard))]
     [RemoteQuery]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
@@ -332,6 +340,7 @@ public class StateSpansController : ControllerBase
         nameof(GetStateSpans),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ScopeDecidedBy(typeof(StateSpanWriteScopeGuard))]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -371,6 +380,7 @@ public class StateSpansController : ControllerBase
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ScopeDecidedBy(typeof(StateSpanWriteScopeGuard))]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -423,6 +433,7 @@ public class StateSpansController : ControllerBase
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ScopeDecidedBy(typeof(StateSpanWriteScopeGuard))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
@@ -459,6 +470,7 @@ public class StateSpansController : ControllerBase
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ScopeDecidedBy(typeof(StateSpanWriteScopeGuard))]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -502,6 +514,7 @@ public class StateSpansController : ControllerBase
         nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
+    [ScopeDecidedBy(typeof(StateSpanWriteScopeGuard))]
     [ProducesResponseType(typeof(StateSpanBulkRestoreResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]

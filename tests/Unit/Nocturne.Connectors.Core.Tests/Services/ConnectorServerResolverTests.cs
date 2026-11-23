@@ -84,6 +84,51 @@ public class ConnectorServerResolverTests
         result!.Host.Should().Be("api.example.com");
     }
 
+    [Theory]
+    [InlineData("evil.example.com")]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Resolve_UsesTheDefaultServer_WhenTheRegionIsNotMapped(string region)
+    {
+        var resolver = new ConnectorServerResolver<TestConfig>(DexcomMapping, GetServer, "share2.dexcom.com");
+
+        var result = resolver.Resolve(CreateConfig(region));
+
+        result!.Host.Should().Be("share2.dexcom.com");
+    }
+
+    [Theory]
+    [InlineData("evil.example.com")]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Resolve_UsesTheFirstMappedServer_WhenTheRegionIsNotMappedAndThereIsNoDefault(string region)
+    {
+        var resolver = new ConnectorServerResolver<TestConfig>(DexcomMapping, GetServer, null);
+
+        var result = resolver.Resolve(CreateConfig(region));
+
+        result!.Host.Should().Be("share2.dexcom.com");
+    }
+
+    [Fact]
+    public void Resolve_MatchesTheRegionIgnoringCaseAndPadding()
+    {
+        var resolver = new ConnectorServerResolver<TestConfig>(DexcomMapping, GetServer, null);
+
+        var result = resolver.Resolve(CreateConfig(" eu "));
+
+        result!.Host.Should().Be("shareous1.dexcom.com");
+    }
+
+    [Fact]
+    public void Resolve_ReturnsNull_WhenTheMappingIsEmptyAndThereIsNoDefault()
+    {
+        var resolver = new ConnectorServerResolver<TestConfig>(new Dictionary<string, string>(), GetServer, null);
+
+        resolver.Resolve(CreateConfig("US")).Should().BeNull();
+        resolver.BuildUrl(CreateConfig("US"), "/path").Should().Be("/path");
+    }
+
     [Fact]
     public void BuildUrl_CombinesBaseAndPath()
     {

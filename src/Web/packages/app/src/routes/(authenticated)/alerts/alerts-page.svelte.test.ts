@@ -3,22 +3,24 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse, TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { AlertRuleResponse, TenantAlertSettingsResponse } from "@nocturne/api-client";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
-const rules = [
-  {
-    id: "11111111-1111-1111-1111-111111111111",
-    name: "Nighttime low",
-    isEnabled: true,
-    severity: "warning",
-    conditionType: "glucose_below",
-    conditionParams: {},
-    channels: [],
-  },
-] as unknown as AlertRuleResponse[];
+const lowRule = {
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "Nighttime low",
+  isEnabled: true,
+  severity: "warning",
+  conditionType: "glucose_below",
+  conditionParams: {},
+  channels: [],
+  coversLow: true,
+  isLastLowCover: false,
+} as unknown as AlertRuleResponse;
+
+let rules: AlertRuleResponse[] = [lowRule];
 
 // The backing values are module-level so each read hands back the same object:
 // a resource that answered a fresh array every access would restart any effect
@@ -29,10 +31,11 @@ const alertHistory = { items: [], totalCount: 0 };
 // `toggleRule` is the shortest write path on the page (one click, no dialog), so
 // it stands in for the server's refusal.
 let toggleImpl: () => Promise<unknown>;
+let deleteImpl: () => Promise<unknown>;
 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
-  deleteRule: remoteCommand(() => undefined),
+  deleteRule: remoteCommand(() => deleteImpl()),
   toggleRule: remoteCommand(() => toggleImpl()),
   testFire: remoteCommand(() => undefined),
 }));
@@ -62,6 +65,8 @@ const rowActions = () => page.getByRole("button", { name: "Row actions" });
 describe("alerts page", () => {
   beforeEach(() => {
     toggleImpl = () => Promise.resolve();
+    deleteImpl = () => Promise.resolve();
+    rules = [lowRule];
     dndSettings = null;
     toastError.mockClear();
     pageState.data = {};
@@ -167,5 +172,112 @@ describe("alerts page", () => {
         "That item no longer exists. Refresh the page to see what's there now."
       )
     );
+  });
+
+  describe("low glucose coverage", () => {
+    const noLowAlert = () => page.getByText(/No alert is on for low glucose/);
+    const addLowAlert = () => page.getByRole("button", { name: "Add a low alert" });
+    const lastCoverDialog = () => page.getByText(/No alert for low glucose will remain/);
+
+    it("warns when no rule covers low glucose, with a way to add one", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = [{ ...lowRule, coversLow: false }];
+
+      render(AlertsPage, {});
+
+      await expect.element(ruleName()).toBeVisible();
+      await expect.element(noLowAlert()).toBeVisible();
+      await expect.element(addLowAlert()).toBeVisible();
+    });
+
+    it("shows no warning while a rule covers low glucose", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+
+      render(AlertsPage, {});
+
+      await expect.element(ruleName()).toBeVisible();
+      await expect.element(noLowAlert()).not.toBeInTheDocument();
+    });
+
+    it("leaves the empty state to say a tenant with no rules has no alert", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = [];
+
+      render(AlertsPage, {});
+
+      await expect.element(page.getByText("No alerts yet")).toBeVisible();
+      await expect.element(noLowAlert()).not.toBeInTheDocument();
+    });
+
+    it("offers no add action to a member who cannot change alerts", async () => {
+      pageState.data = { effectivePermissions: ["alerts.read"] };
+      rules = [{ ...lowRule, coversLow: false }];
+
+      render(AlertsPage, {});
+
+      await expect.element(noLowAlert()).toBeVisible();
+      await expect.element(addLowAlert()).not.toBeInTheDocument();
+    });
+
+    it("asks before turning off the last rule that covers low glucose", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = [{ ...lowRule, isLastLowCover: true }];
+      const toggled = vi.fn(() => Promise.resolve());
+      toggleImpl = toggled;
+
+      render(AlertsPage, {});
+
+      await expect.element(enableSwitch()).toBeVisible();
+      await enableSwitch().click();
+
+      await expect.element(lastCoverDialog()).toBeVisible();
+      expect(toggled).not.toHaveBeenCalled();
+
+      await page.getByRole("button", { name: "Disable", exact: true }).click();
+      await vi.waitFor(() => expect(toggled).toHaveBeenCalledOnce());
+    });
+
+    it("turns off a rule that is not the last cover without asking", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      const toggled = vi.fn(() => Promise.resolve());
+      toggleImpl = toggled;
+
+      render(AlertsPage, {});
+
+      await expect.element(enableSwitch()).toBeVisible();
+      await enableSwitch().click();
+
+      await vi.waitFor(() => expect(toggled).toHaveBeenCalledOnce());
+      await expect.element(lastCoverDialog()).not.toBeInTheDocument();
+    });
+
+    it("asks before deleting the last rule that covers low glucose", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = [{ ...lowRule, isLastLowCover: true }];
+      const deleted = vi.fn(() => Promise.resolve());
+      deleteImpl = deleted;
+
+      render(AlertsPage, {});
+
+      await expect.element(ruleName()).toBeVisible();
+      await rowActions().click();
+      await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+      await expect.element(lastCoverDialog()).toBeVisible();
+      expect(deleted).not.toHaveBeenCalled();
+    });
+
+    it("words the delete confirmation without the low warning for any other rule", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+
+      render(AlertsPage, {});
+
+      await expect.element(ruleName()).toBeVisible();
+      await rowActions().click();
+      await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+      await expect.element(page.getByText(/This action cannot be undone/)).toBeVisible();
+      await expect.element(lastCoverDialog()).not.toBeInTheDocument();
+    });
   });
 });

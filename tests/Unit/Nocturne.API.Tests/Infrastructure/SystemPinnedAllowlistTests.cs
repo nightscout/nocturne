@@ -24,8 +24,8 @@ public class SystemPinnedAllowlistTests
     /// <summary>The repository reads that pin the system inside Infrastructure.</summary>
     private static readonly string[] SystemPinnedReads =
     [
+        nameof(ISubjectRepository.AnyPendingAccessRequestNamedAsync),
         nameof(ISubjectRepository.TenantHasCredentialedMemberAsync),
-        nameof(ISubjectRepository.HasOrphanedMemberAsync),
         nameof(ITenantMembershipRepository.ReadSetupGateAsync),
         nameof(ITenantMembershipRepository.CountSetupCredentialsAsync),
         nameof(ITenantMembershipRepository.ListOrphanedMembersAsync),
@@ -35,8 +35,8 @@ public class SystemPinnedAllowlistTests
 
     private static readonly string[] Allowed =
     [
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.AnyPendingAccessRequestNamedAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.TenantHasCredentialedMemberAsync",
-        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.HasOrphanedMemberAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.ReadSetupGateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.CountSetupCredentialsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TenantMembershipRepository.cs: TenantMembershipRepository.ListOrphanedMembersAsync",
@@ -44,18 +44,22 @@ public class SystemPinnedAllowlistTests
 
     /// <summary>
     /// The members outside the module that call a <see cref="SystemPinnedReads"/> read: the anonymous auth
-    /// status a share host's login page asks, the setup state asked on public-share requests, and the
-    /// setup gate every API request passes through. The scan is by name, so
+    /// status a share host's login page asks, the setup state asked on public-share requests, the
+    /// setup gate every API request passes through, and the dev-only recovery-mode trigger reporting
+    /// what that gate reads, and the anonymous access-request step that asks whether a name is
+    /// already pending on the host's tenant. The scan is by name, so
     /// <c>IInstanceSetupState.TenantHasCredentialedMemberAsync</c>, the facade over the same pinned
     /// read, pins its callers too.
     /// </summary>
     private static readonly string[] AllowedReadCallers =
     [
+        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestOptions",
         "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.GetAuthStatus",
         "src/API/Nocturne.API/Controllers/V4/SetupController.cs: SetupController.GetSoleTenantWithoutOwnerAsync",
         "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.IsSetupCompleteAsync",
         "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.TenantHasCredentialedMemberAsync",
         "src/API/Nocturne.API/Middleware/TenantSetupMiddleware.cs: TenantSetupMiddleware.EvaluateGateAsync",
+        "src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs: DevAdminController.EnterRecoveryMode",
     ];
 
     private static readonly IReadOnlyList<string> Callers = Scan(ScannedTrees, [Method]);
@@ -127,7 +131,7 @@ public class SystemPinnedAllowlistTests
     }
 
     [Theory]
-    [InlineData("class C { Task<bool> M(ISubjectRepository s) => s.HasOrphanedMemberAsync(t, ct); }", "C.M")]
+    [InlineData("class C { Task<SetupGate?> M(ITenantMembershipRepository m) => m.ReadSetupGateAsync(t, r, ct); }", "C.M")]
     [InlineData("class C { Task<bool> M(ISubjectRepository? s) => s?.TenantHasCredentialedMemberAsync(t, ct); }", "C.M")]
     [InlineData("class C { void M(ISubjectRepository s) => Use(s.TenantHasCredentialedMemberAsync); }", "C.M")]
     [InlineData("class C { Task<bool> M(ISubjectRepository s) => s.IsPlatformAdminAsync(id, ct); }", null)]

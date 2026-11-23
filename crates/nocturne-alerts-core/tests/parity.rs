@@ -12,7 +12,7 @@
     reason = "test code"
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -76,16 +76,46 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
         })
         .collect();
 
-    json!({
+    let mut actual = json!({
         "schema_version": 1,
         "scenario": scenario.name,
         "ticks": ticks,
-    })
+    });
+    number_as_corpus(&mut actual);
+    actual
+}
+
+/// Renumbers each `tracker.excursion` as the corpus numbers excursions: 1, 2,
+/// ... in the order they open across every rule of the scenario. The engine
+/// numbers each rule's own (engine-semantics.md §7), so the corpus number is
+/// the rule and its ordinal looked up in opening order.
+fn number_as_corpus(actual: &mut Value) {
+    let mut opened: HashMap<String, u64> = HashMap::new();
+    let mut corpus: HashMap<(String, u64), u64> = HashMap::new();
+    for tick in actual["ticks"].as_array_mut().expect("ticks") {
+        for result in tick["rules"].as_array_mut().expect("rules") {
+            let rule = result["rule_id"].as_str().expect("rule id").to_owned();
+            if result["transition"] == "opened" {
+                let ordinal = opened.entry(rule.clone()).or_default();
+                *ordinal += 1;
+                let next = u64::try_from(corpus.len()).expect("a count") + 1;
+                corpus.insert((rule.clone(), *ordinal), next);
+            }
+            if let Some(excursion) = result.pointer_mut("/tracker/excursion") {
+                let ordinal = excursion.as_u64().expect("an ordinal");
+                *excursion = json!(corpus[&(rule, ordinal)]);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Deep comparison with contextual diff messages
 // ---------------------------------------------------------------------------
+
+/// A result field a snapshot pins by carrying it: snapshots written before the
+/// engine reported it omit it, and the corpus is frozen.
+const PINNED_ONLY_WHEN_PRESENT: &str = "next_change_at";
 
 fn diff(actual: &Value, expected: &Value, path: &str, failures: &mut Vec<String>) {
     match (actual, expected) {
@@ -95,6 +125,7 @@ fn diff(actual: &Value, expected: &Value, path: &str, failures: &mut Vec<String>
                 let p = format!("{path}.{key}");
                 match (a.get(key.as_str()), e.get(key.as_str())) {
                     (Some(av), Some(ev)) => diff(av, ev, &p, failures),
+                    (Some(_), None) if key.as_str() == PINNED_ONLY_WHEN_PRESENT => {}
                     (Some(av), None) => {
                         failures.push(format!("{p}: unexpected field (actual = {av})"));
                     }

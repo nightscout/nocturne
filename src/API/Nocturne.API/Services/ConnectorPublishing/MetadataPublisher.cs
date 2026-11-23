@@ -15,6 +15,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -315,7 +316,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             }
             return true;
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             LogPublishFailure(ex, activationList, source);
             return false;

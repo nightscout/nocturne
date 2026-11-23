@@ -108,7 +108,7 @@
           cross it off your list after use.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that.
+          A code does not sign you in on its own. It gives you ten minutes to add one new way to sign in, and you sign in with that.
         </p>
       </Card.Content>
     </Card.Root>

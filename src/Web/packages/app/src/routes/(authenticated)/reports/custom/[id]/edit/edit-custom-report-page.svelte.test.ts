@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
-import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReport } from "@nocturne/api-client";
 import { chartTemplate, runOf, statisticsTemplate } from "../../custom-report-fixtures.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { minuteLabel } from "#lib/components/reports/custom/workspace/clock.js";
@@ -180,6 +180,16 @@ describe("editing a report saved without the workspace's state", () => {
     render(EditCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toBeVisible();
+    await expect.element(page.getByTestId("report-workspace")).toBeVisible();
+    expect(page.getByTestId("save-trigger").elements()).toHaveLength(0);
+    expect(page.getByTestId("save-copy-trigger").elements()).toHaveLength(0);
+  });
+
+  it("offers a handed-off session a sign-in in place of saving or copying", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(EditCustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to change or copy this report.")).toBeVisible();
     await expect.element(page.getByTestId("report-workspace")).toBeVisible();
     expect(page.getByTestId("save-trigger").elements()).toHaveLength(0);
     expect(page.getByTestId("save-copy-trigger").elements()).toHaveLength(0);

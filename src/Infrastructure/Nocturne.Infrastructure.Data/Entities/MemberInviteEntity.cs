@@ -67,6 +67,10 @@ public class MemberInviteEntity : ITenantScoped
     [Column("limit_to_24_hours")]
     public bool LimitTo24Hours { get; set; } = false;
 
+    /// <summary>When the membership the invite creates ends, in UTC; null when it does not.</summary>
+    [Column("access_ends_at")]
+    public DateTime? AccessEndsAt { get; set; }
+
     /// <summary>
     /// When the invite expires
     /// </summary>

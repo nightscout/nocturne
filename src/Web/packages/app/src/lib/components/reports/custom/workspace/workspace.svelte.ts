@@ -1,4 +1,5 @@
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
+import { formatList } from "#lib/utils/formatting.js";
 import type { StarterGroup } from "./starters.js";
 import {
   convertFromDisplayUnits,
@@ -1052,22 +1053,36 @@ function build(state: WorkspaceState, ctx: BuildContext): Built {
 export function comboLabel(combo: Pick<Combo, "a" | "b" | "op">): string {
   const a = signalLabel(combo.a);
   const b = lowerFirst(signalLabel(combo.b));
-  return combo.op === "difference" ? `${a} minus ${b}` : `${a} divided by ${b}`;
+  return combo.op === "difference"
+    ? // @wc-include
+      `${a} minus ${b}`
+    : // @wc-include
+      `${a} divided by ${b}`;
 }
 
 function weekdayLabel(day: Weekday, weekdays: readonly Weekday[]): string {
   return weekdayName(day, weekdays);
 }
 
-function joinAnd(items: string[]): string {
-  if (items.length <= 1) return items.join("");
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+function againstText(a: string, b: string): string {
+  // @wc-include
+  return `${a} against ${b}`;
+}
+
+function joinAgainst(items: string[]): string {
+  return items.length === 0 ? "" : items.reduce((a, b) => againstText(a, b));
+}
+
+function toText(from: string | number, to: string | number): string {
+  // @wc-include
+  return `${from} to ${to}`;
 }
 
 /** Weekdays as words: runs of three or more as "Monday to Friday". */
 export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): string {
   const order = [...weekdays];
   const sorted = order.filter((d) => days.includes(d));
+  // @wc-include
   if (sorted.length === 7) return "every day";
   const runs: Weekday[][] = [];
   for (const day of sorted) {
@@ -1076,10 +1091,10 @@ export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): str
       last.push(day);
     else runs.push([day]);
   }
-  return joinAnd(
+  return formatList(
     runs.flatMap((run) =>
       run.length >= 3
-        ? [`${weekdayLabel(run[0], weekdays)} to ${weekdayLabel(run[run.length - 1], weekdays)}`]
+        ? [toText(weekdayLabel(run[0], weekdays), weekdayLabel(run[run.length - 1], weekdays))]
         : run.map((d) => weekdayLabel(d, weekdays))
     )
   );
@@ -1100,9 +1115,18 @@ function endMinute(window: { fromMinute: number; toMinute: number }): number {
 /** Minutes as words: "30 minutes", "1 hour", "5 hours", "3 days". */
 export function minutesText(minutes: number): string {
   if (minutes >= 1440 && minutes % 1440 === 0)
-    return minutes === 1440 ? "1 day" : `${minutes / 1440} days`;
+    return minutes === 1440
+      ? // @wc-include
+        "1 day"
+      : // @wc-include
+        `${minutes / 1440} days`;
   if (minutes >= 60 && minutes % 60 === 0)
-    return minutes === 60 ? "1 hour" : `${minutes / 60} hours`;
+    return minutes === 60
+      ? // @wc-include
+        "1 hour"
+      : // @wc-include
+        `${minutes / 60} hours`;
+  // @wc-include
   return `${minutes} minutes`;
 }
 
@@ -1110,7 +1134,8 @@ export function minutesText(minutes: number): string {
 export function windowText(before: number, after: number): string {
   return before === 0
     ? `From the event to ${minutesText(after)} after`
-    : `${minutesText(before)} before to ${minutesText(after)} after`;
+    : // @wc-include
+      `${minutesText(before)} before to ${minutesText(after)} after`;
 }
 
 /** A moment's narrowings as words; the anchor too when `withAnchor`. */
@@ -1123,32 +1148,43 @@ export function momentText(
 ): string {
   if (moment.everythingElse)
     return withAnchor
-      ? `all other ${anchorPhrase(moment.what)}`
-      : "everything else";
+      ? // @wc-include
+        `all other ${anchorPhrase(moment.what)}`
+      : // @wc-include
+        "everything else";
   const parts: string[] = [];
   if (moment.timeOfDay)
     parts.push(
-      `${clock(moment.timeOfDay.fromMinute)} to ${clock(endMinute(moment.timeOfDay))}`
+      toText(clock(moment.timeOfDay.fromMinute), clock(endMinute(moment.timeOfDay)))
     );
   if (
     moment.weekdays &&
     moment.weekdays.length > 0 &&
     moment.weekdays.length < 7
   )
+    // @wc-include
     parts.push(`on ${weekdaysText(moment.weekdays, vocab.weekdays)}`);
   if (vocab.mealNarrowing(moment.what)) {
     const g = moment.grams;
     if (g?.min !== undefined && g.max !== undefined)
+      // @wc-include
       parts.push(`${g.min} to ${g.max} g`);
-    else if (g?.min !== undefined) parts.push(`at least ${g.min} g`);
-    else if (g?.max !== undefined) parts.push(`at most ${g.max} g`);
+    else if (g?.min !== undefined)
+      // @wc-include
+      parts.push(`at least ${g.min} g`);
+    else if (g?.max !== undefined)
+      // @wc-include
+      parts.push(`at most ${g.max} g`);
     if (moment.foods)
       parts.push(
         moment.foods.length === 0
-          ? "with a food"
-          : `with ${moment.foods.map((f) => f.name).join(" or ")}`
+          ? // @wc-include
+            "with a food"
+          : // @wc-include
+            `with ${formatList(moment.foods.map((f) => f.name), "disjunction")}`
       );
     if (moment.foodCategory?.trim())
+      // @wc-include
       parts.push(`with ${moment.foodCategory.trim()}`);
   }
   const since = sinceMealText(moment.minutesSinceMeal);
@@ -1157,11 +1193,20 @@ export function momentText(
     toDisplay(moment.startGlucose, units),
     unitLabel(units)
   );
-  if (glucose) parts.push(`glucose ${glucose} at the event`);
+  if (glucose)
+    // @wc-include
+    parts.push(`glucose ${glucose} at the event`);
   const iob = boundsText(moment.insulinOnBoard, "U");
-  if (iob) parts.push(`insulin on board ${iob} at the event`);
+  if (iob)
+    // @wc-include
+    parts.push(`insulin on board ${iob} at the event`);
   const phrase = anchorPhrase(moment.what);
-  if (parts.length === 0) return withAnchor ? `all ${phrase}` : "all";
+  if (parts.length === 0)
+    return withAnchor
+      ? // @wc-include
+        `all ${phrase}`
+      : // @wc-include
+        "all";
   return withAnchor ? `${phrase} ${parts.join(", ")}` : parts.join(", ");
 }
 
@@ -1200,38 +1245,53 @@ export function boundsText(
   unit: string
 ): string | null {
   if (b?.min !== undefined && b.max !== undefined)
+    // @wc-include
     return `${b.min} to ${b.max} ${unit}`;
-  if (b?.min !== undefined) return `at least ${b.min} ${unit}`;
-  if (b?.max !== undefined) return `at most ${b.max} ${unit}`;
+  if (b?.min !== undefined)
+    // @wc-include
+    return `at least ${b.min} ${unit}`;
+  if (b?.max !== undefined)
+    // @wc-include
+    return `at most ${b.max} ${unit}`;
   return null;
 }
 
 function beforeText(minutes: number): string {
-  return minutes === 60 ? "hour" : minutesText(minutes);
+  return minutes === 60
+    ? // @wc-include
+      "hour"
+    : minutesText(minutes);
 }
 
 /** Time since the last carbs as words: "no carbs in the 4 hours before". */
 export function sinceMealText(b: Bounds | undefined): string | null {
   if (!b) return null;
   if (b.min !== undefined && b.max === undefined)
+    // @wc-include
     return `no carbs in the ${beforeText(b.min)} before`;
   if (b.max !== undefined && b.min === undefined)
+    // @wc-include
     return `carbs in the ${beforeText(b.max)} before`;
   if (b.min !== undefined && b.max !== undefined)
+    // @wc-include
     return `the last carbs ${minutesText(b.min)} to ${minutesText(b.max)} before`;
   return null;
 }
 
 function sentenceCase(labels: string[]): string {
-  return joinAnd(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
+  return formatList(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
 }
 
 export function rangeText(hours: number, presets: readonly { id: string; hours: number }[]): string {
   const preset = presets.find((p) => p.hours === hours);
-  if (preset) return `over the last ${rangeLabel(preset.id)}`;
+  if (preset)
+    // @wc-include
+    return `over the last ${rangeLabel(preset.id)}`;
   return hours % 24 === 0
-    ? `over the last ${hours / 24} days`
-    : `over the last ${hours} hours`;
+    ? // @wc-include
+      `over the last ${hours / 24} days`
+    : // @wc-include
+      `over the last ${hours} hours`;
 }
 
 /**
@@ -1251,7 +1311,7 @@ export class Workspace {
   clock: (minute: number) => string = clockText;
 
   /** How the caption writes two dates; the UI sets the app's date format. */
-  dates: (span: DateSpan) => string = (span) => `${span.from} to ${span.to}`;
+  dates: (span: DateSpan) => string = (span) => toText(span.from, span.to);
 
   readonly #catalogue: CustomReportCatalogue;
   readonly #vocab: Vocabulary;
@@ -1513,7 +1573,13 @@ export class Workspace {
     if (s.lens === "event") parts.push(lowerFirst(windowText(s.event.before, s.event.after)));
     if (this.leaveOutApplies) {
       const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(leaveOutLabel(l.id)));
-      parts.push(left.length > 0 ? `without ${joinAnd(left)}` : "all time");
+      parts.push(
+        left.length > 0
+          ? // @wc-include
+            `without ${formatList(left)}`
+          : // @wc-include
+            "all time"
+      );
     }
     return parts.join(", ");
   }
@@ -2394,15 +2460,17 @@ export class Workspace {
       if (pair.length === 2)
         parts.push({
           kind: "signals",
-          text: `${signalLabel(pair[1])} against ${lowerFirst(signalLabel(pair[0]))}`,
+          text: againstText(signalLabel(pair[1]), lowerFirst(signalLabel(pair[0]))),
         });
       else if (pair.length === 1)
         parts.push({ kind: "signals", text: signalLabel(pair[0]) });
       parts.push({
         kind: "lens",
         text: s.findLag
-          ? "each 15 minutes, with the lag between them"
-          : "each 15 minutes",
+          ? // @wc-include
+            "each 15 minutes, with the lag between them"
+          : // @wc-include
+            "each 15 minutes",
       });
     } else {
       const names = [
@@ -2432,10 +2500,10 @@ export class Workspace {
   #eventListCaption(): CaptionPart[] {
     const s = this.state;
     const anchors = distinct(s.moments.map((m) => m.what));
-    const phrase = joinAnd(anchors.map((a) => anchorPhrase(a)));
+    const phrase = formatList(anchors.map((a) => anchorPhrase(a)));
     let head: string;
     if (s.event.show === "each")
-      head = `${outcomeLabel(this.up)} against ${lowerFirst(alongLabel(this.along))}`;
+      head = againstText(outcomeLabel(this.up), lowerFirst(alongLabel(this.along)));
     else if (s.event.show === "spread")
       head = `How many ${phrase} had each ${lowerFirst(outcomeLabel(this.figure))}`;
     else {
@@ -2449,9 +2517,10 @@ export class Workspace {
     if (narrowed)
       parts.push({
         kind: "groups",
-        text: `for ${s.moments
-          .map((m) => momentText(m, true, this.clock, this.glucoseUnits, this.#vocab))
-          .join(" against ")}`,
+        // @wc-include
+        text: `for ${joinAgainst(
+          s.moments.map((m) => momentText(m, true, this.clock, this.glucoseUnits, this.#vocab))
+        )}`,
       });
     parts.push({ kind: "range", text: rangeText(this.rangeHours, this.#vocab.rangePresets) });
     const options = this.#optionsText();
@@ -2463,16 +2532,20 @@ export class Workspace {
     const s = this.state;
     switch (s.lens) {
       case "timeline":
+        // @wc-include
         return "as a timeline";
       case "typical_day":
+        // @wc-include
         return "over a typical day";
       case "daily":
+        // @wc-include
         return "day by day";
       case "event": {
         const anchors = distinct(
           s.moments.filter((m) => !m.everythingElse).map((m) => m.what)
         );
-        const around = `around ${joinAnd(anchors.map((a) => anchorPhrase(a)))}`;
+        // @wc-include
+        const around = `around ${formatList(anchors.map((a) => anchorPhrase(a)))}`;
         const windows = this.#vocab.windows;
         const isDefault = s.event.before === windows.defaultBefore && s.event.after === windows.defaultAfter;
         return isDefault
@@ -2487,23 +2560,22 @@ export class Workspace {
   #groupsText(): string | null {
     const s = this.state;
     if (this.groupsDays && s.dayFilter)
+      // @wc-include
       return `${lowerFirst(dayFilterText(s.dayFilter, this.clock))} against all other days`;
     if (s.lens === "typical_day") {
       if (s.dayGroups.length === 1 && s.dayGroups[0].length === 7) return null;
-      return s.dayGroups
-        .map((g) => upperFirst(weekdaysText(g, this.#vocab.weekdays)))
-        .join(" against ");
+      return joinAgainst(s.dayGroups.map((g) => upperFirst(weekdaysText(g, this.#vocab.weekdays))));
     }
     if (s.lens === "event") {
       const sameAnchor = distinct(s.moments.map((m) => m.what)).length === 1;
       if (s.moments.length === 1 && !isNarrowed(s.moments[0], this.#vocab) && !s.moments[0].everythingElse)
         return null;
       // A group that narrows nothing is named by its events, "all meals", not "all".
-      return s.moments
-        .map((m) =>
+      return joinAgainst(
+        s.moments.map((m) =>
           momentText(m, !sameAnchor || (!isNarrowed(m, this.#vocab) && !m.everythingElse), this.clock, this.glucoseUnits, this.#vocab)
         )
-        .join(" against ");
+      );
     }
     return null;
   }
@@ -2512,18 +2584,26 @@ export class Workspace {
     const s = this.state;
     const parts: string[] = [];
     if (s.lens === "event") {
-      if (s.event.isolatedOnly) parts.push("only events with nothing else near them");
+      if (s.event.isolatedOnly)
+        // @wc-include
+        parts.push("only events with nothing else near them");
       if (s.event.requireCorroboration && this.hasRises)
+        // @wc-include
         parts.push("only rises the loop answered with extra insulin");
       if (s.event.comparison)
+        // @wc-include
         parts.push(`against ${this.dates(s.event.comparison)}`);
     }
     if (this.leaveOutApplies) {
       const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) =>
         lowerFirst(leaveOutLabel(l.id))
       );
-      if (left.length > 0) parts.push(`without ${joinAnd(left)}`);
-      if (s.profileName) parts.push(`only while ${s.profileName} was active`);
+      if (left.length > 0)
+        // @wc-include
+        parts.push(`without ${formatList(left)}`);
+      if (s.profileName)
+        // @wc-include
+        parts.push(`only while ${s.profileName} was active`);
     }
     return parts.length > 0 ? parts.join(", ") : null;
   }

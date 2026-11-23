@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -163,7 +164,7 @@ public sealed partial class MiniChart : UserControl
             // Time label
             var label = new TextBlock
             {
-                Text = tick.ToString("H:mm"),
+                Text = tick.ToString("H:mm", CultureInfo.InvariantCulture),
                 FontSize = 10,
                 Foreground = new SolidColorBrush(Color.FromArgb(80, 200, 200, 200)),
             };

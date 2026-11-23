@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -43,9 +44,10 @@ internal static class GlookoSyncHarness
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null,
         TimeSpan? endpointPause = null,
-        IMealMatchingService? mealMatchingService = null) =>
+        IMealMatchLinker? mealMatchLinker = null,
+        ILogger<GlookoConnectorService>? logger = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchingService);
+            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchLinker, logger);
 }
 
 /// <summary>
@@ -125,24 +127,25 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
         IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null, TimeSpan endpointPause = default,
-        IMealMatchingService? mealMatchingService = null)
+        IMealMatchLinker? mealMatchLinker = null,
+        ILogger<GlookoConnectorService>? logger = null)
         : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock,
-            endpointPause, mealMatchingService)
+            endpointPause, mealMatchLinker, logger)
     {
     }
 
     private RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
         IConnectorSyncCursorStore? cursorStore, TimeProvider? clock, TimeSpan endpointPause,
-        IMealMatchingService? mealMatchingService)
+        IMealMatchLinker? mealMatchLinker, ILogger<GlookoConnectorService>? logger)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            NullLogger<GlookoConnectorService>.Instance,
+            logger ?? NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             publisher,
-            mealMatchingService: mealMatchingService,
+            mealMatchLinker: mealMatchLinker,
             cursorStore: cursorStore,
             timeProvider: clock,
             endpointPause: endpointPause)
@@ -151,6 +154,20 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
     }
 
     public List<PublishKind> Published { get; }
+}
+
+/// <summary>Keeps every formatted message a service logs.</summary>
+internal sealed class MessageLogger<T> : ILogger<T>
+{
+    public List<string> Messages { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
 }
 
 /// <summary>Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.</summary>
@@ -310,6 +327,14 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
 ///     switches on the V3 path's meal carbs and food entries.
 /// </param>
+/// <param name="withBolusAndGlucose">
+///     Whether each window carries one normal bolus with carbs and one CGM reading, on the V3 graph
+///     and on the V2 endpoints alike.
+/// </param>
+/// <param name="withGuidlessFoods">
+///     Whether the foods carry no Glooko guid: the V2 foods, and the food of the V3 history meal,
+///     whose name ends in a space, so its entry id is stored trimmed.
+/// </param>
 internal sealed class GlookoEndpointHandler(
     Func<int, int>? recordsPerWindow = null,
     IReadOnlyCollection<string>? failingPaths = null,
@@ -317,7 +342,9 @@ internal sealed class GlookoEndpointHandler(
     IReadOnlyCollection<string>? malformedPaths = null,
     bool recoversAfterForbidden = false,
     bool withHistoryMeals = false,
-    ExpiredSessionAnswer? expiredFirstSession = null) : HttpMessageHandler
+    ExpiredSessionAnswer? expiredFirstSession = null,
+    bool withBolusAndGlucose = false,
+    bool withGuidlessFoods = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<(string Start, string End)> _windows = [];
@@ -404,12 +431,14 @@ internal sealed class GlookoEndpointHandler(
             return Json(DeviceSettingsPayload());
 
         if (Matches(path, GlookoConstants.V3HistoriesPath))
-            return Json(withHistoryMeals ? HistoryMealsPayload : "{\"histories\":[]}");
+            return Json(withHistoryMeals
+                ? withGuidlessFoods ? GuidlessHistoryMealsPayload : HistoryMealsPayload
+                : "{\"histories\":[]}");
 
         var window = ResolveWindow(request.RequestUri?.Query ?? string.Empty);
 
         if (Matches(path, GlookoConstants.V3GraphDataPath))
-            return Json(GraphPayload(window));
+            return Json(GraphPayload(window, withBolusAndGlucose));
 
         if (Matches(path, GlookoConstants.SuspendBasalsPath))
             return Json(Records("suspendBasals", window,
@@ -423,14 +452,20 @@ internal sealed class GlookoEndpointHandler(
             return Json("{\"scheduledBasals\":[]}");
 
         if (Matches(path, GlookoConstants.NormalBolusesPath))
-            return Json("{\"normalBoluses\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("normalBoluses", window,
+                    at => $"{{\"timestamp\":\"{Iso(at)}\",\"insulinDelivered\":2.5,\"carbsInput\":30.0}}")
+                : "{\"normalBoluses\":[]}");
 
         if (Matches(path, GlookoConstants.CgmReadingsPath))
-            return Json("{\"readings\":[]}");
+            return Json(withBolusAndGlucose
+                ? Records("readings", window,
+                    at => $"{{\"display_time\":\"{Iso(at)}\",\"bg_value\":12000.0}}")
+                : "{\"readings\":[]}");
 
         if (Matches(path, GlookoConstants.FoodsPath))
             return Json(Records("foods", window with { Records = 1 },
-                at => $"{{\"guid\":\"food_{at.Ticks}\",\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
+                at => $"{{{(withGuidlessFoods ? string.Empty : $"\"guid\":\"food_{at.Ticks}\",")}\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
 
         // MeterReadingsPath is a prefix of the CGM path's parent, so it is matched last.
         if (Matches(path, GlookoConstants.MeterReadingsPath))
@@ -469,12 +504,19 @@ internal sealed class GlookoEndpointHandler(
     /// One suspended basal per record (mapped to both a state span and a temp basal), one reservoir
     /// change (a device event) and one pump alarm (a system event).
     /// </summary>
-    private static string GraphPayload(Window window)
+    private static string GraphPayload(Window window, bool withBolusAndGlucose)
     {
         var series = string.Join(",",
             Property("suspendBasal", window, at => $"{{\"x\":{Unix(at)},\"duration\":1800,\"label\":\"Suspended\"}}"),
             Property("reservoirChange", window, at => $"{{\"x\":{Unix(at)},\"label\":\"Reservoir change\"}}"),
             Property("pumpAlarm", window, at => $"{{\"x\":{Unix(at)},\"alarmType\":\"OCCLUSION\",\"label\":\"Occlusion\"}}"));
+
+        if (withBolusAndGlucose)
+            series += "," + string.Join(",",
+                Property("deliveredBolus", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":2.5,\"label\":\"Normal\",\"data\":{{\"deliveredUnits\":2.5,\"carbsInput\":30.0}}}}"),
+                Property("cgmNormal", window,
+                    at => $"{{\"x\":{Unix(at)},\"y\":120.0,\"value\":12000}}"));
 
         return $"{{\"series\":{{{series}}}}}";
     }
@@ -497,6 +539,13 @@ internal sealed class GlookoEndpointHandler(
         {"histories":[{"type":"meals","guid":"meal-1","item":{
           "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
           "foods":[{"guid":"food-1","name":"Toast","carbs":30.0}]}}]}
+        """;
+
+    private const string GuidlessHistoryMealsPayload =
+        """
+        {"histories":[{"type":"meals","guid":"meal-1","item":{
+          "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
+          "foods":[{"name":"Toast ","carbs":30.0}]}}]}
         """;
 
     /// <summary>

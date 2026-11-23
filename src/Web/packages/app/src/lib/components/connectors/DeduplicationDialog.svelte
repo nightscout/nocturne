@@ -18,7 +18,7 @@
   import {
     DeduplicationJobState,
     type DeduplicationJobStatus,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {

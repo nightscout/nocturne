@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -50,6 +51,88 @@ public class RustEnvelopeMapperTests
     {
         RustEnvelopeMapper.BuildRule(Rule(enabled, "{ not json"))
             .AutoResolveParams.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(AlertRuleOnUnknown.Hold)]
+    [InlineData(AlertRuleOnUnknown.Met)]
+    [InlineData(AlertRuleOnUnknown.NotMet)]
+    public void BuildRule_sends_the_rules_on_unknown(string onUnknown)
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.OnUnknown = onUnknown;
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule));
+
+        wire.GetProperty("on_unknown").GetString().Should().Be(onUnknown);
+    }
+
+    [Theory]
+    [InlineData("Automatic")]
+    [InlineData("Turbo")]
+    public void BuildContext_sends_every_active_pump_mode_as_written(string mode)
+    {
+        var started = new DateTime(2026, 1, 5, 11, 0, 0, DateTimeKind.Utc);
+        var context = BuildContext() with
+        {
+            ActivePumpModes = [new PumpModeSnapshot("Suspended", started.AddHours(1)), new PumpModeSnapshot(mode, started)],
+        };
+
+        var wire = RustEnvelopeMapper.BuildContext(context).GetProperty("active_pump_modes");
+
+        wire.EnumerateArray().Select(m => m.GetProperty("mode").GetString()).Should().Equal("Suspended", mode);
+        wire[1].GetProperty("started_at").GetDateTime().Should().Be(started);
+    }
+
+    [Fact]
+    public void BuildContext_omits_the_pump_modes_when_none_is_active()
+    {
+        RustEnvelopeMapper.BuildContext(BuildContext()).TryGetProperty("active_pump_modes", out _)
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(30)]
+    public void BuildRule_sends_the_rules_glucose_freshness_bound(int? minutes)
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.GlucoseFreshnessMinutes = minutes;
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule));
+
+        int? sent = wire.TryGetProperty("glucose_freshness_minutes", out var value)
+                    && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt32()
+            : null;
+        sent.Should().Be(minutes);
+    }
+
+    [Fact]
+    public void BuildRule_sends_when_the_rule_was_enabled_and_omits_none()
+    {
+        var rule = Rule(autoResolveEnabled: false, null);
+        rule.EnabledAt = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+
+        var wire = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule), AlertEnvelopeJson.Options);
+
+        wire.GetProperty("enabled_at").GetDateTimeOffset()
+            .Should().Be(new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero));
+
+        rule.EnabledAt = null;
+        var unrecorded = JsonSerializer.SerializeToElement(RustEnvelopeMapper.BuildRule(rule), AlertEnvelopeJson.Options);
+        (unrecorded.TryGetProperty("enabled_at", out var value) && value.ValueKind != JsonValueKind.Null)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildContext_sends_when_the_reading_was_received()
+    {
+        var received = new DateTime(2026, 1, 5, 12, 20, 0, DateTimeKind.Utc);
+        var context = BuildContext() with { LatestReceivedAt = received };
+
+        RustEnvelopeMapper.BuildContext(context).GetProperty("latest_received_at").GetDateTime()
+            .Should().Be(received);
     }
 
     [Fact]

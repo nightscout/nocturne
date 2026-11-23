@@ -1,7 +1,7 @@
 import type {
 	AlertRuleResponse,
 	LeafTransitionLog as ApiLeafTransitionLog,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import type { ConditionNode } from "./types";
 
 // ---------------------------------------------------------------------------

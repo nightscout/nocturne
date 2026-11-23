@@ -72,7 +72,7 @@ internal static class ProfileActivationLegacyFields
         }
 
         if (residue.TryGetValue(ProfileSpanMetadata.ProfileNameKey, out var uploadedName)
-            && uploadedName is not null && ReadString(uploadedName) == baseName)
+            && uploadedName is not null && KeptField.LenientString(uploadedName) == baseName)
             residue.Remove(ProfileSpanMetadata.ProfileNameKey);
 
         if (span.IsEffective)
@@ -236,11 +236,4 @@ internal static class ProfileActivationLegacyFields
             Curve = metadata.TryReadString(InsulinCurveKey) ?? "rapid-acting",
         };
     }
-
-    private static string? ReadString(object value) => value switch
-    {
-        string s => s,
-        JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
-    };
 }

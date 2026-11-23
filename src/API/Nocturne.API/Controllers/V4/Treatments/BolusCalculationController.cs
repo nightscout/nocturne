@@ -37,15 +37,10 @@ public class BolusCalculationController(IBolusCalculationRepository repo)
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Bolus calculation", "calculation", "calculations");
+    protected override V4BulkNaming BulkNaming => new("Bolus calculation", "calculations");
 
-    protected override BolusCalculation MapCreateToModel(UpsertBolusCalculationRequest request) => new()
+    protected override BolusCalculation MapCreateToModel(UpsertBolusCalculationRequest request) => new BolusCalculation
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         BloodGlucoseInput = request.BloodGlucoseInput,
         BloodGlucoseInputSource = request.BloodGlucoseInputSource,
         CarbInput = request.CarbInput,
@@ -59,16 +54,11 @@ public class BolusCalculationController(IBolusCalculationRepository repo)
         SplitNow = request.SplitNow,
         SplitExt = request.SplitExt,
         PreBolus = request.PreBolus,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override BolusCalculation MapUpdateToModel(Guid id, UpsertBolusCalculationRequest request, BolusCalculation existing) => new()
+    protected override BolusCalculation MapUpdateToModel(Guid id, UpsertBolusCalculationRequest request, BolusCalculation existing) => new BolusCalculation
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         BloodGlucoseInput = request.BloodGlucoseInput,
         BloodGlucoseInputSource = request.BloodGlucoseInputSource,
         CarbInput = request.CarbInput,
@@ -86,5 +76,5 @@ public class BolusCalculationController(IBolusCalculationRepository repo)
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

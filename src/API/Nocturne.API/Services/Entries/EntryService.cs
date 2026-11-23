@@ -133,7 +133,6 @@ internal class EntryService : IEntryService
 
         var toWrite = new List<Entry>();
         var response = new List<Entry>(processed.Count);
-        var glucoseMoved = new List<Entry>();
         var stored = 0;
 
         for (var i = 0; i < processed.Count; i++)
@@ -145,7 +144,6 @@ internal class EntryService : IEntryService
             {
                 toWrite.Add(entry);
                 response.Add(entry);
-                glucoseMoved.Add(entry);
                 continue;
             }
 
@@ -157,13 +155,10 @@ internal class EntryService : IEntryService
                 continue;
             }
 
-            var storedMgdl = EntryDecomposer.WrittenMgdl(match.Entry);
             var merged = MergeOntoStored(match.Entry, entry);
             merged.Id = match.LegacyId;
             toWrite.Add(merged);
             response.Add(merged);
-            if (EntryDecomposer.WrittenMgdl(merged) != storedMgdl)
-                glucoseMoved.Add(merged);
         }
 
         LogReuploadLoop(processed.Count, stored, uploader);
@@ -172,7 +167,7 @@ internal class EntryService : IEntryService
 
         _logger.LogDebug("Wrote {Count} entries", written.Count);
 
-        return new EntryUploadResult(response, glucoseMoved);
+        return new EntryUploadResult(response);
     }
 
     /// <summary>

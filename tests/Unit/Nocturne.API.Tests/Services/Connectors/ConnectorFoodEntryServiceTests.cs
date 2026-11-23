@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -271,9 +272,6 @@ public class ConnectorFoodEntryServiceTests
     [Fact]
     public async Task ImportAsync_RestoresAWithdrawnEntryTheConnectorReportsAgain()
     {
-        var from = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
-        var to = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero);
-
         await using (var context = NewContext())
         {
             await NewService(context).ImportAsync(UserId, [Import()]);
@@ -281,7 +279,10 @@ public class ConnectorFoodEntryServiceTests
 
         await using (var context = NewContext())
         {
-            await NewService(context).MarkMissingAsDeletedAsync(UserId, Source, from, to, []);
+            var entry = await context.ConnectorFoodEntries.SingleAsync();
+            entry.Status = ConnectorFoodEntryStatus.Deleted;
+            entry.ResolvedAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync();
         }
 
         _mealMatchingMock.Invocations.Clear();
@@ -307,96 +308,60 @@ public class ConnectorFoodEntryServiceTests
             Times.Once);
     }
 
+    private ConnectorFoodEntryService NewServiceOver(Mock<IConnectorFoodEntryRepository> entries) =>
+        new(entries.Object,
+            _mealMatchingMock.Object,
+            TimeProvider.System,
+            Mock.Of<ILogger<ConnectorFoodEntryService>>());
+
     [Fact]
-    public async Task MarkMissingAsDeletedAsync_WithdrawsPendingEntriesTheConnectorNoLongerReports()
+    public async Task MarkMissingAsDeletedAsync_WithdrawsTheSuggestionOfEachEntryTheRepositoryWithdrew()
     {
         var from = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero);
+        var withdrawn = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var entries = new Mock<IConnectorFoodEntryRepository>();
+        entries
+            .Setup(r => r.MarkMissingAsDeletedAsync(
+                Source,
+                from,
+                to,
+                It.Is<IReadOnlySet<string>>(present => present.SetEquals(new[] { "kept" })),
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(withdrawn);
 
-        await using (var context = NewContext())
+        var count = await NewServiceOver(entries).MarkMissingAsDeletedAsync(UserId, Source, from, to, ["kept"]);
+
+        count.Should().Be(2);
+        foreach (var id in withdrawn)
         {
-            await NewService(context).ImportAsync(UserId, [Import("kept"), Import("deleted-upstream")]);
+            _mealMatchingMock.Verify(
+                m => m.WithdrawSuggestionAsync(UserId, id, It.IsAny<CancellationToken>()),
+                Times.Once);
         }
-
-        Guid withdrawnId;
-        await using (var context = NewContext())
-        {
-            withdrawnId = await context.ConnectorFoodEntries
-                .Where(e => e.ExternalEntryId == "deleted-upstream")
-                .Select(e => e.Id)
-                .SingleAsync();
-
-            var withdrawn = await NewService(context)
-                .MarkMissingAsDeletedAsync(UserId, Source, from, to, ["kept"]);
-
-            withdrawn.Should().Be(1);
-        }
-
-        await using var assertContext = NewContext();
-        var entries = await assertContext.ConnectorFoodEntries.ToListAsync();
-
-        entries.Single(e => e.ExternalEntryId == "kept").Status
-            .Should().Be(ConnectorFoodEntryStatus.Pending);
-
-        var gone = entries.Single(e => e.ExternalEntryId == "deleted-upstream");
-        gone.Status.Should().Be(ConnectorFoodEntryStatus.Deleted);
-        gone.ResolvedAt.Should().NotBeNull();
-
-        _mealMatchingMock.Verify(
-            m => m.WithdrawSuggestionAsync(UserId, withdrawnId, It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
-    public async Task MarkMissingAsDeletedAsync_LeavesResolvedEntriesAndOtherWindowsAlone()
+    public async Task MarkMissingAsDeletedAsync_WithdrawsNoSuggestionForAnEntryTheRepositoryLeftAlone()
     {
-        var from = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
-        var to = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero);
+        var entries = new Mock<IConnectorFoodEntryRepository>();
+        entries
+            .Setup(r => r.MarkMissingAsDeletedAsync(
+                It.IsAny<string>(),
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<IReadOnlySet<string>>(),
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
-        await using (var seed = NewContext())
-        {
-            seed.ConnectorFoodEntries.AddRange(
-                new ConnectorFoodEntryEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    ConnectorSource = Source,
-                    ExternalEntryId = "already-matched",
-                    ConsumedAt = from.AddHours(8),
-                    Status = ConnectorFoodEntryStatus.Matched,
-                },
-                new ConnectorFoodEntryEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    ConnectorSource = Source,
-                    ExternalEntryId = "outside-window",
-                    ConsumedAt = from.AddDays(-9),
-                    Status = ConnectorFoodEntryStatus.Pending,
-                },
-                new ConnectorFoodEntryEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = _tenantId,
-                    ConnectorSource = "glooko-connector",
-                    ExternalEntryId = "other-connector",
-                    ConsumedAt = from.AddHours(8),
-                    Status = ConnectorFoodEntryStatus.Pending,
-                });
-            await seed.SaveChangesAsync();
-        }
+        var count = await NewServiceOver(entries).MarkMissingAsDeletedAsync(
+            UserId, Source, DateTimeOffset.MinValue, DateTimeOffset.MaxValue, []);
 
-        await using (var context = NewContext())
-        {
-            var withdrawn = await NewService(context)
-                .MarkMissingAsDeletedAsync(UserId, Source, from, to, []);
-
-            withdrawn.Should().Be(0);
-        }
-
-        await using var assertContext = NewContext();
-        var entries = await assertContext.ConnectorFoodEntries.ToListAsync();
-
-        entries.Should().OnlyContain(e => e.Status != ConnectorFoodEntryStatus.Deleted);
+        count.Should().Be(0);
+        _mealMatchingMock.Verify(
+            m => m.WithdrawSuggestionAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

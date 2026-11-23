@@ -1,4 +1,4 @@
-import { GlucoseBucket, PumpModeState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertLimitFact, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
 import { isTrendBucket } from "./types";
 
 const RATE_DIRECTIONS = ["falling", "rising"] as const;
@@ -28,6 +28,72 @@ export function glucoseBucketLabel(bucket: GlucoseBucket): string {
 			return "Very high";
 		default:
 			return unknownValue(bucket);
+	}
+}
+
+export function forecastCurveLabel(curve: ForecastCurve): string {
+	switch (curve) {
+		case ForecastCurve.Default:
+			return "Default forecast";
+		case ForecastCurve.Iob:
+			return "IOB forecast";
+		case ForecastCurve.Cob:
+			return "COB forecast";
+		case ForecastCurve.Uam:
+			return "UAM forecast";
+		case ForecastCurve.Zt:
+			return "Zero temp forecast";
+		default:
+			return unknownValue(curve);
+	}
+}
+
+/** The choices for where a glucose condition's limit comes from. */
+export function limitSourceLabel(source: "value" | AlertLimitFact): string {
+	switch (source) {
+		case "value":
+			return "Number";
+		case AlertLimitFact.TargetLow:
+			return "Target low";
+		case AlertLimitFact.TargetHigh:
+			return "Target high";
+		case AlertLimitFact.LatestGlucose:
+			return "Latest glucose";
+		default:
+			return unknownValue(source);
+	}
+}
+
+/** A fact a limit names, as a summary says it inside a sentence. */
+export function limitFactWords(fact: AlertLimitFact): string {
+	switch (fact) {
+		case AlertLimitFact.TargetLow:
+			return "target low";
+		case AlertLimitFact.TargetHigh:
+			return "target high";
+		case AlertLimitFact.LatestGlucose:
+			return "latest glucose";
+		default:
+			return unknownValue(fact);
+	}
+}
+
+export function sensorStateLabel(state: SensorState): string {
+	switch (state) {
+		case SensorState.WarmingUp:
+			return "Warm-up";
+		case SensorState.Ok:
+			return "OK";
+		case SensorState.CalibrationNeeded:
+			return "Calibration necessary";
+		case SensorState.Error:
+			return "Error";
+		case SensorState.Expired:
+			return "Expired";
+		case SensorState.NoValue:
+			return "No value";
+		default:
+			return unknownValue(state);
 	}
 }
 

@@ -81,7 +81,7 @@ public class RoleRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AnUpdateMadeUnderATenantRecordsThatTenantAndNamesTheRoleByItsNewName()
+    public async Task AnUpdateMadeUnderATenantRecordsNoTenantKindGlobalAndNamesTheRoleByItsNewName()
     {
         var role = await Roles().CreateAsync(new NewRole("careportal", null, ["careportal:*"], IsSystemRole: false), CancellationToken.None);
 
@@ -90,8 +90,8 @@ public class RoleRepositoryTests : IDisposable
 
         await using var db = _db.CreateContext();
         var row = await db.AuthAuditLog.AsNoTracking().SingleAsync();
-        row.TenantId.Should().Be(_tenant);
-        row.DetailsJson.Should().Contain("\"role\":\"care\"");
+        row.TenantId.Should().BeNull();
+        row.DetailsJson.Should().Contain("\"role\":\"care\"").And.Contain($"\"kind\":\"{AuthAuditKind.Global}\"");
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class RoleRepositoryTests : IDisposable
     public async Task ADeleteTakesTheSubjectAssignmentsWithItInOneSave()
     {
         var role = await Roles().CreateAsync(new NewRole("custom", null, ["a"], IsSystemRole: false), CancellationToken.None);
-        var subjects = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)));
+        var subjects = new SubjectRepository(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
         var one = await subjects.CreateAsync(new NewSubject("one", RoleNames: ["custom"]), CancellationToken.None);
         var two = await subjects.CreateAsync(new NewSubject("two", RoleNames: ["custom"]), CancellationToken.None);
 

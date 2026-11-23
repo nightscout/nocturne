@@ -14,8 +14,19 @@ const LABEL_MAP: Record<string, string> = {
   instance_key_changed_platform: "Enter the platform credentials again",
   open_connectors: "Open connectors",
   open_alerts: "Open alerts",
+  alert_unevaluable_subtitle:
+    "This rule cannot run as set, so it sends no alerts. Edit its conditions and save it.",
+  alert_held_subtitle:
+    "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back. Open the rule to see the cause.",
+  alert_held_closed_subtitle:
+    "This alert had no usable data for 24 hours, so Nocturne closes the alert. The rule cannot send alerts until usable data comes back.",
+  alert_channel_stopped: "An alert channel stopped",
+  alert_channel_stopped_subtitle: "An alert channel stopped.",
+  alert_channel_no_recipient: "An alert channel has no recipient",
+  alert_channel_no_recipient_subtitle: "An alert channel has no recipient.",
   open_platform_settings: "Open platform settings",
   release_installed: "Nocturne is updated",
+  team_renamed: "A team has a new name",
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
@@ -28,6 +39,9 @@ const LABEL_MAP: Record<string, string> = {
   device_clock_deviation: "Device clock deviation corrected",
   device_clock_deviation_subtitle:
     "A connected account's device clock ran at a different offset from its timezone for a while. Affected timestamps are adjusted as that data syncs, so some historical entries may shift.",
+  device_clock_ahead: "A device clock is ahead",
+  device_clock_ahead_subtitle:
+    "A device sent data with a time more than 5 minutes after the current time. Alerts do not use this data until the current time is near that time. Set the clock on the device to the correct time.",
   declared_zone_changed: "Timezone updated from your connected account",
   rejected_uploads: "Some uploads could not be stored",
   rejected_uploads_subtitle:

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -9,8 +10,8 @@ namespace Nocturne.API.Validators.V4;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
-/// <item><description>Device, App, DataSource capped at 500 characters.</description></item>
-/// <item><description>Text capped at 10,000 characters; EventType at 200; SyncIdentifier at 500.</description></item>
+/// <item><description>DataSource capped at its column length (<see cref="RecordColumnLengths"/>); Device and App at 500.</description></item>
+/// <item><description>Text capped at 10,000 characters; EventType at 200; SyncIdentifier at its column length (<see cref="RecordColumnLengths"/>).</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="UpsertNoteRequest"/>
@@ -23,12 +24,12 @@ public class UpsertNoteRequestValidator : AbstractValidator<UpsertNoteRequest>
     /// </summary>
     public UpsertNoteRequestValidator()
     {
-        RuleFor(x => x.Timestamp).NotEqual(default(DateTimeOffset)).WithMessage("Timestamp is required");
+        RuleFor(x => x.Timestamp).TimestampRequired();
         RuleFor(x => x.Device).MaximumLength(500).When(x => x.Device is not null);
         RuleFor(x => x.App).MaximumLength(500).When(x => x.App is not null);
-        RuleFor(x => x.DataSource).MaximumLength(500).When(x => x.DataSource is not null);
+        RuleFor(x => x.DataSource).MaximumLength(RecordColumnLengths.Provenance).When(x => x.DataSource is not null);
         RuleFor(x => x.Text).MaximumLength(10000).When(x => x.Text is not null);
         RuleFor(x => x.EventType).MaximumLength(200).When(x => x.EventType is not null);
-        RuleFor(x => x.SyncIdentifier).MaximumLength(500).When(x => x.SyncIdentifier is not null);
+        RuleFor(x => x.SyncIdentifier).MaximumLength(RecordColumnLengths.SyncIdentifier).When(x => x.SyncIdentifier is not null);
     }
 }

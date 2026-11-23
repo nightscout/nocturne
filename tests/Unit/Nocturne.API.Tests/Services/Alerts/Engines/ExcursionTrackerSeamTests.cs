@@ -23,14 +23,13 @@ public class ExcursionTrackerSeamTests
 
     private sealed class Fixture
     {
-        public Fixture(int confirmationReadings = 1, int hysteresisMinutes = 0)
+        public Fixture(int hysteresisMinutes = 0)
         {
             Time.SetUtcNow(T0);
             Repository = new RecordingTrackerRepository(new AlertRule
             {
                 Id = RuleId,
                 Name = "low",
-                ConfirmationReadings = confirmationReadings,
                 HysteresisMinutes = hysteresisMinutes,
             });
             Tracker = EngineTestHarness.BuildRustTracker(Time, Repository);
@@ -61,20 +60,53 @@ public class ExcursionTrackerSeamTests
         var excursion = f.Repository.Excursions.Values.Should().ContainSingle().Subject;
         opened.ExcursionId.Should().Be(excursion.Id);
         excursion.StartedAt.Should().Be(T0);
-        f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, ActiveExcursionId = excursion.Id, UpdatedAt = T0 });
+        f.State.Should().BeEquivalentTo(new { State = "active", ActiveExcursionId = excursion.Id, UpdatedAt = T0 });
     }
 
     [NativeFact]
-    public async Task Confirms_before_opening()
+    public async Task The_first_engine_evaluation_rewrites_a_stored_confirming_row_as_idle()
     {
-        var f = new Fixture(confirmationReadings: 2);
+        var rule = new AlertRule
+        {
+            Id = RuleId,
+            Name = "low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = """{"direction":"below","value":70}""",
+        };
+        var repository = new RecordingTrackerRepository(rule);
+        repository.States[RuleId] = new AlertTrackerState
+        {
+            AlertRuleId = RuleId,
+            State = "confirming",
+            UpdatedAt = T0.AddMinutes(-1),
+        };
+        var time = new ManualTimeProvider();
+        time.SetUtcNow(T0);
+        var engine = EngineTestHarness.BuildRustEngine(time, repository);
+        var snapshot = new AlertRuleSnapshot(
+            rule.Id, EngineTestHarness.TenantId, rule.Name, rule.ConditionType, rule.ConditionParams,
+            AlertRuleSeverity.Warning, "{}", 0, false, null);
+        var context = new SensorContext { LatestValue = 100, LatestTimestamp = T0, TrendRate = null, LastReadingAt = T0 };
 
-        (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.None);
-        f.State!.State.Should().Be("confirming");
-        f.State.ConfirmationCount.Should().Be(1);
-        f.Repository.Excursions.Should().BeEmpty();
+        await engine.EvaluateRuleAsync(snapshot, context, AlertEngineOptions.Default, CancellationToken.None);
 
+        repository.States[RuleId].State.Should().Be("idle");
+    }
+
+    [NativeFact]
+    public async Task A_stored_confirming_state_reads_as_idle()
+    {
+        var f = new Fixture();
+        f.Repository.States[RuleId] = new AlertTrackerState
+        {
+            AlertRuleId = RuleId,
+            State = "confirming",
+            UpdatedAt = T0,
+        };
+
+        (await f.Tracker.GetActiveExcursionIdAsync(RuleId, CancellationToken.None)).Should().BeNull();
         (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
+        f.State!.State.Should().Be("active");
         f.Repository.Excursions.Should().ContainSingle();
     }
 
@@ -138,7 +170,7 @@ public class ExcursionTrackerSeamTests
         f.Repository.Excursions[opened.ExcursionId!.Value].EndedAt.Should().Be(T0.AddMinutes(10));
         f.State.Should().BeEquivalentTo(new
         {
-            State = "idle", ConfirmationCount = 0, ActiveExcursionId = (Guid?)null,
+            State = "idle", ActiveExcursionId = (Guid?)null,
             HysteresisStartedAt = (DateTime?)null, UpdatedAt = T0.AddMinutes(10),
         });
     }
@@ -171,13 +203,12 @@ public class ExcursionTrackerSeamTests
     [NativeFact]
     public async Task An_unknown_stored_state_reads_as_idle_or_active()
     {
-        var f = new Fixture(confirmationReadings: 1, hysteresisMinutes: 10);
+        var f = new Fixture(hysteresisMinutes: 10);
         var opened = await f.Process(true);
         AlertTrackerState Unknown(Guid? excursion) => new()
         {
             AlertRuleId = RuleId,
             State = "paused",
-            ConfirmationCount = 2,
             ActiveExcursionId = excursion,
             UpdatedAt = T0,
             HysteresisStartedAt = T0,
@@ -191,14 +222,14 @@ public class ExcursionTrackerSeamTests
             new ExcursionTransition(ExcursionTransitionType.HysteresisStarted, opened.ExcursionId));
         f.State.Should().BeEquivalentTo(new
         {
-            State = "hysteresis", ConfirmationCount = 0, ActiveExcursionId = opened.ExcursionId,
+            State = "hysteresis", ActiveExcursionId = opened.ExcursionId,
             HysteresisStartedAt = (DateTime?)T0.AddMinutes(1), AwaitingRearm = false,
         });
 
         f.Repository.States[RuleId] = Unknown(null);
         f.At(TimeSpan.FromMinutes(2));
         (await f.Process(true)).Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
-        f.State.Should().BeEquivalentTo(new { State = "active", ConfirmationCount = 0, AwaitingRearm = false });
+        f.State.Should().BeEquivalentTo(new { State = "active", AwaitingRearm = false });
     }
 
     [NativeFact]
@@ -258,17 +289,17 @@ public class ExcursionTrackerSeamTests
     [NativeFact]
     public async Task Force_close_without_an_excursion_writes_nothing()
     {
-        var f = new Fixture(confirmationReadings: 3);
+        var f = new Fixture();
         (await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None))
             .Type.Should().Be(ExcursionTransitionType.None);
-        await f.Process(true);
+        await f.Process(false);
         var writes = f.Repository.Writes.Count;
 
         (await f.Tracker.ForceCloseAsync(RuleId, ExcursionCloseReason.Manual, CancellationToken.None))
             .Type.Should().Be(ExcursionTransitionType.None);
 
         f.Repository.Writes.Should().HaveCount(writes);
-        f.State!.State.Should().Be("confirming");
+        f.State!.State.Should().Be("idle");
     }
 
     [NativeFact]

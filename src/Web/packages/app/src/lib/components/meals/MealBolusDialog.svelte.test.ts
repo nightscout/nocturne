@@ -15,7 +15,7 @@ vi.mock("svelte-sonner", () => ({
 vi.mock("#lib/api/generated/bolus.generated.remote.js", async () => {
   const { form } = await import("#lib/api/remote-server.js");
   const { formCoerce } = await import("#lib/api/generated/form-utils.generated.js");
-  const { CreateBolusRequestSchema, UpdateBolusRequestSchema } = await import("#lib/api/generated/schemas.js");
+  const { CreateBolusRequestSchema, UpdateBolusRequestSchema } = await import("@nocturne/api-client/schemas");
   const { z } = await import("zod");
   return {
     create: form(formCoerce(CreateBolusRequestSchema), createBolus),

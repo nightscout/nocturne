@@ -1,9 +1,15 @@
 import type { InAppNotificationDto } from "#lib/api/index.js";
 import { createSystemNotification } from "#lib/audio/alarm-sounds.js";
+import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
 import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
+import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
 
-/** The in-app notification type an alert delivered to this person's own account carries. */
-const ALERT_FIRING = "alert.firing";
+/**
+ * The in-app notification types an alert rule delivers to this person's own account: an alert,
+ * the notice that the rule cannot run until its conditions are edited, and the notice that it has
+ * waited 24 hours for missing data.
+ */
+const ALERT_TYPES = new Set(["alert.firing", "alert.unevaluable", "alert.held"]);
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders from it
 const shown = new Map<string, Notification>();
@@ -15,10 +21,10 @@ const shown = new Map<string, Notification>();
  */
 export function raiseAlertNotification(notification: InAppNotificationDto): void {
   const id = notification.id;
-  if (notification.type !== ALERT_FIRING || !id || shown.has(id)) return;
+  if (!ALERT_TYPES.has(notification.type ?? "") || !id || shown.has(id)) return;
   const raised = createSystemNotification(
     notification.title ?? "",
-    notification.subtitle ?? "",
+    resolveNotificationLabel(notification.subtitle),
     `alert-${id}`,
     false
   );
@@ -41,11 +47,7 @@ export function closeAlertNotification(notification: InAppNotificationDto): void
 export function listenForAlertNotifications(): () => void {
   const client = new WebSocketClient({
     url: window.location.origin,
-    reconnectAttempts: Infinity,
-    reconnectDelay: 5000,
-    maxReconnectDelay: 30000,
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    ...BROWSER_SOCKET_TIMING,
   });
   client.on("notificationCreated", raiseAlertNotification);
   client.on("notificationArchived", closeAlertNotification);

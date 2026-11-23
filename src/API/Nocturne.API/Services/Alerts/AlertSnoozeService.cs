@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -40,6 +41,7 @@ internal sealed class AlertSnoozeService(
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
                 .ThenInclude(e => e!.AlertRule)
+            .OfCondition(includeTest: true)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
 
         if (instance is null)
@@ -97,6 +99,7 @@ internal sealed class AlertSnoozeService(
                 .AsNoTracking()
                 .Include(i => i.AlertExcursion)
                     .ThenInclude(e => e!.AlertRule)
+                .OfCondition(includeTest: true)
                 .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
         }
 
@@ -116,7 +119,7 @@ internal sealed class AlertSnoozeService(
 
         // Same freshness bar as the sweep's snooze context: a stale value would describe a patient
         // who may have moved on, so the re-notification carries no reading instead.
-        var latest = await canonicalGlucose.GetLatestAsync(ct);
+        var latest = (await AlertReadings.SelectAsync(canonicalGlucose, now, ct)).Selected;
         var fresh = latest is not null && now - latest.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
             ? latest
             : null;
@@ -165,7 +168,7 @@ internal sealed class AlertSnoozeService(
         var payload = AlertPayloads.Build(
             rule, baseContext, tenantId, excursion.Id, instance.Id, tenant, activeExcursionCount, now);
 
-        await deliveryService.DispatchAsync(instance.Id, channels, payload, ct);
+        await deliveryService.RenotifyAsync(instance.Id, channels, payload, ct);
 
         logger.LogInformation(
             "Snooze on alert instance {InstanceId} lapsed with rule {RuleName} still firing; re-notified",

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "next-change-auto-resolve-tree",
+  "description": "an enabled auto-resolve tree contributes even when the body alone has none",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": true,
+      "auto_resolve_params": {
+        "type": "time_since_last_carb",
+        "time_since_last_carb": {
+          "operator": ">",
+          "minutes": 30
+        }
+      }
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "context": {
+        "last_carb_at": "2026-03-02T11:50:00Z",
+        "latest_value": 60,
+        "latest_timestamp": "2026-03-02T12:00:00Z",
+        "last_reading_at": "2026-03-02T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -158,7 +157,7 @@ public partial class SetupController : ControllerBase
 
     /// <summary>
     /// Generate passkey registration options for the first owner account.
-    /// Guard: exactly one tenant must exist with zero non-system members.
+    /// Guard: <see cref="GetSoleTenantWithoutOwnerAsync"/>.
     /// </summary>
     [HttpPost("owner/options")]
     [EnableRateLimiting("setup")]
@@ -166,6 +165,7 @@ public partial class SetupController : ControllerBase
     [ProducesResponseType(typeof(SetupOwnerOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> OwnerOptions(
         [FromBody] SetupOwnerOptionsRequest request, CancellationToken ct)
     {
@@ -183,11 +183,13 @@ public partial class SetupController : ControllerBase
         if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
             return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
-        var subjectId = await EnsureOwnerSubjectAsync(
-            tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        var (subjectId, ownerRefusal) =
+            await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (ownerRefusal != null)
+            return ownerRefusal;
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId, normalizedUsername);
+            subjectId, normalizedUsername, PasskeyRegistrationFlow.SetupOwner);
 
         return Ok(new SetupOwnerOptionsResponse
         {
@@ -217,8 +219,8 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(request.ChallengeToken))
             return Problem(detail: "Challenge token is required", statusCode: 400, title: "Bad Request");
 
-        // The enrolling subject is looked up here rather than taken from the challenge token, so a
-        // registration challenge minted by another flow cannot be redeemed as the first owner.
+        // The enrolling subject is looked up here rather than taken from the challenge token, and
+        // the challenge must have been minted by OwnerOptions (PasskeyRegistrationFlow.SetupOwner).
         var ownerSubjectId = await FindSetupOwnerSubjectIdAsync(tenant!, ct);
         if (ownerSubjectId == null)
             return Problem(detail: "Start setup again to create the owner account",
@@ -227,10 +229,12 @@ public partial class SetupController : ControllerBase
         try
         {
             var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenant!.Id,
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.SetupOwner, tenant!.Id,
                 expectedSubjectId: ownerSubjectId.Value);
 
-            await GrantFirstOwnerPlatformAdminAsync(credResult.SubjectId);
+            await CompleteAsOwnerAsync(credResult.SubjectId);
+
+            await _subjectService.UpdateLastLoginAsync(credResult.SubjectId);
 
             // Generate recovery codes
             var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
@@ -239,7 +243,7 @@ public partial class SetupController : ControllerBase
                 credResult.SubjectId,
                 new SessionContext(
                     DeviceDescription: "Setup Passkey",
-                    IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress: HttpContext.GetClientAddress(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
@@ -274,6 +278,7 @@ public partial class SetupController : ControllerBase
     [ProducesResponseType(typeof(SetupOwnerOidcResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> OwnerOidc(
         [FromBody] SetupOwnerOidcRequest request, CancellationToken ct)
     {
@@ -291,8 +296,10 @@ public partial class SetupController : ControllerBase
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");
 
-        var subjectId = await EnsureOwnerSubjectAsync(
-            tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        var (subjectId, ownerRefusal) =
+            await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (ownerRefusal != null)
+            return ownerRefusal;
 
         try
         {
@@ -362,7 +369,7 @@ public partial class SetupController : ControllerBase
 
         var result = await _oidcAuthService.HandleSetupCallbackAsync(
             code, state, expectedState,
-            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ipAddress: HttpContext.GetClientAddress(),
             userAgent: Request.Headers.UserAgent.ToString());
 
         if (!result.Success)
@@ -374,7 +381,7 @@ public partial class SetupController : ControllerBase
         }
 
         if (result.SubjectId is { } oidcOwnerSubjectId)
-            await GrantFirstOwnerPlatformAdminAsync(oidcOwnerSubjectId);
+            await CompleteAsOwnerAsync(oidcOwnerSubjectId);
 
         // Temporary bridge: construct SessionTokenPair from OidcTokenResponse until
         // OidcAuthService is migrated to ISessionService.
@@ -410,46 +417,32 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(_operatorConfig.UsernameValidationWebhookUrl))
             return null;
 
-        Exception? failure = null;
-        int? statusCode = null;
+        var answer = await OperatorWebhook.PostAsync<SlugValidationResult>(
+            _httpClientFactory.CreateClient(OperatorWebhook.UsernameValidationClient),
+            _operatorConfig.UsernameValidationWebhookUrl,
+            new { username },
+            ct);
 
-        try
+        if (answer.Outcome == OperatorWebhookOutcome.Answered)
         {
-            var client = _httpClientFactory.CreateClient("username-validation");
-            var response = await client.PostAsJsonAsync(
-                _operatorConfig.UsernameValidationWebhookUrl,
-                new { username },
-                ct);
-
-            if (response.IsSuccessStatusCode)
-            {
-                Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
-                return await response.Content.ReadFromJsonAsync<SlugValidationResult>(ct);
-            }
-
-            statusCode = (int)response.StatusCode;
-        }
-        catch (Exception ex)
-        {
-            if (ct.IsCancellationRequested)
-                return null;
-
-            failure = ex;
+            Interlocked.Exchange(ref _usernameWebhookOutageReported, 0);
+            return answer.Value;
         }
 
         if (Interlocked.Exchange(ref _usernameWebhookOutageReported, 1) == 0)
         {
             _logger.LogWarning(
-                failure,
-                "Username validation webhook did not answer ({Outcome}); usernames are being accepted without it",
-                statusCode?.ToString() ?? "unreachable");
+                "Username validation webhook did not answer ({Outcome}, {Detail}); usernames are being accepted without it",
+                answer.StatusCode?.ToString() ?? answer.Outcome.ToString(),
+                answer.Detail);
         }
 
         return null;
     }
 
     /// <summary>
-    /// Returns the sole tenant if exactly one exists and it has no non-system members,
+    /// Returns the sole non-demo tenant if exactly one exists and no member of it holds a passkey
+    /// or a working provider identity (<see cref="IInstanceSetupState.TenantHasCredentialedMemberAsync"/>),
     /// or an error result if the preconditions are not met.
     /// </summary>
     /// <remarks>
@@ -470,9 +463,6 @@ public partial class SetupController : ControllerBase
 
         var tenant = tenants[0];
 
-        // A credential-less member is a half-finished setup left behind by an abandoned or failed
-        // WebAuthn/OIDC ceremony — EnsureOwnerSubjectAsync reuses that subject idempotently, so
-        // let the flow resume instead of dead-ending on owner_already_exists.
         var hasOwnerWithCredentials = await _setupState.TenantHasCredentialedMemberAsync(tenant.Id, ct);
 
         if (hasOwnerWithCredentials)
@@ -490,15 +480,30 @@ public partial class SetupController : ControllerBase
         (await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct))?.Id;
 
     /// <summary>
-    /// Find or create the first non-system subject, ensure it is a member of the
-    /// given tenant with the owner role, and assign the global admin role.
-    /// Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony,
-    /// and when reusing a subject created for a previously deleted tenant.
+    /// Find (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>) or create the owner
+    /// subject, ensure it is a member of the given tenant with the owner role, and assign the
+    /// global admin role. Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony.
     /// </summary>
-    private async Task<Guid> EnsureOwnerSubjectAsync(
+    /// <returns>
+    /// The subject, or a refusal with nothing written: <see cref="UsernameTaken"/> when another member
+    /// of the tenant holds <paramref name="username"/> (setup reopens while former members still hold
+    /// their usernames), or <see cref="OwnerRoleMissing"/> when the tenant has no owner role.
+    /// </returns>
+    private async Task<(Guid SubjectId, ObjectResult? Refusal)> EnsureOwnerSubjectAsync(
         TenantRecord tenant, string displayName, string username, CancellationToken ct)
     {
+        if (await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct) is not { } roleId)
+        {
+            _logger.LogError("Setup: tenant {TenantId} has no owner role, so no owner can be created", tenant.Id);
+            return (default, OwnerRoleMissing());
+        }
+
         var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
+
+        if (await _members.UsernameExistsAsync(tenant.Id, username, ct)
+            && (existingSubject is null
+                || (await _members.FindMemberAsync(tenant.Id, existingSubject.Id, ct))?.Username != username))
+            return (default, UsernameTaken());
 
         Guid subjectId;
         if (existingSubject != null)
@@ -508,51 +513,63 @@ public partial class SetupController : ControllerBase
         }
         else
         {
-            subjectId = await _subjects.CreateAsync(new NewSubject(displayName, Username: username), ct);
+            subjectId = await _subjects.CreateSetupOwnerAsync(
+                tenant.Id, new NewSubject(displayName, Username: username), ct);
 
             _logger.LogInformation(
                 "Setup: created owner {SubjectId} ({Username}) for tenant {TenantId}",
                 subjectId, username, tenant.Id);
         }
 
-        // Ensure tenant membership with owner role — required when reusing a
-        // subject from a previously deleted tenant.
-        var ownerRoleId = await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct);
-        if (ownerRoleId is { } roleId)
-        {
-            // Setup retries, so a subject that is already a member is the state it wants, and the
-            // result of the add is not read.
-            _ = await _members.AddMemberAsync(
-                new NewTenantMember(tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member), ct);
-        }
+        // False means the subject is already a member, which a retry wants; any other failed add throws.
+        _ = await _members.AddMemberAsync(
+            new NewTenantMember(
+                tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Setup, By = null },
+            ct);
 
         // Set per-tenant username on the membership
         if (await _members.FindMemberAsync(tenant.Id, subjectId, ct) is { } membership)
             await _members.SetUsernameAsync(tenant.Id, membership.Id, username, ct);
 
-        await _subjectService.AssignRoleAsync(subjectId, "admin");
+        await _subjectService.AssignRoleAsync(subjectId, GlobalRoles.Admin);
 
-        return subjectId;
+        return (subjectId, null);
     }
 
     /// <summary>
-    /// Grants the new owner platform admin now that it holds a credential. The startup
-    /// bootstrap pass ran against an empty database on a fresh install, so without this
+    /// Ends the setup owner record (<see cref="ISubjectRepository.ClearSetupOwnerAsync"/>) and
+    /// grants the new owner platform admin now that it holds a credential. The startup
+    /// bootstrap pass ran against an empty database on a fresh install, so without the grant
     /// the owner cannot reach /settings/admin until the API restarts.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The record is cleared first: the credential is already stored, so a grant that throws
+    /// must not leave the record naming a subject that is now the owner.
+    /// </para>
+    /// <para>
     /// Deliberately called from the completion paths rather than
     /// <see cref="EnsureOwnerSubjectAsync"/>: an abandoned WebAuthn ceremony would
     /// otherwise leave a credential-less subject holding the flag, which then suppresses
     /// every later grant — including the startup pass — and locks the instance out for good.
+    /// </para>
     /// </remarks>
-    private async Task GrantFirstOwnerPlatformAdminAsync(Guid subjectId)
+    private async Task CompleteAsOwnerAsync(Guid subjectId)
     {
         // Not the request token: a client that disconnects mid-response would otherwise
-        // abort the grant and leave the owner locked out of the admin UI.
+        // abort the clear or the grant and leave the owner locked out of the admin UI.
+        await _subjects.ClearSetupOwnerAsync(subjectId, CancellationToken.None);
         await _platformAdminBootstrap.EnsureFirstOwnerIsPlatformAdminAsync(
             subjectId, CancellationToken.None);
     }
+
+    private ObjectResult UsernameTaken() =>
+        Problem(detail: "This username is already taken", statusCode: 400, title: "Bad Request");
+
+    private ObjectResult OwnerRoleMissing() =>
+        Problem(
+            detail: "This tenant has no owner role, so setup cannot create the owner account.",
+            statusCode: 500, title: "Internal Server Error");
 
     // Through the shared writer: the setup flow reuses the login flow's state-cookie name, so a
     // scope of its own would leave two same-named cookies the callback cannot tell apart.

@@ -4,7 +4,7 @@
     type AvailableConnector,
     type GoogleHealthStatus,
     type UploaderApp,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Item } from "#lib/components/ui/item/index.js";
@@ -22,6 +22,7 @@
   import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
   import { resolve } from "$app/paths";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import {
     getUploaderDescription,
     getUploaderName,
@@ -30,6 +31,7 @@
   let {
     open = $bindable(false),
     canAddCloudAccount,
+    signInRequiredForApps = false,
     uploaderApps,
     connectors,
     listFailed = false,
@@ -41,6 +43,11 @@
     open: boolean;
     /** Without it the dialog is the app branch alone, with no first question. */
     canAddCloudAccount: boolean;
+    /**
+     * The session started from a sign-in link, so the app branch, whose every action makes a token
+     * or approves a device, offers the person's own sign-in instead.
+     */
+    signInRequiredForApps?: boolean;
     /** Undefined while the list is loading. */
     uploaderApps: UploaderApp[] | undefined;
     /** Connectors with no configuration yet. Undefined while the list is loading. */
@@ -267,7 +274,15 @@
       {@render listControls("Search apps")}
 
       <div class="-mx-6 min-h-0 flex-1 space-y-4 overflow-y-auto px-6">
-        {#if listFailed}
+        {#if signInRequiredForApps}
+          <SignInGate
+            reason="Sign in again to connect an app or create an API token."
+            onrequest={() => {
+              open = false;
+              reset();
+            }}
+          />
+        {:else if listFailed}
           {@render loadFailure()}
         {:else if uploaderApps === undefined}
           {@render loadingRows()}
@@ -313,6 +328,7 @@
 
         <section class="space-y-2">
           <h3 class="text-sm font-semibold">Set up manually</h3>
+          {#if !signInRequiredForApps}
           <ul class="divide-y border-y">
             <li>
               <Item
@@ -351,6 +367,7 @@
               </Item>
             </li>
           </ul>
+          {/if}
 
           {#if baseUrl}
             <div class="space-y-2 pt-2">

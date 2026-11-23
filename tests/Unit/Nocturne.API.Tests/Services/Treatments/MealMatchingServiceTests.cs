@@ -38,7 +38,6 @@ public class MealMatchingServiceTests
 
     private readonly Mock<IConnectorFoodEntryRepository> _foodEntryRepository = new();
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepository = new();
-    private readonly Mock<ITreatmentFoodService> _treatmentFoodService = new();
     private readonly Mock<IInAppNotificationService> _notificationService = new();
     private readonly Mock<IInAppNotificationRepository> _notificationRepository = new();
     private readonly Mock<IMyFitnessPalMatchingSettingsService> _settingsService = new();
@@ -68,7 +67,6 @@ public class MealMatchingServiceTests
     private MealMatchingService NewService(TimeProvider? time = null, string? tenantZoneId = null) =>
         new(_foodEntryRepository.Object,
             _carbIntakeRepository.Object,
-            _treatmentFoodService.Object,
             _notificationService.Object,
             _notificationRepository.Object,
             _settingsService.Object,
@@ -111,7 +109,6 @@ public class MealMatchingServiceTests
         return new MealMatchingService(
             _foodEntryRepository.Object,
             _carbIntakeRepository.Object,
-            _treatmentFoodService.Object,
             _notificationService.Object,
             _notificationRepository.Object,
             settings,
@@ -369,7 +366,7 @@ public class MealMatchingServiceTests
 
     /// <summary>
     /// The suggestion carries the carb intake's own id, which is the key
-    /// <see cref="MealMatchingService.AcceptMatchAsync"/> writes to
+    /// <see cref="MealMatchLinker.LinkAsync"/> writes to
     /// <c>treatment_foods.carb_intake_id</c>. Reading candidates through the legacy treatment
     /// projection produced either a bolus id or, once a never-populated <c>DbId</c> gated the
     /// result, no suggestions at all.
@@ -454,30 +451,20 @@ public class MealMatchingServiceTests
         captured[0].Should().Be(from);
     }
 
-    /// <summary>
-    /// <c>treatment_foods.carb_intake_id</c> has no foreign key, so an unknown id would persist
-    /// a row nothing can resolve and strand the food entry in Matched.
-    /// </summary>
-    [Fact]
-    public async Task AcceptMatchAsync_WritesNothingWhenTheCarbIntakeDoesNotExist()
+    [Theory]
+    [InlineData(DismissMatchOutcome.Dismissed)]
+    [InlineData(DismissMatchOutcome.AlreadyDismissed)]
+    [InlineData(DismissMatchOutcome.AlreadyResolved)]
+    [InlineData(DismissMatchOutcome.NotFound)]
+    public async Task DismissMatchAsync_ReportsWhateverTheRepositoryDecidedAboutTheClaim(DismissMatchOutcome decided)
     {
         var foodEntryId = Guid.NewGuid();
         _foodEntryRepository
-            .Setup(r => r.GetByIdAsync(foodEntryId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Entry(foodEntryId));
+            .Setup(r => r.DismissAsync(foodEntryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(decided);
 
-        _carbIntakeRepository
-            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((CarbIntake?)null);
+        var outcome = await NewService().DismissMatchAsync(foodEntryId);
 
-        await NewService().AcceptMatchAsync(foodEntryId, Guid.CreateVersion7(), 30, 0);
-
-        _treatmentFoodService.Verify(
-            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        _foodEntryRepository.Verify(
-            r => r.UpdateStatusAsync(
-                It.IsAny<Guid>(), It.IsAny<ConnectorFoodEntryStatus>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        outcome.Should().Be(decided);
     }
 }

@@ -1,15 +1,16 @@
 using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Identity;
 using Xunit;
 using Subject = Nocturne.Core.Models.Authorization.Subject;
 
@@ -32,11 +33,19 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IMemberInviteService> _memberInviteService = new();
+    private readonly Mock<ITenantCreationInviteService> _tenantCreationInvites = new();
+    private readonly Mock<ITenantRepository> _tenants = new();
     private readonly Mock<ITotpService> _totpService = new();
+    private readonly ListLogger<OidcAuthService> _logger = new();
     private readonly OidcAuthService _service;
 
     public OidcAuthServiceLoginGateTests()
     {
+        // An unanswered mock reads as "a code is required"; these subjects have no authenticator.
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
+
         var options = Options.Create(new OidcOptions());
         _service = new OidcAuthService(
             _providerService.Object,
@@ -47,11 +56,14 @@ public class OidcAuthServiceLoginGateTests
             _httpFactory.Object,
             _tenantMemberService.Object,
             _memberInviteService.Object,
-            _totpService.Object,
+            _tenantCreationInvites.Object,
+            _tenants.Object,
+            new SignInCompletion(_totpService.Object, _tenantMemberService.Object,
+                _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance);
+            _logger);
     }
 
     private static OidcAuthService.OidcStateData LoginState(string tenantSlug = "erik", string returnUrl = "/")
@@ -82,6 +94,9 @@ public class OidcAuthServiceLoginGateTests
     private Subject SetupResolvedSubject()
     {
         var subject = new Subject { Id = Guid.NewGuid(), Name = "Rhys", Email = "user@example.com" };
+        _subjectService
+            .Setup(s => s.FindFromOidcAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(subject);
         _subjectService
             .Setup(s => s.FindOrCreateFromOidcAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -267,6 +282,29 @@ public class OidcAuthServiceLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnSuccess_LogsTheSubjectAndProviderIdsAndNoPersonalData()
+    {
+        var subject = SetupResolvedSubject();
+        var provider = Provider();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), provider, Claims(), Guid.NewGuid(), ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeTrue();
+        var logged = string.Join(" ", _logger.Entries.Select(e => e.Message));
+        logged.Should().Contain(subject.Id.ToString());
+        logged.Should().Contain(provider.Id.ToString());
+        logged.Should().NotContain(subject.Email!);
+        logged.Should().NotContain(subject.Name);
+        logged.Should().NotContain(Claims().Sub);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task CompleteLoginAsync_WhenSubjectHasAnAuthenticator_WithholdsTheSessionForTheSecondFactor()
     {
         var subject = SetupResolvedSubject();
@@ -275,7 +313,9 @@ public class OidcAuthServiceLoginGateTests
         _tenantMemberService
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, false)).ReturnsAsync("step-up-token");
         SetupSessionIssuance();
 
@@ -297,6 +337,54 @@ public class OidcAuthServiceLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_FromATrustedDevice_IssuesTheSessionWithoutAStepUpToken()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, "device-token"))
+            .ReturnsAsync(SecondFactorRequirement.SatisfiedByTrustedDevice);
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null,
+            trustedDeviceToken: "device-token");
+
+        result.Success.Should().BeTrue();
+        result.UsedTrustedDevice.Should().BeTrue();
+        result.StepUpToken.Should().BeNull();
+        _totpService.Verify(
+            t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenANonMemberPresentsATrustedDevice_IsStillDenied()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.SatisfiedByTrustedDevice);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null,
+            trustedDeviceToken: "device-token");
+
+        result.IsAccessDenied.Should().BeTrue("a trusted device replaces the code, not the membership check");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task CompleteLoginAsync_WhenANonMemberHasAnAuthenticator_IsDeniedBeforeAStepUpTokenIsMinted()
     {
         var subject = SetupResolvedSubject();
@@ -304,7 +392,9 @@ public class OidcAuthServiceLoginGateTests
         _tenantMemberService
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
-        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
 
         var result = await _service.CompleteLoginAsync(
             LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
@@ -327,7 +417,9 @@ public class OidcAuthServiceLoginGateTests
         _memberInviteService
             .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
             .ReturnsAsync(ValidInvite(tenantId));
-        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, true)).ReturnsAsync("step-up-token");
 
         var result = await _service.CompleteLoginAsync(
@@ -345,7 +437,9 @@ public class OidcAuthServiceLoginGateTests
     public async Task CompleteLoginAsync_OnATenantlessHostWithAnAuthenticator_BindsTheTokenToNoTenant()
     {
         var subject = SetupResolvedSubject();
-        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
         _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, null, false)).ReturnsAsync("step-up-token");
 
         var result = await _service.CompleteLoginAsync(
@@ -420,7 +514,7 @@ public class OidcAuthServiceLoginGateTests
         CreatedAt: DateTime.UtcNow,
         UsedBy: [],
         RoleNames: ["Viewer"],
-        Permissions: []);
+        Permissions: [], null);
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -443,5 +537,299 @@ public class OidcAuthServiceLoginGateTests
         _sessionService.Verify(
             s => s.IssueSessionAsync(subject.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForADeactivatedMember_FailsWithoutASessionOrAStepUpToken()
+    {
+        var subject = SetupResolvedSubject();
+        subject.IsActive = false;
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _totpService
+            .Setup(t => t.GetSecondFactorRequirementAsync(subject.Id, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.IsAccessDenied.Should().BeFalse("a deactivated account is not offered the membership request");
+        result.Error.Should().Be("callback_failed");
+        result.StepUpToken.Should().BeNull();
+        _totpService.Verify(
+            t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForADeactivatedSubjectWithNoTenantResolved_Fails()
+    {
+        var subject = SetupResolvedSubject();
+        subject.IsActive = false;
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private void SetupFirstTimeIdentity() =>
+        _subjectService
+            .Setup(s => s.FindFromOidcAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((Subject?)null);
+
+    private void VerifyNothingWrittenForTheIdentity()
+    {
+        _subjectService.Verify(
+            s => s.FindOrCreateFromOidcAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAnUnseenIdentityThatIsNotAMember_IsRefusedWithoutASubject()
+    {
+        SetupFirstTimeIdentity();
+        var provider = Provider();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), provider, Claims(), Guid.NewGuid(), ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().BeNull();
+        result.ProviderId.Should().Be(provider.Id);
+        result.ExternalIdentityDigest.Should().Be(
+            OidcAuthService.ExternalIdentityDigest(provider.IssuerUrl, Claims().Sub));
+        result.ExternalIdentityDigest.Should().NotContain(Claims().Sub);
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAKnownIdentityThatIsNotAMember_LeavesItsSubjectAsItWas()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().Be(subject.Id);
+        result.ExternalIdentityDigest.Should().BeNull("the subject id already names the person");
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ExternalIdentityDigest_IsStablePerIssuerAndSub_AndDoesNotHoldTheSub()
+    {
+        var digest = OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "alice@example.com");
+
+        digest.Should().Be(OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "alice@example.com"));
+        digest.Should().NotBe(OidcAuthService.ExternalIdentityDigest("https://other.example.com", "alice@example.com"));
+        digest.Should().NotBe(OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "bob@example.com"));
+        digest.Should().MatchRegex("^[0-9a-f]{64}$");
+        digest.Should().NotContain("alice");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenStateNamesATenantButNoneResolved_WritesNothingForTheIdentity()
+    {
+        SetupFirstTimeIdentity();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: "erik"), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.Error.Should().Be("invalid_state");
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForAnUnseenIdentityWithAValidJoinLink_CreatesItsSubjectWithTheProvidersDefaultRoles()
+    {
+        SetupFirstTimeIdentity();
+        var created = new Subject { Id = Guid.NewGuid(), Name = "Invitee" };
+        var provider = Provider();
+        provider.DefaultRoles = ["provider-default"];
+        _subjectService
+            .Setup(s => s.FindOrCreateFromOidcAsync(
+                provider.Id, Claims().Sub, provider.IssuerUrl,
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), provider.DefaultRoles))
+            .ReturnsAsync(created);
+        var tenantId = Guid.NewGuid();
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"), provider, Claims(), tenantId,
+            ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _tenantMemberService.Verify(
+            t => t.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "an identity with no subject is a member of nothing");
+    }
+
+    private static TenantRecord SoleTenant(Guid id) => new(
+        Id: id, Slug: "sole", DisplayName: "Sole", IsActive: true, IsDemo: false, AllowAccessRequests: false,
+        AllowPublicDocs: false, OnboardingCompletedAt: null, SetupHubEnrolledAt: null, SetupStripDismissedRevision: null,
+        PatientRelationship: null, HandedOverAt: null, DefaultGlucoseUnits: null, LastReadingAt: null,
+        ShareTokenHash: null, ShareTokenEncrypted: null, ShareTokenSetAt: null, ShareLastAccessedAt: null,
+        SysCreatedAt: DateTime.UtcNow, SysUpdatedAt: DateTime.UtcNow, DemoConfig: null);
+
+    /// <summary>A first-time identity whose subject the sign-in creates, with the provider's default roles.</summary>
+    private (OidcProvider Provider, Subject Created) SetupCreatableFirstTimeIdentity()
+    {
+        SetupFirstTimeIdentity();
+        var provider = Provider();
+        provider.DefaultRoles = ["provider-default"];
+        var created = new Subject { Id = Guid.NewGuid(), Name = "Newcomer" };
+        _subjectService
+            .Setup(s => s.FindOrCreateFromOidcAsync(
+                provider.Id, Claims().Sub, provider.IssuerUrl,
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), provider.DefaultRoles))
+            .ReturnsAsync(created);
+        SetupSessionIssuance();
+        return (provider, created);
+    }
+
+    private Task<OidcCallbackResult> SignInOnTheApexAsync(OidcProvider provider, string returnUrl) =>
+        _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!, returnUrl: returnUrl), provider, Claims(), currentTenantId: null,
+            ipAddress: null, userAgent: null);
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("/")]
+    [InlineData("/settings/account")]
+    [InlineData("/api/auth/platform-access?tenant=erik")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithNoLink_IsRefusedWithoutASubject(string returnUrl)
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+
+        var result = await SignInOnTheApexAsync(provider, returnUrl);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.SubjectId.Should().BeNull();
+        result.ProviderId.Should().Be(provider.Id);
+        result.ExternalIdentityDigest.Should().Be(
+            OidcAuthService.ExternalIdentityDigest(provider.IssuerUrl, Claims().Sub));
+        VerifyNothingWrittenForTheIdentity();
+        _tenants.Verify(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _tenantCreationInvites.Verify(
+            t => t.GetInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAUsableTenantCreationLink_CreatesItsSubjectWithTheProvidersDefaultRoles()
+    {
+        var (provider, created) = SetupCreatableFirstTimeIdentity();
+        _tenantCreationInvites
+            .Setup(t => t.GetInfoAsync("creation-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteInfo>.Ok(
+                new TenantCreationInviteInfo("nocturne.example.com", "Admin", DateTime.UtcNow.AddDays(1))));
+
+        var result = await SignInOnTheApexAsync(provider, "/start?token=creation-token&slug=erik&name=Erik");
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithARefusedTenantCreationLink_IsRefusedWithoutASubject()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        _tenantCreationInvites
+            .Setup(t => t.GetInfoAsync("creation-token", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TenantInviteOutcome<TenantCreationInviteInfo>.Refused(
+                TenantInviteRefusalCode.UsedUp, "This invite link was already used."));
+
+        var result = await SignInOnTheApexAsync(provider, "/start?token=creation-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAJoinLinkOfTheSoleTenant_CreatesItsSubject()
+    {
+        var (provider, created) = SetupCreatableFirstTimeIdentity();
+        var soleId = Guid.NewGuid();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(SoleTenant(soleId));
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", soleId))
+            .ReturnsAsync(ValidInvite(soleId));
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.Success.Should().BeTrue();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(created.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexOfSeveralTenantsForAnUnseenIdentityWithAJoinLink_IsRefusedWithoutReadingTheInvite()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync((TenantRecord?)null);
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
+        _memberInviteService.Verify(
+            s => s.GetInviteByTokenAsync(It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnTheApexForAnUnseenIdentityWithAnUnknownJoinLinkOfTheSoleTenant_IsRefusedWithoutASubject()
+    {
+        var (provider, _) = SetupCreatableFirstTimeIdentity();
+        var soleId = Guid.NewGuid();
+        _tenants.Setup(t => t.FindSoleTenantAsync(It.IsAny<CancellationToken>())).ReturnsAsync(SoleTenant(soleId));
+
+        var result = await SignInOnTheApexAsync(provider, "/join?token=invite-token");
+
+        result.IsAccessDenied.Should().BeTrue();
+        VerifyNothingWrittenForTheIdentity();
     }
 }

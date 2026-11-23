@@ -42,6 +42,7 @@ public class AlertDeliveryServiceMuteTests
         var services = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton(TimeProvider.System)
+            .AddSingleton<ITenantMembershipRepository>(new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
             .AddSingleton<ChatIdentityDirectoryService>()
             .AddSingleton(_notifications.Object)
             .AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>))
@@ -49,7 +50,7 @@ public class AlertDeliveryServiceMuteTests
             .BuildServiceProvider();
         return new AlertDeliveryService(
             factory.Object.AsNocturneFactory(),
-            new TenantMembershipRepository(factory.Object.AsNocturneFactory()),
+            new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IEngineAlarmRelay>(),

@@ -68,6 +68,23 @@ public class TenantMemberEntity : ISystemTimestamped
     public bool LimitTo24Hours { get; set; } = false;
 
     /// <summary>
+    /// When the membership ends, in UTC; null when it does not. From that instant every access read
+    /// treats it as absent (<see cref="Extensions.MembershipLiveness"/>), and nothing is revoked, so a
+    /// later date restores the same access. An owner's membership never has one.
+    /// </summary>
+    [Column("access_ends_at")]
+    public DateTime? AccessEndsAt { get; set; }
+
+    /// <summary>
+    /// The earliest end, in UTC, of a reason in force that ends before the membership does; null when
+    /// no reason can end first. From that instant the row still includes access the reason no longer
+    /// gives, so every access read treats it as absent until it is recomputed
+    /// (<see cref="Services.MembershipReasons.RecomputeAsync(NocturneDbContext, Guid, Guid, DateTime, CancellationToken)"/>).
+    /// </summary>
+    [Column("next_reason_lapse_at")]
+    public DateTime? NextReasonLapseAt { get; set; }
+
+    /// <summary>
     /// Identifier of the invite used to create this membership, if applicable
     /// </summary>
     [Column("created_from_invite_id")]
@@ -111,6 +128,9 @@ public class TenantMemberEntity : ISystemTimestamped
     /// Collection of roles assigned to this member within the tenant
     /// </summary>
     public List<TenantMemberRoleEntity> MemberRoles { get; set; } = [];
+
+    /// <summary>The reasons the member holds its access, whose sum the row stores.</summary>
+    public List<TenantMemberReasonEntity> Reasons { get; set; } = [];
 
     /// <summary>
     /// The membership's effective permissions: every role's permissions unioned with the direct

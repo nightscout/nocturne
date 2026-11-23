@@ -12,6 +12,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { toast } from "svelte-sonner";
   import {
     deleteCustomReport,
@@ -36,6 +37,7 @@
   import { fresh } from "#lib/api/fresh-query.js";
   import { getPatientTimezone } from "#lib/api/generated/patientTimezones.generated.remote.js";
   import { describeSubmitError, errorCode, errorStatus } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import { copyToClipboard } from "#lib/utils/index.js";
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
@@ -59,7 +61,8 @@
   const specErrors = $derived(report?.errors ?? []);
   /** A member limited to the last 24 hours cannot change or copy a report; the API refuses both. */
   const clamped = $derived(page.data.limitTo24Hours === true);
-  const canEdit = $derived(report?.canEdit === true && !clamped);
+  const handedOff = $derived(page.data.isHandedOffSession === true);
+  const canEdit = $derived(report?.canEdit === true && !clamped && !handedOff);
 
   let renaming = $state(false);
   let name = $state("");
@@ -119,6 +122,7 @@
       renameConflict = null;
       toast.success("Nocturne renamed the report.");
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       if (errorStatus(err) === 409 && errorCode(err) === CHANGED) {
         const now = await fresh(getCustomReport(id)).catch(() => null);
         renameConflict = { name: now?.name ?? report.name ?? "", changedAt: now?.updatedAt ?? null };
@@ -143,6 +147,7 @@
       toast.success("Nocturne deleted the report.");
       await goto(resolve("/(authenticated)/reports/custom"));
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       actionError = describeSubmitError(err, "Could not delete the report. Try again.");
     } finally {
       busy = false;
@@ -226,7 +231,7 @@
               <SquarePen aria-hidden="true" />
               Edit
             </Button>
-          {:else if !clamped}
+          {:else if !clamped && !handedOff}
             <Button size="sm" variant="outline" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
               <CopyPlus aria-hidden="true" />
               Edit a copy
@@ -258,7 +263,7 @@
                   Rename
                 </DropdownMenu.Item>
               {/if}
-              {#if report.canEdit}
+              {#if report.canEdit && !handedOff}
                 <DropdownMenu.Separator />
                 <DropdownMenu.Item class="max-sm:min-h-11" variant="destructive" onSelect={() => (confirmingDelete = true)}>
                   <Trash2 aria-hidden="true" />
@@ -269,6 +274,9 @@
           </DropdownMenu.Root>
         </div>
       </div>
+    {/if}
+    {#if handedOff && !clamped}
+      <SignInGate reason="Sign in again to change, copy, or delete this report." />
     {/if}
     {#if actionError}
       <p class="text-sm text-destructive" role="alert">{actionError}</p>

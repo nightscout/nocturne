@@ -358,13 +358,19 @@ public class StateSpanRepository : IStateSpanRepository
             return [];
 
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var governingByOriginalId = await LoadGoverningSpansAsync(db, stateSpans, cancellationToken);
+        var originalIds = stateSpans
+            .Select(s => s.OriginalId)
+            .OfType<string>()
+            .Where(id => id.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+        var governingByOriginalId = await LoadGoverningSpansAsync(db, originalIds, cancellationToken);
+        var hidden = await LoadHiddenGoverningSpansAsync(db, originalIds, governingByOriginalId, cancellationToken);
         var loaded = new HashSet<StateSpanEntity>(
             governingByOriginalId.Values.Where(s => s.DeletedAt == null), ReferenceEqualityComparer.Instance);
         loaded.UnionWith(await LoadSupersedableSpansAsync(db, stateSpans, cancellationToken));
         var successors = await LoadSuccessorsAsync(db, stateSpans, loaded, cancellationToken);
 
-        var written = new List<(StateSpanEntity Row, UpsertOutcome? Outcome)>(stateSpans.Count);
+        var written = new List<(StateSpanEntity Row, StateSpan Sent, UpsertOutcome? Outcome)>(stateSpans.Count);
         var inserted = new List<StateSpanEntity>();
         foreach (var stateSpan in stateSpans)
         {
@@ -373,15 +379,15 @@ public class StateSpanRepository : IStateSpanRepository
             {
                 if (governing.DeletedAt != null)
                 {
-                    written.Add((governing, null));
+                    written.Add((governing, stateSpan, null));
                     continue;
                 }
 
                 StateSpanMapper.UpdateEntity(governing, stateSpan);
                 var entry = db.Entry(governing);
                 entry.DetectChanges();
-                written.Add((governing, entry.State == EntityState.Added ? UpsertOutcome.Created
-                    : NocturneDbContext.WritesNothing(entry) ? UpsertOutcome.Unchanged
+                written.Add((governing, stateSpan, entry.State == EntityState.Added ? UpsertOutcome.Created
+                    : NocturneDbContext.WritesNothing(entry) && !hidden.Contains(governing) ? UpsertOutcome.Unchanged
                     : UpsertOutcome.Updated));
                 continue;
             }
@@ -392,15 +398,18 @@ public class StateSpanRepository : IStateSpanRepository
             await EndAtSuccessorAsync(db, entity, stateSpan.Metadata, loaded, successors, cancellationToken);
             loaded.Add(entity);
             inserted.Add(entity);
-            written.Add((entity, UpsertOutcome.Created));
+            written.Add((entity, stateSpan, UpsertOutcome.Created));
             if (hasOriginalId)
                 governingByOriginalId[stateSpan.OriginalId!] = entity;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        if (hidden.Count == 0)
+            await db.SaveChangesAsync(cancellationToken);
+        else
+            await db.WriteWithHistoryClampLiftedAsync(async token => await db.SaveChangesAsync(token), cancellationToken);
 
         IReadOnlyList<StateSpanUpsert> committed =
-            [.. written.Select(w => new StateSpanUpsert(StateSpanMapper.ToDomainModel(w.Row), w.Outcome))];
+            [.. written.Select(w => new StateSpanUpsert(AnswerFor(w.Row, w.Sent, hidden), w.Outcome))];
         await ReportCommittedAsync(committed);
 
         if (inserted.Count > 0)
@@ -452,14 +461,9 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     private static async Task<Dictionary<string, StateSpanEntity>> LoadGoverningSpansAsync(
         NocturneDbContext db,
-        IReadOnlyList<StateSpan> stateSpans,
+        IReadOnlyCollection<string> originalIds,
         CancellationToken cancellationToken)
     {
-        var originalIds = stateSpans
-            .Select(s => s.OriginalId)
-            .OfType<string>()
-            .Where(id => id.Length > 0)
-            .ToHashSet(StringComparer.Ordinal);
         if (originalIds.Count == 0)
             return new Dictionary<string, StateSpanEntity>(StringComparer.Ordinal);
 
@@ -484,6 +488,48 @@ public class StateSpanRepository : IStateSpanRepository
 
         return governing;
     }
+
+    /// <summary>
+    /// The governing rows of the ids <paramref name="governing"/> lacks that a history-clamped writer cannot
+    /// see, added to <paramref name="governing"/>. The unique legacy-id index spans the whole tenant, so an
+    /// insert beside one fails with 23505 however the clamp reads. The writer's span overwrites the row, and
+    /// the answer is built from the span as sent (<see cref="AnswerFor"/>) and is never
+    /// <see cref="UpsertOutcome.Unchanged"/>, which would tell the writer its guess equals a row it cannot read.
+    /// </summary>
+    private static async Task<HashSet<StateSpanEntity>> LoadHiddenGoverningSpansAsync(
+        NocturneDbContext db,
+        HashSet<string> originalIds,
+        Dictionary<string, StateSpanEntity> governing,
+        CancellationToken cancellationToken)
+    {
+        var hidden = new HashSet<StateSpanEntity>(ReferenceEqualityComparer.Instance);
+        if (!db.HistoryClamped)
+            return hidden;
+
+        var unseen = originalIds.Except(governing.Keys).ToList();
+        if (unseen.Count == 0)
+            return hidden;
+
+        var held = await db.WriteWithHistoryClampLiftedAsync(
+            token => LoadGoverningSpansAsync(db, unseen, token), cancellationToken);
+        foreach (var (id, row) in held)
+        {
+            governing[id] = row;
+            hidden.Add(row);
+        }
+
+        return hidden;
+    }
+
+    /// <summary>
+    /// What an upsert answers for <paramref name="row"/>: the stored row, or for one the clamp hides the span
+    /// <paramref name="sent"/> as it was sent, since the row's own supersession, end and timestamps are not
+    /// the writer's to read.
+    /// </summary>
+    private static StateSpan AnswerFor(StateSpanEntity row, StateSpan sent, HashSet<StateSpanEntity> hidden) =>
+        hidden.Contains(row)
+            ? StateSpanMapper.ToDomainModel(StateSpanMapper.ToEntity(sent))
+            : StateSpanMapper.ToDomainModel(row);
 
     /// <summary>
     /// Every stored open span a new span in the batch could supersede, per

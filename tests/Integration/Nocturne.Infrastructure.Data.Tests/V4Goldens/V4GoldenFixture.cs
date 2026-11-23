@@ -48,10 +48,9 @@ public class V4GoldenFixture : IAsyncLifetime
         services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
         services.AddPostgreSqlInfrastructure(
             AppConnectionString, configuration: null, configure: c => c.HistoryCommitMarginMilliseconds = 0);
-        // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
-        // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();
-        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(CapturingV4RecordBroadcaster<>));
+        services.AddScoped<IRecordChangeSubscriber, CapturingRecordChangeSubscriber>();
+        services.AddScoped<IRecordChangeSubscriber, CacheInvalidationSubscriber>();
         // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
         // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
         services.AddSingleton<EntryCapture>();

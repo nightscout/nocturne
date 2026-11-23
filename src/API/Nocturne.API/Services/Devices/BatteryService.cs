@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -299,7 +300,7 @@ public class BatteryService : IBatteryService
             IsCharging = snapshot.IsCharging ?? false,
             Temperature = snapshot.Temperature,
             Mills = snapshot.Mills,
-            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Timestamp = snapshot.CreatedAt.ToString("o", CultureInfo.InvariantCulture),
             Notification = GetNotificationStatus(snapshot.Battery),
         };
     }
@@ -322,7 +323,7 @@ public class BatteryService : IBatteryService
             Voltage = snapshot.BatteryVoltage,
             IsCharging = false, // Pumps typically don't have charging status
             Mills = snapshot.Mills,
-            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Timestamp = snapshot.CreatedAt.ToString("o", CultureInfo.InvariantCulture),
             Notification = GetNotificationStatus(snapshot.BatteryPercent),
         };
     }

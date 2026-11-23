@@ -85,19 +85,12 @@ public class DtoMappingStageTests
         };
 
         var definitionId = Guid.NewGuid();
-        var trackerDef = new TrackerDefinitionEntity
-        {
-            Id = definitionId,
-            Name = "G7 Sensor",
-            Category = TrackerCategory.Consumable,
-            Mode = TrackerMode.Duration,
-            LifespanHours = 10,
-        };
+        var trackerDef = TrackerDefinition.Restore(
+            definitionId, "G7 Sensor", TrackerCategory.Consumable, TrackerMode.Duration, lifespanHours: 10);
 
-        var trackerInstance = new TrackerInstanceEntity
+        var trackerInstance = new TrackerInstance
         {
             Id = Guid.NewGuid(),
-            DefinitionId = definitionId,
             StartedAt = DateTimeOffset.FromUnixTimeMilliseconds(StartTime).UtcDateTime,
             Definition = trackerDef,
         };
@@ -136,8 +129,8 @@ public class DtoMappingStageTests
             DeviceEventList = [deviceEvent],
             DisplayTempBasals = [tempBasal],
             SystemEvents = [systemEvent],
-            TrackerDefinitions = [trackerDef],
-            TrackerInstances = [trackerInstance],
+            Trackers = [trackerDef],
+            RunningTrackers = [trackerInstance],
             StateSpans = stateSpans,
         };
 

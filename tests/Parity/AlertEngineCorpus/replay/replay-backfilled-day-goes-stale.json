@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "name": "replay-backfilled-day-goes-stale",
+  "description": "a backfilled day, dated before its stream first sent anything, is imported history and carries no arrival, so each reading ages from its timestamp and the hour-long gap reads stale: under met the stale gap fires, under not_met it ends the excursion and the low after it opens a new one, under hold the excursion is held across it",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value": 200
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "met"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "not_met"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "hold"
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:35:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:40:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:45:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:50:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:55:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T13:00:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T13:05:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T13:05:00Z",
+        "last_reading_at": "2026-01-05T13:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T13:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T13:10:00Z",
+        "last_reading_at": "2026-01-05T13:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T13:15:00Z",
+      "reading": false,
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T13:10:00Z",
+        "last_reading_at": "2026-01-05T13:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

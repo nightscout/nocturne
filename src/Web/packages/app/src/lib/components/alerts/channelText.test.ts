@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import { ChannelType } from "@nocturne/api-client";
 import { CHANNEL_META, findChannelMeta } from "./channelMeta";
 import {
   channelDescription,

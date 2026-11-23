@@ -46,6 +46,9 @@
 
   const form = $derived(trackersRemote.updateDefinition.for(definition?.id ?? ""));
 
+  /** Why the definition cannot be saved yet, or `null` when it can. */
+  const blocked = $derived(draft.name.trim() === "" ? "Enter a name." : null);
+
   const submission = useSubmission();
   // A keyed form keeps its issues across openings, so show them only once this opening submits.
   let submitted = $state(false);
@@ -214,11 +217,14 @@
         class="mb-4"
       />
 
-      <Dialog.Footer>
+      <Dialog.Footer class="sm:items-center">
+        {#if blocked}
+          <p class="text-sm text-muted-foreground max-sm:order-last sm:mr-auto" role="status">{blocked}</p>
+        {/if}
         <Button type="button" variant="outline" onclick={() => (open = false)}>
           Cancel
         </Button>
-        <Button type="submit" disabled={!draft.name || !!form.pending}>
+        <Button type="submit" disabled={blocked !== null || !!form.pending}>
           {form.pending ? "Saving..." : "Save"}
         </Button>
       </Dialog.Footer>

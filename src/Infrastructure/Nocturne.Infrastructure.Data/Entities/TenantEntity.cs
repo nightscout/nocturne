@@ -136,6 +136,13 @@ public class TenantEntity : ISystemTimestamped
     public DateTime? ShareLastAccessedAt { get; set; }
 
     /// <summary>
+    /// The subject the first-run setup owner step created for this tenant, while setup has not
+    /// completed as it (<c>ISubjectRepository.FindSetupOwnerCandidateAsync</c>).
+    /// </summary>
+    [Column("setup_owner_subject_id")]
+    public Guid? SetupOwnerSubjectId { get; set; }
+
+    /// <summary>
     /// When the tenant record was created
     /// </summary>
     [Column("sys_created_at")]

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -325,6 +326,7 @@ public class ReadAccessLogWriterTests
             services.AddScoped<IAuditContext, AuditContext>();
             services.AddLogging();
             services.AddDataServices();
+            services.AddSingleton(AccountLinkRoutes.Off);
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<ILogger<ReadAccessLogWriter>>(Logger);
             services.AddSingleton<ReadAccessLogWriter>();

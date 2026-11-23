@@ -6,7 +6,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 import { BUILDER_KIND, BUILDER_VERSION } from "#lib/components/reports/custom/workspace/saved-state.js";
 import { runOf, statisticsTemplate } from "../custom-report-fixtures.js";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 
 type Spec = { panels: { id: string; tracks?: { layers: { id: string }[] }[] }[]; builder?: { kind: string; version: number; state: unknown } };
 
@@ -427,6 +427,14 @@ describe("a new custom report", () => {
     render(NewCustomReportPage, {});
 
     await expect.element(page.getByTestId("clamped-note")).toHaveTextContent("Your access is limited to the last 24 hours. It cannot create reports.");
+    expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
+  });
+
+  it("offers a handed-off session a sign-in in place of the starters", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(NewCustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to make a report.")).toBeVisible();
     expect(page.getByTestId("report-starters").elements()).toHaveLength(0);
   });
 });

@@ -2,7 +2,7 @@ import type { RequestHandler } from "./$types";
 import { handleBotDispatch } from "#lib/server/bot/index.js";
 import { buildScopedBotApiClient } from "#lib/server/bot/api-client.js";
 import { isTrustedInstanceRequest } from "#lib/server/instance-key.js";
-import type { AlertDispatchEvent } from "@nocturne/bot";
+import { parseAlertDispatchEvent } from "@nocturne/bot/parse-dispatch";
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	// This is a public HTTP endpoint: the gateway routes /api/** here and
@@ -15,7 +15,13 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	}
 
 	try {
-		const event: AlertDispatchEvent = await request.json();
+		const event = parseAlertDispatchEvent(await request.json());
+		if (!event) {
+			return new Response(JSON.stringify({ error: "Invalid alert dispatch" }), {
+				status: 400,
+				headers: { "Content-Type": "application/json" },
+			});
+		}
 
 		// The target tenant comes from the authenticated body, not from
 		// X-Forwarded-Host: the edge gateway does not sanitize that header, so a
@@ -27,7 +33,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		// different host than intended — `<token>.share` would put the API into
 		// share-resolution mode. Anything else non-conforming would reach undici and
 		// throw, surfacing as a 500 rather than a bad request.
-		if (typeof event?.tenantSlug !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(event.tenantSlug)) {
+		if (!/^[a-z0-9][a-z0-9-]*$/.test(event.tenantSlug)) {
 			return new Response(JSON.stringify({ error: "tenantSlug is required" }), {
 				status: 400,
 				headers: { "Content-Type": "application/json" },

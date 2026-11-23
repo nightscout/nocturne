@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
@@ -71,7 +70,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly RelativeTempBasalRates _relativeTempBasalRates;
     private readonly IAuditContext _auditContext;
-    private readonly ILegacyReadCacheInvalidation? _legacyReads;
+    private readonly IRecordChangePublisher? _changes;
 
     public TreatmentDecomposer(
         INocturneDbContextFactory contexts,
@@ -95,10 +94,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         IAuditContext auditContext,
         ILogger<TreatmentDecomposer> logger,
         IDeviceEventReactor? deviceEventReactor = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
+        IRecordChangePublisher? changes = null)
         : base(logger)
     {
-        _legacyReads = legacyReads;
+        _changes = changes;
         _deviceEventReactor = deviceEventReactor;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _keys = keys;
@@ -925,12 +924,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
     private static string? UploadedString(Treatment treatment, string key) =>
-        treatment.AdditionalProperties?.GetValueOrDefault(key) switch
-        {
-            string s => s,
-            JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
-            _ => null
-        };
+        KeptField.String(treatment.AdditionalProperties, key);
 
     /// <summary>
     /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in
@@ -2114,28 +2108,31 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     {
         await using var db = await _contexts.CreateAsync(ct);
         // These deletes bypass the repository chokepoint. Its device-event reaction is run below; the v4-native delete broadcast is deferred to the glucose-unification follow-up.
-        var (deleted, deviceEventIds, activationIds) = await db.ExecuteInTransactionAsync(async token =>
+        var (deleted, deviceEventIds, activationIds, written) = await db.ExecuteInTransactionAsync(async token =>
         {
             var count = 0;
             List<Guid> deviceEvents = [];
             List<Guid> activations = [];
+            List<Type> lostRows = [];
             foreach (var table in DecomposedTreatmentTables.All)
             {
                 var result = await table.SoftDeleteAsync(
                     db, legacyIds, source: null, _auditContext, $"legacy_id={string.Join(",", legacyIds)}", DuplicateDelete.EveryCopy, token);
                 count += result.Count;
+                if (result.Count > 0)
+                    lostRows.Add(table.Model);
                 if (table.Model == typeof(V4Models.DeviceEvent))
                     deviceEvents = result.Entities;
                 if (table.Model == typeof(V4Models.ProfileActivation))
                     activations = result.Entities;
             }
-            return (count, deviceEvents, activations);
+            return (count, deviceEvents, activations, lostRows);
         }, ct: ct);
 
         if (deleted > 0)
         {
             Logger.LogDebug("Soft-deleted {Count} v4 records for {Treatments} legacy treatment(s)", deleted, legacyIds.Length);
-            await ReportWrittenAsync(DecomposedTreatmentTables.All.Select(t => t.Model));
+            await ReportWrittenAsync(written);
             await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
         }
 
@@ -2159,7 +2156,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         var spans = LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
             .Where(s => ids.Contains(s.LegacyId!));
 
-        var (deleted, deviceEventIds, activationIds) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        var (deleted, deviceEventIds, activationIds, written) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
@@ -2169,23 +2166,29 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                 .CountAsync(ct);
             List<Guid> deviceEvents = [];
             List<Guid> activations = [];
+            List<Type> lostRows = [];
             foreach (var table in DecomposedTreatmentTables.All)
             {
                 var result = await table.SoftDeleteAsync(db, ids, source, _auditContext, scope, DuplicateDelete.PromoteSurvivor, ct);
                 count += result.Count;
+                if (result.Count > 0)
+                    lostRows.Add(table.Model);
                 if (table.Model == typeof(V4Models.DeviceEvent))
                     deviceEvents = result.Entities;
                 if (table.Model == typeof(V4Models.ProfileActivation))
                     activations = result.Entities;
             }
 
-            count += await db.AuditedSoftDeleteAsync(spans, _auditContext, scope, ct);
+            var spansDeleted = await db.AuditedSoftDeleteAsync(spans, _auditContext, scope, ct);
+            count += spansDeleted;
+            if (spansDeleted > 0)
+                lostRows.Add(typeof(StateSpan));
 
             await transaction.CommitAsync(ct);
-            return (count, deviceEvents, activations);
+            return (count, deviceEvents, activations, lostRows);
         });
 
-        await ReportWrittenAsync([.. DecomposedTreatmentTables.All.Select(t => t.Model), typeof(StateSpan)]);
+        await ReportWrittenAsync(written);
         await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
         await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
         return deleted;
@@ -2425,29 +2428,45 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
         // The served state spans go with the records: a window read serves them, so a window
         // delete that left them would leave them served.
-        var total = await db.ExecuteInTransactionAsync(async token =>
+        var (total, written) = await db.ExecuteInTransactionAsync(async token =>
         {
             // A Note written beside another record is served as part of it, so it is not counted apart.
             long deleted = -await DecomposedTreatmentTables.InWindow(
                     LegacyTreatmentTables.NotesServedWithAnotherRecord(db), from, to)
                 .LongCountAsync(token);
+            List<Type> lostRows = [];
             foreach (var table in DecomposedTreatmentTables.All)
-                deleted += await table.SoftDeleteInWindowAsync(db, from, to, _auditContext, scope, token);
-            deleted += await db.AuditedSoftDeleteAsync(
+            {
+                var tableDeleted = await table.SoftDeleteInWindowAsync(db, from, to, _auditContext, scope, token);
+                deleted += tableDeleted;
+                if (tableDeleted > 0)
+                    lostRows.Add(table.Model);
+            }
+            var spansDeleted = await db.AuditedSoftDeleteAsync(
                 LegacyTreatmentTables.ServedStateSpansInWindow(db, from, to), _auditContext, scope, token);
-            return deleted;
+            deleted += spansDeleted;
+            if (spansDeleted > 0)
+                lostRows.Add(typeof(StateSpan));
+            return (deleted, lostRows);
         }, ct: ct);
 
-        await ReportWrittenAsync([.. DecomposedTreatmentTables.All.Select(t => t.Model), typeof(StateSpan)]);
+        await ReportWrittenAsync(written);
         await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
         Logger.LogInformation("BulkDelete: removed {Total} v4 treatment records from={From} to={To}", total, from, to);
         return total;
     }
 
     /// <summary>
-    /// Tells <see cref="ILegacyReadCacheInvalidation"/> what a write here made around the
-    /// repositories, which report their own writes.
+    /// Announces the types a write here made around the repositories, which report their own writes,
+    /// after its commit: the rows are not materialised, so the change names no record. A delete names
+    /// only the tables that lost rows: each type named moves its facts and starts their evaluation.
+    /// Uncancellable for the reason <see cref="ILegacyReadCacheInvalidation"/> takes no token.
     /// </summary>
-    private Task ReportWrittenAsync(IEnumerable<Type> models) =>
-        _legacyReads?.WrittenAsync([.. models]) ?? Task.CompletedTask;
+    private Task ReportWrittenAsync(IEnumerable<Type> models)
+    {
+        Type[] written = [.. models];
+        return written.Length == 0 || _changes is null
+            ? Task.CompletedTask
+            : _changes.PublishAsync(RecordsChanged.Written(written), CancellationToken.None);
+    }
 }

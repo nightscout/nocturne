@@ -145,6 +145,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPost]
     [RequireScope(Scope.TreatmentsReadWrite, Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IEnumerable<Activity>>> CreateActivities(
@@ -170,6 +171,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [RequireScope(Scope.TreatmentsReadWrite, Scope.SleepReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Activity>> UpdateActivity(
@@ -201,6 +203,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [RequireScope(Scope.TreatmentsReadWrite)]
+    [ScopeDecidedBy(typeof(ActivityWriteScopeGuard))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteActivity(

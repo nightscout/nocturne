@@ -40,6 +40,10 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
   // Set-Cookie for the last-used-method hint has to be forwarded or only the OIDC flow — which
   // is a browser redirect — would ever record one.
   AUTH_COOKIE_NAMES.lastSignIn,
+  // The authenticator step is a server-side form, so the API's Set-Cookie for a newly trusted
+  // device has to be forwarded or the device is listed as trusted and never recognised. Its
+  // deletion matters too: the API clears it when the holder stops trusting this device.
+  AUTH_COOKIE_NAMES.trustedDevice,
 ]);
 
 /**

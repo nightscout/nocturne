@@ -8,7 +8,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpdateBolusRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BolusController"/>
-public class UpdateBolusRequest
+public class UpdateBolusRequest : IV4RecordHeader
 {
     /// <summary>
     /// When the bolus was delivered.

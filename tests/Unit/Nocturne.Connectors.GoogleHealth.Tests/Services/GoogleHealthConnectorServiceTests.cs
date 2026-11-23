@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -388,9 +389,12 @@ public class GoogleHealthConnectorServiceTests
             ? await fixture.Service.SyncDataAsync(config, default, from.UtcDateTime)
             : await fixture.Service.SyncDataAsync(new SyncRequest { From = from.UtcDateTime }, config, default);
 
+        // The clock moves a second per read, and the scheduled entry point reads it once more than
+        // the requested one before the window is resolved.
         Assert.True(result.Success);
         fixture.Writer.Verify(writer => writer.BeginReconciliationAsync(
-            It.IsAny<IReadOnlyCollection<string>>(), from, now, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<IReadOnlyCollection<string>>(), from,
+            It.Is<DateTimeOffset>(to => to >= now && to <= now.AddSeconds(2)), It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(fixture.ImportFromWasConsumed);
         using var state = JsonDocument.Parse(fixture.StoredConfiguration);
         Assert.False(state.RootElement.TryGetProperty("backfillCursorDate", out _));
@@ -486,6 +490,82 @@ public class GoogleHealthConnectorServiceTests
         Assert.True(retried.Success);
         Assert.InRange(retryRanges[0], Now.AddMinutes(-6), Now);
         Assert.Equal(today.AddDays(-retryDays), retryRanges[1].UtcDateTime.Date);
+    }
+
+    [Fact]
+    public async Task A_retry_window_save_that_outlasts_thirty_seconds_is_cancelled_and_not_stored()
+    {
+        var weightRequests = 0;
+        var clock = new FakeTimeProvider(Now);
+        Fixture? fixture = null;
+        var saveStarted = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") && ++weightRequests == 2 => FailAndStall(),
+            var path when path.Contains("/weight/") => Json("""{"dataPoints":[]}"""),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        }, clock);
+        HttpResponseMessage FailAndStall()
+        {
+            fixture!.CursorReadHook = async token =>
+            {
+                saveStarted.TrySetResult(token);
+                await Task.Delay(Timeout.Infinite, token);
+            };
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }
+        var config = fixture.Configuration();
+        config.HistoryDays = 7;
+
+        var sync = fixture.Service.SyncDataAsync(config, CancellationToken.None);
+        var cleanupToken = await saveStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(cleanupToken.IsCancellationRequested);
+        clock.Advance(TimeSpan.FromSeconds(30));
+        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(cleanupToken.IsCancellationRequested);
+        Assert.False(result.Success);
+        Assert.DoesNotContain("backfillChunkDays", fixture.StoredConfiguration);
+    }
+
+    [Fact]
+    public async Task A_reconciliation_cleanup_that_outlasts_thirty_seconds_is_cancelled()
+    {
+        var clock = new FakeTimeProvider(Now);
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json(
+                """{"dataPoints":[{"name":"weight-1","weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"weightGrams":70000}}]}"""),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        }, clock);
+        fixture.Writer
+            .Setup(value => value.WriteAsync(
+                It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
+                It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+        var abandonStarted = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Writer
+            .Setup(value => value.AbandonReconciliationAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(async (Guid _, CancellationToken token) =>
+            {
+                abandonStarted.TrySetResult(token);
+                await Task.Delay(Timeout.Infinite, token);
+            });
+
+        var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        var sync = fixture.Service.SyncDataAsync(
+            new SyncRequest { From = from, To = from.AddDays(1) }, fixture.Configuration(), CancellationToken.None);
+        var cleanupToken = await abandonStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(cleanupToken.IsCancellationRequested);
+        clock.Advance(TimeSpan.FromSeconds(30));
+        var result = await sync.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(cleanupToken.IsCancellationRequested);
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync_native_write:weight", result.Message);
     }
 
     [Fact]
@@ -930,10 +1010,10 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase));
             configurations.Setup(value => value.SaveSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), null,
-                    It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
+                    It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()))
+                .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?, CancellationToken>((_, values, _, _, _) =>
                     secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
-                .Returns(Task.CompletedTask);
+                .ReturnsAsync(new Nocturne.Core.Contracts.Connectors.ConnectorSecretsSaveResult());
             configurations.Setup(value => value.SaveRuntimeSecretsAsync(
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Callback<string, Dictionary<string, string>, CancellationToken>((_, values, _) =>
@@ -958,7 +1038,11 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var cursorStore = new Mock<IConnectorSyncCursorStore>();
             cursorStore.Setup(value => value.GetAsync("GoogleHealth", "health", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new ConnectorSyncCursor(null, RuntimeStateOverride ?? StoredConfiguration));
+                .Returns(async (string _, string _, CancellationToken token) =>
+                {
+                    if (CursorReadHook is { } hook) await hook(token);
+                    return new ConnectorSyncCursor(null, RuntimeStateOverride ?? StoredConfiguration);
+                });
             cursorStore.Setup(value => value.SetAsync("GoogleHealth", "health", It.IsAny<ConnectorSyncCursor>(), It.IsAny<CancellationToken>()))
                 .Callback<string, string, ConnectorSyncCursor, CancellationToken>((_, _, cursor, _) =>
                 {
@@ -1013,7 +1097,7 @@ public class GoogleHealthConnectorServiceTests
                 new GoogleHealthClient(new HttpClient(handler, false)),
                 new GoogleHealthSessionStore(configurations.Object, oauth,
                     Mock.Of<IGoogleHealthGrantHolders>(), tenant.Object, TestPlatform.Options(),
-                    NullLogger<GoogleHealthSessionStore>.Instance),
+                    NullLogger<GoogleHealthSessionStore>.Instance, TimeProvider.System),
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,
@@ -1026,6 +1110,7 @@ public class GoogleHealthConnectorServiceTests
         }
 
         public GoogleHealthConnectorService Service { get; }
+        public Func<CancellationToken, Task>? CursorReadHook { get; set; }
         public SemaphoreSlim Gate { get; } = new(1);
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();
         public Mock<IGoogleHealthReadingWriter> Writer { get; }

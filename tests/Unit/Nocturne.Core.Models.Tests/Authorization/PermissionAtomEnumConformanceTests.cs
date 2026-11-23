@@ -71,6 +71,8 @@ public class PermissionAtomEnumConformanceTests
             [PermissionAtom.SleepReadWrite] = Scope.SleepReadWrite,
             [PermissionAtom.FoodRead] = Scope.FoodRead,
             [PermissionAtom.FoodReadWrite] = Scope.FoodReadWrite,
+            [PermissionAtom.ConnectorsRead] = Scope.ConnectorsRead,
+            [PermissionAtom.ConnectorsReadWrite] = Scope.ConnectorsReadWrite,
             [PermissionAtom.ReportsRead] = Scope.ReportsRead,
             [PermissionAtom.TherapyRead] = Scope.TherapyRead,
             [PermissionAtom.TherapyReadWrite] = Scope.TherapyReadWrite,

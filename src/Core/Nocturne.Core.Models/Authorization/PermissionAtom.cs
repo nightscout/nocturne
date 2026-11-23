@@ -55,6 +55,12 @@ public enum PermissionAtom
     [EnumMember(Value = "food.readwrite"), JsonStringEnumMemberName("food.readwrite")]
     FoodReadWrite,
 
+    [EnumMember(Value = "connectors.read"), JsonStringEnumMemberName("connectors.read")]
+    ConnectorsRead,
+
+    [EnumMember(Value = "connectors.readwrite"), JsonStringEnumMemberName("connectors.readwrite")]
+    ConnectorsReadWrite,
+
     [EnumMember(Value = "reports.read"), JsonStringEnumMemberName("reports.read")]
     ReportsRead,
 

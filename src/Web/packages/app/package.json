@@ -16,9 +16,7 @@
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
     "./components/*": "./src/lib/components/*",
-    "./constants/*": "./src/lib/constants/*.ts",
-    "./api/*": "./src/lib/api/generated/*",
-    "./api-client": "./src/lib/api/generated/nocturne-api-client.ts"
+    "./constants/*": "./src/lib/constants/*.ts"
   },
   "directories": {
     "lib": "lib"
@@ -73,7 +71,7 @@
     "@vitest/browser-playwright": "^4.1.6",
     "@vitest/coverage-v8": "4.1.6",
     "autoprefixer": "^10.5.0",
-    "bits-ui": "^2.18.1",
+    "bits-ui": "^2.18.2",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "eslint": "^10.3.0",
@@ -100,6 +98,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.0",
+    "@nocturne/api-client": "workspace:*",
     "@nocturne/bot": "workspace:*",
     "@nocturne/charts": "workspace:*",
     "@nocturne/bridge": "workspace:*",

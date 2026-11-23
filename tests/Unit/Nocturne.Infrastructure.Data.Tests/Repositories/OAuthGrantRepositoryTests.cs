@@ -113,7 +113,7 @@ public class OAuthGrantRepositoryTests : IDisposable
         var grant = await CreateAsync(Direct(_member, "h1", expiresAt: Now.AddDays(1)));
 
         var state = await Grants(_otherTenant).GetStateAsync(_tenant, grant, CancellationToken.None);
-        state.Should().Be(new OAuthGrantState(null, Now.AddDays(1), state!.Scopes, false));
+        state.Should().Be(new OAuthGrantState(null, Now.AddDays(1), state!.Scopes, false, null));
         (await Grants().GetStateAsync(_otherTenant, grant, CancellationToken.None)).Should().BeNull();
 
         await Grants(_otherTenant).RecordUseAsync(
@@ -248,7 +248,7 @@ public class OAuthGrantRepositoryTests : IDisposable
             .Should().Equal(live);
         (await GetAsync(revoked)).IsRevoked.Should().BeTrue();
         (await Grants().GetActiveForSubjectAsync(_member, CancellationToken.None)).Should().HaveCount(2);
-        (await Grants().HasUnrevokedLegacySecretAsync("none", CancellationToken.None)).Should().BeFalse();
+        (await Grants().FindLiveLegacySecretAsync("none", Now, CancellationToken.None)).Should().BeNull();
         (await Grants().GetTokenHashesAsync(CancellationToken.None)).Should().BeEquivalentTo(["h1", "h2", "h3", "h4"]);
         (await Grants().HasLiveShareGrantAsync(Now, CancellationToken.None)).Should().BeFalse();
 

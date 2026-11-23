@@ -41,6 +41,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/v4/user/preferences", "GET")]
     [InlineData("/api/auth/passkey/credentials", "GET")]
     [InlineData("/api/auth/totp/login", "POST")]
+    [InlineData("/api/auth/oidc/link/callback", "GET")]
     public async Task Apex_serves_a_caller_scoped_path_as_the_sole_tenant(string path, string method)
     {
         var tenantId = SeedTenant("theconen");
@@ -57,6 +58,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/auth/oidc/session", "GET")]
     [InlineData("/api/v4/me/permissions", "GET")]
     [InlineData("/api/auth/totp/login", "POST")]
+    [InlineData("/api/auth/oidc/link/callback", "GET")]
     public async Task Apex_caller_scoped_path_stays_tenantless_on_a_multi_tenant_install(string path, string method)
     {
         SeedTenant("alpha");
@@ -72,9 +74,16 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/auth/oidc/login", "GET")]
     [InlineData("/api/auth/oidc/callback", "GET")]
     [InlineData("/api/auth/oidc/link", "GET")]
-    [InlineData("/api/auth/oidc/link/callback", "GET")]
     [InlineData("/api/v4/me/tenants", "GET")]
     [InlineData("/api/v4/me/tenants/overview", "GET")]
+    [InlineData("/api/v4/me/tenants/overview/review", "GET")]
+    [InlineData("/api/v4/me/tenants/overview/person", "GET")]
+    [InlineData("/api/v4/me/overview-admission", "GET")]
+    [InlineData("/api/v4/me/teams", "GET")]
+    [InlineData("/api/v4/me/teams", "POST")]
+    [InlineData("/api/v4/me/teams/invites/a-token/accept", "POST")]
+    [InlineData("/api/v4/me/teams/access-links/a-token", "GET")]
+    [InlineData("/api/v4/me/teams/access-links/a-token/approve", "POST")]
     [InlineData("/api/v4/admin/tenants", "GET")]
     [InlineData("/api/v4/setup/status", "GET")]
     public async Task Apex_cross_tenant_path_stays_tenantless_on_a_single_tenant_install(string path, string method)

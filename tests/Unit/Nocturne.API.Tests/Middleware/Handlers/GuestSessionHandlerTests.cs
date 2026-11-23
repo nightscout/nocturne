@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
@@ -35,6 +36,7 @@ public class GuestSessionHandlerTests
 
     private readonly string _dbName = Guid.NewGuid().ToString();
     private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestSessionHandler _handler;
 
@@ -61,6 +63,8 @@ public class GuestSessionHandlerTests
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(_dbName));
         services.AddDataServices();
+        services.AddSingleton<TimeProvider>(_time);
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddScoped<IGuestLinkService, GuestLinkService>();
         services.AddScoped<GrantRevocationService>();
         var provider = services.BuildServiceProvider();
@@ -69,6 +73,7 @@ public class GuestSessionHandlerTests
             new EphemeralDataProtectionProvider(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             _sessionCache,
+            _time,
             NullLogger<GuestSessionHandler>.Instance);
     }
 
@@ -181,6 +186,82 @@ public class GuestSessionHandlerTests
         context.Response.Headers.SetCookie.ToString().Should().NotContain(CookieName);
     }
 
+    private async Task CapAsync(DateTime notAfter)
+    {
+        await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(ctx.AsFactory(), _tenantId);
+        var capped = await new OAuthGrantRepository(unit).CapGrantsCreatedByAsync(
+            _dataOwnerId, notAfter, DateTime.UtcNow, CancellationToken.None);
+        await unit.Context.SaveChangesAsync();
+        new GrantRevocationService(_sessionCache).EvictSessions(capped);
+    }
+
+    [Fact]
+    public async Task CappedGrant_WithASessionCachedBeforeTheCap_IsRejectedOnceItsNewExpiryHasPassed()
+    {
+        var grantId = await SeedActivatedGrantAsync(_tenantId);
+        var cookie = ProtectCookie(grantId);
+        (await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie))).Succeeded.Should().BeTrue();
+
+        await CapAsync(DateTime.UtcNow.AddMinutes(-1));
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie));
+        result.Succeeded.Should().BeFalse();
+        result.ShouldSkip.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CappedGrant_WithASessionCachedBeforeTheCap_AuthenticatesUntilItsNewExpiry()
+    {
+        var grantId = await SeedActivatedGrantAsync(_tenantId);
+        var cookie = ProtectCookie(grantId);
+        (await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie))).Succeeded.Should().BeTrue();
+        var newExpiry = DateTime.UtcNow.AddHours(1);
+
+        await CapAsync(newExpiry);
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie));
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.ExpiresAt.Should().Be(new DateTimeOffset(newExpiry, TimeSpan.Zero));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    public async Task CachedSession_PastItsExpiry_IsRefusedWhileStillInTheCache(int secondsAfterExpiry)
+    {
+        var grantId = await SeedActivatedGrantAsync(_tenantId);
+        var cookie = ProtectCookie(grantId);
+        (await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie))).Succeeded.Should().BeTrue();
+        _sessionCache.TryGet(_tenantId, grantId, out var cached).Should().BeTrue();
+        cached.Should().NotBeNull();
+
+        _time.SetUtcNow(new DateTimeOffset(cached!.ExpiresAt, TimeSpan.Zero).AddSeconds(secondsAfterExpiry));
+        _sessionCache.TryGet(_tenantId, grantId, out var stillCached).Should().BeTrue();
+        stillCached.Should().BeSameAs(cached);
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, cookie));
+
+        result.Succeeded.Should().BeFalse();
+        result.ShouldSkip.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CachedSession_BeforeItsExpiry_IsAnsweredFromTheCache()
+    {
+        // The grant is in no table, so only the cache can answer for it.
+        var grantId = Guid.CreateVersion7();
+        var expiresAt = _time.GetUtcNow().UtcDateTime.AddMinutes(10);
+        _sessionCache.Set(_tenantId, grantId, new GuestSessionInfo(
+            grantId, _tenantId, _dataOwnerId, [Scope.GlucoseRead], "Caregiver", expiresAt));
+        _time.Advance(TimeSpan.FromMinutes(10) - TimeSpan.FromSeconds(1));
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, ProtectCookie(grantId)));
+
+        result.Succeeded.Should().BeTrue();
+        result.AuthContext!.ExpiresAt.Should().Be(new DateTimeOffset(expiresAt, TimeSpan.Zero));
+    }
+
     [Fact]
     public async Task RevokedGrant_IsRejectedWithoutWaitingForCacheExpiry()
     {
@@ -192,7 +273,7 @@ public class GuestSessionHandlerTests
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId })
         {
             var service = new GuestLinkService(
-                ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+                ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), _time, NullLogger<GuestLinkService>.Instance);
             (await service.RevokeAsync(grantId, _dataOwnerId)).Should().BeTrue();
         }
 
@@ -224,11 +305,11 @@ public class GuestSessionHandlerTests
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
         var service = new GuestLinkService(
-            ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+            ctx.AsFactory(), new OAuthGrantRepository(ctx.AsFactory()), _sessionCache, new GrantRevocationService(_sessionCache), _time, NullLogger<GuestLinkService>.Instance);
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",
-            Unbounded(), limitTo24Hours: limitTo24Hours);
+            Unbounded(), null, limitTo24Hours: limitTo24Hours);
         var activation = await service.ActivateAsync(created.Code, "1.2.3.4", "TestAgent");
 
         activation.Success.Should().BeTrue();

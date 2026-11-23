@@ -4,7 +4,7 @@
     UploaderApp,
     UploaderSetupResponse,
     DataSourceInfo,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
   import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
   import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
@@ -24,6 +24,7 @@
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -61,6 +62,7 @@
       apiToken = result.token ?? null;
       if (apiToken) startPolling();
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       apiTokenError = describeSubmitError(
         err,
         "Failed to generate API key. You can create one manually in Settings."

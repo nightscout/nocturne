@@ -30,9 +30,8 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         IDuplicateLinker linker,
         IAuditContext auditContext,
         ILogger<BolusRepository> logger,
-        IV4RecordBroadcaster<Bolus>? broadcaster = null,
-        ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads: legacyReads, linker: linker)
+        IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes, linker: linker)
     {
     }
 

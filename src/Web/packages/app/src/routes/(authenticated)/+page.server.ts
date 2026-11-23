@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ locals, request, parent, cookies, i
 
 	// A tenantless host serves the cross-tenant overview instead of one tenant's dashboard, so
 	// there is no tenant whose chart data could be loaded here. The overview itself is fetched
-	// client-side by the same remote query /tenants uses.
+	// client-side by the same remote query /people uses.
 	if (tenantless) {
 		const landing = resolveSingleTenantLanding(
 			await getReachableTenants(apiClient),
@@ -157,7 +157,7 @@ function loadChartData(apiClient: App.Locals['apiClient']) {
  *
  * The bare list, not the overview: all that is wanted here is how many there are and what the
  * sole one is called, and the overview aggregates each tenant's latest glucose to answer that.
- * TenantsOverview fetches the aggregate itself once the page renders.
+ * PeoplePage fetches the aggregate itself once the page renders.
  *
  * The overview is further narrowed to tenants the current token can read glucose from, which no
  * field of TenantDto can express, so this list cannot match it.

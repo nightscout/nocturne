@@ -7,14 +7,28 @@ import SocketIOServer, {
   isShareHost,
   pickHandshakeHost,
   resolveTenantSlug,
+  overviewReads,
   SHARE_REALTIME_UNSUPPORTED,
 } from './socketio-server.js';
-import { signHandshakeTicket, type RealtimeGrant } from './handshake-ticket.js';
+import { signHandshakeTicket, signOverviewTicket, type RealtimeGrant } from './handshake-ticket.js';
 import MessageTranslator from './message-translator.js';
 import { LEGACY_DELTA_WINDOW_MS } from './legacy-delta.js';
 
 const SECRET = 'test-instance-key-0123456789';
 const TENANT_ID = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1b';
+const OTHER_TENANT_ID = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1c';
+const OVERVIEW_SUBJECT = '0a5f2c1e-1111-4222-8333-444455556666';
+
+/** One relay of each tracker and alarm event the overview row shows, as a tenant's SignalR client hands it over. */
+const overviewPingingRelays: Record<string, (relay: MessageTranslator) => void> = {
+  trackerUpdate: (relay) => relay.handleTrackerUpdate({ action: 'ack', instance: { id: 'tr1' } }),
+  trackerDefinitionUpdate: (relay) => relay.handleTrackerDefinitionUpdate({ id: 'td1' }),
+  alarm: (relay) => relay.handleAlarm('alarm', { level: 1, title: 'High' }),
+  urgent_alarm: (relay) => relay.handleAlarm('urgent_alarm', { level: 2, title: 'Urgent High' }),
+  clear_alarm: (relay) => relay.handleClearAlarm({ clear: true }),
+  'engine alarm': (relay) => relay.handleEngineAlarm('urgent_alarm', { level: 2, title: 'Urgent Low' }),
+  'engine clear alarm': (relay) => relay.handleEngineClearAlarm({ clear: true }),
+};
 
 /** The server, with `TENANT_ID` as the tenant every slug names. */
 function servingTenant(server: SocketIOServer): SocketIOServer {
@@ -1552,6 +1566,89 @@ describe('SocketIOServer storage category fan-out', () => {
       await server.stop();
     }
   });
+
+  /** An `/overview` socket admitted with a ticket naming `tenantIds`, recording every event it receives. */
+  async function overviewBrowser(port: number, tenantIds: string[]) {
+    const client = connectClient(`http://127.0.0.1:${port}/overview`, {
+      transports: ['websocket'],
+      forceNew: true,
+      extraHeaders: { 'X-Forwarded-Host': 'nocturne.run' },
+      auth: { token: signOverviewTicket(SECRET, 'nocturne.run', { subjectId: OVERVIEW_SUBJECT, tenantIds }) },
+    });
+    clients.push(client);
+    const received: { event: string; payload: unknown }[] = [];
+    client.onAny((event: string, payload: unknown) => received.push({ event, payload }));
+    await new Promise<void>((resolve) => client.once('connect', () => resolve()));
+    return received;
+  }
+
+  it('delivers an overview socket the ping of a tenant its ticket names and no other event', async () => {
+    const { server, port } = await listening();
+    try {
+      const overview = await overviewBrowser(port, [TENANT_ID]);
+
+      broadcastEverything(server);
+      server.broadcastInAppNotification('notificationCreated', { id: 'n1' }, 'rhys', OVERVIEW_SUBJECT);
+      server.broadcastToAlarmNamespace('urgent_alarm', { level: 2 }, 'rhys');
+      server.broadcastToAlarmNamespace('clear_alarm', { clear: true }, 'rhys');
+      for (const relayEvent of Object.values(overviewPingingRelays)) {
+        relayEvent(new MessageTranslator(server, 'sam', OTHER_TENANT_ID));
+      }
+      server.broadcastOverviewUpdate(TENANT_ID);
+
+      await vi.waitFor(() => expect(overview).toHaveLength(1));
+      await settle();
+      expect(overview).toEqual([{ event: 'overviewUpdate', payload: { tenantId: TENANT_ID } }]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it.each(Object.entries(overviewPingingRelays))(
+    'pings the overview once for a relayed %s, and only the followers of its tenant',
+    async (_event, relayEvent) => {
+      const { server, port } = await listening();
+      try {
+        const follower = await overviewBrowser(port, [TENANT_ID]);
+        const otherFollower = await overviewBrowser(port, [OTHER_TENANT_ID]);
+
+        relayEvent(new MessageTranslator(server, 'rhys', TENANT_ID));
+
+        await vi.waitFor(() => expect(follower).toHaveLength(1));
+        await settle();
+        expect(follower).toEqual([{ event: 'overviewUpdate', payload: { tenantId: TENANT_ID } }]);
+        expect(otherFollower).toEqual([]);
+      } finally {
+        await server.stop();
+      }
+    },
+  );
+
+  it('pings the overview for each data change a tenant relays, and no tenant socket hears the ping', async () => {
+    const { server, port } = await listening();
+    try {
+      const member = await browser(port, grant(true, { subjectId: OVERVIEW_SUBJECT, categories: ['entries'] }));
+      const overview = await overviewBrowser(port, [TENANT_ID]);
+      const relay = new MessageTranslator(server, 'rhys', TENANT_ID);
+
+      relay.handleDataUpdate([{ _id: 'e1', sgv: 120, date: 1000 }]);
+      relay.handleStorageCreate({ colName: 'entries', doc: { _id: 'e1', sgv: 120 } });
+      relay.handleStorageUpdate({ colName: 'entries', doc: { _id: 'e1', sgv: 121 } });
+      relay.handleStorageDelete({ colName: 'entries', doc: { _id: 'e1' } });
+      relay.handleStorageCreate({ colName: 'settings', doc: { _id: 's1' } });
+      relay.handleStatusUpdate({ status: 'ok' });
+
+      await vi.waitFor(() => expect(overview).toHaveLength(4));
+      await vi.waitFor(() => expect(member.map(({ event }) => event)).toContain('status'));
+      await settle();
+      expect(overview.every(({ event, payload }) =>
+        event === 'overviewUpdate' && JSON.stringify(payload) === JSON.stringify({ tenantId: TENANT_ID }))).toBe(true);
+      expect(overview).toHaveLength(4);
+      expect(member.map(({ event }) => event)).not.toContain('overviewUpdate');
+    } finally {
+      await server.stop();
+    }
+  });
 });
 
 describe('SocketIOServer v3 /storage broadcast fan-out', () => {
@@ -2080,4 +2177,268 @@ describe('a share host handshake', () => {
       await server.stop();
     },
   );
+});
+
+describe('SocketIOServer /overview namespace', () => {
+  const clients: ClientSocket[] = [];
+
+  afterEach(() => {
+    for (const client of clients.splice(0)) client.disconnect();
+  });
+
+  async function listening() {
+    const http = createServer();
+    const server = servingTenant(new SocketIOServer(http, {}, 'nocturne.run', null, SECRET));
+    await server.start();
+    await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+    return { server, port: (http.address() as AddressInfo).port };
+  }
+
+  function overviewTicket(tenantIds: string[], host = 'nocturne.run') {
+    return signOverviewTicket(SECRET, host, { subjectId: OVERVIEW_SUBJECT, tenantIds });
+  }
+
+  function open(port: number, namespace: string, token: string, host = 'nocturne.run') {
+    const client = connectClient(`http://127.0.0.1:${port}${namespace}`, {
+      transports: ['websocket'],
+      reconnection: false,
+      forceNew: true,
+      extraHeaders: { 'X-Forwarded-Host': host },
+      auth: { token },
+    });
+    clients.push(client);
+    return client;
+  }
+
+  const connected = (client: ClientSocket) =>
+    new Promise<void>((resolve) => client.once('connect', () => resolve()));
+
+  const refusal = (client: ClientSocket) =>
+    new Promise<string>((resolve) => client.once('connect_error', (error: Error) => resolve(error.message)));
+
+  /** The rooms the server holds the one `/overview` socket in, without its own. */
+  function overviewRooms(server: SocketIOServer): string[] {
+    const [socket] = server.getIO()!.of('/overview').sockets.values();
+    return [...socket.rooms].filter((room) => room !== socket.id).sort();
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  it('joins exactly one overview room per tenant its ticket names, and no tenant, subject or category room', async () => {
+    const { server, port } = await listening();
+    try {
+      await connected(open(port, '/overview', overviewTicket([TENANT_ID, OTHER_TENANT_ID])));
+
+      expect(overviewRooms(server)).toEqual([`overview:${TENANT_ID}`, `overview:${OTHER_TENANT_ID}`].sort());
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('serves the apex while the apex resolves to no tenant', async () => {
+    const { server, port } = await listening();
+    const onApexUnresolved = vi.fn(async () => {});
+    server.onApexUnresolved = onApexUnresolved;
+    try {
+      await connected(open(port, '/overview', overviewTicket([TENANT_ID])));
+
+      expect(onApexUnresolved).not.toHaveBeenCalled();
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('refuses a handshake with no ticket', async () => {
+    const { server, port } = await listening();
+    try {
+      expect(await refusal(open(port, '/overview', ''))).toBe('unauthorized');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('refuses an overview ticket minted for another host', async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID], 'rhys.nocturne.run'));
+
+      expect(await refusal(client)).toBe('unauthorized');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('refuses a share host before reading its ticket', async () => {
+    const { server, port } = await listening();
+    try {
+      const host = 'abc123.share.nocturne.run';
+      const client = open(port, '/overview', overviewTicket([TENANT_ID], host), host);
+
+      expect(await refusal(client)).toBe(SHARE_REALTIME_UNSUPPORTED);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('refuses a tenant ticket presented on /overview', async () => {
+    const { server, port } = await listening();
+    try {
+      const host = 'rhys.nocturne.run';
+      const client = open(port, '/overview', signHandshakeTicket(SECRET, host, TENANT_ID, grant(true)), host);
+
+      expect(await refusal(client)).toBe('unauthorized');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('refuses an overview ticket presented on the tenant namespace', async () => {
+    const { server, port } = await listening();
+    try {
+      const host = 'rhys.nocturne.run';
+      const client = open(port, '/', overviewTicket([TENANT_ID], host), host);
+
+      expect(await refusal(client)).toBe('unauthorized');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("does not let a socket join a room by asking for it", async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID]));
+      const received: string[] = [];
+      client.onAny((event: string) => received.push(event));
+      await connected(client);
+
+      client.emit('join', `overview:${OTHER_TENANT_ID}`);
+      client.emit('subscribe', { tenantIds: [OTHER_TENANT_ID] });
+      await settle();
+      server.broadcastOverviewUpdate(OTHER_TENANT_ID);
+      await settle();
+
+      expect(received).toEqual([]);
+      expect(overviewRooms(server)).toEqual([`overview:${TENANT_ID}`]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('moves the socket onto the tenants of its fresh ticket, leaving those it no longer names', async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID, OTHER_TENANT_ID]));
+      await connected(client);
+      const third = '0198a3c4-7e21-7b10-9d2f-5c6e7f809a1d';
+      client.on('realtime_ticket', (ack: (reply: unknown) => void) => ack({ token: overviewTicket([third]) }));
+
+      const [socket] = server.getIO()!.of('/overview').sockets.values();
+      await server.readmit(socket);
+
+      expect(overviewRooms(server)).toEqual([`overview:${third}`]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('closes a socket whose browser is refused a fresh ticket', async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID]));
+      await connected(client);
+      client.on('realtime_ticket', (ack: (reply: unknown) => void) => ack({ token: null, denied: true }));
+      const closed = new Promise<void>((resolve) => client.once('disconnect', () => resolve()));
+
+      const [socket] = server.getIO()!.of('/overview').sockets.values();
+      await server.readmit(socket);
+
+      await closed;
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('closes a socket whose fresh ticket is a tenant ticket', async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID]));
+      await connected(client);
+      client.on('realtime_ticket', (ack: (reply: unknown) => void) =>
+        ack({ token: signHandshakeTicket(SECRET, 'nocturne.run', TENANT_ID, grant(true)) }));
+      const closed = new Promise<void>((resolve) => client.once('disconnect', () => resolve()));
+
+      const [socket] = server.getIO()!.of('/overview').sockets.values();
+      await server.readmit(socket);
+
+      await closed;
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('asks for the tenant list again with the tenants its ticket names', async () => {
+    const { server, port } = await listening();
+    const admitted: string[][] = [];
+    server.onOverviewAdmitted = (ids) => admitted.push(ids);
+    try {
+      await connected(open(port, '/overview', overviewTicket([TENANT_ID, OTHER_TENANT_ID])));
+
+      expect(admitted).toEqual([[TENANT_ID, OTHER_TENANT_ID].sort()]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('asks for the tenant list again with the tenants of a fresh ticket', async () => {
+    const { server, port } = await listening();
+    const admitted: string[][] = [];
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID]));
+      await connected(client);
+      server.onOverviewAdmitted = (ids) => admitted.push(ids);
+      client.on('realtime_ticket', (ack: (reply: unknown) => void) => ack({ token: overviewTicket([OTHER_TENANT_ID]) }));
+
+      const [socket] = server.getIO()!.of('/overview').sockets.values();
+      await server.readmit(socket);
+
+      expect(admitted).toEqual([[OTHER_TENANT_ID]]);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('closes a socket whose fresh ticket names another subject', async () => {
+    const { server, port } = await listening();
+    try {
+      const client = open(port, '/overview', overviewTicket([TENANT_ID]));
+      await connected(client);
+      const otherSubject = signOverviewTicket(SECRET, 'nocturne.run', {
+        subjectId: '0b5f2c1e-1111-4222-8333-444455556666',
+        tenantIds: [TENANT_ID],
+      });
+      client.on('realtime_ticket', (ack: (reply: unknown) => void) => ack({ token: otherSubject }));
+      const closed = new Promise<void>((resolve) => client.once('disconnect', () => resolve()));
+
+      const [socket] = server.getIO()!.of('/overview').sockets.values();
+      await server.readmit(socket);
+
+      await closed;
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
+describe('overviewReads', () => {
+  it.each(['entries', 'glucose', 'treatments', 'care', 'profiles', 'therapy', 'devicestatus', 'device'])(
+    'reads a change to %s',
+    (colName) => {
+      expect(overviewReads({ colName })).toBe(true);
+    },
+  );
+
+  it.each([['settings'], ['food'], [undefined]])('does not read a change to %s', (colName) => {
+    expect(overviewReads({ colName })).toBe(false);
+  });
 });

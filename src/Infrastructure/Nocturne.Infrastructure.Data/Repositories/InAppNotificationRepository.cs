@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -124,6 +125,59 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         await db.SaveChangesAsync(cancellationToken);
 
         return entity;
+    }
+
+    private const int SourceLockClass = 0x4E49_4E53;
+
+    /// <inheritdoc />
+    public virtual async Task<InAppNotificationEntity?> CreateUnlessActiveAsync(
+        InAppNotificationEntity entity,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db.ExecuteInTransactionAsync<InAppNotificationEntity?>(async token =>
+        {
+            await db.LockForTransactionAsync(
+                SourceLockClass, $"{db.TenantId}|{entity.UserId}|{entity.Type}|{entity.SourceId}", token);
+            if (await db.InAppNotifications.AnyAsync(
+                    n => n.UserId == entity.UserId
+                         && n.Type == entity.Type
+                         && n.SourceId == entity.SourceId
+                         && !n.IsArchived,
+                    token))
+                return null;
+
+            entity.Id = Guid.CreateVersion7();
+            entity.CreatedAt = DateTime.UtcNow;
+            db.InAppNotifications.Add(entity);
+            await db.SaveChangesAsync(token);
+            return entity;
+        },
+        verifySucceeded: async (created, token) =>
+            created is not null && await db.InAppNotifications.AnyAsync(n => n.Id == created.Id, token),
+        ct: cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public virtual async Task<bool> ReplaceMetadataBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        string? metadataJson,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var notification = await db.InAppNotifications.FirstOrDefaultAsync(
+            n => n.UserId == userId && n.Type == type && n.SourceId == sourceId && !n.IsArchived,
+            cancellationToken);
+        if (notification is null)
+            return false;
+
+        notification.MetadataJson = metadataJson;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     /// <summary>

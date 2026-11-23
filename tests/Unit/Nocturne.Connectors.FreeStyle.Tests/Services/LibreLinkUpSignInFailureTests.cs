@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.FreeStyle.Tests.Services;
 
@@ -28,7 +28,6 @@ public class LibreLinkUpSignInFailureTests
         result.Message.Should().Contain("usually temporary")
             .And.NotContain("password")
             .And.NotBe("Authentication failed");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     [Fact]
@@ -39,7 +38,6 @@ public class LibreLinkUpSignInFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     [Fact]
@@ -52,7 +50,6 @@ public class LibreLinkUpSignInFailureTests
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in")
             .And.NotContain("usually temporary");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     [Fact]
@@ -62,13 +59,12 @@ public class LibreLinkUpSignInFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     private static async Task<SyncResult> SyncAgainst(Func<HttpRequestMessage, HttpResponseMessage> answer)
     {
-        using var authClient = new HttpClient(new StubHandler(answer));
-        using var serviceClient = new HttpClient(new StubHandler(answer));
+        using var authClient = new HttpClient(new FakeHttpHandler(answer));
+        using var serviceClient = new HttpClient(new FakeHttpHandler(answer));
         var resolver = new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(
             null, null, LibreLinkUpConstants.Endpoints.Eu);
 
@@ -76,7 +72,7 @@ public class LibreLinkUpSignInFailureTests
             authClient,
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<LibreLinkAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
         var service = new LibreConnectorService(
@@ -95,17 +91,4 @@ public class LibreLinkUpSignInFailureTests
     private static HttpResponseMessage Answer(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body) };
 
-    private static ITenantAccessor ResolvedTenant()
-    {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-        return tenant.Object;
-    }
-
-    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(answer(request));
-    }
 }

@@ -178,6 +178,7 @@ public class PredictionService : IPredictionService
             Cob = predictions?.Cob ?? cob,
             SensitivityRatio = predictions?.SensitivityRatio,
             IntervalMinutes = 5,
+            Algorithm = Nocturne.Core.Models.V4.AidAlgorithm.OpenAps,
             Predictions = new PredictionCurves
             {
                 Default = predictions?.PredictedBg,

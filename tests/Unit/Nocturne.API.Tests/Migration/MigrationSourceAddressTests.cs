@@ -99,9 +99,7 @@ public class MigrationSourceAddressTests
     {
         var source = new PrefixedNightscout();
         await using var provider = MigrationJobHarness.BuildProvider(source);
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(),
-            TimeProvider.System);
+        var service = MigrationJobHarness.CreateService(provider);
 
         var result = await service.TestConnectionAsync(new TestMigrationConnectionRequest
         {
@@ -122,9 +120,7 @@ public class MigrationSourceAddressTests
     {
         var source = new PrefixedNightscout();
         await using var provider = MigrationJobHarness.BuildProvider(source);
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard(),
-            TimeProvider.System);
+        var service = MigrationJobHarness.CreateService(provider);
 
         var result = await service.TestConnectionAsync(new TestMigrationConnectionRequest
         {

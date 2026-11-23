@@ -1,6 +1,6 @@
 <script lang="ts">
   import { testFireDryRun } from "#lib/api/generated/alertRules.generated.remote.js";
-  import type { ReplayRuleDefinition } from "#lib/api/generated/nocturne-api-client.js";
+  import type { ReplayRuleDefinition } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
@@ -9,7 +9,9 @@
   import Check from "@lucide/svelte/icons/check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Send from "@lucide/svelte/icons/send";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import HistoryCheck from "../HistoryCheck.svelte";
+  import { channelNotSentMessage } from "../channelState.svelte";
   import { summarizeCondition } from "../summarizeCondition.svelte";
   import {
     toChannelRequest,
@@ -49,6 +51,7 @@
 
   let testState = $state<"idle" | "sending" | "sent">("idle");
   let testError = $state<string | null>(null);
+  let notSent = $state<string[]>([]);
 
   async function sendTest(): Promise<void> {
     const channelError = validateChannels(editor.channels);
@@ -59,11 +62,14 @@
     testState = "sending";
     testError = null;
     try {
-      await testFireDryRun({
+      const channels = editor.channels.map(toChannelRequest);
+      const answer = await testFireDryRun({
         name: nameEdited ? editor.name : suggestedName,
         severity: editor.severity,
-        channels: editor.channels.map(toChannelRequest),
+        channels,
       });
+      const skipped = answer.notSent ?? [];
+      notSent = skipped.map((entry) => channelNotSentMessage(entry, channels));
       testState = "sent";
     } catch (err) {
       testState = "idle";
@@ -103,13 +109,26 @@
         {/if}
         {testState === "sent" ? "Send another test" : "Send a test alert"}
       </Button>
-      {#if testState === "sent"}
+      {#if testState === "sent" && notSent.length === 0}
         <p class="flex items-center gap-1.5 text-sm text-success" role="status">
           <Check class="size-4" aria-hidden="true" />
           Test alert sent. Make sure that it arrived.
         </p>
       {/if}
     </div>
+    {#if testState === "sent" && notSent.length > 0}
+      <div class="space-y-1" role="status">
+        <p class="text-sm font-medium">The test alert did not go to every channel.</p>
+        <ul class="space-y-1" data-testid="alert-test-not-sent">
+          {#each notSent as message, i (i)}
+            <li class="flex items-start gap-1.5 text-sm text-status-warning">
+              <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>{message}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
     {#if testError}
       <p class="text-sm text-destructive" role="alert">{testError}</p>
     {/if}

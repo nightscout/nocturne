@@ -24,6 +24,7 @@
 	} from "#lib/api/generated/chatIdentities.generated.remote.js";
 	import { getDiscordConfig, initiateDiscordLink } from "./discord.remote";
 	import { describeSubmitError } from "#lib/forms/submit-error.js";
+	import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
 	// Auth guard
 	$effect(() => {
@@ -116,6 +117,7 @@
 				return;
 			}
 		} catch (err) {
+			confirmIdentity.askAfterRefusal(err);
 			actionError = describeSubmitError(err, "Failed to start Discord link flow.");
 		} finally {
 			isLinking = false;

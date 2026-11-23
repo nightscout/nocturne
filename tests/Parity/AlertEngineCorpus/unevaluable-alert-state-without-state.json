@@ -10,7 +10,6 @@
       "condition_params": {
         "alert_id": "00000000-0000-0000-0000-000000000900"
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

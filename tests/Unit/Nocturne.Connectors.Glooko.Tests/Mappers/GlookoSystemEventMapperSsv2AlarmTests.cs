@@ -48,7 +48,6 @@ public class GlookoSystemEventMapperSsv2AlarmTests
         e.Category.Should().Be(SystemEventCategory.Pump);
         e.EventType.Should().Be(SystemEventType.Hazard);
         e.OriginalId.Should().Be("glooko_ssv2_alarm_abc");
-        e.Source.Should().Be("glooko-connector");
         e.Mills.Should().BeGreaterThan(0);
     }
 

@@ -60,6 +60,7 @@ public sealed class DemoTenantService
     private readonly ITenantCache _cache;
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
+    private readonly IAccountLinkRoute _linkRoute;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
@@ -81,7 +82,8 @@ public sealed class DemoTenantService
         PublicAccessCacheService publicAccessCache,
         ITenantCache cache,
         TimeProvider time,
-        ILogger<DemoTenantService> logger)
+        ILogger<DemoTenantService> logger,
+        IAccountLinkRoute linkRoute)
     {
         _factory = factory;
         _tenants = tenants;
@@ -93,6 +95,7 @@ public sealed class DemoTenantService
         _cache = cache;
         _time = time;
         _logger = logger;
+        _linkRoute = linkRoute;
     }
 
     /// <summary>
@@ -138,8 +141,8 @@ public sealed class DemoTenantService
         // subject, land together.
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var tenants = new TenantRepository(unit);
-        var members = new TenantMembershipRepository(unit);
-        var subjects = new SubjectRepository(unit, _time);
+        var members = new TenantMembershipRepository(unit, _linkRoute);
+        var subjects = new SubjectRepository(unit, _linkRoute, _time);
 
         await unit.CommitAsync(async t =>
         {
@@ -269,9 +272,9 @@ public sealed class DemoTenantService
     /// <para>
     /// The session rows are the part this controls. It is not the case that the demo retains no
     /// visitor addresses at all: <c>AuditContextMiddleware</c> stamps
-    /// <c>Connection.RemoteIpAddress</c> onto every <c>mutation_audit_log</c> row, so a visitor's
+    /// the client address onto every <c>mutation_audit_log</c> row, so a visitor's
     /// address is recorded for each write they make and survives until the next reset clears the
-    /// table by cascade. Nobody can read it in the meantime — <c>AuditController</c> gates on
+    /// table by cascade. Nobody can read it in the meantime: <c>AuditController</c> gates on
     /// <c>audit.read</c>, which <see cref="Scope.DemoVisitorPermissions"/> excludes,
     /// so that exclusion is load-bearing and not merely tidy.
     /// </para>
@@ -320,11 +323,18 @@ public sealed class DemoTenantService
                 subjectId, tenant.Slug);
         }
 
-        if (await _subjects.DeleteAsync(subjectId.Value, ct) is SubjectChange.LastOwnerOf stillOwner)
+        switch (await _subjects.DeleteAsync(subjectId.Value, ct))
         {
-            _logger.LogError(
-                "Demo member {SubjectId} became the last owner of {Slugs} again before its delete, so it was kept",
-                subjectId, string.Join(", ", stillOwner.OwnedTenants.Select(t => t.Slug)));
+            case SubjectChange.LastOwnerOf stillOwner:
+                _logger.LogError(
+                    "Demo member {SubjectId} became the last owner of {Slugs} again before its delete, so it was kept",
+                    subjectId, string.Join(", ", stillOwner.OwnedTenants.Select(t => t.Slug)));
+                break;
+            case SubjectChange.LastManagerOf stillManager:
+                _logger.LogError(
+                    "Demo member {SubjectId} is the last manager of teams {TeamIds}, so it was kept",
+                    subjectId, string.Join(", ", stillManager.ManagedTeams.Select(t => t.TeamId)));
+                break;
         }
     }
 
@@ -353,7 +363,7 @@ public sealed class DemoTenantService
         await members.UpdateRoleAsync(
             tenantId, roleId.Value,
             new TenantRoleEdit("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]),
-            _time.GetUtcNow().UtcDateTime, ct);
+            null, _time.GetUtcNow().UtcDateTime, ct);
         return roleId.Value;
     }
 
@@ -426,7 +436,8 @@ public sealed class DemoTenantService
 
             await members.AddMemberAsync(
                 new NewTenantMember(
-                    tenantId, subjectId, [demoRoleId], Label: DemoMemberName, Username: DemoMemberUsername, LimitTo24Hours: false),
+                    tenantId, subjectId, [demoRoleId], Label: DemoMemberName, Username: DemoMemberUsername, LimitTo24Hours: false)
+                    { How = MembershipJoinHow.System, By = null },
                 ct);
             return;
         }

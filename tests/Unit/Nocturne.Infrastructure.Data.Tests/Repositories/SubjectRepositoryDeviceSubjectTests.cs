@@ -26,7 +26,7 @@ public class SubjectRepositoryDeviceSubjectTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private SubjectRepository Repository(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)));
+    private SubjectRepository Repository(Guid tenant) => new(new TestNocturneDbContextFactory(_db.CreateContext(tenant)), AccountLinkRoutes.Off);
 
     private int Holders()
     {

@@ -65,6 +65,36 @@ describe("ConnectorConfigForm", () => {
 		await expect.element(toggle).toBeVisible();
 	});
 
+	it("disables a switch the API locks and says why", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
+				configuration: { syncGlucose: false },
+				lockedKeys: ["syncGlucose"],
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("switch")).toBeDisabled();
+		await expect
+			.element(page.getByTestId("locked-syncGlucose"))
+			.toHaveTextContent("Only members who can manage this site's settings can turn this on.");
+	});
+
+	it("leaves a switch the API does not lock enabled, with no reason", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
+				configuration: { syncGlucose: false },
+				lockedKeys: [],
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("switch")).toBeEnabled();
+		expect(page.getByTestId("locked-syncGlucose").elements()).toHaveLength(0);
+	});
+
 	it("renders number fields with constraints info", async () => {
 		render(ConnectorConfigForm, {
 			props: {

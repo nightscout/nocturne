@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Dexcom.Tests.Services;
 
@@ -40,18 +40,16 @@ public class DexcomTokenExpiryTests
 
     private static async Task<DexcomAuthTokenProvider> SignedIn(TimeProvider clock)
     {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var tenant = ResolvedTenant.Accessor();
 
         var provider = new DexcomAuthTokenProvider(
-            new HttpClient(new LoginHandler()),
+            new HttpClient(LoginHandler()),
             new ConnectorTokenCache(clock),
             new ConnectorServerResolver<DexcomConnectorConfiguration>(
                 new Dictionary<string, string> { ["US"] = DexcomConstants.Servers.Us },
                 config => ((DexcomConnectorConfiguration)config).Server,
                 null),
-            tenant.Object,
+            tenant,
             NullLogger<DexcomAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             clock);
@@ -63,15 +61,7 @@ public class DexcomTokenExpiryTests
         return provider;
     }
 
-    private sealed class LoginHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var body = request.RequestUri!.ToString().EndsWith("AuthenticatePublisherAccount", StringComparison.Ordinal)
-                ? "\"account-id-1\""
-                : "\"session-id-1\"";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
-        }
-    }
+    private static FakeHttpHandler LoginHandler() => new FakeHttpHandler(
+            _ => FakeHttpHandler.Status(HttpStatusCode.OK, "\"session-id-1\""))
+        .On("AuthenticatePublisherAccount", FakeHttpHandler.Status(HttpStatusCode.OK, "\"account-id-1\""));
 }

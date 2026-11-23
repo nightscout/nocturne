@@ -128,13 +128,6 @@ public class OidcProviderService : IOidcProviderService
     }
 
     /// <inheritdoc />
-    public async Task<OidcProvider?> GetProviderByIssuerAsync(string issuerUrl)
-    {
-        var record = await _providers.FindByIssuerAsync(issuerUrl, CancellationToken.None);
-        return record != null ? MapToModel(record) : null;
-    }
-
-    /// <inheritdoc />
     public async Task<OidcProvider> CreateProviderAsync(OidcProvider provider)
     {
         provider.Id = await _providers.CreateAsync(

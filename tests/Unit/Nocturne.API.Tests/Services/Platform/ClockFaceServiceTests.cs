@@ -20,7 +20,7 @@ public class ClockFaceServiceTests
     public ClockFaceServiceTests()
     {
         _db.TenantId = Guid.NewGuid();
-        _service = new ClockFaceService(_db.AsFactory(), new SubjectRepository(_db.AsFactory()), TimeProvider.System, NullLogger<ClockFaceService>.Instance);
+        _service = new ClockFaceService(_db.AsFactory(), new SubjectRepository(_db.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, NullLogger<ClockFaceService>.Instance);
     }
 
     private Guid AddSubject(string? preferences)

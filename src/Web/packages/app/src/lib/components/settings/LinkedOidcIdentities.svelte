@@ -3,6 +3,7 @@
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { invalidateAll } from "$app/navigation";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Plus from "@lucide/svelte/icons/plus";
@@ -18,14 +19,19 @@
     unlinkIdentity,
   } from "#lib/api/generated/oidcs.generated.remote.js";
   import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import { isRecord } from "#lib/utils/type-guards.js";
   import { getProvidersInfo } from "#routes/(unauthenticated)/auth/auth.remote.js";
 
   interface Props {
     primaryAuthFactorCount: number;
+    /** The identity a recovery just linked, marked in the list. */
+    justAddedId?: string;
+    /** List only: the session cannot add or remove a sign-in method, so neither control shows. */
+    readOnly?: boolean;
   }
 
-  const { primaryAuthFactorCount }: Props = $props();
+  const { primaryAuthFactorCount, justAddedId, readOnly = false }: Props = $props();
 
   const linkedQuery = getLinkedIdentities();
   const providersQuery = getProvidersInfo();
@@ -90,6 +96,7 @@
       successMessage = "Sign-in method removed.";
       clearMessagesSoon();
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       if (errorStatus(err) === 409 || errorBodyCode(err) === "last_factor") {
         errorMessage =
           "Cannot remove your only sign-in method. Add another first.";
@@ -128,6 +135,7 @@
           Google, Microsoft, or GitHub.
         </Card.Description>
       </div>
+      {#if !readOnly}
       <Button
         variant="outline"
         size="sm"
@@ -137,6 +145,7 @@
         <Plus class="mr-1.5 h-3.5 w-3.5" />
         Link an account
       </Button>
+      {/if}
     </div>
   </Card.Header>
   <Card.Content class="space-y-3">
@@ -169,8 +178,11 @@
           class="flex items-center justify-between gap-4 rounded-md border p-3"
         >
           <div class="space-y-1 flex-1 min-w-0">
-            <p class="text-sm font-medium">
+            <p class="flex flex-wrap items-center gap-2 text-sm font-medium">
               {identity.providerName ?? "Unknown provider"}
+              {#if identity.id === justAddedId}
+                <Badge variant="secondary" size="sm">Added just now</Badge>
+              {/if}
             </p>
             {#if identity.email}
               <p class="text-xs text-muted-foreground truncate">
@@ -194,6 +206,7 @@
               {/if}
             </div>
           </div>
+          {#if !readOnly}
           <Button
             type="button"
             variant="ghost-destructive"
@@ -209,11 +222,12 @@
               <Trash2 class="h-3.5 w-3.5" />
             {/if}
           </Button>
+          {/if}
         </div>
       {/each}
     {/if}
 
-    {#if !canRemove && identities.length > 0}
+    {#if !readOnly && !canRemove && identities.length > 0}
       <p class="text-xs text-muted-foreground">
         You cannot remove your only sign-in method. Add another first.
       </p>

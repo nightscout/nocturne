@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CustomReportCatalogue } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReportCatalogue } from "@nocturne/api-client";
 import { liveCatalogue } from "./catalogue.fixtures.js";
 import { Report } from "./report.svelte.js";
 import savedBefore from "./saved-before-the-port.fixture.json";

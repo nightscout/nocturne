@@ -102,6 +102,30 @@ fn the_tick_log_is_absent_unless_asked_for() {
 }
 
 #[test]
+fn until_steps_past_the_last_tick_and_a_sample_skips_a_glucose_rule() {
+    let signal_loss = json!({
+        "id": RULE_1,
+        "condition_type": "signal_loss",
+        "condition_params": { "timeout_minutes": 15 },
+    });
+    let low = threshold_rule("00000000-0000-0000-0000-000000000002");
+    let mut sample = tick("2026-01-05T12:00:00Z", 60);
+    sample["at"] = json!("2026-01-05T12:05:00Z");
+    sample["reading"] = json!(false);
+    let response = replay(&json!({
+        "schema_version": 1,
+        "rules": [signal_loss, low],
+        "ticks": [tick("2026-01-05T12:00:00Z", 100), sample],
+        "until": "2026-01-05T12:30:00Z",
+    }));
+    assert_eq!(response["ok"], json!(true), "{}", response["error"]);
+    assert_eq!(
+        response["events"],
+        json!([{ "at": "2026-01-05T12:15:00Z", "rule_id": RULE_1, "kind": "fired" }])
+    );
+}
+
+#[test]
 fn an_unevaluable_rule_is_skipped_not_an_error() {
     let response = replay(&json!({
         "schema_version": 1,
@@ -145,6 +169,10 @@ fn unusable_requests_are_error_envelopes() {
     let mut out_of_range = base();
     out_of_range["ticks"][0]["at"] = json!("0000-12-31T00:00:00Z");
     assert_error(&replay(&out_of_range), "ticks.at");
+
+    let mut until_out_of_range = base();
+    until_out_of_range["until"] = json!("0000-12-31T00:00:00Z");
+    assert_error(&replay(&until_out_of_range), "until");
 
     assert_error(
         &replay(&json!({ "schema_version": 1 })),

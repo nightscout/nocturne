@@ -13,7 +13,7 @@
     type AlertReplayResult,
     type AlertReplayEvent,
     type AlertRuleResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { indexBy } from "#lib/utils/collections.js";
   import { time } from "#lib/utils/formatting.js";
   import type { ChartDataView } from "@nocturne/charts";
@@ -232,9 +232,11 @@
     });
   });
 
-  // Replay events land on the same 5-min ticks the chart's glucose readings
-  // do, so a half-tick window catches all events for the hovered point
-  // without bleeding into neighbouring ones.
+  // Replay events land where live evaluated a reading (its arrival, usually
+  // within seconds of its point), or between readings where a rule changes
+  // with the clock. Half a 5-minute reading interval catches the events of the
+  // hovered point without bleeding into neighbouring ones; an event of a late
+  // upload or inside a gap shows as its marker and in the list.
   const TOOLTIP_HALF_WINDOW_MS = 2.5 * 60 * 1000;
   function eventsNear(at: Date): Marker[] {
     const t = at.getTime();

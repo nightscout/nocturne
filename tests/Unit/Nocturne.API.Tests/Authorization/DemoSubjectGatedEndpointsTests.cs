@@ -47,6 +47,24 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(MembershipRequestController), nameof(MembershipRequestController.CreateRequest) },
         { typeof(AuthorizationController), nameof(AuthorizationController.CreateSubject) },
 
+        // Teams. The shared subject would be a manager of every team any visitor made or joined,
+        // and every later visitor could run them.
+        { typeof(TeamsController), nameof(TeamsController.GetMyTeams) },
+        { typeof(TeamsController), nameof(TeamsController.CreateTeam) },
+        { typeof(TeamsController), nameof(TeamsController.GetTeam) },
+        { typeof(TeamsController), nameof(TeamsController.RenameTeam) },
+        { typeof(TeamsController), nameof(TeamsController.RemoveManager) },
+        { typeof(TeamsController), nameof(TeamsController.CreateManagerInvite) },
+        { typeof(TeamsController), nameof(TeamsController.RevokeManagerInvite) },
+        { typeof(TeamsController), nameof(TeamsController.GetInviteInfo) },
+        { typeof(TeamsController), nameof(TeamsController.AcceptInvite) },
+        { typeof(TeamsController), nameof(TeamsController.DeleteTeam) },
+        { typeof(TeamsController), nameof(TeamsController.CreateAccessLink) },
+        { typeof(TeamsController), nameof(TeamsController.RevokeAccessLink) },
+        // The demo subject owns the demo site, so it could give any team access to it.
+        { typeof(TeamsController), nameof(TeamsController.GetAccessLinkInfo) },
+        { typeof(TeamsController), nameof(TeamsController.ApproveAccessLink) },
+
         // Accumulating an external identity on the shared subject.
         { typeof(OidcController), nameof(OidcController.Link) },
         { typeof(OidcController), nameof(OidcController.LinkCallback) },
@@ -74,6 +92,12 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(ConfigurationController), nameof(ConfigurationController.SaveConfiguration) },
         { typeof(ConfigurationController), nameof(ConfigurationController.SaveSecrets) },
         { typeof(ConnectorStatusController), nameof(ConnectorStatusController.GetStatus) },
+
+        // Tenant administration. tenant.settings is in the demo role, so the scope admits the
+        // visitor, and the setting would follow every later one.
+        { typeof(GlucoseProcessingSettingsController), nameof(GlucoseProcessingSettingsController.SetPreference) },
+        { typeof(GlucoseProcessingSettingsController), nameof(GlucoseProcessingSettingsController.SetSourceDefaults) },
+        { typeof(PasskeyController), nameof(PasskeyController.CompleteOnboarding) },
 
         // Completing the CareLink flow writes the signed-in Medtronic username and country into
         // the tenant's connector configuration, which GET returns in the clear. The service also

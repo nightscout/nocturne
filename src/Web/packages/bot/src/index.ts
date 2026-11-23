@@ -19,18 +19,10 @@ export { requireLink, requireLinkForAction } from "./lib/require-link.js";
 export { platformHandle } from "./lib/platform-handle.js";
 export { formatGlucose, trendArrow, TREND_ARROWS } from "./lib/format.js";
 export type {
-  ActiveExcursion,
   BotApiClient,
   AlertDispatchEvent,
   AlertPayload,
-  AlertSeverity,
-  SensorGlucoseReading,
   DirectoryCandidate,
-  PendingDeliveryResponse,
-  ChatAcknowledgeRequest,
   AcknowledgementOutcome,
   AcknowledgementResult,
-  MarkDeliveredRequest,
-  MarkFailedRequest,
-  HeartbeatRequest,
 } from "./types.js";

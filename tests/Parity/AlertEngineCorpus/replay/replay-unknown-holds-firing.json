@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "name": "replay-unknown-holds-firing",
+  "description": "an unknown met under hold leaves the firing state as it is and clears no timers: rule 1 keeps firing through the gap at 12:05 and clears on the known false at 12:15; rule 2\u0027s sustained run survives the gap and holds at 12:10; rule 3 (not_met) clears at the gap, and rule 4 (met) fires at it",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "not_met"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value": 180
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "on_unknown": "met"
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

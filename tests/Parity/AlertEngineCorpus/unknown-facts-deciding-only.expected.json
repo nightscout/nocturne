@@ -1,0 +1,665 @@
+{
+  "schema_version": 1,
+  "scenario": "unknown-facts-deciding-only",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            },
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            },
+            {
+              "leaf_id": 2,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "device_ages",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            },
+            {
+              "fact": "device_ages",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            },
+            {
+              "fact": "insulin",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:05:00Z"
+          },
+          "next_change_at": "2026-01-06T12:05:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "excursion": 1,
+            "held_since": "2026-01-05T12:05:00Z"
+          },
+          "next_change_at": "2026-01-06T12:05:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            },
+            {
+              "fact": "insulin",
+              "reason": "absent"
+            },
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 2,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "device_ages",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "absent"
+            },
+            {
+              "fact": "device_ages",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "active",
+            "excursion": 1,
+            "held_since": "2026-01-05T12:05:00Z"
+          },
+          "next_change_at": "2026-01-06T12:05:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            },
+            {
+              "fact": "pump",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false
+            },
+            {
+              "leaf_id": 2,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "device_ages",
+              "reason": "ahead_of_clock"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-05T12:35:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_site_change_at",
+              "ahead_ms": 600000
+            }
+          ]
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "state_spans",
+              "reason": "unrecognised"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:30:00Z"
+          },
+          "next_change_at": "2026-01-06T12:30:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "pump",
+              "reason": "inexact"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-06T12:00:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000008",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "glucose",
+              "reason": "stale"
+            },
+            {
+              "fact": "device_ages",
+              "reason": "ahead_of_clock"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            },
+            {
+              "leaf_id": 1,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:00:00Z"
+          },
+          "next_change_at": "2026-01-05T12:35:00Z",
+          "clock_anomaly": [
+            {
+              "fact": "last_site_change_at",
+              "ahead_ms": 600000
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

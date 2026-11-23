@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -153,12 +154,15 @@ public class NotificationsController : ControllerBase
     /// </para>
     /// <para>
     /// <see cref="IInAppNotificationService.ExecuteActionAsync"/> is a generic dispatcher, not an
-    /// acknowledgement endpoint: past the built-in <c>dismiss</c>/<c>navigate</c> cases it hands the
-    /// action to whichever <see cref="INotificationActionHandler"/> is registered for the
-    /// notification's type, and those handlers mutate their own domains — the tracker handler's
-    /// <c>accept</c> completes and restarts tracker instances, a write
-    /// <c>TrackersController</c> gates on <c>alerts.readwrite</c>. So the capability arm is confined
-    /// here to <see cref="InAppProvider.NotificationType"/>: a caller holding only
+    /// acknowledgement endpoint: it hands the action to whichever
+    /// <see cref="INotificationActionHandler"/> is registered for the notification's type (the
+    /// built-in <c>dismiss</c>/<c>navigate</c> archive applies only where that handler declines),
+    /// and those handlers mutate their own domains, each gated as its own controller gates it: the
+    /// meal-match <c>dismiss</c> moves a food entry out of Pending, a write
+    /// <c>MealMatchingController.DismissMatch</c> gates on <c>food.readwrite</c>, so that handler
+    /// declines the write for a caller without it. The meal-match <c>accept</c> is gated the same way, as
+    /// <see cref="Services.NotificationActionHandlers.MealMatchActionHandler"/> states. So the
+    /// capability arm is confined here to <see cref="InAppProvider.NotificationType"/>: a caller holding only
     /// <c>device.notify</c> is refused any other notification type, and only a holder of
     /// <c>alerts.readwrite</c> reaches the rest of the dispatch table.
     /// </para>
@@ -169,9 +173,10 @@ public class NotificationsController : ControllerBase
     /// </para>
     /// </remarks>
     [HttpPost("{id:guid}/actions/{actionId}")]
-    [RemoteCommand(Invalidates = ["GetNotifications"])]
+    [RemoteCommand(Invalidates = ["GetNotifications", "MealMatching_GetSuggestions", "Nutrition_GetMeals"])]
     [Authorize]
     [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
+    [ScopeDecidedBy(typeof(InAppProvider), nameof(InAppProvider.NotificationType))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -207,7 +212,7 @@ public class NotificationsController : ControllerBase
                     type,
                     id
                 );
-                return Forbid();
+                return this.ForbiddenForScope(Scope.AlertsReadWrite);
             }
         }
 

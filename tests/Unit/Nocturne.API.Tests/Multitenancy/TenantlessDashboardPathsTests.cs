@@ -22,6 +22,12 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/auth/oidc/refresh")]
     // Drives the dashboard tiles.
     [InlineData("/api/v4/me/tenants/overview")]
+    // Drives the review lens of the same page.
+    [InlineData("/api/v4/me/tenants/overview/review")]
+    // Drives the panel beside the list.
+    [InlineData("/api/v4/me/tenants/overview/person")]
+    // Names the tenants whose live changes the same page hears about.
+    [InlineData("/api/v4/me/overview-admission")]
     // Drives the navigation and tenant switcher.
     [InlineData("/api/v4/me/tenants")]
     // Reports the caller's own global subject-role scopes; nothing tenant-derived.
@@ -116,6 +122,31 @@ public sealed class TenantlessDashboardPathsTests
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/passkey/onboarding/complete")
             .Should().BeFalse();
     }
+
+    [Theory]
+    // A team belongs to no tenant, so every route of it is served on the apex and on any tenant host.
+    [InlineData("/api/v4/me/teams", "GET")]
+    [InlineData("/api/v4/me/teams", "POST")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001", "GET")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001", "DELETE")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/name", "PUT")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/managers/0195f0a0-0000-7000-8000-000000000002", "DELETE")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/invites", "POST")]
+    [InlineData("/api/v4/me/teams/invites/a-token", "GET")]
+    [InlineData("/api/v4/me/teams/invites/a-token/accept", "POST")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/access-links", "POST")]
+    [InlineData("/api/v4/me/teams/0195f0a0-0000-7000-8000-000000000001/access-links/0195f0a0-0000-7000-8000-000000000003", "DELETE")]
+    [InlineData("/api/v4/me/teams/access-links/a-token", "GET")]
+    [InlineData("/api/v4/me/teams/access-links/a-token/approve", "POST")]
+    public void Every_team_route_is_served_without_a_tenant(string path, string method) =>
+        TenantResolutionMiddleware.IsTenantlessAllowed(path, method).Should().BeTrue();
+
+    [Theory]
+    [InlineData("/api/v4/me/teams", "PUT")]
+    [InlineData("/api/v4/me/teams/anything", "PATCH")]
+    [InlineData("/api/v4/me/teamsx", "GET")]
+    public void Only_the_team_verbs_and_paths_are_served_without_a_tenant(string path, string method) =>
+        TenantResolutionMiddleware.IsTenantlessAllowed(path, method).Should().BeFalse();
 
     [Fact]
     public void The_subject_tenant_list_is_matched_exactly_not_as_a_prefix()

@@ -9,17 +9,18 @@
    * Pure visual — no button, no click handling — so callers can wrap it in
    * whatever interactive element they need without nested-button HTML.
    */
-  import { Chart, Svg } from "layerchart";
+  import { Axis, Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import {
     partialView,
     setGlucoseChartContext,
   } from "@nocturne/charts";
   import { computeTrackLayout } from "@nocturne/charts/core";
-  import { GlucoseTrack } from "@nocturne/charts";
-  import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { GlucoseTrack, ThresholdRules } from "@nocturne/charts";
+  import type { ChartThresholdsDto } from "@nocturne/api-client";
   import { resolveChartThresholds } from "@nocturne/charts/core";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
+  import { hourLabel } from "#lib/utils/formatting.js";
 
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
@@ -28,9 +29,11 @@
     day?: { startMills: number; endMills: number };
     /** Overrides the realtime store's tenant thresholds; the shared fallbacks apply when neither is present. */
     thresholds?: ChartThresholdsDto | null;
+    /** Adds the glucose axis, the time axis and the threshold lines, for a trace read on its own rather than as a thumbnail. */
+    detailed?: boolean;
   }
 
-  let { entries, day, thresholds: supplied }: Props = $props();
+  let { entries, day, thresholds: supplied, detailed = false }: Props = $props();
 
   const tenantThresholds = tenantChartThresholds();
   const thresholds = $derived(
@@ -102,17 +105,31 @@
       xScale={scaleTime()}
       {xDomain}
       yDomain={[0, thresholds.glucoseYMax]}
-      padding={{ top: 1, bottom: 1, left: 1, right: 1 }}
+      padding={detailed
+        ? { top: 8, bottom: 20, left: 32, right: 8 }
+        : { top: 1, bottom: 1, left: 1, right: 1 }}
     >
       {#snippet children({ context })}
         {((chartHeight = context.height), "")}
         <Svg>
           {#if chartHeight > 0}
+            {#if detailed}
+              <ThresholdRules />
+            {/if}
             <GlucoseTrack
               lineColorMode="threshold"
               areaMode="deviation"
-              showAxis={false}
+              showAxis={detailed}
               showPoints={false}
+            />
+          {/if}
+          {#if detailed}
+            <Axis
+              placement="bottom"
+              ticks={4}
+              format={(v) => (v instanceof Date ? hourLabel(v) : String(v))}
+              tickOcclusion
+              tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
             />
           {/if}
         </Svg>

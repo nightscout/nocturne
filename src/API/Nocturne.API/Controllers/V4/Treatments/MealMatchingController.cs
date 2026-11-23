@@ -41,17 +41,23 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 public class MealMatchingController : ControllerBase
 {
     private readonly IMealMatchingService _mealMatchingService;
+    private readonly IMealMatchLinker _linker;
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly IInAppNotificationService _notificationService;
+    private readonly TimeProvider _time;
 
     public MealMatchingController(
         IMealMatchingService mealMatchingService,
+        IMealMatchLinker linker,
         IConnectorFoodEntryRepository foodEntryRepository,
-        IInAppNotificationService notificationService)
+        IInAppNotificationService notificationService,
+        TimeProvider time)
     {
         _mealMatchingService = mealMatchingService;
+        _linker = linker;
         _foodEntryRepository = foodEntryRepository;
         _notificationService = notificationService;
+        _time = time;
     }
 
     /// <summary>
@@ -84,8 +90,9 @@ public class MealMatchingController : ControllerBase
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to)
     {
-        var fromDate = from ?? DateTimeOffset.UtcNow.AddDays(-1);
-        var toDate = to ?? DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
+        var fromDate = from ?? now.AddDays(-1);
+        var toDate = to ?? now;
 
         IReadOnlyList<SuggestedMealMatchResult> suggestions;
         try
@@ -127,13 +134,16 @@ public class MealMatchingController : ControllerBase
     /// Writes a <c>treatment_foods</c> row keyed by the carb intake, which
     /// <see cref="NutritionController"/> gates on <c>treatments.readwrite</c>, and marks the
     /// connector food entry matched. Gated on the treatments category rather than food because the
-    /// carb breakdown is a COB input.
+    /// carb breakdown is a COB input. A repeat of an accept that linked answers 204 and writes
+    /// nothing; an entry matched to another carb intake, dismissed or withdrawn answers 409.
     /// </remarks>
     [HttpPost("accept")]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions", "Nutrition_GetMeals"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ErrorEnvelope]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
     {
@@ -143,14 +153,32 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        await _mealMatchingService.AcceptMatchAsync(
+        var outcome = await _linker.LinkAsync(
             request.FoodEntryId,
             request.CarbIntakeId,
             request.Carbs,
             request.TimeOffsetMinutes,
             HttpContext.RequestAborted);
 
-        // Archive the notification
+        ActionResult? refusal = outcome switch
+        {
+            AcceptMatchOutcome.Linked or AcceptMatchOutcome.AlreadyLinked => null,
+            AcceptMatchOutcome.NotFound => Problem(
+                detail: "This food or this carb entry no longer exists. Nothing changed.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Match Not Found"),
+            AcceptMatchOutcome.AlreadyResolved => Problem(
+                detail: "This food is already linked to a different carb entry, or it was dismissed or removed. Nothing changed.",
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Food Cannot Be Linked"),
+            _ => throw new InvalidOperationException($"Unhandled accept outcome {outcome}."),
+        };
+
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
         await _notificationService.ArchiveBySourceAsync(
             userId,
             "meal_matching.suggested_match",
@@ -168,12 +196,17 @@ public class MealMatchingController : ControllerBase
     /// <remarks>
     /// Writes only the <c>connector_food_entries</c> status, which is the food category in
     /// <see cref="ShareDataCategories.GovernedTables"/>, so this action is gated on the food
-    /// category while <see cref="AcceptMatch"/> is gated on treatments.
+    /// category while <see cref="AcceptMatch"/> is gated on treatments. A repeat of a dismiss
+    /// answers 204; a food entry that does not exist answers 404, and one already matched or
+    /// withdrawn answers 409. Both leave the suggestion notification alone.
     /// </remarks>
     [HttpPost("dismiss")]
     [RequireScope(Scope.FoodReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DismissMatch([FromBody] DismissMatchRequest request)
     {
         var userId = HttpContext.GetSubjectIdString();
@@ -182,9 +215,27 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        await _mealMatchingService.DismissMatchAsync(request.FoodEntryId, HttpContext.RequestAborted);
+        var outcome = await _mealMatchingService.DismissMatchAsync(request.FoodEntryId, HttpContext.RequestAborted);
 
-        // Archive the notification
+        ActionResult? refusal = outcome switch
+        {
+            DismissMatchOutcome.Dismissed or DismissMatchOutcome.AlreadyDismissed => null,
+            DismissMatchOutcome.NotFound => Problem(
+                detail: "This food no longer exists. Nothing changed.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Food Not Found"),
+            DismissMatchOutcome.AlreadyResolved => Problem(
+                detail: "This food is already linked to a carb entry, or it was removed. Nothing changed.",
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Food Cannot Be Dismissed"),
+            _ => throw new InvalidOperationException($"Unhandled dismiss outcome {outcome}."),
+        };
+
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
         await _notificationService.ArchiveBySourceAsync(
             userId,
             "meal_matching.suggested_match",

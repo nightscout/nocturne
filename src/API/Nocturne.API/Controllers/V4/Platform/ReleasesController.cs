@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -25,15 +26,13 @@ public class ReleasesController(
     IOptions<ReleaseCheckOptions> options) : ControllerBase
 {
     [HttpGet("status")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ReleaseStatusDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ReleaseStatusDto>> GetReleaseStatus(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.TenantSettings))
-            return Forbid();
-
         if (!options.Value.Enabled)
             return NotFound();
 

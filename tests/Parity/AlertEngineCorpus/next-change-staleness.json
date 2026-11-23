@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "name": "next-change-staleness",
+  "description": "staleness '>' changes a tick after the elapsed time reaches the bound",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "staleness",
+      "condition_params": {
+        "operator": ">",
+        "value": 10
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:00:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-03-02T11:55:00Z",
+        "last_reading_at": "2026-03-02T11:55:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

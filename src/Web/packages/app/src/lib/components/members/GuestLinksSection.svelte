@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { RemoteCommand } from '$app/server';
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
-  import { formatDayTime, relativeTime } from "#lib/utils/formatting.js";
+  import { formatDayTime, formatList, relativeTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -11,12 +11,13 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import { toggled } from "#lib/utils/collections.js";
-  import { categoriesIn, formatList } from "./data-categories";
+  import { categoriesIn } from "./data-categories";
   import { EmptyState } from "#lib/components/shared/index.js";
   import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import CopyButton from "#lib/components/members/CopyButton.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { Artwork } from "water-ui";
   import Clock from "@lucide/svelte/icons/clock";
   import X from "@lucide/svelte/icons/x";
@@ -34,11 +35,22 @@
   import {
     type GuestLinkInfo,
     GuestLinkStatus,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { describeSubmitError, FormError } from "#lib/forms/index.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
-  let { onCreated }: { onCreated?: () => void } = $props();
+  let {
+    onCreated,
+    signInRequired = false,
+  }: {
+    onCreated?: () => void;
+    /**
+     * The session started from a sign-in link. Making a link or a new code is the person's own
+     * sign-in's to do, so those controls give way to it; the list, revoke and dismiss stay.
+     */
+    signInRequired?: boolean;
+  } = $props();
 
   const canCreateGuestLinks = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.guest")
@@ -160,6 +172,7 @@
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       onCreated?.();
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       createError = describeSubmitError(
         err,
         "Failed to create guest link. Try again."
@@ -219,6 +232,7 @@
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       showCreateForm = true;
     } catch (err) {
+      confirmIdentity.askAfterRefusal(err);
       linkError = describeSubmitError(
         err,
         "Failed to create a new code. Active links are limited to 5 at a time."
@@ -257,7 +271,7 @@
           Share read-only access with someone who does not have an account
         </p>
       </div>
-      {#if !showCreateForm}
+      {#if !showCreateForm && !signInRequired}
         <Button
           variant="outline"
           size="sm"
@@ -269,8 +283,12 @@
       {/if}
     </div>
 
+    {#if signInRequired}
+      <SignInGate reason="Sign in again to make a guest link." />
+    {/if}
+
     <!-- Create Form -->
-    {#if showCreateForm}
+    {#if showCreateForm && !signInRequired}
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">Create guest link</Card.Title>
@@ -417,7 +435,7 @@
     {/if}
 
     <!-- Guest Links List -->
-    {#if allLinks.length === 0 && !showCreateForm}
+    {#if allLinks.length === 0 && !showCreateForm && !signInRequired}
       <EmptyState
         art="key"
         variant="dashed"
@@ -466,7 +484,7 @@
                     {/if}
                   </div>
                 </div>
-                {#if link.status === GuestLinkStatus.Active || isTerminal(link) && !link.dismissedAt}
+                {#if !signInRequired && (link.status === GuestLinkStatus.Active || isTerminal(link) && !link.dismissedAt)}
                   <Button
                     variant="ghost-muted"
                     size="sm"

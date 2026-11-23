@@ -1,9 +1,11 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -17,16 +19,15 @@ namespace Nocturne.API.Tests.Migration;
 /// <summary>
 /// Tenant-isolation and durability behaviour for <see cref="MigrationJobService"/>. A migration
 /// job is owned by the tenant that started it, and status/cancel lookups must be scoped to that
-/// tenant so one tenant cannot read or cancel another tenant's job by guessing its id. Job records
-/// are persisted, so lookups survive the in-memory job map being lost (e.g. an API restart).
+/// tenant so one tenant cannot read or cancel another tenant's job by guessing its id. A job is its
+/// stored record, so every lookup is answered by a process that never ran it.
 /// </summary>
 public class MigrationJobServiceTests
 {
     /// <summary>
     /// Real DI provider with an InMemory NocturneDbContext so StartMigrationAsync can persist the
-    /// job record. The background migration task itself still fails fast (no HTTP/tenant services
-    /// are registered) — these tests exercise ownership, lookup, and record durability, not the
-    /// data transfer.
+    /// job record. Nothing runs the job, which stays pending: these tests exercise ownership,
+    /// lookup, and record durability, not the data transfer.
     /// </summary>
     private static (MigrationJobService Service, IServiceProvider Provider) CreateService(
         IServiceProvider? existingProvider = null)
@@ -35,16 +36,10 @@ public class MigrationJobServiceTests
         var provider = existingProvider ?? new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .BuildServiceProvider();
 
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            provider,
-            new ConfigurationBuilder().Build(),
-            new TenantRunGuard(),
-            TimeProvider.System);
-
-        return (service, provider);
+        return (MigrationJobHarness.CreateService(provider), provider);
     }
 
     private static TenantContext Tenant(Guid id) => new(id, $"slug-{id:N}", "Test Tenant", true, IsDemo: false);
@@ -137,14 +132,11 @@ public class MigrationJobServiceTests
     [Fact]
     public async Task GetStatusAsync_serves_the_persisted_record_when_the_job_is_not_in_memory()
     {
-        // Regression: job state lived only in a ConcurrentDictionary, so an API restart made a
-        // running job's id answer 404 — indistinguishable from a job that never existed.
         var (service, provider) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
         var job = await service.StartMigrationAsync(ApiRequest(), tenant);
 
-        // A fresh service over the same store models the post-restart process: empty job map,
-        // same database.
+        // A fresh service over the same store models the post-restart process.
         var (restarted, _) = CreateService(provider);
 
         var status = await restarted.GetStatusAsync(tenant.TenantId, job.Id);
@@ -181,119 +173,41 @@ public class MigrationJobServiceTests
     [Fact]
     public async Task StartMigrationAsync_WhenTheTenantAlreadyHasALiveJob_IsRefused()
     {
-        var handler = new BlockingHandler();
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            MigrationJobHarness.BuildProvider(handler),
-            new ConfigurationBuilder().Build(),
-            new TenantRunGuard(),
-            TimeProvider.System);
+        var (service, _) = CreateService();
         var tenant = Tenant(Guid.NewGuid());
 
-        try
-        {
-            var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
 
-            var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
-                () => service.StartMigrationAsync(ApiRequest(), tenant));
+        var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
+            () => service.StartMigrationAsync(ApiRequest(), tenant));
 
-            refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
-        }
-        finally
-        {
-            handler.Release();
-        }
-    }
-
-    /// <summary>
-    /// Regression for #1707: a job reads terminal before its final record is written and its
-    /// lease released. The terminal persist is held open here, so the start is issued inside that
-    /// window every time rather than only when the scheduler happens to land there.
-    /// </summary>
-    [Fact]
-    public async Task StartMigrationAsync_WhenTheHolderAlreadyReadsTerminal_WaitsForTheSlotInsteadOfRefusing()
-    {
-        var handler = new BlockingHandler();
-        var terminalPersist = new TerminalPersistGate();
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            MigrationJobHarness.BuildProvider(handler, interceptor: terminalPersist),
-            new ConfigurationBuilder().Build(),
-            new TenantRunGuard(),
-            TimeProvider.System);
-        var tenant = Tenant(Guid.NewGuid());
-
-        try
-        {
-            var first = await service.StartMigrationAsync(ApiRequest(), tenant);
-
-            handler.Release();
-            await terminalPersist.Reached.WaitAsync(TimeSpan.FromSeconds(10));
-
-            var status = await service.GetStatusAsync(tenant.TenantId, first.Id);
-            status.State.Should().Be(MigrationJobState.Failed, "the job has finished but still holds the slot");
-
-            var restart = service.StartMigrationAsync(ApiRequest(), tenant);
-            restart.IsCompleted.Should().BeFalse("the slot is held until the terminal record is written");
-
-            terminalPersist.Release();
-            var second = await restart.WaitAsync(TimeSpan.FromSeconds(10));
-
-            second.Id.Should().NotBe(first.Id);
-        }
-        finally
-        {
-            terminalPersist.Release();
-        }
+        refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
     }
 
     [Fact]
-    public async Task StartMigrationAsync_ForDifferentTenants_RunsConcurrently()
+    public async Task StartMigrationAsync_AfterTheTenantsJobEnded_IsAccepted()
     {
-        var handler = new BlockingHandler();
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            MigrationJobHarness.BuildProvider(handler),
-            new ConfigurationBuilder().Build(),
-            new TenantRunGuard(),
-            TimeProvider.System);
+        var (service, _) = CreateService();
+        var tenant = Tenant(Guid.NewGuid());
+        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+        await service.CancelAsync(tenant.TenantId, first.Id);
+
+        var second = await service.StartMigrationAsync(ApiRequest(), tenant);
+
+        second.Id.Should().NotBe(first.Id);
+        (await service.GetStatusAsync(tenant.TenantId, first.Id)).State.Should().Be(MigrationJobState.Cancelled);
+        (await service.GetStatusAsync(tenant.TenantId, second.Id)).State.Should().Be(MigrationJobState.Pending);
+    }
+
+    [Fact]
+    public async Task StartMigrationAsync_ForDifferentTenants_IsAcceptedForEach()
+    {
+        var (service, _) = CreateService();
 
         var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
         var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
 
         second.Id.Should().NotBe(first.Id);
-        handler.Release();
-    }
-
-    /// <summary>
-    /// Holds the first save of a terminal <see cref="MigrationRunEntity"/> open until released,
-    /// pinning the job between reporting terminal and releasing its lease.
-    /// </summary>
-    private sealed class TerminalPersistGate : SaveChangesInterceptor
-    {
-        private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private int _armed = 1;
-
-        public Task Reached => _reached.Task;
-
-        public void Release() => _released.TrySetResult();
-
-        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
-            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            var terminal = eventData.Context!.ChangeTracker.Entries<MigrationRunEntity>()
-                .Any(e => e.Entity.State is nameof(MigrationJobState.Completed)
-                    or nameof(MigrationJobState.Failed) or nameof(MigrationJobState.Cancelled));
-
-            if (terminal && Interlocked.Exchange(ref _armed, 0) == 1)
-            {
-                _reached.TrySetResult();
-                await _released.Task;
-            }
-
-            return result;
-        }
     }
 
     private static MigrationJob CreateJob()
@@ -309,6 +223,32 @@ public class MigrationJobServiceTests
             NullLogger.Instance,
             provider,
             TimeProvider.System);
+    }
+
+    [Fact]
+    public async Task A_count_that_outlasts_its_budget_is_given_up_on_when_the_clock_passes_it()
+    {
+        var (_, provider) = CreateService();
+        var clock = new FakeTimeProvider();
+        var id = Guid.NewGuid();
+        var job = new MigrationJob(
+            id,
+            Guid.NewGuid(),
+            ApiRequest(),
+            new MigrationJobInfo { Id = id, Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow },
+            tenantContext: null,
+            NullLogger.Instance,
+            provider,
+            clock);
+        var counting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http = new HttpClient(new StallingHandler(counting)) { BaseAddress = new Uri("https://example-nightscout.invalid/") };
+
+        var count = job.FetchCollectionCountAsync(http, "entries", CancellationToken.None);
+        await counting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        count.IsCompleted.Should().BeFalse();
+        clock.Advance(TimeSpan.FromSeconds(30));
+
+        (await count.WaitAsync(TimeSpan.FromSeconds(10))).Should().BeNull("the run goes on without a total");
     }
 
     [Fact]
@@ -337,18 +277,15 @@ public class MigrationJobServiceTests
         job.GetStatus().CollectionProgress["profile"].SkippedReason.Should().Be("no profile endpoint");
     }
 
-    /// <summary>Holds every source request until released, keeping the job in a live state.</summary>
-    private sealed class BlockingHandler : HttpMessageHandler
+    /// <summary>Never answers, and says when a request has arrived.</summary>
+    private sealed class StallingHandler(TaskCompletionSource arrived) : HttpMessageHandler
     {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public void Release() => _released.TrySetResult();
-
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            await _released.Task.WaitAsync(cancellationToken);
-            throw new HttpRequestException("released");
+            arrived.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("unreachable");
         }
     }
 }

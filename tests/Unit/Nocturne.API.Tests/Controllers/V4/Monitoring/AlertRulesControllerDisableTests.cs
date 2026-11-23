@@ -80,7 +80,8 @@ public class AlertRulesControllerDisableTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(db)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
             MockTenantAccessor.Create(db.TenantId).Object,
@@ -90,8 +91,8 @@ public class AlertRulesControllerDisableTests
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(tracker.Object, handler.Object),
-            Mock.Of<ILogger<AlertRulesController>>());
+            new AlertRuleRetirement(tracker.Object, handler.Object, Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
 
         return (controller, excursionId, tracker, handler, () => ruleExistedAtClose);
     }
@@ -148,6 +149,19 @@ public class AlertRulesControllerDisableTests
         await controller.ToggleRule(RuleId, CancellationToken.None);
 
         VerifyNothingClosed(tracker, handler);
+    }
+
+    [Fact]
+    public async Task Toggling_a_disabled_rule_on_reports_when_it_was_enabled()
+    {
+        var (controller, _, _, _, _) = await CreateAsync(enabled: false);
+
+        var result = await controller.ToggleRule(RuleId, CancellationToken.None);
+
+        var response = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+        response.IsEnabled.Should().BeTrue();
+        response.EnabledAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
     }
 
     [Fact]

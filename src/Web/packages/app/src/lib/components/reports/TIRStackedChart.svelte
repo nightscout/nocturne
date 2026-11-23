@@ -6,7 +6,7 @@
 <script lang="ts">
   import { StackedBar, type StackedBarSegment } from "@nocturne/charts";
   import { bgRange } from "#lib/utils/formatting.js";
-  import type { TimeInRangePercentages } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TimeInRangePercentages } from "@nocturne/api-client";
 
   interface Props {
     /** Pre-computed percentages - required to avoid reactive API calls */

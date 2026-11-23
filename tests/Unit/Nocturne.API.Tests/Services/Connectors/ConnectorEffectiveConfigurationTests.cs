@@ -48,7 +48,7 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
     private ConnectorConfigurationService CreateService(IConfiguration configuration) =>
         new(
             new ConnectorConfigurationRepository(_dbContext.AsFactory()),
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
@@ -56,6 +56,7 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
             configuration,
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
 
     [Fact]

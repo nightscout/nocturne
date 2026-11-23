@@ -230,6 +230,7 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         jobInfo.Should().NotBeNull();
+        await MigrationJobPump.RunAsync(Fixture);
 
         // Poll until complete
         MigrationJobStatus? status = null;

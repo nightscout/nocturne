@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -27,6 +28,7 @@ public class NocturneDbContextFactoryTests : IAsyncDisposable
         services.AddScoped<IAuditContext, StubAuditContext>();
         services.AddSingleton<FactoryHoldingSingleton>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 

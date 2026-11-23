@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts;
@@ -328,6 +329,52 @@ public class DeviceStatusProjectionServiceTests
         result.Override.CurrentCorrectionRange.Should().NotBeNull();
         result.Override.CurrentCorrectionRange!.MinValue.Should().Be(140.0);
         result.Override.CurrentCorrectionRange.MaxValue.Should().Be(160.0);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_WithAStoredInactiveOverride_ReturnsItAsUploaded()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = JsonSerializer.Serialize(new LoopStatus { Version = "3.0" }, JsonOptions);
+        aps.OverrideJson = """{"active":false,"timestamp":"2026-11-16T19:49:17Z"}""";
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+
+        var served = JsonSerializer.SerializeToNode(result.Override, NightscoutJsonOptions.Create())!.AsObject();
+        served.Select(p => p.Key).Should().BeEquivalentTo("active", "timestamp");
+        result.Override!.Active.Should().BeFalse();
+        result.Override.Timestamp.Should().Be("2026-11-16T19:49:17Z");
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_WithAStoredActiveOverride_AddsNoDurationLoopDidNotSend()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = JsonSerializer.Serialize(new LoopStatus { Version = "3.0" }, JsonOptions);
+        aps.OverrideJson =
+            """{"active":true,"name":"Exercise","multiplier":0.8,"timestamp":"2026-11-16T12:37:00Z","currentCorrectionRange":{"minValue":140,"maxValue":160}}""";
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, OverrideSpan(-30, 30), null);
+
+        result.Override!.Duration.Should().BeNull();
+        result.Override.Active.Should().BeTrue();
+        result.Override.Name.Should().Be("Exercise");
+        result.Override.Multiplier.Should().Be(0.8);
+        result.Override.Timestamp.Should().Be("2026-11-16T12:37:00Z");
+        result.Override.CurrentCorrectionRange!.MinValue.Should().Be(140);
+        result.Override.CurrentCorrectionRange.MaxValue.Should().Be(160);
+    }
+
+    [Fact]
+    public void ProjectFromSnapshots_WithAStoredOverrideBeyondTheTypedFields_KeepsThem()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = JsonSerializer.Serialize(new LoopStatus { Version = "3.0" }, JsonOptions);
+        aps.OverrideJson = """{"active":false,"timestamp":"2026-11-16T19:49:17Z","symbol":"x"}""";
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+
+        result.Override!.ExtensionData.Should().ContainKey("symbol");
     }
 
     [Theory]

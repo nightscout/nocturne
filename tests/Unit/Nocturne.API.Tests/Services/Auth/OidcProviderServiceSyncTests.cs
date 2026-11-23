@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data.Extensions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,7 @@ public class OidcProviderServiceSyncTests
         services.AddDbContextFactory<NocturneDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         return services.BuildServiceProvider();
     }
 

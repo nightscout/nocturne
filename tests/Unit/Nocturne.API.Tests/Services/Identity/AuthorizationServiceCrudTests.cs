@@ -79,7 +79,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockDirectGrantService.Object,
             new OAuthGrantRepository(_dbContext.AsFactory()),
             _mockJwtService.Object,
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _categoryReadContext,
             TimeProvider.System
         );
@@ -232,15 +232,15 @@ public class AuthorizationServiceCrudTests : IDisposable
         {
             Name = "Holds nothing",
             Roles = ["a-role-nocturne-cannot-translate"],
-        });
+        }, maker: null);
 
         await create.Should().ThrowAsync<ArgumentException>();
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -276,7 +276,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CreateSubjectAsync_MintsAGrantOnTheDeviceSubjectAndReturnsTheTokenOnce()
+    public async Task CreateSubjectAsync_MintsAGrantOnTheDeviceSubjectThatStopsWhenItsMakerDoes()
     {
         var grantId = Guid.CreateVersion7();
 
@@ -293,8 +293,8 @@ public class AuthorizationServiceCrudTests : IDisposable
             .Setup(d => d.CreateAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
             {
                 Id = grantId,
@@ -304,11 +304,13 @@ public class AuthorizationServiceCrudTests : IDisposable
                 CreatedAt = DateTime.UtcNow,
             }));
 
+        var makerId = Guid.CreateVersion7();
+        var accessEndsAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc);
         var result = await _authorizationService.CreateSubjectAsync(new LegacySubject
         {
             Name = "New Device Subject",
             Roles = ["readable"],
-        });
+        }, new CredentialMaker(makerId, accessEndsAt));
 
         result.Id.Should().Be(grantId.ToString());
         result.AccessToken.Should().Be("noc_generated-token");
@@ -322,7 +324,7 @@ public class AuthorizationServiceCrudTests : IDisposable
                 _deviceSubjectId,
                 "New Device Subject",
                 It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
-                null, false, null, null, null, It.IsAny<CancellationToken>()),
+                accessEndsAt, false, null, null, makerId, null, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -343,8 +345,8 @@ public class AuthorizationServiceCrudTests : IDisposable
             .Setup(d => d.CreateAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
             {
                 Id = Guid.CreateVersion7(),
@@ -358,14 +360,14 @@ public class AuthorizationServiceCrudTests : IDisposable
         {
             Name = "Clamped",
             Roles = ["readable"],
-        });
+        }, maker: null);
 
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), true,
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid?>(),
+                It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

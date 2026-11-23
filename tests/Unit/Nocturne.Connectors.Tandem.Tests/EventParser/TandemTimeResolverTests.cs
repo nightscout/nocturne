@@ -114,7 +114,7 @@ public class TandemTimeResolverTests
             new TandemEventBuilder(256, after, seqNum: 2).UInt16(4, 130).UInt32(8, (uint)after));
 
         var glucose = new TandemCgmMapper(NullLogger.Instance, new TandemTimeResolver(-7, LosAngeles))
-            .Map(TandemEventDecoder.Decode(blob), TandemTestClock.Now);
+            .Map(TandemEventDecoder.Decode(blob));
 
         glucose.Select(g => (g.Timestamp, g.UtcOffset)).Should().BeEquivalentTo(new[]
         {

@@ -14,6 +14,14 @@ public interface ISubjectService
     /// <returns>Subject if found, null otherwise</returns>
     Task<Subject?> GetSubjectByIdAsync(Guid subjectId);
 
+    /// <summary>
+    /// The subject an OIDC identity is linked to, or null. Reads only, so a sign-in can decide
+    /// admission before <see cref="FindOrCreateFromOidcAsync"/> writes anything.
+    /// </summary>
+    /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
+    /// <param name="issuer">OIDC issuer URL</param>
+    Task<Subject?> FindFromOidcAsync(string oidcSubjectId, string issuer);
+
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
     /// <param name="issuer">OIDC issuer URL</param>
     /// <param name="email">
@@ -45,8 +53,36 @@ public interface ISubjectService
     /// <param name="oidcSubjectId">The subject identifier from the OIDC provider (sub claim).</param>
     /// <param name="issuer">The OIDC issuer URL.</param>
     /// <param name="email">The email from OIDC claims, if any.</param>
+    /// <param name="emailVerified">
+    /// Whether the provider asserted <paramref name="email"/> as verified. When it did and the
+    /// email is the subject's own address, the address is confirmed; linking never changes it.
+    /// </param>
     Task<(OidcLinkOutcome Outcome, Guid? IdentityId)> AttachOidcIdentityAsync(
-        Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email);
+        Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email,
+        bool emailVerified);
+
+    /// <summary>
+    /// For a setup caller who has just proved the identity: makes the subject holding it the one
+    /// setup completes, in place of <paramref name="createdSubjectId"/>, the owner the setup run for
+    /// tenant <paramref name="tenantSlug"/> created, and returns its id; null when either does not
+    /// qualify (<see cref="ISubjectRepository.AdoptForSetupAsync"/>).
+    /// </summary>
+    Task<Guid?> AdoptForSetupAsync(Guid createdSubjectId, string oidcSubjectId, string issuer, string tenantSlug);
+
+    /// <summary>
+    /// For a caller who has just proved the identity as <paramref name="subjectId"/>: links it to
+    /// that subject and deletes the unclaimed subject holding it, returning the new link's id; null
+    /// when the holder is not unclaimed (<see cref="ISubjectRepository.TakeUnclaimedOidcIdentityAsync"/>).
+    /// </summary>
+    /// <remarks>The address is handled as <see cref="AttachOidcIdentityAsync"/> handles it.</remarks>
+    Task<Guid?> TakeUnclaimedOidcIdentityAsync(
+        Guid subjectId, string oidcSubjectId, string issuer, string? email, bool emailVerified);
+
+    /// <summary>
+    /// Confirms the subject's address when <paramref name="email"/> is the one it holds, by the rule of
+    /// <see cref="ISubjectRepository.ConfirmEmailAsync"/>.
+    /// </summary>
+    Task<EmailConfirmation> ConfirmEmailAsync(Guid subjectId, string email);
 
     /// <summary>
     /// Atomically remove an OIDC identity from a subject, enforcing the primary-factor rule
@@ -88,8 +124,9 @@ public interface ISubjectService
 
     /// <returns>
     /// <see cref="SubjectChange.Changed"/> when deleted, <see cref="SubjectChange.LastOwnerOf"/> naming
-    /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.NotFound"/> when
-    /// it does not exist or is a system subject
+    /// the tenants when the subject is the last owner of any, <see cref="SubjectChange.LastManagerOf"/>
+    /// naming the teams when the subject is the last manager of any with other members,
+    /// <see cref="SubjectChange.NotFound"/> when it does not exist or is a system subject
     /// </returns>
     Task<SubjectChange> DeleteSubjectAsync(Guid subjectId);
 

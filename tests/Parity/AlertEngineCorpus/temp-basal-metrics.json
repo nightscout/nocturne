@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "temp-basal-metrics",
-  "description": "rate metric compares U/hr; percent_of_scheduled computes rate/scheduled*100; scheduled null or zero is false; no active temp is false (no guard)",
+  "description": "rate metric compares U/hr; percent_of_scheduled computes rate/scheduled*100; scheduled null or zero is unknown; no active temp is false (no guard)",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -12,7 +12,6 @@
         "operator": "\u003E=",
         "value": 2
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -25,7 +24,6 @@
         "operator": "\u003C=",
         "value": 50
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

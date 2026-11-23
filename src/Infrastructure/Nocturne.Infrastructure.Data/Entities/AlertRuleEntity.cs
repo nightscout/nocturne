@@ -63,6 +63,20 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string? AutoResolveParams { get; set; }
 
     /// <summary>
+    /// What an unknown root means to the tracker, one of <see cref="AlertRuleOnUnknown"/>.
+    /// </summary>
+    [Column("on_unknown")]
+    [MaxLength(16)]
+    public string OnUnknown { get; set; } = AlertRuleOnUnknown.Hold;
+
+    /// <summary>
+    /// Minutes a reading stays fresh for the rule's reading-driven leaves; null is the engine's
+    /// default.
+    /// </summary>
+    [Column("glucose_freshness_minutes")]
+    public int? GlucoseFreshnessMinutes { get; set; }
+
+    /// <summary>
     /// Alert severity. Critical alerts bypass quiet hours.
     /// </summary>
     [Column("severity")]
@@ -81,6 +95,13 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("is_enabled")]
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// When the rule was last enabled (docs/alerts/engine-semantics.md §3). Read only while the
+    /// rule is enabled; null is not recorded.
+    /// </summary>
+    [Column("enabled_at")]
+    public DateTime? EnabledAt { get; set; }
 
     /// <summary>
     /// When true, this rule still fires while the tenant is in Do Not Disturb mode (manual

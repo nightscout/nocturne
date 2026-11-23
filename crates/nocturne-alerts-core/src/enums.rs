@@ -6,6 +6,10 @@
 //! which the backend's `EnumManifestTests` keeps equal to the C# enums, and
 //! `enums_match_manifest` pins each one to it.
 
+use rust_decimal::Decimal;
+
+use crate::truth::Truth;
+
 /// An enum with a fixed set of wire names.
 pub trait WireEnum: Copy + Eq + 'static {
     /// Every member, in declaration order.
@@ -80,12 +84,27 @@ impl CmpOp {
             Self::Eq => actual == threshold,
         }
     }
+
+    /// `limit` moved by `margin` toward the side where the comparison holds,
+    /// so it holds `margin` further past `limit`; a negative `margin` moves it
+    /// toward the side where it does not (engine-semantics.md §3, clear
+    /// margin). `==` has no side, and a limit the move would take past the
+    /// decimal range stays where it is.
+    #[must_use]
+    pub fn widened(self, limit: Decimal, margin: Decimal) -> Decimal {
+        match self {
+            Self::Gt | Self::Ge => limit.checked_sub(margin),
+            Self::Lt | Self::Le => limit.checked_add(margin),
+            Self::Eq => None,
+        }
+        .unwrap_or(limit)
+    }
 }
 
-/// `op` applied to `actual`; false when it is absent.
+/// `op` applied to `actual`; unknown when it is absent.
 #[must_use]
-pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> bool {
-    actual.is_some_and(|actual| op.apply(actual, threshold))
+pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> Truth {
+    actual.map_or(Truth::Unknown, |actual| op.apply(actual, threshold).into())
 }
 
 wire_enum! {
@@ -171,6 +190,44 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// `SensorState`: what the sensor's own reports say of its readings
+    /// (engine-semantics.md §4). `no_value` is the host's word for a newest
+    /// reading that carries no glucose value.
+    pub enum SensorState {
+        WarmingUp = "warming_up",
+        Ok = "ok",
+        CalibrationNeeded = "calibration_needed",
+        Error = "error",
+        Expired = "expired",
+        NoValue = "no_value",
+    }
+}
+
+wire_enum! {
+    /// `ForecastCurve`: a forecast series a `predicted` leaf selects
+    /// (engine-semantics.md §3). `default` is the series a host has always
+    /// sent, not a curve of its own; the others are oref's.
+    #[derive(PartialOrd, Ord)]
+    pub enum ForecastCurve {
+        Default = "default",
+        Iob = "iob",
+        Cob = "cob",
+        Uam = "uam",
+        Zt = "zt",
+    }
+}
+
+wire_enum! {
+    /// `AlertLimitFact`: the fact a glucose comparison's `value_from` names
+    /// as its limit (engine-semantics.md §3, a limit from a fact).
+    pub enum LimitFact {
+        LatestGlucose = "latest_glucose",
+        TargetLow = "target_low",
+        TargetHigh = "target_high",
+    }
+}
+
+wire_enum! {
     /// `threshold.direction`.
     pub enum ThresholdDirection {
         Above = "above",
@@ -244,6 +301,9 @@ mod tests {
                 names::<TransmitterBatteryMetric>(),
             ),
             ("TrendBucket", names::<TrendBucket>()),
+            ("SensorState", names::<SensorState>()),
+            ("ForecastCurve", names::<ForecastCurve>()),
+            ("AlertLimitFact", names::<LimitFact>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];
         for (enum_name, ours) in tables {

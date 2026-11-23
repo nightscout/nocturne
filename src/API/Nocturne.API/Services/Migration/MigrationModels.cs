@@ -32,7 +32,10 @@ public enum MigrationJobState
     Failed = 4,
     /// <summary>Migration was explicitly stopped by the user before completion.</summary>
     Cancelled = 5,
-    /// <summary>The API restarted while the migration was running; the work did not complete and must be re-run.</summary>
+    /// <summary>
+    /// The API restarted while the migration was running, under a version that could not resume it;
+    /// the work did not complete and must be re-run.
+    /// </summary>
     Interrupted = 6
 }
 
@@ -56,7 +59,7 @@ public static class MigrationJobStates
     public static IReadOnlyList<string> LiveNames { get; } =
         Enum.GetValues<MigrationJobState>().Where(IsLive).Select(s => s.ToString()).ToArray();
 
-    /// <summary>Whether a job in this state is pending or running, so can still be cancelled or interrupted.</summary>
+    /// <summary>Whether a job in this state is pending or running, so has more to do and can still be cancelled.</summary>
     public static bool IsLive(this MigrationJobState state) =>
         state is MigrationJobState.Pending or MigrationJobState.Running;
 }

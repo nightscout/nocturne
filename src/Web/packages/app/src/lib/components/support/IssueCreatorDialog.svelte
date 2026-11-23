@@ -23,7 +23,7 @@
   import { readApiFailures, type ApiFailure } from "#lib/support/api-failure-log.js";
   import { buildDiagnosticInfo } from "#lib/support/diagnostic-info.js";
   import { page } from "$app/state";
-  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "#lib/api/generated/nocturne-api-client.js";
+  import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "@nocturne/api-client";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { fresh } from "#lib/api/fresh-query.js";
 

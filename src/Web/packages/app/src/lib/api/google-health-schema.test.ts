@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GoogleHealthOptionsSchema } from "./generated/schemas";
+import { GoogleHealthOptionsSchema } from "@nocturne/api-client/schemas";
 
 describe("Google Health generated request validation", () => {
   it("preserves the API limit of 32 data types", () => {

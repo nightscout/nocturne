@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "name": "limit-from-fact-invalid-skipped",
+  "description": "each invalid form of a limit cannot be evaluated, so its rule is skipped: value and value_from both, neither, threshold against latest_glucose, an offset beyond 1000, a fact the engine does not know, and value_from on a leaf whose value is not glucose; a valid rule beside them is evaluated",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70,
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "latest_glucose",
+          "offset": -5
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "within_minutes": 30,
+        "value_from": {
+          "fact": "latest_glucose",
+          "offset": -1001
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "eventual_glucose",
+      "condition_params": {
+        "operator": "<",
+        "value_from": {
+          "fact": "max_iob"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "iob",
+      "condition_params": {
+        "operator": ">",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value_from": {
+          "fact": "target_low"
+        }
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "target_low": 80,
+        "target_high": 180,
+        "iob_units": 3,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 20
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 20
+          }
+        ],
+        "aps_determination": {
+          "at": "2026-01-05T12:00:00Z",
+          "eventual_mgdl": 60
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -33,6 +33,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { fresh } from "#lib/api/fresh-query.js";
@@ -52,7 +53,8 @@
 
   /** A member limited to the last 24 hours can neither change nor copy a report; the API refuses both. */
   const clamped = $derived(page.data.limitTo24Hours === true);
-  const canEdit = $derived(report.current?.canEdit === true && !clamped);
+  const handedOff = $derived(page.data.isHandedOffSession === true);
+  const canEdit = $derived(report.current?.canEdit === true && !clamped && !handedOff);
   const name = $derived(report.current?.name ?? "");
 
   /**
@@ -230,6 +232,8 @@
       <p class="text-sm text-muted-foreground" role="status" data-testid="clamped-note">
         Your access is limited to the last 24 hours. It cannot change or copy reports.
       </p>
+    {:else if handedOff}
+      <SignInGate reason="Sign in again to change or copy this report." />
     {:else if !canEdit}
       <p class="text-sm text-muted-foreground" role="status" data-testid="read-only-note">
         Another member made this report, so you cannot change it. You can save a copy with Save as.
@@ -274,7 +278,7 @@
             {#if canEdit}
               <SaveControl report={workspace} {name} reason={problem} disabled={busy} codes={problemCodes} onsave={(n) => saveWorkspace(workspace, n)} />
             {/if}
-            {#if !clamped}
+            {#if !clamped && !handedOff}
               <SaveControl
                 report={workspace}
                 kind="copy"

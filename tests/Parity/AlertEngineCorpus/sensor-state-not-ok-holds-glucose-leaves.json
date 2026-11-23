@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "name": "sensor-state-not-ok-holds-glucose-leaves",
+  "description": "while the sensor is warming up, needs calibration, has an error, has expired or sent a reading with no value, threshold, rate_of_change, trend and glucose_bucket read unknown by sensor_state with reason sensor_not_ok whatever the reading, so each rule holds and opens nothing on a low warm-up value; with no sensor state the same reading opens every rule",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "rate_of_change",
+      "condition_params": {
+        "direction": "falling",
+        "rate": 2
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "trend",
+      "condition_params": {
+        "bucket": "falling_fast"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "glucose_bucket",
+      "condition_params": {
+        "buckets": [
+          "low",
+          "very_low"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low",
+        "sensor_state": {
+          "state": "warming_up",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low",
+        "sensor_state": {
+          "state": "calibration_needed",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low",
+        "sensor_state": {
+          "state": "error",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low",
+        "sensor_state": {
+          "state": "expired",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low",
+        "sensor_state": {
+          "state": "no_value",
+          "since": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 50,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "trend_rate": -3,
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low"
+      }
+    }
+  ]
+}

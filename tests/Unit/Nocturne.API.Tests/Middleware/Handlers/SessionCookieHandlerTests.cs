@@ -133,7 +133,7 @@ public class SessionCookieHandlerTests
 
     /// <summary>
     /// The claims the session overload of <see cref="IJwtService.GenerateAccessToken"/> can emit
-    /// (sub, name, email, roles, permission, sid, jti, iat, exp). A session JWT carrying only these is
+    /// (sub, name, email, roles, permission, sid, handoff, jti, iat, exp). A session JWT carrying only these is
     /// the shape the handler accepts.
     /// </summary>
     private static readonly HashSet<string> SessionShapeClaims =
@@ -144,6 +144,7 @@ public class SessionCookieHandlerTests
         nameof(JwtClaims.Roles),
         nameof(JwtClaims.Permissions),
         nameof(JwtClaims.SessionId),
+        nameof(JwtClaims.HandedOff),
         nameof(JwtClaims.JwtId),
         nameof(JwtClaims.IssuedAt),
         nameof(JwtClaims.ExpiresAt),

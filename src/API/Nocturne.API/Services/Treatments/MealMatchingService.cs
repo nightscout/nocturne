@@ -14,7 +14,7 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// Matches connector food entries (primarily from MyFitnessPal) to existing carb intake records
-/// within a configurable time window, linking them via <see cref="ITreatmentFoodService"/>. Raises
+/// within a configurable time window, linking them through <see cref="IConnectorFoodEntryRepository"/>. Raises
 /// an in-app notification for new matches so users can review auto-linked meals.
 /// </summary>
 /// <seealso cref="IMealMatchingService"/>
@@ -31,7 +31,6 @@ public class MealMatchingService : IMealMatchingService
 
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
-    private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IInAppNotificationService _notificationService;
     private readonly IInAppNotificationRepository _notificationRepository;
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
@@ -42,7 +41,6 @@ public class MealMatchingService : IMealMatchingService
     public MealMatchingService(
         IConnectorFoodEntryRepository foodEntryRepository,
         ICarbIntakeRepository carbIntakeRepository,
-        ITreatmentFoodService treatmentFoodService,
         IInAppNotificationService notificationService,
         IInAppNotificationRepository notificationRepository,
         IMyFitnessPalMatchingSettingsService settingsService,
@@ -52,7 +50,6 @@ public class MealMatchingService : IMealMatchingService
     {
         _foodEntryRepository = foodEntryRepository;
         _carbIntakeRepository = carbIntakeRepository;
-        _treatmentFoodService = treatmentFoodService;
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
         _settingsService = settingsService;
@@ -102,59 +99,15 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    public async Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
+    public async Task<DismissMatchOutcome> DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
     {
-        var foodEntry = await _foodEntryRepository.GetByIdAsync(foodEntryId, ct);
-        if (foodEntry == null)
-        {
-            _logger.LogWarning("Food entry {FoodEntryId} not found", foodEntryId);
-            return;
-        }
-
-        // treatment_foods.carb_intake_id carries no foreign key, so an unknown id here would
-        // persist a row no breakdown can ever resolve — and flip the food entry to Matched,
-        // so it never resurfaces as a suggestion.
-        var carbIntake = await _carbIntakeRepository.GetByIdAsync(carbIntakeId, ct);
-        if (carbIntake == null)
-        {
-            _logger.LogWarning("Carb intake {CarbIntakeId} not found", carbIntakeId);
-            return;
-        }
-
-        var treatmentFood = new TreatmentFood
-        {
-            Id = Guid.CreateVersion7(),
-            CarbIntakeId = carbIntakeId,
-            FoodId = foodEntry.FoodId,
-            Portions = foodEntry.Servings,
-            Carbs = carbs,
-            TimeOffsetMinutes = timeOffsetMinutes,
-            FoodName = foodEntry.Food?.Name ?? foodEntry.MealName,
-            CarbsPerPortion = foodEntry.Servings > 0 ? carbs / foodEntry.Servings : null,
-        };
-
-        await _treatmentFoodService.AddAsync(treatmentFood, ct);
-
-        // Update food entry status
-        await _foodEntryRepository.UpdateStatusAsync(
-            foodEntryId,
-            ConnectorFoodEntryStatus.Matched,
-            ct);
+        var outcome = await _foodEntryRepository.DismissAsync(foodEntryId, ct);
 
         _logger.LogInformation(
-            "Accepted meal match: food entry {FoodEntryId} linked to carb intake {CarbIntakeId}",
+            "Dismiss of food entry {FoodEntryId}: {Outcome}",
             foodEntryId,
-            carbIntakeId);
-    }
-
-    public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
-    {
-        await _foodEntryRepository.UpdateStatusAsync(
-            foodEntryId,
-            ConnectorFoodEntryStatus.Standalone,
-            ct);
-
-        _logger.LogInformation("Dismissed meal match for food entry {FoodEntryId}", foodEntryId);
+            outcome);
+        return outcome;
     }
 
     public async Task WithdrawSuggestionAsync(string userId, Guid foodEntryId, CancellationToken ct = default)

@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { createQueryResource, remoteCommand, remoteQuery, remoteQueryError, type RemoteQueryStub } from "#lib/test-stubs/remote-resource.js";
-import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
+import type { CustomReport } from "@nocturne/api-client";
 import { chartResult, normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
 import { liveCatalogue } from "#lib/components/reports/custom/workspace/catalogue.fixtures.js";
 
@@ -227,6 +227,19 @@ describe("saved custom report page", () => {
     expect(page.getByRole("menuitem", { name: "Rename" }).elements()).toHaveLength(0);
     expect(page.getByRole("menuitem", { name: "Delete" }).elements()).toHaveLength(0);
     await expect.element(page.getByRole("link", { name: "Edit a copy" })).toBeVisible();
+  });
+
+  it("on a handed-off session runs the report and offers a sign-in in place of Edit, Rename and Delete", async () => {
+    pageState.data = { ...MEMBER, isHandedOffSession: true };
+    render(CustomReportPage, {});
+
+    await expect.element(page.getByText("Sign in again to change, copy, or delete this report.")).toBeVisible();
+    expect(page.getByRole("link", { name: "Edit" }).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: "Edit a copy" }).elements()).toHaveLength(0);
+    await page.getByTestId("report-actions").click();
+    await expect.element(page.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+    expect(page.getByRole("menuitem", { name: "Rename" }).elements()).toHaveLength(0);
+    expect(page.getByRole("menuitem", { name: "Delete" }).elements()).toHaveLength(0);
   });
 
   it("shows why a stored spec no longer runs, and does not run it", async () => {

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "name": "sustained-host-gap",
+  "description": "no evaluation for an hour while an override held: the first evaluation after the gap starts the run where the override began, and sustained{30} holds at once",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 30,
+        "child": {
+          "type": "override_active",
+          "override_active": {
+            "is_active": true
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {}
+    },
+    {
+      "at": "2026-11-02T13:00:00Z",
+      "context": {
+        "active_override": {
+          "started_at": "2026-11-02T12:05:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T13:05:00Z",
+      "context": {
+        "active_override": {
+          "started_at": "2026-11-02T12:05:00Z"
+        }
+      }
+    }
+  ]
+}

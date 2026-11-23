@@ -1,4 +1,4 @@
-import { ChannelType } from "#lib/api/generated/nocturne-api-client.js";
+import { ChannelType } from "@nocturne/api-client";
 import type { ChannelKind, ChannelMetaEntry } from "./channelMeta";
 
 export function channelLabel(kind: ChannelKind): string {

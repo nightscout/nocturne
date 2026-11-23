@@ -45,7 +45,6 @@ public class GlookoHeartRateMapper(string connectorSource, GlookoTimeMapper time
                     Accuracy = 0,
                     Device = _connectorSource,
                     EnteredBy = _connectorSource,
-                    DataSource = _connectorSource,
                 });
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))

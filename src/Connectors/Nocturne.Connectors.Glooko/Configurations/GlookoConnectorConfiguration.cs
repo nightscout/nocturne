@@ -34,7 +34,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Profiles,
         SyncDataType.Notes,
         SyncDataType.Activity
-    ]
+    ],
+    LegacyIdPrefix = "glooko"
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration
 {

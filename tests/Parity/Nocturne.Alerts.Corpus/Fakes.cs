@@ -19,47 +19,41 @@ public sealed class ManualTimeProvider : TimeProvider
 
 /// <summary>
 /// In-memory <see cref="IConditionTimerStore"/> that records every mutation so the
-/// expected snapshot can assert sustained-timer set/clear deltas (the state the host
+/// expected snapshot can assert sustained set/clear deltas (the state the host
 /// persists between evaluations).
 /// </summary>
 public sealed class RecordingTimerStore : IConditionTimerStore
 {
-    private readonly Dictionary<(Guid RuleId, string Path), DateTime> _store = new();
+    private readonly Dictionary<(Guid RuleId, string Path), (bool Running, DateTime At)> _store = new();
     private readonly List<ExpectedTimerOp> _log = new();
 
-    public Task<IReadOnlyDictionary<string, DateTime>> GetAllForRuleAsync(Guid ruleId, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyDictionary<string, DateTime>>(
-            _store.Where(kv => kv.Key.RuleId == ruleId)
-                .ToDictionary(kv => kv.Key.Path, kv => kv.Value));
+    public Task<ConditionTimers> GetAllForRuleAsync(Guid ruleId, CancellationToken ct)
+    {
+        var rule = _store.Where(kv => kv.Key.RuleId == ruleId).ToList();
+        return Task.FromResult(new ConditionTimers(
+            rule.Where(kv => kv.Value.Running).ToDictionary(kv => kv.Key.Path, kv => kv.Value.At),
+            rule.Where(kv => !kv.Value.Running).ToDictionary(kv => kv.Key.Path, kv => kv.Value.At)));
+    }
 
     public Task SetFirstTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
-        _store[(ruleId, path)] = at;
+        _store[(ruleId, path)] = (true, at);
         _log.Add(new ExpectedTimerOp("set", path, DateTime.SpecifyKind(at, DateTimeKind.Utc)));
         return Task.CompletedTask;
     }
 
-    public Task ClearAsync(Guid ruleId, string path, CancellationToken ct)
+    public Task SetNotTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
-        // Only a clear that removes something is observable state change; the engine calls
-        // ClearAsync unconditionally on every child-false tick, which would flood the
-        // snapshot with no-ops. Record the op only when a timer actually existed.
-        if (_store.Remove((ruleId, path)))
-        {
-            _log.Add(new ExpectedTimerOp("clear", path, null));
-        }
+        _store[(ruleId, path)] = (false, at);
+        _log.Add(new ExpectedTimerOp("clear", path, DateTime.SpecifyKind(at, DateTimeKind.Utc)));
         return Task.CompletedTask;
     }
 
     public Task PruneToPathsAsync(Guid ruleId, IReadOnlyCollection<string> retainedPaths, CancellationToken ct)
     {
         var keep = new HashSet<string>(retainedPaths, StringComparer.Ordinal);
-        var toRemove = _store.Keys.Where(k => k.RuleId == ruleId && !keep.Contains(k.Path)).ToList();
-        foreach (var k in toRemove)
-        {
+        foreach (var k in _store.Keys.Where(k => k.RuleId == ruleId && !keep.Contains(k.Path)).ToList())
             _store.Remove(k);
-            _log.Add(new ExpectedTimerOp("clear", k.Path, null));
-        }
         return Task.CompletedTask;
     }
 

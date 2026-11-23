@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -29,8 +30,6 @@ public class MigrationSourceIdentityTests
     private const string TokenUrl = "https://example-nightscout.invalid/nightscout/?token=synthetic-token";
     private const string CleanUrl = "https://example-nightscout.invalid/nightscout";
 
-    private readonly TenantRunGuard _runGuard = new();
-
     private (MigrationJobService Service, ServiceProvider Provider) CreateService(
         List<Guid>? notifiedTenants = null,
         params Guid[] activeTenants)
@@ -39,6 +38,7 @@ public class MigrationSourceIdentityTests
         var provider = new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
+            .AddSingleton(AccountLinkRoutes.Off)
             .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
             .AddActiveTenantSnapshot()
             .AddScoped<INotificationV1Service>(sp => RecordingNotifications(
@@ -54,29 +54,15 @@ public class MigrationSourceIdentityTests
             seed.SaveChanges();
         }
 
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
-            provider,
-            new ConfigurationBuilder().Build(),
-            _runGuard,
-            TimeProvider.System);
-
-        return (service, provider);
+        return (MigrationJobHarness.CreateService(provider), provider);
     }
 
-    /// <summary>
-    /// Starts a job and waits for its background run to release the tenant's lease, which it does
-    /// only after writing its final record, so nothing rewrites the rows under the assertions.
-    /// </summary>
-    private async Task<MigrationJobInfo> StartAndSettleAsync(
+    /// <summary>Starts a job and runs it to its end.</summary>
+    private static async Task<MigrationJobInfo> StartAndSettleAsync(
         MigrationJobService service, TenantContext tenant, string url)
     {
         var job = await service.StartMigrationAsync(Request(url), tenant);
-
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        while (_runGuard.TryGetHolder(tenant.TenantId, MigrationJobService.MigrationRunName, out _))
-            await Task.Delay(10, timeout.Token);
-
+        await MigrationJobHarness.RunToEndAsync(service, tenant);
         return job;
     }
 
@@ -267,16 +253,13 @@ public class MigrationSourceIdentityTests
     [Fact]
     public void The_pending_config_offers_the_configured_url_without_its_token()
     {
-        var service = new MigrationJobService(
-            NullLogger<MigrationJobService>.Instance,
+        var service = MigrationJobHarness.CreateService(
             new ServiceCollection().BuildServiceProvider(),
             new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MIGRATION_MODE"] = "Api",
                 ["MIGRATION_NS_URL"] = "https://user:pass@example-nightscout.invalid/nightscout/?token=synthetic-token",
-            }).Build(),
-            new TenantRunGuard(),
-            TimeProvider.System);
+            }).Build());
 
         var pending = service.GetPendingConfig();
 

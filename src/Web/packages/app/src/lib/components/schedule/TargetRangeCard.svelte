@@ -20,7 +20,7 @@
     convertFromDisplayUnits,
     timeStringToSeconds,
   } from "#lib/utils/formatting.js";
-  import type { TargetRangeSchedule } from "#lib/api/generated/nocturne-api-client.js";
+  import type { TargetRangeSchedule } from "@nocturne/api-client";
 
   interface Props {
     profileName: string;

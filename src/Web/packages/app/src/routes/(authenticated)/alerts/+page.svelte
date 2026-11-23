@@ -19,7 +19,7 @@
   import type {
     AlertRuleResponse,
     TenantAlertSettingsResponse,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -229,6 +229,23 @@
             : `${needsReview} alert rules need review.`}
           Some rules were created in an older format. An update changed or turned off some of them. For others, the conditions possibly do not alert as set. Each one is marked below.
         </p>
+      </div>
+    {/if}
+
+    {#if rules.length > 0 && !rules.some((r) => r.coversLow)}
+      <div
+        role="status"
+        class="flex items-center gap-3 rounded-lg border px-4 py-3 {severity('warning', 'strip')}"
+      >
+        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <p class="flex-1 text-sm font-medium">
+          No alert is on for low glucose. Nocturne will not tell you when glucose is low.
+        </p>
+        {#if canManageAlerts}
+          <Button type="button" variant="outline" size="sm" onclick={newRule}>
+            <Plus class="h-4 w-4 mr-2" /> Add a low alert
+          </Button>
+        {/if}
       </div>
     {/if}
 

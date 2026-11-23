@@ -21,8 +21,9 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
     private static readonly Guid SourceId = InterruptedJobSweepPostgresFixture.SourceId;
     private readonly TestDatabase _database = fixture.Database;
 
+    /// <summary>A live migration run is resumed by its job, so the sweep leaves it live.</summary>
     [Fact]
-    public async Task EveryLiveMigrationState_IsMarkedInterrupted_AndEveryOtherStateIsLeftAlone()
+    public async Task EveryMigrationState_IsLeftAlone()
     {
         var rows = Enum.GetNames<MigrationJobState>()
             .Select(name => (Id: Guid.CreateVersion7(), State: name))
@@ -32,8 +33,8 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
             foreach (var (id, state) in rows)
             {
                 await ExecuteAsync(conn, $"""
-                    INSERT INTO migration_runs (id, source_id, tenant_id, mode, created_at, started_at, state, entries_migrated, treatments_migrated)
-                    VALUES ('{id}', '{SourceId}', '{TenantId}', 'Api', now(), now(), '{state}', 0, 0);
+                    INSERT INTO migration_runs (id, source_id, tenant_id, mode, created_at, started_at, state, entries_migrated, treatments_migrated, revision)
+                    VALUES ('{id}', '{SourceId}', '{TenantId}', 'Api', now(), now(), '{state}', 0, 0, 0);
                     """);
             }
         }
@@ -44,8 +45,7 @@ public class InterruptedJobSweepTests(InterruptedJobSweepPostgresFixture fixture
         foreach (var (id, state) in rows)
         {
             var after = await ScalarAsync(read, $"SELECT state FROM migration_runs WHERE id = '{id}'");
-            var wasLive = Enum.Parse<MigrationJobState>(state).IsLive();
-            after.Should().Be(wasLive ? nameof(MigrationJobState.Interrupted) : state, $"a {state} run");
+            after.Should().Be(state, $"a {state} run");
         }
     }
 

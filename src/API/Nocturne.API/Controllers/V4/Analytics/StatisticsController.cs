@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.Core.Clinical.Devices;
@@ -1022,8 +1023,8 @@ public class StatisticsController : ControllerBase
         if (clock.Zone is not { } userTz)
             return Ok(new HourlyInsulinDeliveryResponse
             {
-                StartDate = startUtc.ToString("yyyy-MM-dd"),
-                EndDate = endUtc.ToString("yyyy-MM-dd"),
+                StartDate = startUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                EndDate = endUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 TimeZoneUnavailableReason = clock.Reason,
             });
 
