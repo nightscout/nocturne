@@ -2,13 +2,19 @@ using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -18,7 +24,10 @@ namespace Nocturne.API.Tests.Authorization;
 /// <summary>
 /// A subject consenting to a client on PostgreSQL under the runtime role and Row Level Security:
 /// overlapping first consents leave one active grant holding both scope sets, a grant revoked after
-/// the consent read it is not written to, and only an app grant stands in the consent's way.
+/// the consent read it is not written to, only an app grant stands in the consent's way, a removal of the
+/// subject's membership that races a first consent leaves no active grant, an account deletion that
+/// races a first consent deadlocks with neither, and a scopes edit that races a merge leaves the edit's
+/// scopes whole.
 /// </summary>
 [Trait("Category", "Integration")]
 public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database database)
@@ -26,6 +35,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan DeadlockDetection = TimeSpan.FromSeconds(3);
 
     public sealed class Database : IAsyncLifetime
     {
@@ -76,6 +86,24 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         }
     }
 
+    /// <summary>Records every statement that failed, so a deadlock a retry hid is still seen.</summary>
+    private sealed class FailureLog : DbCommandInterceptor
+    {
+        private readonly List<Exception> _failures = [];
+
+        public IReadOnlyList<Exception> Failures
+        {
+            get { lock (_failures) return [.. _failures]; }
+        }
+
+        public override Task CommandFailedAsync(
+            DbCommand command, CommandErrorEventData eventData, CancellationToken cancellationToken = default)
+        {
+            lock (_failures) _failures.Add(eventData.Exception);
+            return Task.CompletedTask;
+        }
+    }
+
     private static bool WritesGrant(DbCommand command) =>
         command.CommandText.StartsWith("INSERT", StringComparison.Ordinal)
         && command.CommandText.Contains("oauth_grants", StringComparison.Ordinal);
@@ -88,12 +116,10 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
             && Interlocked.Increment(ref seen) == nth;
     }
 
-    private NocturneDbContext Context(Guid tenant, IInterceptor? staged = null) =>
+    private NocturneDbContext Context(Guid tenant, params IInterceptor[] staged) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
-            .AddInterceptors(staged is null
-                ? [new TenantConnectionInterceptor()]
-                : [new TenantConnectionInterceptor(), staged])
+            .AddInterceptors([new TenantConnectionInterceptor(), .. staged])
             .Options) { TenantId = tenant };
 
     private sealed record Seeded(Guid Tenant, Guid Client, Guid Subject, Factory Contexts);
@@ -119,6 +145,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         await using (var db = Context(tenant))
         {
             db.Subjects.Add(new SubjectEntity { Id = subject, Name = "consenting subject" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenant, SubjectId = subject });
             db.OAuthClients.Add(new OAuthClientEntity { Id = client, ClientId = $"app-{client:N}", RedirectUris = "[]" });
             await db.SaveChangesAsync();
         }
@@ -144,14 +171,24 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         return id;
     }
 
-    private static async Task<StagedGrantConsent> ConsentAsync(Factory contexts, Seeded seeded, params string[] scopes)
+    private static async Task<StagedGrantConsent?> ConsentAsync(Factory contexts, Seeded seeded, params string[] scopes)
     {
         await using var unit = await DbUnitOfWork.OpenAsync(contexts);
         StagedGrantConsent? staged = null;
         await unit.CommitAsync(
             async token => staged = await new GrantConsentService(NullLogger<GrantConsentService>.Instance)
                 .StageAsync(unit, seeded.Client, seeded.Subject, scopes, ct: token));
-        return staged!;
+        return staged;
+    }
+
+    private static async Task RemoveMembershipAsync(Factory contexts, Seeded seeded)
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, seeded.Tenant);
+        var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
+        var member = (await members.FindMemberAsync(seeded.Tenant, seeded.Subject, CancellationToken.None))!;
+        var revocation = new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
+        await unit.CommitAsync(token => MembershipRemoval.StageAsync(
+            unit, members, revocation, seeded.Tenant, member, MembershipEndHow.Removed, DateTime.UtcNow, token));
     }
 
     private async Task<List<OAuthGrantEntity>> GrantsAsync(Seeded seeded)
@@ -186,8 +223,8 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
         var active = (await GrantsAsync(seeded)).Where(g => g.RevokedAt is null).ToList();
         active.Should().ContainSingle();
         active[0].Scopes.Should().BeEquivalentTo(["glucose.read", "treatments.read"]);
-        staged.Count(s => s.Created).Should().Be(1);
-        staged.Select(s => s.Grant.Id).Distinct().Should().ContainSingle().Which.Should().Be(active[0].Id);
+        staged.Count(s => s!.Created).Should().Be(1);
+        staged.Select(s => s!.Grant.Id).Distinct().Should().ContainSingle().Which.Should().Be(active[0].Id);
     }
 
     [Fact]
@@ -205,7 +242,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
 
         var staged = await ConsentAsync(consenting, seeded, "treatments.read");
 
-        staged.Created.Should().BeTrue();
+        staged!.Created.Should().BeTrue();
         staged.Grant.Id.Should().NotBe(revoked);
         staged.Grant.Scopes.Should().BeEquivalentTo(["treatments.read"]);
         var stored = await GrantsAsync(seeded);
@@ -233,7 +270,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
 
         var staged = await ConsentAsync(consenting, seeded, "treatments.read");
 
-        staged.Created.Should().BeFalse();
+        staged!.Created.Should().BeFalse();
         staged.Grant.Scopes.Should().BeEquivalentTo(["glucose.read", "treatments.read"]);
         (await GrantsAsync(seeded)).Single(g => g.Id == grant).Scopes
             .Should().BeEquivalentTo(["glucose.read", "treatments.read"]);
@@ -248,7 +285,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
 
         var staged = await ConsentAsync(seeded.Contexts, seeded, "treatments.read");
 
-        staged.Created.Should().BeFalse();
+        staged!.Created.Should().BeFalse();
         staged.Grant.Id.Should().Be(active);
         staged.Grant.Scopes.Should().BeEquivalentTo(["glucose.read", "treatments.read"]);
         (await GrantsAsync(seeded)).Single(g => g.Id == revoked).Scopes.Should().BeEquivalentTo(["entries.read"]);
@@ -262,9 +299,115 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
 
         var staged = await ConsentAsync(seeded.Contexts, seeded, "treatments.read");
 
-        staged.Created.Should().BeTrue();
+        staged!.Created.Should().BeTrue();
         staged.Grant.Id.Should().NotBe(guest);
         staged.Grant.GrantType.Should().Be(OAuthGrantTypes.App);
         (await GrantsAsync(seeded)).Where(g => g.RevokedAt is null).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ARemovalThatRacesAFirstConsentLeavesTheRemovedMemberWithNoActiveGrant()
+    {
+        var seeded = await SeedAsync();
+        var consentIsAboutToCreate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseConsent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var consenting = new Factory(
+            tenant => Context(tenant, new BeforeStatement(WritesGrant, () =>
+            {
+                consentIsAboutToCreate.SetResult();
+                return releaseConsent.Task.WaitAsync(Patience);
+            })),
+            seeded.Tenant);
+
+        var consent = Task.Run(() => ConsentAsync(consenting, seeded, "glucose.read"));
+        await consentIsAboutToCreate.Task.WaitAsync(Patience);
+        var removal = Task.Run(() => RemoveMembershipAsync(seeded.Contexts, seeded));
+
+        await Task.WhenAny(removal, Task.Delay(LockWait));
+        releaseConsent.SetResult();
+        await Task.WhenAll(consent, removal).WaitAsync(Patience);
+
+        (await GrantsAsync(seeded)).Where(g => g.RevokedAt is null).Should().BeEmpty();
+        await using var db = Context(seeded.Tenant);
+        (await db.TenantMembers.AnyAsync(m => m.SubjectId == seeded.Subject)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AnAccountDeletionThatRacesAFirstConsentAndTheConsentBothFinishWithoutADeadlock()
+    {
+        var seeded = await SeedAsync();
+        var failures = new FailureLog();
+        var consentIsAboutToCreate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseConsent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var consenting = new Factory(
+            tenant => Context(tenant, failures, new BeforeStatement(WritesGrant, () =>
+            {
+                consentIsAboutToCreate.SetResult();
+                return releaseConsent.Task.WaitAsync(Patience);
+            })),
+            seeded.Tenant);
+        var deleting = new Factory(tenant => Context(tenant, failures), seeded.Tenant);
+
+        var consent = Task.Run(() => ConsentAsync(consenting, seeded, "glucose.read"));
+        await consentIsAboutToCreate.Task.WaitAsync(Patience);
+        var deletion = Task.Run(() =>
+            new SubjectRepository(deleting, AccountLinkRoutes.Off).DeleteAsync(seeded.Subject, CancellationToken.None));
+
+        var finishedAhead = await Task.WhenAny(deletion, Task.Delay(DeadlockDetection));
+        finishedAhead.Should().NotBe(deletion, "the deletion waits for the consent to commit");
+        releaseConsent.SetResult();
+        await Task.WhenAll(consent, deletion).WaitAsync(Patience);
+
+        failures.Failures.Should().BeEmpty("neither side is aborted as a deadlock victim, and none is retried");
+        (await consent)!.Created.Should().BeTrue();
+        (await deletion).Should().BeOfType<SubjectChange.Changed>();
+        await using var db = Context(seeded.Tenant);
+        (await db.Subjects.AnyAsync(s => s.Id == seeded.Subject)).Should().BeFalse();
+        (await GrantsAsync(seeded)).Should().BeEmpty("the grant the consent wrote goes with the subject");
+    }
+
+    [Fact]
+    public async Task AConsentAfterTheRemovalFindsNoMembershipAndWritesNothing()
+    {
+        var seeded = await SeedAsync();
+        await RemoveMembershipAsync(seeded.Contexts, seeded);
+
+        var staged = await ConsentAsync(seeded.Contexts, seeded, "glucose.read");
+
+        staged.Should().BeNull();
+        (await GrantsAsync(seeded)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AScopesEditPausedBeforeItsSaveLeavesItsScopesWholeWhenAConsentMergesMeanwhile()
+    {
+        var seeded = await SeedAsync();
+        var grant = await SeedGrantAsync(seeded, OAuthGrantTypes.App, ["glucose.read", "entries.read"]);
+        StagedGrantConsent? merged = null;
+        var editing = new Factory(
+            tenant => Context(tenant, new BeforeStatement(
+                command => command.CommandText.StartsWith("UPDATE", StringComparison.Ordinal)
+                    && command.CommandText.Contains("oauth_grants", StringComparison.Ordinal),
+                async () => merged = await ConsentAsync(seeded.Contexts, seeded, "treatments.read"))),
+            seeded.Tenant);
+        var guestSessions = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
+        var service = new OAuthGrantService(
+            editing,
+            new OAuthGrantRepository(editing),
+            Mock.Of<IOAuthClientService>(),
+            guestSessions,
+            new GrantRevocationService(guestSessions),
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
+            TimeProvider.System,
+            NullLogger<OAuthGrantService>.Instance);
+
+        var edited = await service.UpdateGrantAsync(grant, seeded.Subject, scopes: ["glucose.read"]);
+
+        merged.Should().NotBeNull("the consent merged while the edit was paused before its save");
+        merged!.Created.Should().BeFalse();
+        merged.Grant.Id.Should().Be(grant);
+        merged.Grant.Scopes.Should().Contain("treatments.read");
+        edited!.Scopes.Should().BeEquivalentTo(["glucose.read"]);
+        (await GrantsAsync(seeded)).Single(g => g.Id == grant).Scopes.Should().BeEquivalentTo(["glucose.read"]);
     }
 }

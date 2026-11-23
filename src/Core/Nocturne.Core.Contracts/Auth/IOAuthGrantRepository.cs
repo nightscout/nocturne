@@ -162,10 +162,24 @@ public interface IOAuthGrantRepository
     /// <summary>
     /// Takes the transaction-scoped lock that serialises the consents of <paramref name="subjectId"/> to
     /// client <paramref name="clientEntityId"/> on this tenant, so a consent that waits on it finds the
-    /// grant the one ahead of it wrote. It is held to the commit of the caller's unit of work.
+    /// grant the one ahead of it wrote. Then it holds the subject's row <c>FOR KEY SHARE</c> and takes
+    /// the subject's membership lock, which the removal of the membership holds while it reads the
+    /// grants it revokes. All three are held to the commit of the caller's unit of work.
     /// </summary>
+    /// <returns>
+    /// Whether the subject holds a membership of this tenant, read under the membership lock: a
+    /// removal that committed first leaves none, and one that follows waits for this unit's commit and
+    /// revokes the grant it writes, so a subject with no membership of a tenant holds no grant on it.
+    /// </returns>
+    /// <remarks>
+    /// The subject row comes before the membership lock because account deletion and
+    /// <c>RemoveMembershipsOfSubjectAsync</c> lock that row <c>FOR UPDATE</c> and then wait for the
+    /// membership locks, while the grant's insert needs the row <c>FOR KEY SHARE</c> through its
+    /// foreign key: taking it later would let a consent and a deletion each wait for what the other
+    /// holds.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
-    Task LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
+    Task<bool> LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
 
     /// <summary>
     /// Merges a consent into grant <paramref name="grantId"/> while it is unrevoked: the grant's row is

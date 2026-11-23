@@ -419,10 +419,14 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct)
+    public virtual async Task<bool> LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct)
     {
         var db = OwnUnit("Serialising consents holds a lock to the commit of the caller's unit of work.").Context;
         await db.LockForTransactionAsync(ConsentLockClass, $"{db.TenantId}|{subjectId}|{clientEntityId}", ct);
+        var tenantId = db.TenantId;
+        await db.LockSubjectRowSharedAsync(subjectId, ct);
+        await db.LockMembershipAsync(tenantId, subjectId, ct);
+        return await db.TenantMembers.AnyAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
     }
 
     /// <inheritdoc/>

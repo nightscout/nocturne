@@ -147,13 +147,24 @@ public class OAuthTokenServiceTests : IDisposable
     /// <summary>
     /// Seed a SubjectEntity so FK constraints are satisfied.
     /// </summary>
-    private async Task SeedSubjectAsync(NocturneDbContext db, Guid? id = null, string? name = null)
+    private async Task SeedSubjectAsync(
+        NocturneDbContext db, Guid? id = null, string? name = null, bool member = true)
     {
+        var subjectId = id ?? _testSubjectId;
         db.Subjects.Add(new SubjectEntity
         {
-            Id = id ?? _testSubjectId,
+            Id = subjectId,
             Name = name ?? "Test User",
         });
+        if (member)
+        {
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = db.TenantId,
+                SubjectId = subjectId,
+            });
+        }
         await db.SaveChangesAsync();
     }
 
@@ -357,6 +368,36 @@ public class OAuthTokenServiceTests : IDisposable
             .SingleAsync(g => g.ClientEntityId == _testClientEntityId && g.SubjectId == _testSubjectId);
         Assert.Equal(limitTo24Hours, grant.LimitTo24Hours);
         VerifyMintedHistoryLimit(limitTo24Hours, Times.Once());
+    }
+
+    [Fact]
+    public async Task ExchangeAuthorizationCodeAsync_SubjectRemovedSinceConsenting_FailsWithInvalidGrantAndWritesNoGrant()
+    {
+        const string testCode = "removed-member-code";
+        const string testCodeHash = "removed-member-code-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(testCode)).Returns(testCodeHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, member: false);
+        await SeedAuthorizationCodeAsync(db, testCodeHash);
+        var guestSessionCache = new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+        var grantService = new OAuthGrantService(
+            _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
+            Mock.Of<IOAuthClientService>(),
+            guestSessionCache,
+            new GrantRevocationService(guestSessionCache),
+            new GrantConsentService(Mock.Of<ILogger<GrantConsentService>>()),
+            TimeProvider.System,
+            Mock.Of<ILogger<OAuthGrantService>>());
+
+        var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
+            testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.Empty(await db.OAuthGrants.AsNoTracking().ToListAsync());
     }
 
     [Theory]

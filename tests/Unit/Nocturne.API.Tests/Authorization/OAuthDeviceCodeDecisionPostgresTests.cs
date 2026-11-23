@@ -120,6 +120,9 @@ public class OAuthDeviceCodeDecisionPostgresTests(OAuthDeviceCodeDecisionPostgre
             db.Subjects.AddRange(
                 new SubjectEntity { Id = subject, Name = "approver" },
                 new SubjectEntity { Id = otherSubject, Name = "rival approver" });
+            db.TenantMembers.AddRange(
+                new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenant, SubjectId = subject },
+                new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenant, SubjectId = otherSubject });
             db.OAuthClients.Add(new OAuthClientEntity { Id = client, ClientId = ClientId, RedirectUris = "[]" });
             db.OAuthGrants.Add(new OAuthGrantEntity
             {

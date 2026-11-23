@@ -257,6 +257,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
                         limitTo24Hours: limitTo24Hours,
                         approvedByDeviceCode: true,
                         ct: token);
+                    if (staged is null)
+                        throw new RefusedCommitException<ApprovalRefusal>(ApprovalRefusal.NotAMember);
 
                     if (!await codes.ApproveDeviceCodeAsync(entity.Id, subjectId, staged.Grant.Id, DateTime.UtcNow, token))
                         throw new RefusedCommitException<ApprovalRefusal>(ApprovalRefusal.NoLongerPending);
@@ -266,11 +268,14 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
                     (await codes.FindDeviceCodeByUserCodeAsync(normalized, token))?.GrantId == staged.Grant.Id,
                 ct: ct);
         }
-        catch (RefusedCommitException<ApprovalRefusal>)
+        catch (RefusedCommitException<ApprovalRefusal> refused)
         {
             _logger.LogWarning(
-                "Cannot approve device code {UserCode}: it is no longer pending",
-                normalized);
+                "Cannot approve device code {UserCode}: {Refusal}",
+                normalized,
+                refused.Refusal == ApprovalRefusal.NotAMember
+                    ? "the approver holds no membership of the tenant"
+                    : "it is no longer pending");
             return false;
         }
 
@@ -346,6 +351,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private enum ApprovalRefusal
     {
         NoLongerPending,
+        NotAMember,
     }
 
     private static bool IsExpired(DeviceCodeRecord code) => DateTime.UtcNow >= code.ExpiresAt;

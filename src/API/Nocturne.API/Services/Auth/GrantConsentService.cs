@@ -22,6 +22,10 @@ namespace Nocturne.API.Services.Auth;
 /// merges into it. <c>ix_oauth_grants_tenant_client_subject_active</c> is the backstop: no path that
 /// takes the lock can reach it.
 /// </para>
+/// <para>
+/// The same call takes the subject's membership lock and reads the membership under it, so a consent
+/// from a removed member writes nothing (<see cref="IOAuthGrantRepository.LockConsentAsync"/>).
+/// </para>
 /// </remarks>
 public sealed class GrantConsentService
 {
@@ -43,7 +47,8 @@ public sealed class GrantConsentService
     /// <param name="limitTo24Hours">The latest consent sets whether tokens read only the last 24 hours.</param>
     /// <param name="approvedByDeviceCode">Whether a device-code approval is consenting. Once set it stays set.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task<StagedGrantConsent> StageAsync(
+    /// <returns>The consent as written; null when the subject holds no membership of the tenant, so nothing was written.</returns>
+    public async Task<StagedGrantConsent?> StageAsync(
         DbUnitOfWork unit,
         Guid clientEntityId,
         Guid subjectId,
@@ -53,7 +58,9 @@ public sealed class GrantConsentService
         CancellationToken ct = default)
     {
         var grants = new OAuthGrantRepository(unit);
-        await grants.LockConsentAsync(clientEntityId, subjectId, ct);
+        if (!await grants.LockConsentAsync(clientEntityId, subjectId, ct))
+            return null;
+
         var existingGrant = await grants.FindActiveAsync(clientEntityId, subjectId, ct);
 
         if (existingGrant != null)
