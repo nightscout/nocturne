@@ -26,7 +26,7 @@ public static class SystemEventMapper
             MetadataJson = systemEvent.Metadata != null
                 ? JsonSerializer.Serialize(systemEvent.Metadata)
                 : null,
-            OriginalId = systemEvent.OriginalId,
+            OriginalId = string.IsNullOrEmpty(systemEvent.OriginalId) ? null : systemEvent.OriginalId,
             CreatedAt = systemEvent.CreatedAt ?? DateTime.UtcNow,
         };
     }
@@ -38,7 +38,7 @@ public static class SystemEventMapper
     {
         return new SystemEvent
         {
-            Id = entity.OriginalId ?? entity.Id.ToString(),
+            Id = string.IsNullOrEmpty(entity.OriginalId) ? entity.Id.ToString() : entity.OriginalId,
             EventType = Enum.TryParse<SystemEventType>(entity.EventType, out var eventType)
                 ? eventType
                 : SystemEventType.Info,
