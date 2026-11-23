@@ -24,7 +24,8 @@ public interface IMealMatchingService
     /// <param name="carbIntakeId">The carb intake to link the food to</param>
     /// <param name="carbs">The carb amount (may be adjusted from original)</param>
     /// <param name="timeOffsetMinutes">Minutes offset from the carb intake time (0 = ate at bolus time)</param>
-    Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
+    /// <returns><c>true</c> when the food entry was linked; <c>false</c> when it or the carb intake does not exist, and nothing was written.</returns>
+    Task<bool> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
 
     /// <summary>
     /// Dismiss a match, marking the food entry as standalone

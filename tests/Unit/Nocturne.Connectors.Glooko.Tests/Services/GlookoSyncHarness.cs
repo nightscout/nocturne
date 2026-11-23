@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -43,9 +44,10 @@ internal static class GlookoSyncHarness
         IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null,
         TimeSpan? endpointPause = null,
-        IMealMatchingService? mealMatchingService = null) =>
+        IMealMatchingService? mealMatchingService = null,
+        ILogger<GlookoConnectorService>? logger = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchingService);
+            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchingService, logger);
 }
 
 /// <summary>
@@ -125,20 +127,21 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
         IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? clock = null, TimeSpan endpointPause = default,
-        IMealMatchingService? mealMatchingService = null)
+        IMealMatchingService? mealMatchingService = null,
+        ILogger<GlookoConnectorService>? logger = null)
         : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock,
-            endpointPause, mealMatchingService)
+            endpointPause, mealMatchingService, logger)
     {
     }
 
     private RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
         IConnectorSyncCursorStore? cursorStore, TimeProvider? clock, TimeSpan endpointPause,
-        IMealMatchingService? mealMatchingService)
+        IMealMatchingService? mealMatchingService, ILogger<GlookoConnectorService>? logger)
         : base(
             httpClient,
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
-            NullLogger<GlookoConnectorService>.Instance,
+            logger ?? NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             tokenProvider,
             publisher,
@@ -151,6 +154,20 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
     }
 
     public List<PublishKind> Published { get; }
+}
+
+/// <summary>Keeps every formatted message a service logs.</summary>
+internal sealed class MessageLogger<T> : ILogger<T>
+{
+    public List<string> Messages { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
 }
 
 /// <summary>Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.</summary>

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -88,6 +89,21 @@ public class GlookoConnectorServiceFoodAttributionTests
         harness.MealMatching.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(true, "Attributed 1/1 food entries")]
+    [InlineData(false, "Attributed 0/1 food entries")]
+    public async Task SyncDataAsync_CountsAFoodEntryAsAttributedOnlyWhenTheMatchWasLinked(
+        bool linked, string expectedLine)
+    {
+        var harness = new Harness();
+        harness.AcceptMatchReports(linked);
+
+        await harness.SyncAsync(harness.Service(), carbIntakes: true);
+
+        harness.Log.Messages.Should().ContainSingle(m => m.Contains("Attributed "))
+            .Which.Should().Contain(expectedLine);
+    }
+
     private sealed class Harness
     {
         private readonly DateTime _from = DateTime.UtcNow.AddDays(-3);
@@ -132,6 +148,14 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public Mock<IMealMatchingService> MealMatching { get; } = new();
 
+        public MessageLogger<GlookoConnectorService> Log { get; } = new();
+
+        public void AcceptMatchReports(bool linked) =>
+            MealMatching
+                .Setup(m => m.AcceptMatchAsync(
+                    It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(linked);
+
         private IConnectorPublisher Publisher { get; }
 
         public CarbIntake StoredCarbIntake =>
@@ -139,7 +163,7 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public RecordingGlookoConnectorService Service() =>
             GlookoSyncHarness.Service(
-                new GlookoEndpointHandler(withHistoryMeals: _useV3Api, withGuidlessFoods: _guidless), publisher: Publisher, mealMatchingService: MealMatching.Object);
+                new GlookoEndpointHandler(withHistoryMeals: _useV3Api, withGuidlessFoods: _guidless), publisher: Publisher, mealMatchingService: MealMatching.Object, logger: Log);
 
         public Task<SyncResult> SyncAsync(RecordingGlookoConnectorService service, bool carbIntakes)
         {
