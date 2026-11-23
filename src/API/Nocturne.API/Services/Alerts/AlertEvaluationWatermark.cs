@@ -18,8 +18,7 @@ namespace Nocturne.API.Services.Alerts;
 /// The skip expires after <see cref="MaxSkipWindow"/>. A rule can turn true on the clock alone
 /// while the reading stands still, e.g. a <c>time_of_day</c> gate opening over a low that the
 /// wall-clock sweep does not evaluate (<see cref="Engines.RuleTrees.ReferencesWallClock"/>). So the reading is a
-/// reason to skip a repeat, never a reason to stop evaluating. The window also bounds a rule the user has just created or edited, and a pass the
-/// orchestrator completed with some rule's exception swallowed internally.
+/// reason to skip a repeat, never a reason to stop evaluating. The window also bounds a rule the user has just created or edited.
 /// </para>
 /// </remarks>
 /// <seealso cref="CanonicalAlertEvaluator"/>
@@ -44,16 +43,14 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
 
     /// <summary>
     /// True when a pass inside the last <see cref="MaxSkipWindow"/> already evaluated exactly this
-    /// reading. Compares the three fields that make up the evaluated <c>SensorContext</c> rather
-    /// than the row's identity: a corrected value or trend at an unchanged timestamp is a
-    /// different decision and must be evaluated, and a same-valued replacement row is not. A
-    /// <see cref="ReadingTrend"/> derived from an earlier reading is not in the key: deriving it
-    /// costs the read a skipped repeat exists to save, and an earlier reading that lands late is
-    /// judged once <see cref="MaxSkipWindow"/> lapses or the next reading arrives.
+    /// reading (<see cref="EvaluatedReading"/>). A <see cref="ReadingTrend"/> derived from an
+    /// earlier reading is not in the key: deriving it costs the read a skipped repeat exists to save,
+    /// and an earlier reading that lands late is judged once <see cref="MaxSkipWindow"/> lapses or
+    /// the next reading arrives.
     /// </summary>
     public bool AlreadyEvaluated(Guid tenantId, SensorGlucose reading) =>
         _lastPass.TryGetValue(tenantId, out var previous)
-        && previous.Reading == Key(reading)
+        && previous.Reading == EvaluatedReading.Of(reading)
         && _timeProvider.GetElapsedTime(previous.At) < MaxSkipWindow;
 
     /// <summary>
@@ -71,7 +68,7 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
     {
         if (tenantId == Guid.Empty) return true;
 
-        var claim = new Pass(Key(reading), _timeProvider.GetTimestamp());
+        var claim = new Pass(EvaluatedReading.Of(reading), _timeProvider.GetTimestamp());
         while (true)
         {
             if (!_lastPass.TryGetValue(tenantId, out var previous))
@@ -88,18 +85,13 @@ internal sealed class AlertEvaluationWatermark(TimeProvider timeProvider)
 
     /// <summary>
     /// Drops the claim on <paramref name="reading"/> when its pass did not complete, so the next
-    /// write evaluates it again. A newer claim is left alone.
+    /// write, or the sweep, evaluates it again. A newer claim is left alone.
     /// </summary>
     public void Release(Guid tenantId, SensorGlucose reading)
     {
-        if (_lastPass.TryGetValue(tenantId, out var claimed) && claimed.Reading == Key(reading))
+        if (_lastPass.TryGetValue(tenantId, out var claimed) && claimed.Reading == EvaluatedReading.Of(reading))
             _lastPass.TryRemove(new KeyValuePair<Guid, Pass>(tenantId, claimed));
     }
 
-    private static ReadingKey Key(SensorGlucose reading) =>
-        new(reading.Timestamp, reading.Mgdl, reading.TrendRate);
-
-    private readonly record struct ReadingKey(DateTime Timestamp, double Mgdl, double? TrendRate);
-
-    private readonly record struct Pass(ReadingKey Reading, long At);
+    private readonly record struct Pass(EvaluatedReading Reading, long At);
 }

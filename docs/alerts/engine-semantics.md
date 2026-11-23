@@ -1040,12 +1040,65 @@ set (`AlertFactEvaluationScheduler`):
 
 Pending work lives in one process. On shutdown, after the server has drained its requests, every
 pending evaluation starts at once and the host waits for them, until its shutdown timeout. Work the
-timeout cuts off, and an evaluation that fails, records nothing. A pass that skipped a reading
-another pass had claimed is not retried when the claiming pass fails; the next write retries it. The 30 s sweep (§5.1) then
-evaluates the wall-clock rules it does not wait for (§5.3). Every other rule, a plain `threshold`
-for one, has no backstop but the tenant's next reading, as when a request that evaluated inline
-died. A write lands in the process that took it: two processes each evaluate their own writes, and
-the rule lock and the evaluation gate serialise what they decide.
+timeout cuts off, and an evaluation that fails, records nothing. A write lands in the process that
+took it: two processes each evaluate their own writes, and the rule lock and the evaluation gate
+serialise what they decide.
+
+The sweep makes good a reading whose evaluation never completed:
+
+- A pass on a reading it claimed records, per tenant and in one statement of its own, that reading
+  (its timestamp, value and trend rate, the claim's key) once it has decided every enabled rule
+  (`alert_evaluated_readings`). A pass in which a rule threw records nothing and releases its claim;
+  a pass that skipped a rule a newer reading decided records nothing and keeps its claim; a pass
+  that did not claim the reading records nothing. A record that fails to write is logged and the
+  evaluation stands.
+- Each run, the sweep compares the newest reading the alert contexts select (a reading with no value
+  included, §4) with the tenant's record. A tenant with no enabled rule reads neither; one with no
+  reading reads only its newest. When they differ and the reading was stored at least 10 s before
+  the run (`AlertSweepJob.LostEvaluationGrace`), the sweep evaluates every enabled rule against it
+  through the write's own evaluation (`CanonicalAlertEvaluator`, the same claim, enrichment,
+  orchestrator and rule gate). The grace measures the reading's stored time against the API's clock;
+  a stored time ahead of the sweep's clock, which another process's clock running ahead gives, is
+  evaluated at once. A glucose write's evaluation starts with no debounce and normally completes in
+  well under a second, so the grace passes it only when it was lost.
+- A reading that arrived more than 1440 minutes before the run (`AlertSweepJob.LostEvaluationReach`,
+  the largest `glucose_freshness_minutes`, §3) is not evaluated, recorded or logged, and its record
+  is not read. Every glucose leaf ages a reading from its arrival and reads such a reading as stale,
+  so its evaluation can open nothing through glucose; it would only start holds (§6.4) that no
+  evaluation started before. (A rule whose `on_unknown` is `met` or `not_met` is wall-clock and is
+  evaluated as §5.1 says.) A reading stored less than 1440 minutes ago is evaluated however old
+  its timestamp is.
+- The sweep runs a tenant once a process takes its run: on a single process whose shutdown cut an
+  evaluation off, that is the restart. From then, an evaluation that died with its process, that
+  the shutdown timeout cut off, or in which a rule threw is made good by the first sweep at or after
+  the later of 10 s after its reading was stored and the end of the failed pass: at most that plus
+  the 30 s interval. A pass that ran to its end and recorded nothing, because its record failed to
+  write or because it read no enabled rule, keeps its claim for 60 s
+  (`AlertEvaluationWatermark.MaxSkipWindow`), so a rule enabled after it is evaluated at most 60 s
+  plus the 30 s interval after the claim. A write's pass still running in the same process holds
+  its claim too, so a later rule of that pass is decided when the pass reaches it, and the sweep
+  cannot take the reading until 60 s after the claim. A process that starts reads the record, so a
+  reading evaluated before the restart is not evaluated again.
+- The claim keeps the sweep's pass and the write's pass on a reading from both running in one
+  process. A write's pass still running in another process past the grace is evaluated a second
+  time; the transition lock re-reads the tracker and drops the stale decision, so the excursion
+  opens once and its opening is dispatched once (§7).
+- A reading that makes some rule throw on every pass keeps its tenant evaluated, every enabled rule,
+  on each sweep until the rule stops throwing, the next reading arrives, or the reading is more than
+  1440 minutes old. The orchestrator logs each failing rule on each pass, and the evaluator logs a
+  pass that throws before it ends on each run.
+- The sweep logs a reading it evaluated once per process, and only once its pass has run: as
+  information when the tenant has no record yet, which is the first sweep of each tenant after the
+  record begins, and as a warning when the record names another reading.
+
+What stays uncovered: the record names readings only. A lost evaluation of a write that moved
+another fact (a pump snapshot moving `iob`, say) is made good by the next reading's evaluation, or,
+when the newest reading itself was never evaluated, by the sweep's pass, which reads every fact
+afresh; with neither, a rule that reads no clock waits for the next reading. The record holds the
+reading's stored trend rate. A reading with none takes a rate derived from the nearest earlier
+reading (§4), so a backfilled earlier reading can change that rate and leave the key unchanged:
+when the backfill's evaluation is lost, a `rate_of_change` or `trend` rule over the derived rate
+waits for the next reading. A wall-clock rule is evaluated by the sweep as §5.1 and §5.3 say.
 
 Some writes do not announce, and their facts' rules are evaluated only by the next reading and,
 when wall-clock, by the sweep: state spans, trackers, sleep sessions, alert instances and Do

@@ -270,6 +270,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
+        services.AddScoped<IEvaluatedReadingStore, AlertEvaluatedReadingRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<IDndWindowRepository, DndWindowRepository>();
         services.AddScoped<ITenantAlertSettingsRepository, TenantAlertSettingsRepository>();

@@ -38,8 +38,9 @@ public class ShareDataCategoriesGuardTests
         "oauth_authorization_codes", "oauth_clients", "oauth_device_codes", "oauth_grants", "oauth_refresh_tokens",
         "read_access_log",
 
-        // Internal bookkeeping.
-        "dedup_reconcile_state",
+        // Internal bookkeeping. The evaluated reading's key is the newest reading's, which the
+        // evaluation that wrote it read in full, so it is not history.
+        "alert_evaluated_readings", "dedup_reconcile_state",
 
         // The owner's onboarding state.
         "setup_hub_additions", "setup_hub_items",

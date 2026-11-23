@@ -45,6 +45,8 @@ public class HistoryClampLiftPremiseTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/DuplicateReconciler.cs",
         // job_ledger is a platform table no policy covers, and its upserts run as plain commands.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/JobLedgerRepository.cs",
+        // alert_evaluated_readings is unclamped, and its upsert runs as a plain command in a job scope.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/AlertEvaluatedReadingRepository.cs",
         // A migration runs as the migrator, outside any reader's clamp, and upserts job_ledger rows.
         "src/Infrastructure/Nocturne.Infrastructure.Data.Migrations/Migrations/20261102093846_AddSecondaryStreamFlagToSensorGlucose.cs",
     ];

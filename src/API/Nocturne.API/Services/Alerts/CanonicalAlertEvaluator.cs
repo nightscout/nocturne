@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
@@ -30,9 +31,11 @@ namespace Nocturne.API.Services.Alerts;
 /// canonical reading arrives here many times over; <see cref="AlertEvaluationWatermark"/> collapses
 /// those repeats to one pass per reading per <see cref="AlertEvaluationWatermark.MaxSkipWindow"/>,
 /// claimed before the pass dispatches and released if it does not complete. A repeat still evaluates
-/// the rules the batch's other facts select. Hysteresis closure, snooze expiry,
-/// auto-resolve and wall-clock rules (<see cref="RuleTrees.ReferencesWallClock"/>) are also driven by
-/// the timer in <see cref="AlertSweepJob"/>.
+/// the rules the batch's other facts select. A pass on a reading it claimed that decided every
+/// enabled rule records the reading (<see cref="IEvaluatedReadingStore"/>); the sweep evaluates a
+/// newest reading with no such record (<see cref="AlertSweepJob.LostEvaluationGrace"/>). Hysteresis
+/// closure, snooze expiry, auto-resolve and wall-clock rules (<see cref="RuleTrees.ReferencesWallClock"/>)
+/// are also driven by the timer in <see cref="AlertSweepJob"/>.
 /// </para>
 /// </remarks>
 internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
@@ -43,6 +46,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     private readonly ITenantAccessor _tenantAccessor;
     private readonly AlertEvaluationWatermark _watermark;
     private readonly AlertRuleDecisions _decisions;
+    private readonly IEvaluatedReadingStore _evaluatedReadings;
     private readonly IClockAnomalyNotice _clockAnomalyNotice;
     private readonly ILogger<CanonicalAlertEvaluator> _logger;
 
@@ -53,6 +57,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         ITenantAccessor tenantAccessor,
         AlertEvaluationWatermark watermark,
         AlertRuleDecisions decisions,
+        IEvaluatedReadingStore evaluatedReadings,
         IClockAnomalyNotice clockAnomalyNotice,
         ILogger<CanonicalAlertEvaluator> logger)
     {
@@ -62,6 +67,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _watermark = watermark ?? throw new ArgumentNullException(nameof(watermark));
         _decisions = decisions ?? throw new ArgumentNullException(nameof(decisions));
+        _evaluatedReadings = evaluatedReadings ?? throw new ArgumentNullException(nameof(evaluatedReadings));
         _clockAnomalyNotice = clockAnomalyNotice ?? throw new ArgumentNullException(nameof(clockAnomalyNotice));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -107,13 +113,14 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     };
 
     /// <inheritdoc />
-    public async Task EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
+    public async Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default)
     {
+        var ran = false;
         try
         {
             var (readAt, now) = _decisions.BeginRead();
             var selection = await AlertReadings.SelectAsync(_canonicalGlucose, now, ct);
-            await EvaluateSelectedAsync(selection.Selected, readAt, moved, ct);
+            ran = await EvaluateSelectedAsync(selection.Selected, readAt, moved, ct);
             await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
         }
         catch (OperationCanceledException) { throw; }
@@ -131,14 +138,17 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             // must not stop the next one.
             _logger.LogError(ex, "Alert evaluation against the canonical stream failed unexpectedly");
         }
+
+        return ran;
     }
 
-    private async Task EvaluateSelectedAsync(SensorGlucose? latest, long readAt, MovedFacts moved, CancellationToken ct)
+    /// <returns>Whether this call claimed <paramref name="latest"/> and its pass ran to its end.</returns>
+    private async Task<bool> EvaluateSelectedAsync(SensorGlucose? latest, long readAt, MovedFacts moved, CancellationToken ct)
     {
-        if (latest is null || moved.Facts.Count == 0) return;
+        if (latest is null || moved.Facts.Count == 0) return false;
 
         var tenantId = _tenantAccessor.TenantId;
-        if (tenantId == Guid.Empty) return;
+        if (tenantId == Guid.Empty) return false;
 
         var glucose = moved.Facts.Contains(ContextFactWrites.Glucose);
         var reading = glucose && _watermark.TryClaim(tenantId, latest);
@@ -150,6 +160,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         }
 
         var completed = false;
+        AlertPassOutcome? outcome = null;
         try
         {
             var selecting = moved.Facts
@@ -166,18 +177,47 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
                     var context = AlertReadings.HasValue(latest)
                         ? ContextFor(latest, await ReadingTrend.ForAsync(latest, _canonicalGlucose, ct))
                         : ContextForValueless(latest, await AlertReadings.LookBackAsync(_canonicalGlucose, latest, ct));
-                    await _alertOrchestrator.EvaluateRulesAsync(
+                    outcome = await _alertOrchestrator.EvaluateRulesAsync(
                         selected, enabled.Select(r => r.Id).ToHashSet(), context, readAt, ct);
                 }
             }
             // The claim stands even when the orchestrator skipped rules: it skips only a rule a
-            // newer context has decided, which a repeat of this reading would skip too.
-            completed = true;
+            // newer context has decided, which a repeat of this reading would skip too. A rule that
+            // threw is undecided, so its reading is released for the next write or the sweep.
+            completed = outcome != AlertPassOutcome.Failed;
         }
         finally
         {
             if (reading && !completed)
                 _watermark.Release(tenantId, latest);
+        }
+
+        if (reading && outcome == AlertPassOutcome.Decided)
+            await RecordEvaluatedAsync(latest, ct);
+        return reading;
+    }
+
+    /// <summary>
+    /// Records <paramref name="latest"/> as evaluated. A failure only costs the sweep one more
+    /// evaluation of the reading, so it is logged and the evaluation stands.
+    /// </summary>
+    private async Task RecordEvaluatedAsync(SensorGlucose latest, CancellationToken ct)
+    {
+        try
+        {
+            await _evaluatedReadings.RecordAsync(EvaluatedReading.Of(latest), ct);
+        }
+        catch (DbException ex)
+        {
+            _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
+        }
+        catch (TimeoutException ex)
+        {
+            _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
         }
     }
 

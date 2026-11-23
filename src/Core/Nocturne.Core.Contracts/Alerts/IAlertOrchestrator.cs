@@ -42,10 +42,27 @@ public interface IAlertOrchestrator
     /// with the others (the sweep's): it is neither checked nor recorded, since a read ordered late
     /// could stop a newer reading's evaluation of a rule.
     /// </param>
-    Task EvaluateRulesAsync(
+    Task<AlertPassOutcome> EvaluateRulesAsync(
         IReadOnlyList<AlertRuleSnapshot> rules,
         IReadOnlySet<Guid> enabledRuleIds,
         SensorContext context,
         long? readAt,
         CancellationToken ct);
+}
+
+/// <summary>What an evaluation pass made of the rules it was given.</summary>
+/// <remarks>
+/// A rule whose condition cannot be evaluated, or whose <c>alert_state</c> names no enabled rule, has
+/// nothing to decide and counts as decided.
+/// </remarks>
+public enum AlertPassOutcome
+{
+    /// <summary>Every rule was decided by this pass.</summary>
+    Decided,
+
+    /// <summary>No rule failed, and a newer context had decided at least one.</summary>
+    Superseded,
+
+    /// <summary>At least one rule threw, so it is undecided.</summary>
+    Failed,
 }

@@ -16,5 +16,10 @@ public interface ICanonicalAlertEvaluator
     /// moved the glucose fact. No-op when no usable reading is selected. Failures are logged and
     /// swallowed.
     /// </summary>
-    Task EvaluateAsync(MovedFacts moved, CancellationToken ct = default);
+    /// <returns>
+    /// Whether a pass of every enabled rule over the selected reading ran to its end, whatever it
+    /// decided: false when the glucose fact did not move, the reading was already claimed, or the pass
+    /// threw before it ended.
+    /// </returns>
+    Task<bool> EvaluateAsync(MovedFacts moved, CancellationToken ct = default);
 }

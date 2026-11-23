@@ -81,12 +81,12 @@ public sealed class AlertFactEvaluationPostgresTests(AlertFactEvaluationPostgres
 
     private sealed class ScopedOrchestrator(RecordingOrchestrator recording, ITenantAccessor tenant) : IAlertOrchestrator
     {
-        public Task EvaluateRulesAsync(
+        public Task<AlertPassOutcome> EvaluateRulesAsync(
             IReadOnlyList<AlertRuleSnapshot> rules, IReadOnlySet<Guid> enabledRuleIds, SensorContext context,
             long? readAt, CancellationToken ct)
         {
             recording.Add(new Pass(tenant.TenantId, rules, context));
-            return Task.CompletedTask;
+            return Task.FromResult(AlertPassOutcome.Decided);
         }
     }
 
@@ -104,6 +104,7 @@ public sealed class AlertFactEvaluationPostgresTests(AlertFactEvaluationPostgres
         services.AddSingleton<TimeProvider>(_time);
         services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
         services.AddScoped<IAlertRepository, Nocturne.Infrastructure.Data.Repositories.AlertRepository>();
+        services.AddScoped<IEvaluatedReadingStore, Nocturne.Infrastructure.Data.Repositories.AlertEvaluatedReadingRepository>();
         services.AddSingleton(Mock.Of<IDemoModeService>());
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();
         services.AddSingleton<AlertEvaluationWatermark>();
