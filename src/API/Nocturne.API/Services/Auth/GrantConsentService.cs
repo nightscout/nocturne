@@ -7,7 +7,8 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// The rule for a subject consenting to a client: the active grant the subject already holds for it
-/// takes the union of its scopes and the new ones, and a subject with none gets a new grant.
+/// takes the union of its scopes and the new ones, and a subject with none gets a new grant. A grant
+/// revoked while the consent reads it is not merged into: the consent creates a new one.
 /// </summary>
 /// <remarks>
 /// A writer on the caller's <see cref="DbUnitOfWork"/>, so a consent can commit with the write that
@@ -15,6 +16,12 @@ namespace Nocturne.API.Services.Auth;
 /// <see cref="DbUnitOfWork.CommitAsync(Func{CancellationToken, Task}, CancellationToken)"/> and saves
 /// the grant there, so a statement that follows in the same transaction can refer to its id. The
 /// owner logs the consent through <see cref="LogCommitted"/> once the commit has landed.
+/// <para>
+/// A lock on the subject and client (<see cref="IOAuthGrantRepository.LockConsentAsync"/>) is held from
+/// before the read to the commit, so a consent that waits on another finds the grant it wrote and
+/// merges into it. <c>ix_oauth_grants_tenant_client_subject_active</c> is the backstop: no path that
+/// takes the lock can reach it.
+/// </para>
 /// </remarks>
 public sealed class GrantConsentService
 {
@@ -46,22 +53,18 @@ public sealed class GrantConsentService
         CancellationToken ct = default)
     {
         var grants = new OAuthGrantRepository(unit);
+        await grants.LockConsentAsync(clientEntityId, subjectId, ct);
         var existingGrant = await grants.FindActiveAsync(clientEntityId, subjectId, ct);
 
         if (existingGrant != null)
         {
-            var mergedScopes = existingGrant.Scopes
-                .Union(scopes)
-                .OrderBy(s => s)
-                .ToList();
-
-            var updated = await grants.UpdateAsync(
-                existingGrant.Id,
-                new OAuthGrantEdit(null, mergedScopes, limitTo24Hours, approvedByDeviceCode),
-                ct) ?? throw new InvalidOperationException($"Grant {existingGrant.Id} vanished while its consent was merged.");
-            await unit.Context.SaveChangesAsync(ct);
-
-            return new StagedGrantConsent(OAuthGrantMapper.ToInfo(updated), Created: false);
+            var updated = await grants.MergeConsentAsync(
+                existingGrant.Id, scopes, limitTo24Hours, approvedByDeviceCode, ct);
+            if (updated != null)
+            {
+                await unit.Context.SaveChangesAsync(ct);
+                return new StagedGrantConsent(OAuthGrantMapper.ToInfo(updated), Created: false);
+            }
         }
 
         var grantId = await grants.CreateAsync(

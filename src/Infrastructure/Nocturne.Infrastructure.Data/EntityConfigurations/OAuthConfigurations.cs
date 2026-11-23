@@ -44,6 +44,15 @@ internal sealed class OAuthGrantEntityConfiguration : IEntityTypeConfiguration<O
             .HasIndex(g => new { g.TenantId, g.SubjectId })
             .HasDatabaseName("ix_oauth_grants_tenant_subject");
 
+        // The grant a consent merges into, which GrantConsentService finds and creates under a lock.
+        // Direct and guest grants carry no client, and only an app grant is the consent's, so no
+        // other type can hold a subject's place for a client.
+        entity
+            .HasIndex(g => new { g.TenantId, g.ClientEntityId, g.SubjectId })
+            .IsUnique()
+            .HasDatabaseName("ix_oauth_grants_tenant_client_subject_active")
+            .HasFilter("grant_type = 'app' AND revoked_at IS NULL");
+
         entity
             .HasIndex(g => g.RevokedAt)
             .HasDatabaseName("ix_oauth_grants_revoked_at")

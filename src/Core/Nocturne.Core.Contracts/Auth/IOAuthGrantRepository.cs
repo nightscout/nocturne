@@ -53,7 +53,10 @@ public interface IOAuthGrantRepository
     /// <summary>The grant with <paramref name="grantId"/>, in any state.</summary>
     Task<OAuthGrantRecord?> GetAsync(Guid grantId, CancellationToken ct);
 
-    /// <summary>The unrevoked grant of <paramref name="subjectId"/> for client <paramref name="clientEntityId"/>.</summary>
+    /// <summary>
+    /// The unrevoked app grant of <paramref name="subjectId"/> for client <paramref name="clientEntityId"/>:
+    /// the one grant a consent merges into, which a unique index allows a subject at most one of.
+    /// </summary>
     Task<OAuthGrantRecord?> FindActiveAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
 
     /// <summary>The unrevoked grants of <paramref name="subjectId"/>, of every type, newest first.</summary>
@@ -167,6 +170,30 @@ public interface IOAuthGrantRepository
 
     /// <summary>Applies <paramref name="edit"/> to grant <paramref name="grantId"/> and returns it as edited, with its client.</summary>
     Task<OAuthGrantRecord?> UpdateAsync(Guid grantId, OAuthGrantEdit edit, CancellationToken ct);
+
+    /// <summary>
+    /// Takes the transaction-scoped lock that serialises the consents of <paramref name="subjectId"/> to
+    /// client <paramref name="clientEntityId"/> on this tenant, so a consent that waits on it finds the
+    /// grant the one ahead of it wrote. It is held to the commit of the caller's unit of work.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
+    Task LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct);
+
+    /// <summary>
+    /// Merges a consent into grant <paramref name="grantId"/> while it is unrevoked: the grant's row is
+    /// held against a revocation and an edit of its scopes until the unit commits, and the scopes of
+    /// <paramref name="scopes"/> join the ones the row holds once it is held. Writes nothing when the
+    /// grant is revoked or gone.
+    /// </summary>
+    /// <param name="grantId">The grant to merge into.</param>
+    /// <param name="scopes">The scopes consented to, added to the grant's.</param>
+    /// <param name="limitTo24Hours">The latest consent sets whether tokens read only the last 24 hours.</param>
+    /// <param name="approvedByDeviceCode">Whether a device-code approval is consenting. Once set it stays set.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The grant as merged; null when it was revoked or is not there, so nothing was written.</returns>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work, or the unit has no transaction open.</exception>
+    Task<OAuthGrantRecord?> MergeConsentAsync(
+        Guid grantId, IEnumerable<string> scopes, bool limitTo24Hours, bool approvedByDeviceCode, CancellationToken ct);
 
     /// <summary>
     /// Activates the guest link whose code hashes to <paramref name="codeHash"/> if it is

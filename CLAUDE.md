@@ -262,7 +262,8 @@ Know what it actually checks before trusting it:
   unrelated table — clears every index in that migration. It runs no SQL and
   proves nothing about correctness.
 - **Only the house idiom is recognised**: `row_number() OVER (PARTITION BY …)`
-  plus a soft delete or a delete. A correct cleanup written another way is a false
+  plus a soft delete or a delete (for `oauth_grants` only, `UPDATE oauth_grants … SET
+  revoked_at` is its soft delete). A correct cleanup written another way is a false
   red. Widen the migration to the idiom, not the guard to the migration.
 - **Shapes it cannot see**, which review has to catch: `CREATE TABLE IF NOT
   EXISTS` naming a table that already exists, which spoofs the new-table
