@@ -587,9 +587,11 @@ public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGo
 
         var response = await Client.PostAsync("/api/v1/entries", content);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var stored = await Client.GetAsync("/api/v1/entries.json?count=10");
-        var entries = JsonDocument.Parse(await stored.Content.ReadAsStringAsync()).RootElement;
+        var body = await stored.Content.ReadAsStringAsync();
+        stored.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var entries = JsonDocument.Parse(body).RootElement;
         entries.EnumerateArray().Select(e => e.GetProperty("sgv").GetDouble()).Should().Contain(142);
     }
 
