@@ -71,11 +71,11 @@ public class ContextFactWritesTests
     }
 
     [Fact]
-    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateAndTheDetermination() =>
+    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateTheDeterminationAndDeviceAges() =>
         ContextFactWrites.Facts.Keys.Where(ContextFactWrites.SweepMayWaitFor)
             .Should().BeEquivalentTo(
                 [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter,
-                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination]);
+                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination, ContextFactWrites.DeviceAges]);
 
     [Fact]
     public void OnlyAnApsSnapshotWriteMovesTheDetermination() =>
@@ -117,7 +117,6 @@ public class ContextFactWritesTests
     [InlineData(ContextFactWrites.Sleep)]
     [InlineData(ContextFactWrites.ActiveAlerts)]
     [InlineData(ContextFactWrites.DoNotDisturb)]
-    [InlineData(ContextFactWrites.DeviceAges)]
     public void AFactWithAWritePathThatDoesNotAnnounceIsNeverWaitedFor(string fact)
     {
         ContextFactWrites.Facts[fact].EveryWriteAnnounces.Should().BeFalse();

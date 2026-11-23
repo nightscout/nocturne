@@ -7,7 +7,11 @@ namespace Nocturne.API.Tests.TestDoubles;
 
 internal static class LegacyReadRecordChanges
 {
-    /// <summary>The publisher a repository reports its writes to <paramref name="legacyReads"/> through, as the API wires it.</summary>
-    public static IRecordChangePublisher AsRecordChanges(this ILegacyReadCacheInvalidation legacyReads) =>
-        new RecordChangePublisher([new LegacyReadCacheSubscriber(legacyReads)]);
+    /// <summary>
+    /// The publisher a repository reports its writes to <paramref name="legacyReads"/> through, as the API
+    /// wires it, with <paramref name="others"/> beside it.
+    /// </summary>
+    public static IRecordChangePublisher AsRecordChanges(
+        this ILegacyReadCacheInvalidation legacyReads, params IRecordChangeSubscriber[] others) =>
+        new RecordChangePublisher([new LegacyReadCacheSubscriber(legacyReads), .. others]);
 }

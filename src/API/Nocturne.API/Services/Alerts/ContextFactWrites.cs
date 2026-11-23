@@ -38,11 +38,9 @@ internal static class ContextFactWrites
 
     /// <param name="EveryWriteAnnounces">
     /// Every write that moves the fact reaches the record-changed event. False where a store writes it
-    /// without announcing (state spans, trackers, sleep sessions, alert instances, Do Not Disturb), or
-    /// where deduplication re-picks which copy reads are shown with no announcement: device events are
-    /// deduplicated, so a merge can move a site change or sensor start by its match tolerance.
-    /// Glucose is deduplicated too, and stays true because the sweep keys a recorded next change by the
-    /// glucose facts it reads itself, so a re-pick that changes the selected reading is seen there.
+    /// without announcing (state spans, trackers, sleep sessions, alert instances, Do Not Disturb).
+    /// Deduplication announces the types whose shown copy it re-picks, so a merge that moves a site
+    /// change, a sensor start or a reading counts as a write.
     /// </param>
     /// <param name="MovesWithClock">
     /// The fact changes with no write: insulin and carbs on board decay, a temp basal or a scheduled
@@ -73,7 +71,7 @@ internal static class ContextFactWrites
         [Uploader] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [Transmitter] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [StateSpans] = new(EveryWriteAnnounces: false, MovesWithClock: false),
-        [DeviceAges] = new(EveryWriteAnnounces: false, MovesWithClock: false),
+        [DeviceAges] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [Trackers] = new(EveryWriteAnnounces: false, MovesWithClock: false),
         [Sleep] = new(EveryWriteAnnounces: false, MovesWithClock: false),
         [ActiveAlerts] = new(EveryWriteAnnounces: false, MovesWithClock: false),
@@ -118,7 +116,8 @@ internal static class ContextFactWrites
     /// Whether the sweep may wait for the next change of a rule that reads <paramref name="fact"/>:
     /// every write that moves it evaluates the rule, and nothing else does (§5.3). Only
     /// <see cref="Glucose"/>, <see cref="Aps"/>, <see cref="Uploader"/>, <see cref="Transmitter"/>,
-    /// <see cref="SensorState"/> and <see cref="ApsDetermination"/> qualify. An unknown fact does not.
+    /// <see cref="SensorState"/>, <see cref="ApsDetermination"/> and <see cref="DeviceAges"/> qualify.
+    /// An unknown fact does not.
     /// </summary>
     public static bool SweepMayWaitFor(string fact) =>
         Facts.TryGetValue(fact, out var trigger) && trigger.EveryWriteAnnounces && !trigger.MovesWithClock;

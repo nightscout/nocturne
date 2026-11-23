@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -34,6 +35,14 @@ namespace Nocturne.Infrastructure.Data.Services.Deduplication;
 /// of a running run only stamps <see cref="DedupReconcileStateEntity.RunCancelRequestedAt"/>, which the
 /// run reads after each page.
 /// </para>
+/// <para>
+/// A slice announces once, as it ends however it ends, the types whose shown copy its committed pages
+/// and merges changed (<see cref="RepickAnnouncement"/>): a run over a year of glucose is hundreds of
+/// pages, and a page announced alone would start an evaluation each. A merge, and a page of at most
+/// one linker chunk (<see cref="DuplicateMatching.DedupChunkSize"/>), is one transaction, so one that
+/// throws committed nothing to announce. A longer page commits chunk by chunk, so one that throws is
+/// announced.
+/// </para>
 /// </remarks>
 public sealed class DeduplicationAdmin(
     INocturneDbContextFactory contexts,
@@ -41,7 +50,8 @@ public sealed class DeduplicationAdmin(
     DuplicateReconciler reconciler,
     ILogger<DeduplicationAdmin> logger,
     ITenantAccessor? tenantAccessor = null,
-    ICategoryReadContext? categoryReadContext = null) : IDeduplicationAdmin
+    ICategoryReadContext? categoryReadContext = null,
+    IRecordChangePublisher? changes = null) : IDeduplicationAdmin
 {
     /// <summary>How long one slice of a run lasts before it hands back to the scheduler.</summary>
     internal TimeSpan SliceLength { get; init; } = TimeSpan.FromMinutes(5);
@@ -141,6 +151,7 @@ public sealed class DeduplicationAdmin(
 
         var slice = Stopwatch.StartNew();
         var totals = run.Totals;
+        var repicked = new HashSet<RecordType>();
         try
         {
             if (resumeAt is null)
@@ -161,7 +172,19 @@ public sealed class DeduplicationAdmin(
                 var phase = TypePhases[index];
                 await foreach (var page in phase.Pages(db, after, ct))
                 {
-                    var linked = await linker.DeduplicateBatchAsync(phase.RecordType, page.Inputs, ct);
+                    DeduplicationBatchResult? linked = null;
+                    try
+                    {
+                        linked = await linker.DeduplicateBatchAsync(phase.RecordType, page.Inputs, ct);
+                    }
+                    finally
+                    {
+                        if (linked is null
+                                ? page.Inputs.Count > DuplicateMatching.DedupChunkSize
+                                : linked.RecordsLinked > linked.GroupsCreated)
+                            repicked.Add(phase.RecordType);
+                    }
+
                     totals = totals.Add(phase.RecordType, linked);
                     after = page.End;
 
@@ -193,7 +216,12 @@ public sealed class DeduplicationAdmin(
                 // such a split, and the merge loads every primary of the type, which for a dense stream
                 // like glucose would be hundreds of thousands of rows for nothing.
                 if (DuplicateMatching.WideMatchableTypes.Contains(phase.RecordType))
-                    totals = totals with { Duplicates = totals.Duplicates + await reconciler.MergeAllAsync(phase.RecordType, ct) };
+                {
+                    var merged = await reconciler.MergeAllAsync(phase.RecordType, ct);
+                    totals = totals with { Duplicates = totals.Duplicates + merged };
+                    if (merged > 0)
+                        repicked.Add(phase.RecordType);
+                }
             }
 
             await EndAsync(db, run, totals, DeduplicationJobState.Completed, null);
@@ -207,6 +235,10 @@ public sealed class DeduplicationAdmin(
             logger.LogError(ex, "Deduplication run {RunId} failed", run.Status.JobId);
             await EndAsync(db, run, totals, DeduplicationJobState.Failed, ex.Message);
             return null;
+        }
+        finally
+        {
+            await RepickAnnouncement.PublishAsync(changes, repicked);
         }
     }
 
