@@ -108,7 +108,7 @@ public class CountController : ControllerBase
             "Count entries endpoint requested with find: {Find}, type: {Type} from {RemoteIpAddress}",
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _entryService.CountEntriesAsync(find, type, cancellationToken);
@@ -137,7 +137,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count treatments endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _treatmentService.CountTreatmentsAsync(
@@ -167,7 +167,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count device status endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var count = await _deviceStatuses.CountDeviceStatusesAsync(
@@ -208,7 +208,7 @@ public class CountController : ControllerBase
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
@@ -276,7 +276,7 @@ public class CountController : ControllerBase
             storage,
             find,
             type,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         long count;

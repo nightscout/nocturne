@@ -68,7 +68,7 @@ public class LoginHandoffController : ControllerBase
         [FromBody] LoginHandoffRequest request, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ipAddress = HttpContext.GetClientAddress();
         var userAgent = Request.Headers.UserAgent.ToString();
 
         var redeemed = await _loginCodeService.RedeemAsync(

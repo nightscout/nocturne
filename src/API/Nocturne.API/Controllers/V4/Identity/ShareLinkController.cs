@@ -82,7 +82,7 @@ public class ShareLinkController : ControllerBase
                 AuthAuditEventType.ShareLinkRevealed,
                 HttpContext.GetSubjectId(),
                 success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString());
         }
 

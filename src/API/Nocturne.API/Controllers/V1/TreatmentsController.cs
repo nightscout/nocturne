@@ -86,7 +86,7 @@ public class TreatmentsController : ControllerBase
             count,
             skip,
             findQuery,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         count = LegacyReadLimits.ZeroAsAbsent(count);
@@ -140,7 +140,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Treatment by ID endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -285,7 +285,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Update treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))
@@ -327,7 +327,7 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Delete treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))

@@ -220,7 +220,7 @@ public class OidcController : ControllerBase
             code,
             state,
             expectedState,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent,
             currentTenantId,
             Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]
@@ -250,7 +250,7 @@ public class OidcController : ControllerBase
                 if (!result.RefusalAudited)
                 {
                     await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
-                        ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                        ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                         errorMessage: "not_a_member",
                         detailsJson: NotAMemberDetails(result));
                 }
@@ -265,7 +265,7 @@ public class OidcController : ControllerBase
             );
 
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc" }));
 
@@ -446,13 +446,13 @@ public class OidcController : ControllerBase
         var result = await _authService.HandleLinkCallbackAsync(
             code, state, expectedState,
             auth.SubjectId.Value,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent);
 
         if (!result.Success)
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, auth.SubjectId, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: result.ErrorDescription,
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc_link" }));
 
@@ -460,7 +460,7 @@ public class OidcController : ControllerBase
         }
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, auth.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
             detailsJson: JsonSerializer.Serialize(new { identityId = result.IdentityId }));
 
         _logger.LogInformation(
@@ -495,7 +495,7 @@ public class OidcController : ControllerBase
         if (enrolment is not { State: RecoveryEnrolmentState.Enrolled, Result: { } linked, SubjectId: { } subjectId })
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
-                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
                 errorMessage: enrolment.Result?.ErrorDescription ?? "recovery_session_required",
                 detailsJson: JsonSerializer.Serialize(new { method = "oidc_recovery_link" }));
 
@@ -505,7 +505,7 @@ public class OidcController : ControllerBase
         }
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityLinked, subjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
             detailsJson: JsonSerializer.Serialize(new { identityId = linked.IdentityId, method = "recovery" }));
 
         var returnUrl = linked.ReturnUrl ?? "/";
@@ -596,7 +596,7 @@ public class OidcController : ControllerBase
             return this.FactorRemovalRefusal(result, "OIDC identity");
 
         await _auditService.LogAsync(AuthAuditEventType.OidcIdentityUnlinked, auth.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent,
             detailsJson: JsonSerializer.Serialize(new { identityId }));
 
         _logger.LogInformation(
@@ -637,7 +637,7 @@ public class OidcController : ControllerBase
 
         var result = await _authService.RefreshSessionAsync(
             refreshToken,
-            GetClientIpAddress(),
+            HttpContext.GetClientAddress(),
             Request.Headers.UserAgent
         );
 
@@ -658,7 +658,7 @@ public class OidcController : ControllerBase
         SetSessionCookies(result);
 
         await _auditService.LogAsync(AuthAuditEventType.TokenRefreshed, result.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent);
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 
         return Ok(result);
     }
@@ -697,7 +697,7 @@ public class OidcController : ControllerBase
 
         var authContext = HttpContext.GetAuthContext();
         await _auditService.LogAsync(AuthAuditEventType.Logout, authContext?.SubjectId, success: true,
-            ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent);
+            ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 
         _logger.LogInformation("User logged out");
 
@@ -835,12 +835,6 @@ public class OidcController : ControllerBase
         // Then try from Authorization header (for API clients)
         return Request.GetAuthorizationCredential("Refresh");
     }
-
-    /// <summary>
-    /// Get the client IP address
-    /// </summary>
-    private string? GetClientIpAddress() =>
-        HttpContext.Connection.RemoteIpAddress?.ToString();
 
     /// <summary>
     /// Redirect to an error page

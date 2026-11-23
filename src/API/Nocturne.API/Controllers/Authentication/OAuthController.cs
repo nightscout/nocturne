@@ -1067,7 +1067,7 @@ public class OAuthController : ControllerBase
             });
         }
 
-        var createdFromIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var createdFromIp = HttpContext.GetClientAddress();
 
         var client = await _clientService.RegisterClientAsync(
             request.SoftwareId,

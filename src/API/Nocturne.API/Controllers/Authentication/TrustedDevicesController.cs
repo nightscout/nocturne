@@ -148,7 +148,7 @@ public class TrustedDevicesController : ControllerBase
 
     private Task LogRevokedAsync(Guid subjectId, object details) =>
         _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, subjectId, success: true,
-            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ipAddress: HttpContext.GetClientAddress(),
             userAgent: Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(details));
 }

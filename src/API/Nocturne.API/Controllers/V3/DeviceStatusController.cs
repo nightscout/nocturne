@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
@@ -129,7 +130,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var result = await _deviceStatuses.GetDeviceStatusByIdAsync(id, cancellationToken);
@@ -342,7 +343,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (!await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))

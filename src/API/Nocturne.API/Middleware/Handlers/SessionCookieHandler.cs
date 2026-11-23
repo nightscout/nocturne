@@ -138,7 +138,7 @@ public class SessionCookieHandler : IAuthHandler
         try
         {
             var authService = scope.ServiceProvider.GetRequiredService<IOidcAuthService>();
-            var ipAddress = GetClientIpAddress(context);
+            var ipAddress = context.GetClientAddress();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
 
             var newTokens = await authService.RefreshSessionAsync(
@@ -237,11 +237,5 @@ public class SessionCookieHandler : IAuthHandler
     private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
         context.Response.SetSessionCookies(
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
-
-    /// <summary>
-    /// Get client IP address
-    /// </summary>
-    private static string? GetClientIpAddress(HttpContext context) =>
-        context.Connection.RemoteIpAddress?.ToString();
 
 }

@@ -241,7 +241,7 @@ public partial class SetupController : ControllerBase
                 credResult.SubjectId,
                 new SessionContext(
                     DeviceDescription: "Setup Passkey",
-                    IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress: HttpContext.GetClientAddress(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
@@ -365,7 +365,7 @@ public partial class SetupController : ControllerBase
 
         var result = await _oidcAuthService.HandleSetupCallbackAsync(
             code, state, expectedState,
-            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ipAddress: HttpContext.GetClientAddress(),
             userAgent: Request.Headers.UserAgent.ToString());
 
         if (!result.Success)

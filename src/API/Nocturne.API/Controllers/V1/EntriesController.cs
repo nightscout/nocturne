@@ -132,7 +132,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Entry spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
             spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
@@ -228,7 +228,7 @@ public class EntriesController : ControllerBase
             type,
             dateString,
             format,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Nightscout v1 does not filter by ?type=; a type filter arrives as find[type].
@@ -633,7 +633,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Update entry endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // A 32-hex id is a record uuid, or a legacy id an older POST /api/v1/entries assigned.
@@ -711,7 +711,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Delete entry endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (id == LegacyDeleteStatus.AnyId || LegacyEntryTypes.All.Contains(id))

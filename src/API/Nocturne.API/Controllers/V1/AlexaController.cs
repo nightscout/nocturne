@@ -74,7 +74,7 @@ public class AlexaController : ControllerBase
             {
                 _logger.LogWarning(
                     "Unauthorized Alexa request from {RemoteIpAddress}",
-                    HttpContext.Connection.RemoteIpAddress
+                    HttpContext.GetClientAddress()
                 );
                 return Unauthorized("Access denied");
             }

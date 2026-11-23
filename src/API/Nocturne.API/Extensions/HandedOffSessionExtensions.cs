@@ -28,7 +28,7 @@ public static class HandedOffSessionExtensions
         await refreshTokens.RevokeSessionForSubjectAsync(owner.SubjectId, owner.SessionId, "Replaced by a sign-in");
         await context.RequestServices.GetRequiredService<IAuthAuditService>().LogAsync(
             AuthAuditEventType.Logout, owner.SubjectId, success: true,
-            ipAddress: context.Connection.RemoteIpAddress?.ToString(),
+            ipAddress: context.GetClientAddress(),
             userAgent: context.Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(new { reason = "replaced_by_sign_in" }));
     }

@@ -55,7 +55,7 @@ public sealed class RecoverySession(
         await using var db = await contexts.CreateAsync(ct);
         var issued = await loginCodes.IssueAsync(
             db, subjectId, LoginCodePurpose.RecoverySession,
-            http.Connection.RemoteIpAddress?.ToString(), http.Request.Headers.UserAgent.ToString(),
+            http.GetClientAddress(), http.Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(http.GetAuthContext()), ct);
         return issued.Code;
     }
@@ -108,7 +108,7 @@ public sealed class RecoverySession(
                     if (!enrolled(outcome))
                         throw new EnrolmentRefusedException();
                 },
-                http.Connection.RemoteIpAddress?.ToString(), http.Request.Headers.UserAgent.ToString(), ct);
+                http.GetClientAddress(), http.Request.Headers.UserAgent.ToString(), ct);
         }
         catch (EnrolmentRefusedException)
         {

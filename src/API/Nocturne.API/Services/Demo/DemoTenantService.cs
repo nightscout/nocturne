@@ -272,9 +272,9 @@ public sealed class DemoTenantService
     /// <para>
     /// The session rows are the part this controls. It is not the case that the demo retains no
     /// visitor addresses at all: <c>AuditContextMiddleware</c> stamps
-    /// <c>Connection.RemoteIpAddress</c> onto every <c>mutation_audit_log</c> row, so a visitor's
+    /// the client address onto every <c>mutation_audit_log</c> row, so a visitor's
     /// address is recorded for each write they make and survives until the next reset clears the
-    /// table by cascade. Nobody can read it in the meantime — <c>AuditController</c> gates on
+    /// table by cascade. Nobody can read it in the meantime: <c>AuditController</c> gates on
     /// <c>audit.read</c>, which <see cref="Scope.DemoVisitorPermissions"/> excludes,
     /// so that exclusion is load-bearing and not merely tidy.
     /// </para>

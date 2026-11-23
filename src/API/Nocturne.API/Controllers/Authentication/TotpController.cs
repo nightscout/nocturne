@@ -239,7 +239,7 @@ public class TotpController : ControllerBase
         if (untrusted > 0)
         {
             await _auditService.LogAsync(AuthAuditEventType.DeviceTrustRevoked, auth.SubjectId, success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ipAddress: HttpContext.GetClientAddress(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { all = true, count = untrusted, reason = "authenticator_removed" }));
         }
@@ -276,7 +276,7 @@ public class TotpController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TotpLoginResponse>> Login([FromBody] TotpLoginRequest request)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.GetClientAddress();
         var ua = Request.Headers.UserAgent.ToString();
 
         TotpLoginResult? result;

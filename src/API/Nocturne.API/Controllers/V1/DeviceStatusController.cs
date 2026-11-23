@@ -71,7 +71,7 @@ public class DeviceStatusController : ControllerBase
             "Device status endpoint requested with count: {Count}, skip: {Skip} from {RemoteIpAddress}",
             count,
             skip,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var pageSize = LegacyReadLimits.ZeroAsAbsent(count) ?? 10;
@@ -213,7 +213,7 @@ public class DeviceStatusController : ControllerBase
         _logger.LogDebug(
             "Device status deletion endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (string.IsNullOrWhiteSpace(id))

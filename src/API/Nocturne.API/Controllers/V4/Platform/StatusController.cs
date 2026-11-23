@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -52,7 +53,7 @@ public class StatusController : ControllerBase
     {
         _logger.LogDebug(
             "V4 Status endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
+            HttpContext.GetClientAddress()
         );
 
         try
