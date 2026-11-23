@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { MediaQuery, SvelteMap } from "svelte/reactivity";
-  import { LineChart, Tooltip } from "layerchart";
+  import { Tooltip } from "layerchart";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
   import Plus from "@lucide/svelte/icons/plus";
@@ -37,13 +37,8 @@
   import { startOfDay } from "#lib/utils/date-range.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
-  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import EHbA1cTimelineChart from "#lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
-  import {
-    CHART_TEXTURES,
-    patternClass,
-    type TextureKey,
-  } from "@nocturne/charts/core";
   import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {
@@ -56,12 +51,21 @@
   };
 
   // Display bounds come from the same backend conversion as the plotted values.
-  const A1C_ZONES: { key: string; label: string; swatch: string; texture: Extract<TextureKey, `ehba1c-zone-${string}`> }[] = [
-    { key: "healthy", label: "Non-diabetic range", swatch: "var(--gri-zone-a)", texture: "ehba1c-zone-healthy" },
-    { key: "target", label: "Type 1 diabetes target", swatch: "var(--gri-zone-b)", texture: "ehba1c-zone-target" },
-    { key: "high", label: "Elevated", swatch: "var(--gri-zone-d)", texture: "ehba1c-zone-high" },
-    { key: "veryHigh", label: "Very high", swatch: "var(--gri-zone-e)", texture: "ehba1c-zone-very-high" },
+  const A1C_ZONES: { key: string; label: string; swatch: string }[] = [
+    { key: "healthy", label: "Non-diabetic range", swatch: "var(--gri-zone-a)" },
+    { key: "target", label: "Type 1 diabetes target", swatch: "var(--gri-zone-b)" },
+    { key: "high", label: "Elevated", swatch: "var(--gri-zone-d)" },
+    { key: "veryHigh", label: "Very high", swatch: "var(--gri-zone-e)" },
   ];
+
+  const ZOOM_PRESETS: { key: string; label: string; months: number | null }[] = [
+    { key: "3m", label: "3 months", months: 3 },
+    { key: "6m", label: "6 months", months: 6 },
+    { key: "1y", label: "1 year", months: 12 },
+    { key: "all", label: "All", months: null },
+  ];
+
+  let zoom = $state<[Date, Date] | null>(null);
 
   let loading = $state(true);
   let error = $state<unknown>(null);
@@ -182,26 +186,34 @@
     ];
   });
 
-  // Clamped to yDomain so a band never computes to a pixel position outside the plot area —
-  // an unclamped "very high" band (up to 14%) otherwise rendered above the chart's actual
-  // top edge and, since the chart container doesn't clip by default, bled out over the toggle.
-  const annotations = $derived(
-    zoneBands
-      .map((band) => {
-        const yMin = Math.max(band.yMin, yDomain[0]);
-        const yMax = Math.min(band.yMax, yDomain[1]);
-        if (yMax <= yMin) return null;
-        const y: [number, number] = [yMin, yMax];
-        return {
-          type: "range" as const,
-          layer: "below" as const,
-          y,
-          fill: CHART_TEXTURES[band.texture].color,
-          class: patternClass(band.texture),
-        };
-      })
-      .filter((band) => band !== null)
+  /** The zone boundaries the dashed rules mark, low to high, with the zone on each side. */
+  const boundaries = $derived(
+    zoneBands.slice(0, -1).map((band, i) => ({
+      key: band.key,
+      value: band.yMax,
+      below: `${band.label} ${formatZoneRange(band)}`,
+      above: `${zoneBands[i + 1].label} ${formatZoneRange(zoneBands[i + 1])}`,
+    }))
   );
+
+  /** The colour of the zone a displayed value falls in. */
+  function zoneColorOf(value: number): string {
+    const zone = zoneBands.find((band) => band.isLast || value <= band.yMax);
+    return zone?.swatch ?? "var(--muted-foreground)";
+  }
+
+  function presetZoom(months: number | null): [Date, Date] | null {
+    if (months === null || chartData.length === 0) return null;
+    const last = chartData[chartData.length - 1].date;
+    const from = new Date(last.getFullYear(), last.getMonth() - months, last.getDate());
+    return from <= chartData[0].date ? null : [from, last];
+  }
+
+  function isPresetActive(months: number | null): boolean {
+    const preset = presetZoom(months);
+    if (preset === null || zoom === null) return preset === zoom;
+    return preset[0].getTime() === zoom[0].getTime() && preset[1].getTime() === zoom[1].getTime();
+  }
 
   async function loadAll() {
     loading = true;
@@ -317,9 +329,7 @@
     }
     // A lab-only date gets a synthetic row with the interpolated estimate solely to give the tooltip
     // a hover target there. `extremes` and `yDomain` read `chartData`, so the summaries never see
-    // these rows, and lab draws stay out of the calculation (see `labChartPoints`). Declaring lab
-    // draws as a second series instead would be wrong: LineChart renders a Spline per visible
-    // series and would join the lab points with a line.
+    // these rows, and lab draws stay out of the calculation (see `labChartPoints`).
     for (const labPoint of labChartPoints) {
       if (!rows.has(labPoint.date.getTime())) {
         const displayValue = displayValueForChartDate(labPoint.date);
@@ -443,26 +453,34 @@
           </div>
         {/if}
 
-        <div class="h-[320px] w-full @md:h-[400px]" data-testid="ehba1c-chart">
-          <LineChart
-            data={displayChartData}
-            x="date"
-            y="displayValue"
-            {yDomain}
-            clip
-            padding={{ top: 4, right: 16, bottom: 20, left: 20 }}
-            series={[
-              {
-                key: "displayValue",
-                label: `${a1cLabel(true)} ${a1cUnitLabel()}`,
-                color: "var(--ehba1c-line)",
-              },
-            ]}
-            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round", "data-testid": "ehba1c-line" } }}
-            points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
-            {annotations}
-          >
-            {#snippet tooltip({ context })}
+        <div class="mb-3 flex flex-wrap items-center justify-end gap-1 print:hidden" role="group" aria-label="Period">
+          {#each ZOOM_PRESETS as preset (preset.key)}
+            <Button
+              size="sm"
+              variant={isPresetActive(preset.months) ? "secondary" : "ghost"}
+              aria-pressed={isPresetActive(preset.months)}
+              onclick={() => (zoom = presetZoom(preset.months))}
+            >
+              {preset.label}
+            </Button>
+          {/each}
+        </div>
+
+        <EHbA1cTimelineChart
+          data={displayChartData}
+          labPoints={labChartPoints.map((point) => ({
+            id: point.id,
+            date: point.date,
+            displayValue: point.displayValue,
+            title: `Lab result: ${formatA1c(point.a1cDisplay)} (${formatLongDate(point.date)})${point.note ? ` — ${point.note}` : ""}`,
+          }))}
+          {boundaries}
+          zones={zoneBands.map((band) => ({ key: band.key, color: band.swatch }))}
+          {yDomain}
+          {zoom}
+          onZoom={(domain) => (zoom = domain)}
+        >
+          {#snippet tooltip(context)}
               <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
                 {#snippet children({ data })}
                   {@const snapped = snapToLab(
@@ -481,7 +499,10 @@
                     {#if eHbA1cPoint}
                       <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
                         <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
-                          <span class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"></span>
+                          <span
+                            class="h-2 w-2 shrink-0 rounded-full bg-(--zone-color)"
+                            style:--zone-color={zoneColorOf(a1cDisplayValue(eHbA1cPoint.a1cDisplay) ?? 0)}
+                          ></span>
                           <span>{a1cLabel(true)}</span>
                         </span>
                         <span class="font-mono font-medium tabular-nums">{formatA1c(eHbA1cPoint.a1cDisplay)}</span>
@@ -502,19 +523,22 @@
                   </div>
                 {/snippet}
               </Tooltip.Root>
-            {/snippet}
-          </LineChart>
-        </div>
+          {/snippet}
+        </EHbA1cTimelineChart>
 
         <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
-          <ChartKey
-            class="text-sm text-foreground"
-            items={zoneBands.map((band) => ({
-              texture: band.texture,
-              color: band.swatch,
-              label: `${band.label} (${formatZoneRange(band)})`,
-            }))}
-          />
+          {#each zoneBands as band (band.key)}
+            <div class="flex items-center gap-1.5" data-testid="ehba1c-zone-key">
+              <span class="inline-block h-1 w-5 rounded-full bg-(--zone-color)" style:--zone-color={band.swatch}></span>
+              <span>{band.label} ({formatZoneRange(band)})</span>
+            </div>
+          {/each}
+          <div class="flex items-center gap-1.5">
+            <svg width="20" height="4" aria-hidden="true" class="text-muted-foreground">
+              <line x1="0" y1="2" x2="20" y2="2" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" />
+            </svg>
+            <span>Boundary: the lower limit of the range in its color</span>
+          </div>
           {#if labChartPoints.length > 0}
             <div class="flex items-center gap-1.5">
               <span class="inline-block h-0 w-0 border-x-4 border-b-7 border-x-transparent border-b-foreground"
@@ -615,21 +639,6 @@
     </Card.Content>
   </Card.Root>
 </div>
-
-{#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
-  {#each points as point (point.data.id)}
-    <!-- Native polygon: layerchart Polygon draws a path with no children, so the per-marker title tooltip has no home; one marker per lab result. -->
-    <polygon
-      data-testid="lab-marker"
-      points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"
-      class="fill-foreground stroke-background"
-      stroke-width="1"
-      pointer-events="none"
-    >
-      <title>Lab result: {formatA1c(point.data.a1cDisplay)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
-    </polygon>
-  {/each}
-{/snippet}
 
 <ConfirmDialog
   open={pendingDeleteLabResult !== null}
