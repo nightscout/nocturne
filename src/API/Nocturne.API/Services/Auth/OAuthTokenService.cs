@@ -178,6 +178,12 @@ public class OAuthTokenService : IOAuthTokenService
             ct: ct
         );
 
+        if (grant is null)
+        {
+            _logger.LogWarning("Authorization code exchange failed: subject holds no membership of the tenant");
+            return InvalidAuthorizationCodeFailure();
+        }
+
         return await MintTokenPairAsync(grant, subject, ct);
     }
 

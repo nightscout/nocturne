@@ -57,7 +57,7 @@ public class OAuthGrantService : IOAuthGrantService
     }
 
     /// <inheritdoc />
-    public async Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
+    public async Task<OAuthGrantInfo?> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
@@ -71,8 +71,11 @@ public class OAuthGrantService : IOAuthGrantService
                 unit, clientEntityId, subjectId, scopes, limitTo24Hours, ct: token),
             ct);
 
-        _consent.LogCommitted(consent!);
-        return consent!.Grant;
+        if (consent is null)
+            return null;
+
+        _consent.LogCommitted(consent);
+        return consent.Grant;
     }
 
     /// <inheritdoc />

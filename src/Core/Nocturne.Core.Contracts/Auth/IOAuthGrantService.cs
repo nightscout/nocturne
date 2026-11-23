@@ -19,7 +19,8 @@ public interface IOAuthGrantService
     /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
     /// sets it.
     /// </param>
-    Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
+    /// <returns>The grant as written; null when the subject holds no membership of the tenant, so nothing was written.</returns>
+    Task<OAuthGrantInfo?> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,

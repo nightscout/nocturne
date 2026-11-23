@@ -90,13 +90,24 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     /// <summary>
     /// Seed a SubjectEntity so FK constraints are satisfied.
     /// </summary>
-    private async Task SeedSubjectAsync(NocturneDbContext db, Guid? id = null, string? name = null)
+    private async Task SeedSubjectAsync(
+        NocturneDbContext db, Guid? id = null, string? name = null, bool member = true)
     {
+        var subjectId = id ?? _testSubjectId;
         db.Subjects.Add(new SubjectEntity
         {
-            Id = id ?? _testSubjectId,
+            Id = subjectId,
             Name = name ?? "Test User",
         });
+        if (member)
+        {
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = db.TenantId,
+                SubjectId = subjectId,
+            });
+        }
         await db.SaveChangesAsync();
     }
 
@@ -289,6 +300,23 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.NotNull(entity.ApprovedAt);
         Assert.Equal(grant.Id, entity.GrantId);
         Assert.Equal(_testSubjectId, entity.SubjectId);
+    }
+
+    [Fact]
+    public async Task ApproveDeviceCodeAsync_ApproverHoldingNoMembership_ReturnsFalseAndLeavesTheCodePending()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, member: false);
+        await SeedDeviceCodeAsync(db, userCode: "NOMEMBER");
+
+        var result = await CreateService(db).ApproveDeviceCodeAsync("NOMEMBER", _testSubjectId, FullAccess);
+
+        Assert.False(result);
+        Assert.Empty(await db.OAuthGrants.AsNoTracking().ToListAsync());
+        var entity = await db.OAuthDeviceCodes.AsNoTracking().FirstAsync(d => d.UserCode == "NOMEMBER");
+        Assert.Null(entity.ApprovedAt);
+        Assert.Null(entity.GrantId);
     }
 
     [Fact]
@@ -520,10 +548,17 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     /// </summary>
     private async Task SeedSubjectAsync(NocturneDbContext db, Guid? id = null, string? name = null)
     {
+        var subjectId = id ?? _testSubjectId;
         db.Subjects.Add(new SubjectEntity
         {
-            Id = id ?? _testSubjectId,
+            Id = subjectId,
             Name = name ?? "Test User",
+        });
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            SubjectId = subjectId,
         });
         await db.SaveChangesAsync();
     }
