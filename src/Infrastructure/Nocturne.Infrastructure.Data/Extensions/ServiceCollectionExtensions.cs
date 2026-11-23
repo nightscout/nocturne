@@ -265,6 +265,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
         services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
         services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
+        services.AddScoped<ISensorStateReportRepository, SensorStateReportRepository>();
         services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
 
         services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();

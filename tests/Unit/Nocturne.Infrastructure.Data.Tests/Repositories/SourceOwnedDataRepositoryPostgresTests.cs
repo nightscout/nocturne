@@ -326,23 +326,57 @@ public class SourceOwnedDataRepositoryPostgresTests(SourceOwnedDataRepositoryPos
     }
 
     /// <summary>
-    /// A purge that deletes a status's extras announces <see cref="DeviceStatusExtras"/>, whose rows
-    /// can state the sensor's state; one that deletes none does not.
+    /// A purge deletes the source's sensor state reports and announces <see cref="SensorStateReport"/>,
+    /// which states the sensor's state to alerts; a purge of another source leaves them. A report is a
+    /// row of its status's source as a snapshot is, so a status it alone names has its extras deleted
+    /// too. The extras are not announced, since nothing reads them as a record type.
     /// </summary>
     [Fact]
-    public async Task APurgeThatDeletesDeviceStatusExtrasAnnouncesThem()
+    public async Task APurgeDeletesTheSourcesSensorStateReportsAndAnnouncesThem()
     {
         var tenant = await InsertTenantAsync();
-        await SeedStatusAsync(tenant, Source, Source, Source);
+        var snapshotted = await SeedStatusAsync(tenant, Source, Source, Source);
+        var reportOnly = await SeedStatusAsync(tenant);
+        await using (var db = Context(tenant))
+        {
+            foreach (var correlationId in new[] { snapshotted, reportOnly })
+            {
+                db.SensorStateReports.Add(new SensorStateReportEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenant,
+                    CorrelationId = correlationId,
+                    DataSource = Source,
+                    Device = "CareLink MiniMed 780G",
+                    Timestamp = DateTime.UtcNow,
+                    State = nameof(Nocturne.Core.Models.Alerts.SensorState.WarmingUp),
+                    ReportedField = SensorStateReport.CareLinkField,
+                    ReportedValue = "WARM_UP",
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
         var changes = new RecordingRecordChanges();
         var repository = new SourceOwnedDataRepository(new Factory(Context, tenant), new UserAuditContext(), changes);
 
         await repository.SoftDeleteAsync(RecordSelector.ForSource(OtherSource), CancellationToken.None);
         var untouched = changes.Changes.Select(c => c.RecordType).ToList();
+        await using (var db = Context(tenant))
+            (await db.SensorStateReports.CountAsync()).Should().Be(2);
         await repository.SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
-        untouched.Should().NotContain(typeof(DeviceStatusExtras));
-        changes.Changes.Select(c => c.RecordType).Should().Contain(typeof(DeviceStatusExtras));
+        untouched.Should().NotContain(typeof(SensorStateReport));
+        var announced = changes.Changes.Select(c => c.RecordType).ToList();
+        announced.Should().Contain(typeof(SensorStateReport));
+        announced.Should().NotContain(typeof(DeviceStatusExtras));
+        await using (var db = Context(tenant))
+        {
+            (await db.SensorStateReports.CountAsync()).Should().Be(0);
+            var extras = await db.DeviceStatusExtras.IgnoreQueryFilters().ToDictionaryAsync(e => e.CorrelationId);
+            extras[snapshotted].DeletedAt.Should().NotBeNull();
+            extras[reportOnly].DeletedAt.Should().NotBeNull("the status's report is a row of the source");
+        }
     }
 
     [Fact]

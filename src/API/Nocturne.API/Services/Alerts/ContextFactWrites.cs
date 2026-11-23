@@ -50,8 +50,8 @@ internal static class ContextFactWrites
     /// </param>
     /// <remarks>
     /// <see cref="SensorState"/> is moved by a reading (one with no value is its own state) and by a
-    /// device status that reports the sensor, whose extras write announces itself. A reported state
-    /// stops counting at an instant the context carries (<see cref="SensorStateSnapshot.Until"/>), which
+    /// <see cref="SensorStateReport"/> write, which announces itself. A reported state
+    /// stops counting at an instant the context carries (<see cref="Nocturne.Core.Models.Alerts.SensorStateSnapshot.Until"/>), which
     /// the engine reports as a next change, so the fact does not move with the clock.
     /// <see cref="ApsDetermination"/> is moved only by an APS snapshot write, and goes stale at an
     /// instant the engine reports as a next change, so it does not move with the clock either.
@@ -90,7 +90,6 @@ internal static class ContextFactWrites
     public static readonly IReadOnlyDictionary<Type, string[]> MovedBy = new Dictionary<Type, string[]>
     {
         [typeof(SensorGlucose)] = [Glucose, SensorState],
-        [typeof(DeviceStatusExtras)] = [SensorState],
         [typeof(MeterGlucose)] = [],
         [typeof(Calibration)] = [],
         [typeof(BGCheck)] = [],
@@ -103,6 +102,7 @@ internal static class ContextFactWrites
         [typeof(PumpSnapshot)] = [Pump, Insulin],
         [typeof(ApsSnapshot)] = [Aps, Insulin, Carbs, Predictions, ApsDetermination],
         [typeof(UploaderSnapshot)] = [Uploader, Transmitter],
+        [typeof(SensorStateReport)] = [SensorState],
         [typeof(DeviceEvent)] = [DeviceAges, Pump],
         [typeof(ProfileActivation)] = [StateSpans, TimeZone, Glucose, Insulin, Carbs, Pump, Predictions, TargetRange],
         [typeof(TherapySettings)] = [TimeZone, Insulin, Carbs, Predictions, TargetRange],

@@ -31,9 +31,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 ///   released, a record keyed by its primary key revives its row in place.</item>
 /// </list>
 /// A device status's extras row has no source, so it follows its status
-/// (<see cref="V4RecordTables.StatusExtrasLeftBy"/>) after the snapshot tables, uncounted. A purge
-/// that deletes any announces <see cref="DeviceStatusExtras"/>, whose rows can state the sensor's
-/// state; a release revives no row, so it announces nothing for them.
+/// (<see cref="V4RecordTables.StatusExtrasLeftBy"/>) after the device status tables, uncounted and
+/// unannounced, since no alert or cache reads its writes; a release revives no row.
 /// Each purge and each release announces once, after its tables have committed, which model types it
 /// changed (<see cref="IRecordChangePublisher"/>), so the legacy read caches stop serving them and the
 /// alert rules over them are evaluated.
@@ -218,8 +217,7 @@ public class SourceOwnedDataRepository : ISourceOwnedDataReader, ISourceOwnedDat
                 written.Add(table.Model);
             }
 
-            if (await db.AuditedSoftDeleteAsync(V4RecordTables.StatusExtrasLeftBy(db, selector), _audit, selector.Scope, ct) > 0)
-                written.Add(typeof(DeviceStatusExtras));
+            await db.AuditedSoftDeleteAsync(V4RecordTables.StatusExtrasLeftBy(db, selector), _audit, selector.Scope, ct);
         }
         finally
         {

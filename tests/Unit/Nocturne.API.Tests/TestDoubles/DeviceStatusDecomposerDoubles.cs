@@ -19,6 +19,7 @@ internal static class DeviceStatusDecomposerDoubles
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),
+            Mock.Of<ISensorStateReportRepository>(),
             Mock.Of<IStateSpanService>(),
             new UnresolvedDevices(),
             Mock.Of<IAuditContext>(),
