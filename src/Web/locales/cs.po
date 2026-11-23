@@ -23775,9 +23775,8 @@ msgstr "Tenanty"
 #~ msgid "Translations"
 #~ msgstr "Překlady"
 
-#: src/lib/components/connectors/ConnectorSetup.svelte
-msgid "Only members who can manage this site's settings can configure or enable this connector."
-msgstr "Tento konektor mohou nastavit nebo zapnout pouze členové s oprávněním ke správě nastavení instance."
+#~ msgid "Only members who can manage this site's settings can configure or enable this connector."
+#~ msgstr "Tento konektor mohou nastavit nebo zapnout pouze členové s oprávněním ke správě nastavení instance."
 
 #. 0: formatInsulinDisplay(totalInsulin)
 #: src/lib/components/reports/TreatmentSummary.svelte
@@ -32102,9 +32101,8 @@ msgstr ""
 msgid "Can see and log treatments"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
-msgid "They can also log insulin and carbs, and change alerts."
-msgstr ""
+#~ msgid "They can also log insulin and carbs, and change alerts."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
 msgid "Can manage settings"
@@ -47914,4 +47912,38 @@ msgstr ""
 #. 0: formatList(p.max_of.map(forecastCurveLabel), "conjunction")
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Highest of {0}"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Only members who can manage this site's settings can delete synced data."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Only members who can manage this site's settings can sign in to CareLink."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Only members who can set up this site's data sources can configure or enable this connector."
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Saving a Nightscout API secret here does not create an API secret for uploaders."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Only members who can manage this site's settings can turn this on."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/[connector]/+page.svelte
+msgid "Only members who can manage this site's settings can import Oura data."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "They can also log insulin and carbs, change alerts, and set up data sources."
 msgstr ""

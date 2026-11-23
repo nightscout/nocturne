@@ -23775,9 +23775,8 @@ msgstr "Tenants"
 #~ msgid "Translations"
 #~ msgstr "Translations"
 
-#: src/lib/components/connectors/ConnectorSetup.svelte
-msgid "Only members who can manage this site's settings can configure or enable this connector."
-msgstr "Only members who can manage this site's settings can configure or enable this connector."
+#~ msgid "Only members who can manage this site's settings can configure or enable this connector."
+#~ msgstr "Only members who can manage this site's settings can configure or enable this connector."
 
 #. 0: formatInsulinDisplay(totalInsulin)
 #: src/lib/components/reports/TreatmentSummary.svelte
@@ -32102,9 +32101,8 @@ msgstr "Readings, treatments, devices and reports. They cannot change anything."
 msgid "Can see and log treatments"
 msgstr "Can see and log treatments"
 
-#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
-msgid "They can also log insulin and carbs, and change alerts."
-msgstr "They can also log insulin and carbs, and change alerts."
+#~ msgid "They can also log insulin and carbs, and change alerts."
+#~ msgstr "They can also log insulin and carbs, and change alerts."
 
 #: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
 msgid "Can manage settings"
@@ -47915,3 +47913,37 @@ msgstr "Lowest of {0}"
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Highest of {0}"
 msgstr "Highest of {0}"
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Only members who can manage this site's settings can delete synced data."
+msgstr "Only members who can manage this site's settings can delete synced data."
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Only members who can manage this site's settings can sign in to CareLink."
+msgstr "Only members who can manage this site's settings can sign in to CareLink."
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Only members who can set up this site's data sources can configure or enable this connector."
+msgstr "Only members who can set up this site's data sources can configure or enable this connector."
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Saving a Nightscout API secret here does not create an API secret for uploaders."
+msgstr "Saving a Nightscout API secret here does not create an API secret for uploaders."
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Only members who can manage this site's settings can turn this on."
+msgstr "Only members who can manage this site's settings can turn this on."
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it."
+msgstr "Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it."
+
+#: src/routes/(authenticated)/settings/connectors/[connector]/+page.svelte
+msgid "Only members who can manage this site's settings can import Oura data."
+msgstr "Only members who can manage this site's settings can import Oura data."
+
+#: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
+msgid "They can also log insulin and carbs, change alerts, and set up data sources."
+msgstr "They can also log insulin and carbs, change alerts, and set up data sources."
