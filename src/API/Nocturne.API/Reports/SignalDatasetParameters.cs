@@ -100,6 +100,18 @@ internal sealed record LabHbA1cParameters : ReportDatasetParameters
     public override string DatasetName => Name;
 }
 
+[Description(
+    "ehba1c: the estimated HbA1c of each day, in percent, from a recency-weighted mean of the glucose of the 90 days before it, "
+    + "with that weighted mean. A day with less than a month of readings in its window has no row.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record EHbA1cParameters : ReportDatasetParameters
+{
+    public const string Name = "ehba1c";
+
+    [JsonIgnore]
+    public override string DatasetName => Name;
+}
+
 [Description("body_weight: each body weight record: weight, body fat and lean mass. Needs the therapy permission.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record BodyWeightParameters : ReportDatasetParameters

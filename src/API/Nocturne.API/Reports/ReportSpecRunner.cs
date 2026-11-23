@@ -15,7 +15,8 @@ internal sealed record ReportRunContext(
     bool HistoryClamped = false,
     TimeZoneInfo? Zone = null,
     bool? Hour12 = null,
-    string? Region = null)
+    string? Region = null,
+    bool A1cMmolMol = false)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -182,7 +183,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         {
             var output = await context.Cache.ReadAsync(key, ReportSpecValidator.CountKey(dataset, parameters, range, kind, x, shape), () => dataset.RunAsync(
                 new ReportDatasetRequest(parameters, kind, from, to, context.UseMmol, context.GrantedScopes, context.Services, context.ReadLog,
-                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole, context.Hour12, context.Region),
+                    context.HistoryClamped, context.Cache, run.Now, x, context.Zone, shape.Fields, shape.Whole, context.Hour12, context.Region,
+                    context.A1cMmolMol),
                 run.Token));
             return new Read(output, ReportPanelStatus.Ok, null);
         }
@@ -221,7 +223,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var companions = catalogue.Where(f => f.Companion).Select(f => f.Name);
         var fields = bound.Concat(colours).Concat(companions).Distinct(StringComparer.Ordinal)
             .Where(name => !omitted.Contains(name))
-            .Select(name => Labelled(catalogue.Single(f => f.Name == name).ResolveUnit(useMmol), output))
+            .Select(name => Labelled(catalogue.Single(f => f.Name == name).ResolveUnit(useMmol, run.Context.A1cMmolMol), output))
             .ToList();
         var names = fields.Select(f => f.Name).ToList();
 
@@ -613,7 +615,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             .Where(n => n != ReportField.SentenceField || dataset.RowSentenceAbout is not { } about || ReportAbout.DrawnBy(about, drawnNames));
         var fields = boundNames.Concat(colours).Concat(companions).Distinct(StringComparer.Ordinal)
             .Where(n => !omitted.Contains(n))
-            .Select(n => Labelled(catalogue.Single(f => f.Name == n).ResolveUnit(useMmol), output))
+            .Select(n => Labelled(catalogue.Single(f => f.Name == n).ResolveUnit(useMmol, run.Context.A1cMmolMol), output))
             .ToList();
         var names = fields.Select(f => f.Name).ToList();
         // A fold reads only the fields it is given from each row, so a read's rows go to it as they are: a whole read
@@ -826,7 +828,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             if (output.Omitted.FirstOrDefault(o => o.Field == source.Field) is { } withheld)
                 return Derivation.Failed(ReportPanelStatus.NotPermitted,
                     $"Not shown: a source of this layer needs the {ScopeWords(withheld.Scope)} permission, which this token does not hold.");
-            var sourceField = catalogue.Single(f => f.Name == source.Field).ResolveUnit(run.Context.UseMmol);
+            var sourceField = catalogue.Single(f => f.Name == source.Field).ResolveUnit(run.Context.UseMmol, run.Context.A1cMmolMol);
             sourceKind = axis.AxisKind!.Value;
             step = ReportGrid.Step(sourceKind.Value, panel.Grid is > 0 ? panel.Grid.Value : ReportGrid.DefaultMinutes, from, to);
             var window = output.Window ?? new ReportWindow(fromMs, toMs);

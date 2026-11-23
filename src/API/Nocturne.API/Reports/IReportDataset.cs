@@ -73,7 +73,8 @@ internal enum ReportAggregate
 /// <param name="Kind">What it holds.</param>
 /// <param name="Unit">
 /// Its unit as printed, null for none. <c>glucose</c> stands for the tenant's display unit until
-/// <see cref="ResolveUnit"/>, and so does a leading <c>glucose/</c> (<c>glucose/U</c> for an ISF).
+/// <see cref="ResolveUnit"/>, and so does a leading <c>glucose/</c> (<c>glucose/U</c> for an ISF);
+/// <c>a1c</c> stands for the caller's HbA1c unit, percent or mmol/mol.
 /// </param>
 /// <param name="Description">What it is.</param>
 /// <param name="Scope">The read scope it needs beyond the dataset's own, or null.</param>
@@ -112,6 +113,9 @@ internal sealed record ReportField(
 {
     public const string GlucoseUnit = "glucose";
 
+    /// <summary>The unit of an HbA1c field: the caller's HbA1c unit (<see cref="ReportDatasetRequest.A1cMmolMol"/>).</summary>
+    public const string A1cUnit = "a1c";
+
     /// <summary>
     /// A row field holding one sentence the API wrote about the row; a <see cref="Companion"/> field.
     /// </summary>
@@ -144,8 +148,10 @@ internal sealed record ReportField(
     /// <summary>Whether the field's values are glucose, or glucose per something, so written in the display unit.</summary>
     public bool InGlucoseUnit => Unit is not null && (Unit == GlucoseUnit || Unit.StartsWith(GlucoseUnit + "/", StringComparison.Ordinal));
 
-    public ReportField ResolveUnit(bool useMmol) =>
-        InGlucoseUnit ? this with { Unit = (useMmol ? "mmol/L" : "mg/dL") + Unit![GlucoseUnit.Length..] } : this;
+    public ReportField ResolveUnit(bool useMmol, bool a1cMmolMol = false) =>
+        InGlucoseUnit ? this with { Unit = (useMmol ? "mmol/L" : "mg/dL") + Unit![GlucoseUnit.Length..] }
+        : Unit == A1cUnit ? this with { Unit = a1cMmolMol ? "mmol/mol" : "%" }
+        : this;
 }
 
 /// <summary>
@@ -253,6 +259,7 @@ internal interface IReportDataset
 /// <param name="X">The field a chart layer lays along, for a dataset whose rows take the shape they are drawn in.</param>
 /// <param name="Hour12">Whether the tenant reads a 12-hour clock, for times written in words; null when it chose none.</param>
 /// <param name="Region">The reader's region format, for the order dates are written in (<see cref="ReportClock"/>); null for none.</param>
+/// <param name="A1cMmolMol">Whether the caller reads HbA1c in mmol/mol (IFCC) rather than percent (NGSP).</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
     ReportPanelKind Kind,
@@ -270,7 +277,8 @@ internal sealed record ReportDatasetRequest(
     IReadOnlyList<string>? Fields = null,
     bool Whole = false,
     bool? Hour12 = null,
-    string? Region = null)
+    string? Region = null,
+    bool A1cMmolMol = false)
 {
     /// <summary>
     /// The most rows a <see cref="Whole"/> read of a dense series keeps, so a run holds a bounded number however long

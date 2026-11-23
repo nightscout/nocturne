@@ -5,10 +5,12 @@ using Nocturne.API.Reports;
 using Nocturne.API.Reports.Datasets;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Services;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -35,7 +37,7 @@ public class SignalDatasetTests
         new IReportDataset[]
         {
             new DeviceEventsDataset(), new SystemEventsDataset(), new TrackersDataset(), new SleepStagesDataset(), new SleepNightsDataset(),
-            new SleepBiometricsDataset(), new LabHbA1cDataset(), new BodyWeightDataset(), new AlertExcursionsDataset(),
+            new SleepBiometricsDataset(), new LabHbA1cDataset(), new EHbA1cDataset(), new BodyWeightDataset(), new AlertExcursionsDataset(),
             new AlertInstancesDataset(), new DndWindowsDataset(), new SensorDetailDataset(), new MeterGlucoseDataset(),
             new CompressionLowsDataset(), new GlucoseEpisodesDataset(),
         }.ToDictionary(d => d.Name, d => d.RequiredScope).Should().BeEquivalentTo(new Dictionary<string, string>
@@ -47,6 +49,7 @@ public class SignalDatasetTests
             ["sleep_nights"] = Scope.SleepRead,
             ["sleep_biometrics"] = Scope.SleepRead,
             ["lab_hba1c"] = Scope.GlucoseRead,
+            ["ehba1c"] = Scope.GlucoseRead,
             ["body_weight"] = Scope.TherapyRead,
             ["alert_excursions"] = Scope.AlertsRead,
             ["alert_instances"] = Scope.AlertsRead,
@@ -305,5 +308,68 @@ public class SignalDatasetTests
         ReportNames.Signal(new SleepNightsDataset().Fields.Single(f => f.Name == "avgHeartRate").Label).Should().Be("Heart rate in sleep");
         new IReportDataset[] { new DeviceEventsDataset(), new SleepStagesDataset(), new GlucoseEpisodesDataset() }
             .Should().OnlyContain(d => d.Marks.SequenceEqual(new[] { ReportMark.Spans }) && d.Fields.Count(f => f.Kind != ReportFieldKind.Time) == 3);
+    }
+
+    [Fact]
+    public async Task Estimated_hba1c_reads_the_timeline_of_each_year_the_range_crosses_and_keeps_only_its_days()
+    {
+        var overview = new Mock<IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(2025, null, It.IsAny<CancellationToken>())).ReturnsAsync(new EHbA1cTimelineResponse
+        {
+            Year = 2025,
+            Points =
+            [
+                new EHbA1cPoint { Date = "2025-12-01", EstimatedA1cPercent = 9.9, WeightedAverageGlucoseMgdl = 230 },
+                new EHbA1cPoint { Date = "2025-12-31", EstimatedA1cPercent = 7.123, WeightedAverageGlucoseMgdl = 157.7 },
+            ],
+        });
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(2026, null, It.IsAny<CancellationToken>())).ReturnsAsync(new EHbA1cTimelineResponse
+        {
+            Year = 2026,
+            Points = [new EHbA1cPoint { Date = "2026-01-02", EstimatedA1cPercent = 6.5, WeightedAverageGlucoseMgdl = 140 }],
+        });
+        var services = new ServiceCollection().AddSingleton(overview.Object).BuildServiceProvider();
+        var log = new ReportReadLog();
+        var request = new ReportDatasetRequest(new EHbA1cParameters(), ReportPanelKind.Chart,
+            new DateTimeOffset(2025, 12, 31, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero),
+            false, new HashSet<string> { Scope.GlucoseRead }, services, log, Zone: TimeZoneInfo.Utc);
+
+        var output = await new EHbA1cDataset().RunAsync(request, CancellationToken.None);
+
+        output.Rows.Select(r => r["ehba1c"]).Should().Equal(7.12, 6.5);
+        output.Rows[0]["day"].Should().Be(new DateTimeOffset(2025, 12, 31, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        output.Rows[1]["weightedMean"].Should().Be(140.0);
+        output.Facts.Single(f => f.Label == "Latest").Value.Should().Be("6.5");
+        log.Datasets.Should().Equal("glucose");
+    }
+
+    [Fact]
+    public async Task Estimated_hba1c_is_in_mmol_per_mol_for_a_caller_who_reads_hba1c_in_mmol_per_mol()
+    {
+        var overview = new Mock<IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(2026, null, It.IsAny<CancellationToken>())).ReturnsAsync(new EHbA1cTimelineResponse
+        {
+            Year = 2026,
+            Points = [new EHbA1cPoint { Date = "2026-01-02", EstimatedA1cPercent = 7, WeightedAverageGlucoseMgdl = 154 }],
+        });
+        var services = new ServiceCollection().AddSingleton(overview.Object).BuildServiceProvider();
+        var request = new ReportDatasetRequest(new EHbA1cParameters(), ReportPanelKind.Chart,
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero),
+            false, new HashSet<string> { Scope.GlucoseRead }, services, new ReportReadLog(), Zone: TimeZoneInfo.Utc, A1cMmolMol: true);
+
+        var output = await new EHbA1cDataset().RunAsync(request, CancellationToken.None);
+
+        output.Rows.Single()["ehba1c"].Should().Be(53.0);
+        output.Facts.Single(f => f.Label == "Latest").Should().Match<ReportFact>(f => f.Value == "53.0" && f.Unit == "mmol/mol");
+        output.Sentence.Should().Contain("53.0 mmol/mol");
+    }
+
+    [Theory]
+    [InlineData(false, "%")]
+    [InlineData(true, "mmol/mol")]
+    public void The_hba1c_fields_are_in_the_callers_hba1c_unit(bool mmolMol, string unit)
+    {
+        new EHbA1cDataset().Fields.Single(f => f.Name == "ehba1c").ResolveUnit(false, mmolMol).Unit.Should().Be(unit);
+        new LabHbA1cDataset().Fields.Single(f => f.Name == "hba1c").ResolveUnit(true, mmolMol).Unit.Should().Be(unit);
     }
 }

@@ -549,6 +549,16 @@ describe("relate", () => {
     expect(spec(ws).panels[0].grid).toBe(120);
   });
 
+  it("draws a long timeline of signals over days with no grid, since a day is one slot", () => {
+    const ws = new Workspace(liveCatalogue);
+    ws.toggleSignal("labHbA1c");
+    ws.setRange(2160);
+
+    expect(spec(ws).panels[0].grid).toBeUndefined();
+    ws.toggleSignal("glucose");
+    expect(spec(ws).panels[0].grid).toBe(120);
+  });
+
   it("smooths a timeline signal on a grid the window fits at any range", () => {
     const ws = new Workspace(liveCatalogue);
     ws.toggleSignal("glucose");
