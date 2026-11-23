@@ -25,6 +25,11 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
 {
     private SqliteConnection? _connection;
 
+    /// <summary>
+    /// Holds the factory's in-memory database open for the factory's lifetime. Every context opens a
+    /// connection of its own to that database: SQLite cannot run statements of several contexts on
+    /// one connection at once, and the pipeline runs fire-and-forget writes beside the next request.
+    /// </summary>
     public SqliteConnection Connection => _connection
         ?? throw new InvalidOperationException("Factory not initialized");
 
@@ -43,7 +48,13 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = $"nocturne-tests-{Guid.NewGuid():N}",
+            Mode = SqliteOpenMode.Memory,
+            Cache = SqliteCacheMode.Shared,
+        }.ToString();
+        _connection = new SqliteConnection(connectionString);
         _connection.Open();
 
         builder.ConfigureAppConfiguration((_, config) =>
@@ -67,13 +78,12 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
             RemoveDbContextRegistrations(services);
             RemoveService<ICacheService>(services);
 
-            var conn = Connection;
+            var options = new DbContextOptionsBuilder<NocturneDbContext>()
+                .UseSqlite(connectionString)
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .Options;
             var mockFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-            mockFactory.Setup(f => f.CreateDbContext()).Returns(() => new NocturneDbContext(
-                new DbContextOptionsBuilder<NocturneDbContext>()
-                    .UseSqlite(conn)
-                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                    .Options));
+            mockFactory.Setup(f => f.CreateDbContext()).Returns(() => new NocturneDbContext(options));
             mockFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => mockFactory.Object.CreateDbContext());
             services.AddSingleton(mockFactory.Object);
@@ -140,9 +150,12 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing)
+        if (disposing && _connection is { } connection)
         {
-            _connection?.Dispose();
+            _connection = null;
+            // Pooled connections would otherwise hold the in-memory database open after the factory.
+            SqliteConnection.ClearPool(connection);
+            connection.Dispose();
         }
     }
 }
