@@ -132,7 +132,7 @@ public class ConnectorSecretExtensionsTests
         service.Verify(
             s => s.SaveSecretsAsync(
                 It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
-                It.IsAny<string>(), It.IsAny<Nocturne.Core.Models.Authorization.CredentialMaker?>(), It.IsAny<CancellationToken>()),
+                It.IsAny<string>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

@@ -24,7 +24,10 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 /// </summary>
 /// <remarks>
 /// Uses standard API authentication; every action except the schema needs <c>connectors.read</c>
-/// to read or <c>connectors.readwrite</c> to change, both of which <c>tenant.settings</c> satisfies.
+/// to read or <c>connectors.readwrite</c> to change. <c>tenant.settings</c> satisfies both, and the
+/// built-in Caretaker role holds <c>connectors.readwrite</c>. A caller without <c>tenant.settings</c>
+/// is held to <see cref="DelegatedConfigurationGuard"/> and makes no credential from a saved secret
+/// (<see cref="ConnectorSecretSaver.MayAdopt"/>).
 /// </remarks>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
@@ -33,10 +36,10 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [Route("api/v4/connectors/config")]
 [Authorize]
 // Connector configuration names the host the server will fetch from, and connector status
-// reports what happened, so these endpoints let their caller aim a request from inside the
-// deployment's network and read the result. That is a tenant owner's business, not an anonymous
-// visitor's: the demo's account is shared and obtainable without signing up. A permission gate
-// would not do — the demo member holds tenant.settings.
+// reports what happened, so these endpoints let their caller aim a request at any host the server
+// can reach (link-local addresses excepted) and read the result. That is for a member who sets up
+// the site's data sources, not an anonymous visitor: the demo's account is shared and obtainable
+// without signing up. A permission gate would not do — the demo member holds tenant.settings.
 [DenyDemoSubject]
 // Every action but the schema, which describes a connector's declared fields and holds no tenant
 // state, requires a connector scope. Repeated per action rather than declared on the class because
@@ -84,8 +87,18 @@ public class ConfigurationController : ControllerBase
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
         }
 
-        return Ok(await WithoutUnusableKeysAsync(connectorName, config, ct));
+        config = await WithoutUnusableKeysAsync(connectorName, config, ct);
+        if (IsGuarded())
+            config.LockedKeys = await _configService.GetGuardedKeysAsync(connectorName, ct);
+        return Ok(config);
     }
+
+    /// <summary>
+    /// Whether <see cref="DelegatedConfigurationGuard"/> holds the caller: a delegated credential, or
+    /// a caller who may set up data sources but not change the site's settings.
+    /// </summary>
+    private bool IsGuarded() =>
+        RequireInteractiveSessionAttribute.Refuses(HttpContext) || !HttpContext.HasScope(Scope.TenantSettings);
 
     /// <summary>
     /// Drops the stored keys the connector's configuration type does not bind, and the bound keys
@@ -186,7 +199,8 @@ public class ConfigurationController : ControllerBase
     /// Only properties marked with [RuntimeConfigurable] are accepted.
     /// Validates the configuration against the connector's schema before saving.
     /// Refused for Google Health, whose options are saved by the Google Health endpoint. A delegated
-    /// credential is refused the changes <see cref="DelegatedConfigurationGuard"/> lists.
+    /// credential, and a caller without <c>tenant.settings</c>, is refused the changes
+    /// <see cref="DelegatedConfigurationGuard"/> lists.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Configuration values as JSON</param>
@@ -227,16 +241,16 @@ public class ConfigurationController : ControllerBase
             return BadRequest(new { message = "Configuration validation failed", errors = validationErrors });
         }
 
-        if (RequireInteractiveSessionAttribute.Refuses(HttpContext)
-            && await _configService.GetDelegatedRefusalsAsync(connectorName, configuration, ct) is [_, ..] refused)
+        if (IsGuarded()
+            && await _configService.GetGuardedRefusalsAsync(connectorName, configuration, ct) is [_, ..] refused)
         {
-            _logger.LogWarning("Refused a delegated change to {Fields} on connector {ConnectorName}",
+            _logger.LogWarning("Refused a guarded change to {Fields} on connector {ConnectorName}",
                 string.Join(", ", refused), connectorName);
             if (RequireInteractiveSessionAttribute.IsHandedOff(HttpContext))
                 return RequireInteractiveSessionAttribute.SignInRequired(HttpContext);
             return this.ProblemWithCode(
                 DelegatedChangeRefusedCode,
-                $"Only the account holder's own sign-in can change {string.Join(", ", refused)}. " +
+                $"Only a member who can change this site's settings, at their own sign-in, can change {string.Join(", ", refused)}. " +
                 "To use another address, delete the connector and set it up again: it then holds no " +
                 "secret until one is saved.",
                 StatusCodes.Status403Forbidden);
@@ -247,8 +261,8 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
-    /// The problem code of a save <see cref="DelegatedConfigurationGuard"/> refuses to a delegated
-    /// credential.
+    /// The problem code of a save <see cref="DelegatedConfigurationGuard"/> refuses to a guarded
+    /// caller.
     /// </summary>
     public const string DelegatedChangeRefusedCode = "connector_change_needs_own_sign_in";
 
@@ -513,8 +527,10 @@ public class ConfigurationController : ControllerBase
 
         try
         {
-            var maker = adopts ? await HttpContext.CredentialMakerAsync(ct) : null;
-            return Ok(await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, maker, ct));
+            var saver = adopts && await HttpContext.CredentialMakerAsync(ct) is { } maker
+                ? new ConnectorSecretSaver(maker, HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped())
+                : null;
+            return Ok(await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, saver, ct));
         }
         catch (InvalidOperationException ex)
         {

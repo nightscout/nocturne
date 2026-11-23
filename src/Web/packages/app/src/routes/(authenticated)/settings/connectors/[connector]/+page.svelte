@@ -14,7 +14,9 @@
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import OuraImportCard from "#lib/components/connectors/OuraImportCard.svelte";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
   import type { AvailableConnector } from "@nocturne/api-client";
 
@@ -27,6 +29,12 @@
   const permissionsQuery = getMyPermissions();
   const canManage = $derived(
     canChangeTenantSettings(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       permissionsQuery.current?.scopes,
       permissionsQuery.current?.refusedAsDemoSubject
     )
@@ -63,6 +71,10 @@
     {#snippet extras({ connector }: { connector: AvailableConnector })}
       {#if isOura && canManage && connectorName}
         <OuraImportCard connectorId={connectorName} />
+      {:else if isOura && canSetUp && !canManage}
+        <ReadOnlyNotice data-testid="oura-import-read-only">
+          Only members who can manage this site's settings can import Oura data.
+        </ReadOnlyNotice>
       {:else if connector.id && !isOura}
         <RepullHistoryCard connectorId={connector.id} />
       {/if}

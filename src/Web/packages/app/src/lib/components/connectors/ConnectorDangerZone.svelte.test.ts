@@ -99,7 +99,7 @@ describe("ConnectorDangerZone", () => {
     ]);
   });
 
-  it("hides every destructive control from a member without tenant.settings", async () => {
+  it("hides every destructive control from a viewer", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
 
     render(ConnectorDangerZone, {
@@ -120,6 +120,47 @@ describe("ConnectorDangerZone", () => {
     expect(
       page.getByRole("button", { name: "Delete data", exact: true }).elements()
     ).toHaveLength(0);
+  });
+
+  it("offers a caretaker the configuration delete and says why the data delete is not theirs", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read", "treatments.readwrite", "connectors.readwrite"] };
+
+    render(ConnectorDangerZone, {
+      props: {
+        connectorId: "dexcom",
+        displayName: "Dexcom",
+        hasExistingConfig: true,
+        hasData: true,
+        dataSummary: null,
+      },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Delete config", exact: true }))
+      .toBeEnabled();
+    await expect
+      .element(page.getByRole("button", { name: "Delete data", exact: true }))
+      .toBeDisabled();
+    await expect
+      .element(page.getByTestId("connector-delete-data-reason"))
+      .toHaveTextContent("Only members who can manage this site's settings can delete synced data.");
+  });
+
+  it("gives a settings holder the data delete with no reason", async () => {
+    render(ConnectorDangerZone, {
+      props: {
+        connectorId: "dexcom",
+        displayName: "Dexcom",
+        hasExistingConfig: true,
+        hasData: true,
+        dataSummary: null,
+      },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Delete data", exact: true }))
+      .toBeEnabled();
+    expect(page.getByTestId("connector-delete-data-reason").elements()).toHaveLength(0);
   });
 
   it("hides every destructive control from the demo visitor", async () => {

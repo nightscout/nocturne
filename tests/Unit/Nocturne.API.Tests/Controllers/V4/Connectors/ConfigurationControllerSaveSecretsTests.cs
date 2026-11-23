@@ -20,7 +20,9 @@ public class ConfigurationControllerSaveSecretsTests
 
     private readonly Guid _subjectId = Guid.CreateVersion7();
 
-    private ConfigurationController Controller(AuthType authType)
+    private ConfigurationController Controller(AuthType authType) => Controller(authType, [Scope.FullAccess]);
+
+    private ConfigurationController Controller(AuthType authType, IReadOnlyList<string> grantedScopes)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -29,6 +31,7 @@ public class ConfigurationControllerSaveSecretsTests
             AuthType = authType,
             SubjectId = _subjectId,
         };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
         return new ConfigurationController(_configService.Object, NullLogger<ConfigurationController>.Instance)
         {
@@ -48,7 +51,7 @@ public class ConfigurationControllerSaveSecretsTests
 
         Assert.IsType<ForbidResult>(result);
         _configService.Verify(s => s.SaveSecretsAsync(
-            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CredentialMaker?>(),
+            It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<ConnectorSecretSaver?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -61,7 +64,23 @@ public class ConfigurationControllerSaveSecretsTests
         Assert.IsType<OkObjectResult>(result);
         _configService.Verify(s => s.SaveSecretsAsync(
             "Nightscout", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
-            It.Is<CredentialMaker?>(maker => maker != null && maker.SubjectId == _subjectId),
+            It.Is<ConnectorSecretSaver?>(saver => saver != null && saver.Maker.SubjectId == _subjectId && saver.MayAdopt),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task NightscoutApiSecret_FromACaretakersSession_IsSavedByASaverWhoMayNotAdopt()
+    {
+        var caretaker = MemberScopeResolver.Resolve(
+            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Caretaker]), AuthType.SessionCookie, new HashSet<string>());
+
+        var result = await Controller(AuthType.SessionCookie, [.. caretaker]).SaveSecrets(
+            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        _configService.Verify(s => s.SaveSecretsAsync(
+            "Nightscout", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
+            It.Is<ConnectorSecretSaver?>(saver => saver != null && saver.Maker.SubjectId == _subjectId && !saver.MayAdopt),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

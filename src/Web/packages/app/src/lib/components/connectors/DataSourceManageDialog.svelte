@@ -5,6 +5,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import AppLogo from "#lib/components/ui/AppLogo.svelte";
   import { formatNumber } from "#lib/utils/formatting.js";
@@ -33,6 +34,13 @@
 
   const canManage = $derived(
     canChangeTenantSettings(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+
+  const canSetUp = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -89,6 +97,12 @@
             <p class="font-medium">{formatNumber(source.totalRecords)}</p>
           {/if}
         </div>
+
+        {#if canSetUp && !canManage && source.canDelete}
+          <p class="text-muted-foreground" data-testid="data-source-delete-reason">
+            Only members who can manage this site's settings can delete synced data.
+          </p>
+        {/if}
       </div>
 
       <Dialog.Footer>

@@ -103,7 +103,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
 
         var act = async () => await _service.SaveSecretsAsync(
             ConnectorName, new Dictionary<string, string> { ["RefreshToken"] = "their-token" },
-            "carelink-connect", maker: null);
+            "carelink-connect", saver: null);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
@@ -151,7 +151,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             (nameof(IConnectorConfigurationService.SaveConfigurationAsync),
                 () => _service.SaveConfigurationAsync(ConnectorName, CareLinkAccount("a@b.c", "AU"))),
             (nameof(IConnectorConfigurationService.SaveSecretsAsync),
-                async () => await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" }, modifiedBy: null, maker: null)),
+                async () => await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" }, modifiedBy: null, saver: null)),
             (nameof(IConnectorConfigurationService.SaveRuntimeSecretsAsync),
                 () => _service.SaveRuntimeSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
             (nameof(IConnectorConfigurationService.SetActiveAsync),

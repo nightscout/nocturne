@@ -493,7 +493,7 @@ public class GoogleHealthTests : IDisposable
         secrets["refreshToken"] = "refresh";
         secrets["grantedScopes"] = GoogleHealthClient.MetricsScope;
         secrets["clientId"] = Platform().ClientId;
-        await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets, modifiedBy: null, maker: null);
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets, modifiedBy: null, saver: null);
         await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
@@ -751,7 +751,7 @@ public class GoogleHealthTests : IDisposable
     {
         var store = new TestConnectorStore();
         store.SetConfiguration("""{"enabled":false,"lastSyncedTo":"2026-09-01T00:00:00Z","backfillCursorDate":"2026-01-01","backfillFloorDate":"2020-01-01","backfillComplete":true,"backfillChunkDays":7,"syncIntervalMinutes":30,"importFrom":"2020-01-01T00:00:00Z","dataTypes":["steps"]}""");
-        await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string> { ["accountKey"] = "previous-account" }, modifiedBy: null, maker: null);
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", new Dictionary<string, string> { ["accountKey"] = "previous-account" }, modifiedBy: null, saver: null);
         var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
 
         await service.PurgeAsync(Guid.NewGuid(), default);
@@ -1389,7 +1389,7 @@ public class GoogleHealthTests : IDisposable
         {
             ["refreshToken"] = "refresh",
             ["clientSecret"] = "tenant-secret"
-        }, modifiedBy: null, maker: null);
+        }, modifiedBy: null, saver: null);
 
         await service.DisconnectAsync(Guid.NewGuid(), default);
         if (purge) await service.PurgeAsync(Guid.NewGuid(), default);
@@ -2024,9 +2024,9 @@ public class GoogleHealthTests : IDisposable
                 if (invalidatesCaches) OnSave?.Invoke();
             }
             configurations.Setup(value => value.SaveSecretsAsync(
-                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CredentialMaker?>(),
+                    "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Dictionary<string, string>, string?, CredentialMaker?, CancellationToken>(
+                .Callback<string, Dictionary<string, string>, string?, Nocturne.Core.Contracts.Connectors.ConnectorSecretSaver?, CancellationToken>(
                     (_, values, _, _, ct) => RecordSecrets(values, ct, invalidatesCaches: true))
                 .ReturnsAsync(new ConnectorSecretsSaveResult());
             configurations.Setup(value => value.SaveRuntimeSecretsAsync(

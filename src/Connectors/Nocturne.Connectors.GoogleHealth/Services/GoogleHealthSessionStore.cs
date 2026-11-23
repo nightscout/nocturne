@@ -145,7 +145,7 @@ public sealed class GoogleHealthSessionStore(
         secrets[RefreshTokenKey] = session.RefreshToken;
         secrets[GrantedScopesKey] = string.Join(' ', session.Scopes.Distinct(StringComparer.Ordinal));
         secrets[AccountKey] = accountKey;
-        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), maker: null, ct);
+        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject.ToString(), saver: null, ct);
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public sealed class GoogleHealthSessionStore(
         secrets.Remove(SessionClientIdKey);
         secrets.Remove(LegacyClientSecretKey);
         if (removeAccount) secrets.Remove(AccountKey);
-        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject?.ToString(), maker: null, ct);
+        await configurations.SaveSecretsAsync(GoogleHealthConnectorService.ConnectorName, secrets, subject?.ToString(), saver: null, ct);
         // Released before the revocation asks who else holds the account, so two tenants clearing
         // at once cannot each see the other and both keep the grant.
         await holders.ReleaseAsync(TenantId, ct);

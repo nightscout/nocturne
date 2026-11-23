@@ -870,6 +870,33 @@ describe("Google Health status", () => {
   );
 });
 
+describe("caretaker, who sets up data sources but cannot manage settings", () => {
+  beforeEach(() => {
+    page.data.effectivePermissions = ["glucose.read", "treatments.readwrite", "connectors.readwrite"];
+  });
+
+  it("syncs every connector and opens a connector's configuration and sync", async () => {
+    render(ConnectorsPage);
+
+    await expect
+      .element(browserPage.getByRole("button", { name: "Sync all connectors" }))
+      .toBeVisible();
+    await browserPage.getByRole("button", { name: /Dexcom/ }).click();
+    const dialog = browserPage.getByRole("dialog");
+    await expect.element(dialog.getByRole("link", { name: "Configure" })).toBeVisible();
+    await expect.element(dialog.getByRole("button", { name: "Sync now" })).toBeVisible();
+  });
+
+  it("is offered a cloud account but not Google Health, which needs the site's settings", async () => {
+    render(ConnectorsPage);
+    await browserPage.getByRole("button", { name: "Add a connection" }).click();
+
+    const dialog = browserPage.getByRole("dialog");
+    await expect.element(dialog.getByRole("button", { name: /A cloud account/ })).toBeVisible();
+    expect(mocks.googleHealth).toHaveBeenCalledTimes(0);
+  });
+});
+
 /**
  * A session opened from a sign-in link someone else issued is refused the connections list, a
  * token and a device approval, and nothing else on this page. Only those give way to the sign-in.

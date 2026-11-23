@@ -96,7 +96,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     [Fact]
     public async Task SaveSecretsAsync_InvalidatesForTheTenant()
     {
-        await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" }, modifiedBy: null, maker: null);
+        await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" }, modifiedBy: null, saver: null);
 
         _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
         _nudged.Should().ContainSingle().Which.Should().Be(_tenantId);

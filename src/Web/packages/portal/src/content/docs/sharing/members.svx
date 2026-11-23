@@ -41,13 +41,15 @@ access:
 |------|------------------|
 | Viewer | Read-only: blood glucose and the whole Reports section. For a quick glance. |
 | Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
-| Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
+| Caretaker | Everything a Clinician sees. They can also log treatments, manage alerts, and set up data sources: connect, change, sync, and remove them. For someone who actively helps day to day. |
 | Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
 | Owner | You. Full control of the account; can't be removed. |
 
-If a role is close but not quite right, you can adjust an individual member's
-**permissions** on top of it, switching a particular kind of access on or off for
-that one person, without changing what the role means for everyone else.
+If a role is close but not quite right, you can give an individual member extra
+**permissions** on top of it, without changing what the role means for everyone
+else. Extra permissions only add access. To give one person less than a role
+gives, give them a different role, or make a role of your own with only the
+access they need.
 
 You can also tick **Only last 24 hours** (when you invite them, or later) to
 limit that member to recent data, the same way the public link's time window
@@ -59,8 +61,12 @@ works.
   things. Invite the <strong>teacher as a Viewer</strong>; they just need to
   glance at the current glucose during class. Invite the
   <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
-  or manage an alert if they step in. Each has their own login, you can see them
-  in your member list, and when the year ends you remove them in one click.
+  or manage an alert if they step in. A Caretaker can also set up data sources.
+  If the nurse must not do that, give them a role of your own without data source
+  setup, or remove data source setup from the Caretaker role, which changes it for
+  every Caretaker. Each has their
+  own login, you can see them in your member list, and when the year ends you
+  remove them in one click.
 
 </Callout>
 

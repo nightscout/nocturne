@@ -107,9 +107,29 @@ public class ServicesControllerScopeTests
                 "the Administrator role holds tenant.settings, so it must administer services");
     }
 
+    [Fact]
+    public void Caretaker_DrivesConnectorsButCannotDeleteData()
+    {
+        var scopes = SeedRoleScopes(RoleSeeds.Caretaker);
+
+        foreach (var actionName in ConnectorReadActions.Concat(
+                     AdministeringActions.Where(a => AdministeringActionScopes[a] == Scope.ConnectorsReadWrite)))
+        {
+            Evaluate(actionName, authenticated: true, scopes)
+                .Should().BeNull($"a caretaker sets up data sources, so it must reach {actionName}");
+        }
+
+        foreach (var actionName in AdministeringActions.Where(a => AdministeringActionScopes[a] == Scope.TenantSettings))
+        {
+            Evaluate(actionName, authenticated: true, scopes)
+                .Should().BeOfType<ScopeForbiddenResult>(
+                    $"deleting health records is tenant administration, so a caretaker must not reach {actionName}");
+        }
+    }
+
     [Theory]
     [InlineData(RoleSeeds.Viewer)]
-    [InlineData(RoleSeeds.Caretaker)]
+    [InlineData(RoleSeeds.Clinician)]
     public void SeedRoleWithoutTenantSettings_IsRefused(string role)
     {
         var scopes = SeedRoleScopes(role);

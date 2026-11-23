@@ -152,7 +152,7 @@ public class MemberScopeResolverTests
                 [
                     Scope.GlucoseRead, Scope.TreatmentsReadWrite,
                     Scope.TherapyRead, Scope.AlertsReadWrite,
-                    Scope.FoodRead,
+                    Scope.FoodRead, Scope.ConnectorsReadWrite,
                 ],
                 [
                     Scope.FullAccess, Scope.GlucoseReadWrite,
@@ -462,6 +462,19 @@ public class MemberScopeResolverTests
         }
     }
 
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public void ConnectorsReadWriteCredential_OnACaretakerMembership_KeepsConnectorSetupAndNothingElse(AuthType authType)
+    {
+        var resolved = Resolve(RoleSeeds.Permissions[RoleSeeds.Caretaker], authType, Scope.ConnectorsReadWrite);
+
+        resolved.Should().BeEquivalentTo([Scope.ConnectorsReadWrite]);
+        Scope.Satisfies(resolved, Scope.ConnectorsRead).Should().BeTrue();
+        Scope.Satisfies(resolved, Scope.TenantSettings).Should().BeFalse();
+    }
+
     [Fact]
     public void ConnectorsReadCredential_OnAnAdminMembership_ResolvesToConnectorsReadOnly()
     {
@@ -472,9 +485,8 @@ public class MemberScopeResolverTests
     [Theory]
     [InlineData(RoleSeeds.Viewer)]
     [InlineData(RoleSeeds.Clinician)]
-    [InlineData(RoleSeeds.Caretaker)]
     [InlineData(RoleSeeds.Denied)]
-    public void ConnectorsReadWriteCredential_OnAMembershipWithoutTenantSettings_ResolvesToNothing(string role)
+    public void ConnectorsReadWriteCredential_OnAMembershipWithoutConnectorSetup_ResolvesToNothing(string role)
     {
         Resolve(RoleSeeds.Permissions[role], AuthType.OAuthAccessToken, Scope.ConnectorsReadWrite)
             .Should().BeEmpty();

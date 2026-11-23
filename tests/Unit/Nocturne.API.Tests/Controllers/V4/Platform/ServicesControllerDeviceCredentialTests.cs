@@ -111,11 +111,25 @@ public class ServicesControllerDeviceCredentialTests
     [InlineData("dexcom", true, false)]
     public void TheConnectorSaysWhenASavedSecretWouldStop(string connector, bool callerAccessEnds, bool stops)
     {
-        var result = Controller(callerAccessEnds ? CallerEnd : null, Scope.ConnectorsReadWrite)
-            .GetConnectorCapabilities(connector);
+        var capabilities = Capabilities(Controller(callerAccessEnds ? CallerEnd : null, Scope.TenantSettings), connector);
 
-        var capabilities = result.Result.Should().BeOfType<OkObjectResult>().Which.Value
-            .Should().BeOfType<ConnectorCapabilities>().Subject;
         capabilities.SavedSecretStopsAt.Should().Be(stops ? CallerEnd : null);
+        capabilities.SavedSecretMakesNoCredential.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("nightscout", true)]
+    [InlineData("dexcom", false)]
+    public void ACallerWhoOnlySetsUpDataSourcesIsToldASavedSecretMakesNoCredential(string connector, bool makesNone)
+    {
+        var capabilities = Capabilities(Controller(CallerEnd, Scope.ConnectorsReadWrite), connector);
+
+        capabilities.SavedSecretMakesNoCredential.Should().Be(makesNone);
+        capabilities.SavedSecretStopsAt.Should().BeNull("a caller who makes no credential has none to stop");
+    }
+
+    private static ConnectorCapabilities Capabilities(ServicesController controller, string connector) =>
+        controller.GetConnectorCapabilities(connector)
+            .Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<ConnectorCapabilities>().Subject;
 }

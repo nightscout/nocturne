@@ -9,6 +9,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Migrations;
 using Npgsql;
 using Xunit;
@@ -502,6 +503,29 @@ public class CredentialAuthorityIntegrationTests : ApiIntegrationTestBase
         using var uploader = ApiSecretClient(Sha1(secret));
         (await uploader.GetAsync("/api/v1/entries/current")).StatusCode.Should().Be(HttpStatusCode.OK,
             "the site's secret belongs to the site, not to whoever saved it");
+    }
+
+    [Fact]
+    public async Task NightscoutSecret_SavedByACaretaker_IsKeptForTheConnectorAndMakesNoCredential()
+    {
+        const string secret = "integration-caretaker-nightscout-secret";
+        Guid caretakerId;
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            (caretakerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
+                conn, _tenantId, "Authority Caretaker", RoleSeeds.Permissions[RoleSeeds.Caretaker]);
+        }
+
+        using var caretaker = AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, caretakerId));
+        var saved = await caretaker.PutAsJsonAsync("/api/v4/connectors/config/nightscout/secrets", new { apiSecret = secret });
+        var body = await saved.Content.ReadAsStringAsync();
+        saved.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        JsonSerializer.Deserialize<JsonElement>(body).GetProperty("notAdopted").GetBoolean().Should().BeTrue();
+
+        using var uploader = ApiSecretClient(Sha1(secret));
+        (await uploader.GetAsync("/api/v1/entries/current")).StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "a caretaker cannot make a credential wider than their own access");
     }
 
     private async Task<string> MintAsync(string session, params string[] scopes) =>

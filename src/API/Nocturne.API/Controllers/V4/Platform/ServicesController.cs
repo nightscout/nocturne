@@ -206,8 +206,13 @@ public class ServicesController : ControllerBase
             return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
         }
 
-        if (ConnectorConfigurationService.AdoptsSecret(id))
+        if (!ConnectorConfigurationService.AdoptsSecret(id))
+            return Ok(capabilities);
+
+        if (ConnectorSecretSaver.MayAdoptFor(HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped()))
             capabilities.SavedSecretStopsAt = HttpContext.CallerAccessEndsAt();
+        else
+            capabilities.SavedSecretMakesNoCredential = true;
 
         return Ok(capabilities);
     }

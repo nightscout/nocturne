@@ -20,6 +20,7 @@
   } from "#lib/api/generated/services.generated.remote.js";
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
@@ -42,6 +43,7 @@
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Clock from "@lucide/svelte/icons/clock";
+  import Info from "@lucide/svelte/icons/info";
   import { formatMediumDate } from "#lib/utils/formatting.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
@@ -107,15 +109,21 @@
       permissionsQuery.current?.refusedAsDemoSubject
     )
   );
+  const canSetUp = $derived(
+    canSetUpConnectors(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
 
   // --- Reactive queries ---
   const servicesOverviewQuery = getServicesOverview();
   const schemaQuery = $derived(activeId ? getConnectorSchema(activeId) : null);
   const configQuery = $derived(
-    activeId && canManage ? getConnectorConfiguration(activeId) : null
+    activeId && canSetUp ? getConnectorConfiguration(activeId) : null
   );
   const effectiveConfigQuery = $derived(
-    activeId && canManage ? getConnectorEffectiveConfig(activeId) : null
+    activeId && canSetUp ? getConnectorEffectiveConfig(activeId) : null
   );
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
@@ -124,7 +132,7 @@
   retainQuery(() => effectiveConfigQuery);
   retainQuery(() => dataSummaryQuery);
   retainQuery(() => capabilitiesQuery);
-  const statusQuery = $derived(canManage ? getAllConnectorStatus() : null);
+  const statusQuery = $derived(canSetUp ? getAllConnectorStatus() : null);
   retainQuery(() => statusQuery);
 
   // --- Derived data from queries ---
@@ -391,7 +399,7 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage && showConfiguration}
+        {#if canSetUp && showConfiguration}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -411,7 +419,7 @@
       {/if}
 
       <!-- Enable/Disable Toggle -->
-      {#if showToggle && canManage}
+      {#if showToggle && canSetUp}
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
@@ -432,15 +440,30 @@
       <!-- CareLink browser-based sign-in -->
       {#if isCareLink && canManage}
         <CareLinkConnectPanel onConnected={onCareLinkConnected} />
+      {:else if isCareLink && canSetUp}
+        <ReadOnlyNotice data-testid="carelink-read-only">
+          Only members who can manage this site's settings can sign in to CareLink.
+        </ReadOnlyNotice>
       {/if}
 
       <!-- Configuration Form -->
-      {#if !canManage}
+      {#if !canSetUp}
         <ReadOnlyNotice data-testid="connector-read-only">
-          Only members who can manage this site's settings can configure or
+          Only members who can set up this site's data sources can configure or
           enable this connector.
         </ReadOnlyNotice>
       {:else if showConfiguration && hasRuntimeConfig}
+        {#if connectorCapabilities?.savedSecretMakesNoCredential}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-makes-no-credential"
+          >
+            <Info class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Saving a Nightscout API secret here does not create an API secret for uploaders.
+            </span>
+          </p>
+        {/if}
         {#if secretInUseStopsAt}
           <p
             class="flex items-start gap-2 text-sm text-muted-foreground"
@@ -470,6 +493,7 @@
           {hasSecrets}
           {showEnvVarHints}
           {saveLabel}
+          lockedKeys={existingConfig?.lockedKeys ?? []}
           onSave={handleSave}
         />
       {:else if showConfiguration}

@@ -15,6 +15,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.FreeStyle.Configurations;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Core.Contracts.Audit;
@@ -30,15 +31,17 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Connectors;
 
 /// <summary>
-/// A delegated credential holding <c>connectors.readwrite</c> may set a connector up and change its
-/// options, but may not point a connector that holds a secret somewhere new, nor turn on a property
-/// that sends the tenant's records out (<see cref="DelegatedConfigurationGuard"/>). The account
-/// holder's own sign-in may do both.
+/// A delegated credential holding <c>connectors.readwrite</c>, and a member who may set up data
+/// sources but not change the site's settings, may set a connector up and change its options, but
+/// may not point a connector that holds a secret somewhere new, nor turn on a property that sends
+/// the tenant's records out (<see cref="DelegatedConfigurationGuard"/>). A settings holder's own
+/// sign-in may do both.
 /// </summary>
 public class ConnectorConfigurationDelegatedChangeTests : IDisposable
 {
     private const string Nightscout = "Nightscout";
     private const string NocturneRemote = "NocturneRemote";
+    private const string MyLife = "MyLife";
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
@@ -50,6 +53,7 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
         _ = typeof(NightscoutConnectorConfiguration);
         _ = typeof(NocturneRemoteConnectorConfiguration);
         _ = typeof(LibreLinkUpConnectorConfiguration);
+        _ = typeof(MyLifeConnectorConfiguration);
 
         _db = TestDbContextFactory.CreateSqlite();
         var tenantId = Guid.CreateVersion7();
@@ -250,6 +254,103 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
         result.Result.Should().BeOfType<OkObjectResult>();
     }
 
+    // ---- a member who sets up data sources but cannot change the site's settings ----
+
+    /// <summary>
+    /// Every destination <see cref="DelegatedConfigurationGuard"/> guards: the stored configuration,
+    /// the same document with the destination moved, and the connector's secret.
+    /// </summary>
+    public static TheoryData<string, string, string, string, string> Destinations => new()
+    {
+        { Nightscout, "url", """{"url":"https://mine.example"}""", """{"url":"https://attacker.example"}""", "apiSecret" },
+        { Nightscout, "realtimeUrl", """{"url":"https://mine.example"}""", """{"url":"https://mine.example","realtimeUrl":"https://attacker.example"}""", "apiSecret" },
+        { NocturneRemote, "url", """{"url":"https://mine.example"}""", """{"url":"https://attacker.example"}""", "accessToken" },
+        { MyLife, "serviceUrl", """{"username":"u","serviceUrl":"https://mine.example"}""", """{"username":"u","serviceUrl":"https://attacker.example"}""", "password" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Destinations))]
+    public async Task Caretaker_MovingADestinationWhileASecretIsStored_IsRefusedAndChangesNothing(
+        string connector, string key, string stored, string proposed, string secret)
+    {
+        await SeedAsync(connector, stored, new() { [secret] = "s" });
+
+        var result = await Controller(AuthType.SessionCookie, RoleSeeds.Caretaker)
+            .SaveConfiguration(connector, JsonDocument.Parse(proposed), default);
+
+        ShouldBeRefused(result, key);
+        (await StoredAsync(connector)).Should().NotContain("attacker");
+    }
+
+    [Theory]
+    [MemberData(nameof(Destinations))]
+    public async Task Caretaker_MovingADestinationWithNoSecretStored_IsAccepted(
+        string connector, string key, string stored, string proposed, string secret)
+    {
+        _ = (key, secret);
+        await SeedAsync(connector, stored, []);
+
+        var result = await Controller(AuthType.SessionCookie, RoleSeeds.Caretaker)
+            .SaveConfiguration(connector, JsonDocument.Parse(proposed), default);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        (await StoredAsync(connector)).Should().Contain("https://attacker.example");
+    }
+
+    [Theory]
+    [MemberData(nameof(Destinations))]
+    public async Task SettingsHolder_MovingADestinationWhileASecretIsStored_IsAccepted(
+        string connector, string key, string stored, string proposed, string secret)
+    {
+        _ = key;
+        await SeedAsync(connector, stored, new() { [secret] = "s" });
+
+        var result = await Controller(AuthType.SessionCookie, RoleSeeds.Admin)
+            .SaveConfiguration(connector, JsonDocument.Parse(proposed), default);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        (await StoredAsync(connector)).Should().Contain("https://attacker.example");
+    }
+
+    [Theory]
+    [MemberData(nameof(Destinations))]
+    public async Task Caretaker_IsToldTheDestinationIsLockedAndASettingsHolderIsNot(
+        string connector, string key, string stored, string proposed, string secret)
+    {
+        _ = proposed;
+        await SeedAsync(connector, stored, new() { [secret] = "s" });
+
+        (await LockedKeysAsync(RoleSeeds.Caretaker, connector)).Should().Contain(key);
+        (await LockedKeysAsync(RoleSeeds.Admin, connector)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Caretaker_EnablingWriteBack_IsRefused()
+    {
+        await SeedAsync(Nightscout, """{"url":"https://mine.example"}""", []);
+
+        var result = await Controller(AuthType.SessionCookie, RoleSeeds.Caretaker).SaveConfiguration(
+            Nightscout, JsonDocument.Parse("""{"url":"https://mine.example","writeBackEnabled":true}"""), default);
+
+        ShouldBeRefused(result, "writeBackEnabled");
+    }
+
+    [Fact]
+    public async Task Caretaker_ChangingAnOptionWhileASecretIsStored_IsAccepted()
+    {
+        await SeedAsync(Nightscout, """{"url":"https://mine.example"}""", new() { ["apiSecret"] = "s" });
+
+        var result = await Controller(AuthType.SessionCookie, RoleSeeds.Caretaker).SaveConfiguration(
+            Nightscout, JsonDocument.Parse("""{"url":"https://mine.example","maxCount":500}"""), default);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private async Task<IReadOnlyList<string>> LockedKeysAsync(string role, string connector) =>
+        (await Controller(AuthType.SessionCookie, role).GetConfiguration(connector, default))
+        .Result.Should().BeOfType<OkObjectResult>().Subject
+        .Value.Should().BeOfType<ConnectorConfigurationResponse>().Subject.LockedKeys;
+
     // ---- connector names ----
 
     [Theory]
@@ -326,7 +427,9 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
         problem.Detail.Should().Contain(key);
     }
 
-    private ConfigurationController Controller(AuthType authType)
+    private ConfigurationController Controller(AuthType authType) => Controller(authType, RoleSeeds.Owner);
+
+    private ConfigurationController Controller(AuthType authType, string role)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -335,6 +438,8 @@ public class ConnectorConfigurationDelegatedChangeTests : IDisposable
             AuthType = authType,
             SubjectId = Guid.CreateVersion7(),
         };
+        httpContext.Items["GrantedScopes"] = MemberScopeResolver.Resolve(
+            new HashSet<string>(RoleSeeds.Permissions[role]), AuthType.SessionCookie, new HashSet<string>());
 
         return new ConfigurationController(_service, NullLogger<ConfigurationController>.Instance)
         {

@@ -128,6 +128,13 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
 
     private static CredentialMaker MakerOf(Seeded seeded, DateTime? accessEndsAt) => new(seeded.Maker, accessEndsAt);
 
+    /// <summary><paramref name="maker"/> saving as a caller who may change the site's settings, so a save adopts.</summary>
+    private static ConnectorSecretSaver SettingsHolder(CredentialMaker maker) =>
+        new(maker, ResolvedScopes(RoleSeeds.Admin), HistoryClamped: false);
+
+    private static IReadOnlySet<string> ResolvedScopes(string role) =>
+        MemberScopeResolver.Resolve(new HashSet<string>(RoleSeeds.Permissions[role]), AuthType.SessionCookie, new HashSet<string>());
+
     private static Mock<ISecretEncryptionService> Encryption()
     {
         var encryption = new Mock<ISecretEncryptionService>();
@@ -138,9 +145,9 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         return encryption;
     }
 
-    /// <summary>Saves <paramref name="secret"/> as the Nightscout connector's API secret, as <paramref name="maker"/>, at <paramref name="at"/>.</summary>
+    /// <summary>Saves <paramref name="secret"/> as the Nightscout connector's API secret, as <paramref name="saver"/>, at <paramref name="at"/>.</summary>
     private async Task<ConnectorSecretsSaveResult> SaveSecretAsync(
-        Seeded seeded, string secret, CredentialMaker maker, DateTimeOffset at)
+        Seeded seeded, string secret, ConnectorSecretSaver saver, DateTimeOffset at)
     {
         var service = new ConnectorConfigurationService(
             new ConnectorConfigurationRepository(seeded.Contexts),
@@ -156,13 +163,13 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             NullLogger<ConnectorConfigurationService>.Instance);
 
         return await service.SaveSecretsAsync(
-            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = secret }, modifiedBy: null, maker: maker);
+            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = secret }, modifiedBy: null, saver: saver);
     }
 
     /// <summary>Saves <paramref name="secret"/> as <paramref name="maker"/> at <see cref="Now"/> and returns the grant it adopted.</summary>
     private async Task<Guid> AdoptSecretAsync(Seeded seeded, string secret, CredentialMaker maker)
     {
-        (await SaveSecretAsync(seeded, secret, maker, Now)).SecretAlreadyInUse.Should().BeFalse();
+        (await SaveSecretAsync(seeded, secret, SettingsHolder(maker), Now)).SecretAlreadyInUse.Should().BeFalse();
         return (await SecretGrantsAsync(seeded, secret)).Last();
     }
 
@@ -732,7 +739,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var first = await AdoptSecretAsync(seeded, secret, MakerOf(seeded, Now.UtcDateTime.AddHours(1)));
         var extended = Now.UtcDateTime.AddDays(5);
 
-        var result = await SaveSecretAsync(seeded, secret, MakerOf(seeded, extended), Now.AddHours(2));
+        var result = await SaveSecretAsync(seeded, secret, SettingsHolder(MakerOf(seeded, extended)), Now.AddHours(2));
 
         result.SecretAlreadyInUse.Should().BeFalse();
         var grants = await SecretGrantsAsync(seeded, secret);
@@ -750,7 +757,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var owner = await new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject("readopt-owner"), CancellationToken.None);
 
-        (await SaveSecretAsync(seeded, secret, new CredentialMaker(owner, null), Now.AddHours(2)))
+        (await SaveSecretAsync(seeded, secret, SettingsHolder(new CredentialMaker(owner, null)), Now.AddHours(2)))
             .SecretAlreadyInUse.Should().BeFalse();
 
         var latest = await GrantAsync(seeded, (await SecretGrantsAsync(seeded, secret)).Last());
@@ -766,10 +773,75 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var secret = $"secret-{Guid.NewGuid():N}";
         await AdoptSecretAsync(seeded, secret, MakerOf(seeded, stops));
 
-        var result = await SaveSecretAsync(seeded, secret, MakerOf(seeded, Now.UtcDateTime.AddDays(5)), Now.AddMinutes(30));
+        var result = await SaveSecretAsync(seeded, secret, SettingsHolder(MakerOf(seeded, Now.UtcDateTime.AddDays(5))), Now.AddMinutes(30));
 
         result.SecretAlreadyInUse.Should().BeTrue();
         result.SecretInUseStopsAt.Should().Be(stops);
         (await SecretGrantsAsync(seeded, secret)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ACaretakerSavingAnApiSecretMakesNoCredential()
+    {
+        var seeded = await SeedAsync("caretaker-save", null);
+        var secret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, secret, new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Caretaker), HistoryClamped: false), Now);
+
+        result.NotAdopted.Should().BeTrue();
+        result.SecretAlreadyInUse.Should().BeFalse();
+        (await SecretGrantsAsync(seeded, secret)).Should().BeEmpty();
+        (await SecretAuthenticatesAsync(seeded, secret, Now.AddMinutes(1))).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ACaretakerSavingOverAnAdoptedSecretLeavesThatCredentialExactlyAsItWas()
+    {
+        var seeded = await SeedAsync("caretaker-over", null);
+        var ownersSecret = $"secret-{Guid.NewGuid():N}";
+        var adopted = await AdoptSecretAsync(seeded, ownersSecret, MakerOf(seeded, null));
+        var before = await GrantRowAsync(seeded, adopted);
+        var caretakersSecret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, caretakersSecret,
+            new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Caretaker), HistoryClamped: false), Now.AddHours(1));
+
+        result.NotAdopted.Should().BeTrue();
+        (await GrantRowAsync(seeded, adopted)).Should().Be(before);
+        (await SecretGrantsAsync(seeded, caretakersSecret)).Should().BeEmpty();
+        (await SecretAuthenticatesAsync(seeded, ownersSecret, Now.AddHours(2))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ASettingsHolderWhoseReadsAreLimitedTo24HoursMakesNoCredential()
+    {
+        var seeded = await SeedAsync("clamped-save", null);
+        var secret = $"secret-{Guid.NewGuid():N}";
+
+        var result = await SaveSecretAsync(
+            seeded, secret, new ConnectorSecretSaver(MakerOf(seeded, null), ResolvedScopes(RoleSeeds.Admin), HistoryClamped: true), Now);
+
+        result.NotAdopted.Should().BeTrue();
+        (await SecretGrantsAsync(seeded, secret)).Should().BeEmpty();
+    }
+
+    /// <summary>The stored row of grant <paramref name="id"/>, every column, as PostgreSQL writes it.</summary>
+    private async Task<string> GrantRowAsync(Seeded seeded, Guid id)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, false);
+            SELECT row_to_json(g)::text FROM oauth_grants g WHERE g.id = @id;
+            """;
+        cmd.Parameters.Add(new NpgsqlParameter("@tenant", seeded.Tenant.ToString()));
+        cmd.Parameters.Add(new NpgsqlParameter("@id", id));
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+        return reader.GetString(0);
     }
 }

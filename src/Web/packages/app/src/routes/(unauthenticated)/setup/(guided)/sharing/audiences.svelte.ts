@@ -91,7 +91,7 @@ export function familyRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
       slug: "caretaker",
       level: RoleAccessLevel.ReadAndLogTreatments,
       label: "Can see and log treatments",
-      description: "They can also log insulin and carbs, and change alerts.",
+      description: "They can also log insulin and carbs, change alerts, and set up data sources.",
     },
     {
       slug: "admin",
