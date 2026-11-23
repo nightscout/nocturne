@@ -37,6 +37,8 @@ vi.mock("#lib/api/generated/teams.generated.remote.js", () => ({
   createManagerInvite: (arg: unknown) => remoteCommand(mocks.createManagerInvite)(arg),
   revokeManagerInvite: (arg: unknown) => remoteCommand(mocks.revokeManagerInvite)(arg),
   deleteTeam: (arg: unknown) => remoteCommand(mocks.deleteTeam)(arg),
+  createAccessLink: vi.fn(),
+  revokeAccessLink: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -211,12 +213,8 @@ describe("team page", () => {
     render(TeamPage);
 
     await expect
-      .element(
-        page.getByText("A link stops working when the manager who made it leaves the team.", {
-          exact: false,
-        }),
-      )
-      .toBeVisible();
+      .element(page.getByText("One person can use each link.", { exact: false }))
+      .toHaveTextContent("A link stops working when the manager who made it leaves the team.");
   });
 
   it("says no link works when there are no pending invites", async () => {
@@ -265,7 +263,7 @@ describe("team page", () => {
 
     expect(page.getByRole("button", { name: "Copy the invite link" }).elements()).toHaveLength(0);
     await page.getByLabelText("Label (optional)").fill("  For Jo ");
-    await page.getByLabelText("30 days").click();
+    await page.getByLabelText("30 days").first().click();
     await page.getByRole("button", { name: "Make link" }).click();
 
     await vi.waitFor(() =>

@@ -194,6 +194,21 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
     }
 
     [Fact]
+    public async Task A_manager_reads_the_roles_a_link_may_suggest_and_a_person_outside_the_team_reads_no_team()
+    {
+        var (team, manager) = await TeamAsync();
+        var stranger = await NewSubjectAsync();
+
+        var roles = (await Teams().GetAsync(team, manager, Now, default))!.SuggestableRoles;
+
+        roles.Select(r => r.Slug).Should().BeEquivalentTo(
+            [RoleSeeds.Caretaker, RoleSeeds.Clinician, RoleSeeds.Viewer], o => o.WithoutStrictOrdering());
+        roles.Should().OnlyContain(r => r.Permissions.Count > 0 && Scope.IsDataOnly(r.Permissions));
+        roles.Single(r => r.Slug == RoleSeeds.Viewer).Permissions.Should().Equal(RoleSeeds.Permissions[RoleSeeds.Viewer]);
+        (await Teams().GetAsync(team, stranger, Now, default)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task An_expired_a_revoked_and_a_used_up_link_each_state_why_and_give_nothing()
     {
         var (team, manager) = await TeamAsync();
@@ -318,6 +333,8 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             LimitTo24Hours = true,
         });
         sites[0].RoleNames.Should().Contain("Caretaker").And.HaveCount(2);
+        sites[0].HasEnded.Should().BeFalse();
+        (await Teams().GetAsync(team, manager, end.AddMinutes(1), default))!.Sites.Single().HasEnded.Should().BeTrue();
 
         var listed = (await Teams().ListAccessOfTenantAsync(site.Id, Now, default)).Should().ContainSingle().Subject;
         listed.TeamId.Should().Be(team);

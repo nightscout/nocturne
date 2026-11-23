@@ -16,5 +16,36 @@ export function teamProblemMessages(): ProblemCodeMessages {
     team_invite_no_longer_valid:
       "The manager who made this link left the team. Ask a manager of the team for a new link.",
     team_invite_already_member: "You are already a member of this team.",
+    team_access_role_invalid: "A link cannot suggest this role. Choose another role.",
+    team_access_end_invalid: "The end date must be in the future. Choose a later date.",
+  };
+}
+
+/**
+ * The sentence for each problem code the access link page can meet. It words the four codes a
+ * manager invite shares with an access link for a link that gives access to a site.
+ */
+export function teamAccessProblemMessages(): ProblemCodeMessages {
+  return {
+    ...teamProblemMessages(),
+    team_invite_expired: "This link has expired. Ask a manager of the team for a new link.",
+    team_invite_revoked: "A manager revoked this link. Ask a manager of the team for a new link.",
+    team_invite_used_up: "This link has no uses left. Ask a manager of the team for a new link.",
+    team_invite_no_longer_valid:
+      "The manager who made this link left the team. Ask a manager of the team for a new link.",
+    team_access_link_end_passed:
+      "The latest end date that this link allows has passed. Ask a manager of the team for a new link.",
+    team_access_already_given: "This team already has access to this site.",
+    team_access_not_owner: "Only an owner of the site can give a team access to it.",
+    team_access_roles_required: "Choose at least one role.",
+    team_access_role_not_in_site: "A role that you chose is not a role of this site. Reload the page and try again.",
+    team_access_role_administrative: "A team can have only roles for data. Choose other roles.",
+    team_access_role_wider_than_link: "A role that you chose gives more than this link allows. Choose other roles.",
+    team_access_role_wider_than_approver: "A role that you chose gives more than you hold. Choose other roles.",
+    team_access_limit_required: "This access must be limited to the last 24 hours.",
+    team_access_end_later_than_link:
+      "The access must end no later than this link allows. Choose an earlier end date.",
+    team_access_end_outlasts_approver:
+      "The access cannot last longer than your own access. Choose an earlier end date.",
   };
 }

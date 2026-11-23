@@ -150,4 +150,48 @@ public sealed class RoleControllerGetRolesGateTests
         roles.Single(r => r.Id == held.Id).Should().Match<TenantRoleDto>(r => r.HeldByTeam && r.OnlyOwnersMayWiden == onlyOwnersMayWiden);
         roles.Single(r => r.Id == free.Id).Should().Match<TenantRoleDto>(r => !r.HeldByTeam && !r.OnlyOwnersMayWiden);
     }
+
+    [Theory]
+    [InlineData(RoleSeeds.Owner, false)]
+    [InlineData(RoleSeeds.Admin, true)]
+    public async Task GetRoles_tellsWhatACallerMayChooseForARoleATeamHolds(string callerRole, bool sendsCoveredPermissions)
+    {
+        var held = Role("nights", [.. RoleSeeds.Permissions[RoleSeeds.Caretaker]]);
+        var free = Role("days", Scope.GlucoseRead);
+        var caller = Guid.CreateVersion7();
+        _roles.Setup(s => s.GetRolesAsync(_tenantId, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([held, free]);
+        _roles.Setup(s => s.GetRoleHoldersAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RoleHolders([], [], [], new HashSet<Guid> { held.Id }));
+        var members = new Mock<ITenantMembershipRepository>();
+        members.Setup(m => m.FindMemberAsync(_tenantId, caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMemberRecord(
+                Guid.CreateVersion7(), _tenantId, caller, "Sam", null, true, false, false, false, false,
+                [new TenantMemberRoleRecord(Guid.CreateVersion7(), callerRole, callerRole, RoleSeeds.Permissions[callerRole])],
+                null, null, null, false, null, null, null, DateTime.UtcNow));
+        var controller = BuildController(Scope.RolesManage);
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = caller,
+        };
+
+        var result = await controller.GetRoles(members.Object, TimeProvider.System, CancellationToken.None);
+
+        var roles = result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<List<TenantRoleDto>>().Subject;
+        var heldRole = roles.Single(r => r.Id == held.Id);
+        heldRole.TeamRefusedPermissions.Should().BeEquivalentTo(Scope.AdministrativePermissions);
+        if (sendsCoveredPermissions)
+        {
+            heldRole.CoveredPermissions.Should().Contain([Scope.TreatmentsRead, Scope.TreatmentsReadWrite, Scope.AlertsRead])
+                .And.NotContain(Scope.GlucoseReadWrite);
+        }
+        else
+        {
+            heldRole.CoveredPermissions.Should().BeNull();
+        }
+
+        var freeRole = roles.Single(r => r.Id == free.Id);
+        freeRole.TeamRefusedPermissions.Should().BeEmpty();
+        freeRole.CoveredPermissions.Should().BeNull();
+    }
 }

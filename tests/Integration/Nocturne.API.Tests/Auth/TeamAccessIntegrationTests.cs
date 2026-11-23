@@ -72,7 +72,7 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         var team = await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}");
         var given = team.GetProperty("sites").EnumerateArray().Should().ContainSingle().Subject;
         given.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            "tenantId", "displayName", "roleNames", "limitTo24Hours", "accessEndsAt", "givenAt");
+            "tenantId", "displayName", "roleNames", "limitTo24Hours", "accessEndsAt", "hasEnded", "givenAt");
         given.GetProperty("tenantId").GetGuid().Should().Be(tenantId);
 
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);

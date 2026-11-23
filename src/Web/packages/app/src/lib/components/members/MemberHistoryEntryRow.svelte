@@ -69,6 +69,11 @@
       !!entry.member?.subjectId &&
       entry.actor?.subjectId === entry.member.subjectId,
   );
+  const teamRoleCount = $derived(entry.roles?.length ?? 0);
+  const teamRoles = $derived(
+    (entry.roles ?? []).map((slug) => roles.find((r) => r.slug === slug)?.name ?? slug).join(", "),
+  );
+  const teamLimited = $derived(entry.historyLimit === MemberHistoryLimit.TwentyFourHours);
   const gained = $derived((entry.gained ?? []).map((p) => labels[p] ?? p).join(", "));
   const lost = $derived((entry.lost ?? []).map((p) => labels[p] ?? p).join(", "));
 </script>
@@ -154,6 +159,62 @@
         {actor} removed the end date of {member}'s access.
       {:else if entry.kind === MemberHistoryKind.AccessEndChanged}
         {actor} changed the end date of {member}'s access. The detail is no longer stored.
+      {:else if entry.kind === MemberHistoryKind.TeamAccessStopped}
+        {#if entry.team?.name}
+          {actor} stopped the access of the team {entry.team.name}.
+        {:else}
+          {actor} stopped the access of a team that was deleted.
+        {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamAccessGiven}
+        {#if entry.team?.name}
+          {#if teamRoleCount === 0}
+            {actor} gave the team {entry.team.name} access. The detail is no longer stored.
+          {:else if teamRoleCount === 1}
+            {#if teamLimited && accessEnd}
+              {actor} gave the team {entry.team.name} access with the role {teamRoles} to the last 24 hours only, until {accessEnd}.
+            {:else if teamLimited}
+              {actor} gave the team {entry.team.name} access with the role {teamRoles} to the last 24 hours only.
+            {:else if accessEnd}
+              {actor} gave the team {entry.team.name} access with the role {teamRoles} until {accessEnd}.
+            {:else}
+              {actor} gave the team {entry.team.name} access with the role {teamRoles}.
+            {/if}
+          {:else}
+            {#if teamLimited && accessEnd}
+              {actor} gave the team {entry.team.name} access with the roles {teamRoles} to the last 24 hours only, until {accessEnd}.
+            {:else if teamLimited}
+              {actor} gave the team {entry.team.name} access with the roles {teamRoles} to the last 24 hours only.
+            {:else if accessEnd}
+              {actor} gave the team {entry.team.name} access with the roles {teamRoles} until {accessEnd}.
+            {:else}
+              {actor} gave the team {entry.team.name} access with the roles {teamRoles}.
+            {/if}
+          {/if}
+        {:else}
+          {#if teamRoleCount === 0}
+            {actor} gave a team that was deleted access. The detail is no longer stored.
+          {:else if teamRoleCount === 1}
+            {#if teamLimited && accessEnd}
+              {actor} gave a team that was deleted access with the role {teamRoles} to the last 24 hours only, until {accessEnd}.
+            {:else if teamLimited}
+              {actor} gave a team that was deleted access with the role {teamRoles} to the last 24 hours only.
+            {:else if accessEnd}
+              {actor} gave a team that was deleted access with the role {teamRoles} until {accessEnd}.
+            {:else}
+              {actor} gave a team that was deleted access with the role {teamRoles}.
+            {/if}
+          {:else}
+            {#if teamLimited && accessEnd}
+              {actor} gave a team that was deleted access with the roles {teamRoles} to the last 24 hours only, until {accessEnd}.
+            {:else if teamLimited}
+              {actor} gave a team that was deleted access with the roles {teamRoles} to the last 24 hours only.
+            {:else if accessEnd}
+              {actor} gave a team that was deleted access with the roles {teamRoles} until {accessEnd}.
+            {:else}
+              {actor} gave a team that was deleted access with the roles {teamRoles}.
+            {/if}
+          {/if}
+        {/if}
       {:else if entry.kind === MemberHistoryKind.RolePermissionsChanged}
         {#if entry.role}
           {actor} changed the permissions of the role {role}.

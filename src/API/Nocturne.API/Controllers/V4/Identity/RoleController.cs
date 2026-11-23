@@ -69,6 +69,12 @@ public class RoleController : ControllerBase
                 InviteOutlastsCaller = holders.InvitedPast.Contains(r.Id),
                 HeldByTeam = holders.HeldByTeam.Contains(r.Id),
                 OnlyOwnersMayWiden = holders.HeldByTeam.Contains(r.Id) && !callerIsOwner,
+                TeamRefusedPermissions = holders.HeldByTeam.Contains(r.Id)
+                    ? Scope.AdministrativePermissions.Order(StringComparer.Ordinal).ToList()
+                    : [],
+                CoveredPermissions = holders.HeldByTeam.Contains(r.Id) && !callerIsOwner
+                    ? Scope.PermissionAtoms.Where(a => Scope.Satisfies(r.Permissions, a)).Order(StringComparer.Ordinal).ToList()
+                    : null,
             })
             .ToList());
     }

@@ -19,6 +19,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Users from "@lucide/svelte/icons/users";
+  import UsersRound from "@lucide/svelte/icons/users-round";
   import Lock from "@lucide/svelte/icons/lock";
   import {
     getRoles,
@@ -51,6 +52,10 @@
   let originalEditPermissions = $state<string[]>([]);
   let isEditReadonly = $state(false);
   let editReadonlyReason = $state<"system" | "member" | "invite">("system");
+  let editOnlyOwnersMayWiden = $state(false);
+  let editRefusedAtoms = $state<string[]>([]);
+  let editCoveredAtoms = $state<string[] | undefined>(undefined);
+  let editHeldByTeam = $state(false);
 
   const isEditDirty = $derived(
     editName !== originalEditName ||
@@ -99,6 +104,10 @@
     originalEditPermissions = [...editPermissions];
     isEditReadonly = role.isSystem === true || role.outlastsCaller === true || role.inviteOutlastsCaller === true;
     editReadonlyReason = role.outlastsCaller ? "member" : role.inviteOutlastsCaller ? "invite" : "system";
+    editOnlyOwnersMayWiden = role.onlyOwnersMayWiden === true;
+    editRefusedAtoms = role.teamRefusedPermissions ?? [];
+    editCoveredAtoms = role.coveredPermissions;
+    editHeldByTeam = role.heldByTeam === true;
     dialogError = null;
     isEditOpen = true;
   }
@@ -111,9 +120,12 @@
     isDeleteOpen = true;
   }
 
-  const nameProblems = {
+  const roleProblems = {
     role_name_taken: "A role with this name already exists. Use a different name.",
     role_name_reserved: "This name is reserved. Use a different name.",
+    role_held_by_team:
+      "A team has this role, so it can hold only permissions for data and you cannot delete it.",
+    role_held_by_team_owner_only: "A team has this role, so only an owner can add permissions to it.",
   };
 
   async function handleCreate() {
@@ -129,7 +141,7 @@
       resetCreateForm();
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to create role. Try again.", nameProblems);
+      dialogError = describeSubmitError(err, "Failed to create role. Try again.", roleProblems);
     } finally {
       isCreating = false;
     }
@@ -151,7 +163,7 @@
       isEditOpen = false;
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to update role. Try again.", nameProblems);
+      dialogError = describeSubmitError(err, "Failed to update role. Try again.", roleProblems);
     } finally {
       isEditing = false;
     }
@@ -166,7 +178,7 @@
       isDeleteOpen = false;
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to delete role. Try again.");
+      dialogError = describeSubmitError(err, "Failed to delete role. Try again.", roleProblems);
     } finally {
       isDeleting = false;
     }
@@ -192,6 +204,7 @@
   <div class="space-y-2.5">
     {#each roles as role (role.id)}
       {@const outlastsReasonId = `role-outlasts-${role.id}`}
+      {@const teamReasonId = `role-team-${role.id}`}
       <div
         class="flex items-center gap-3 rounded-xl border border-border bg-background p-3.5"
         role="group"
@@ -210,6 +223,9 @@
             <span class="truncate text-sm font-semibold">{role.name ?? "Unnamed"}</span>
             {#if role.isSystem}
               <Badge variant="secondary"><Lock class="mr-1 h-3 w-3" />System</Badge>
+            {/if}
+            {#if role.heldByTeam}
+              <Badge variant="secondary"><UsersRound class="mr-1 h-3 w-3" />Held by a team</Badge>
             {/if}
           </div>
           <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -233,6 +249,14 @@
               An invite that gives access longer than yours uses this role.
             </p>
           {/if}
+          {#if role.heldByTeam}
+            <p id={teamReasonId} class="mt-1.5 text-xs text-muted-foreground">
+              A team has this role. It cannot be deleted, and it can hold only permissions for data.
+              {#if role.onlyOwnersMayWiden}
+                Only an owner can add permissions to it.
+              {/if}
+            </p>
+          {/if}
         </div>
         <div class="flex shrink-0 items-center gap-2">
           {#if role.slug === "owner" || role.outlastsCaller || role.inviteOutlastsCaller}
@@ -250,6 +274,8 @@
                 variant="outline-destructive"
                 size="sm"
                 aria-label="Delete role"
+                disabled={role.heldByTeam}
+                aria-describedby={role.heldByTeam ? teamReasonId : undefined}
                 onclick={() => openDeleteDialog(role)}
               >
                 <Trash2 class="h-3.5 w-3.5" />
@@ -319,7 +345,11 @@
     <Dialog.Header>
       <Dialog.Title>{isEditReadonly ? "View role" : "Edit role"}</Dialog.Title>
       <Dialog.Description>
-        {#if !isEditReadonly}
+        {#if !isEditReadonly && editOnlyOwnersMayWiden}
+          A team has this role. You can remove permissions from it, and only an owner can add permissions.
+        {:else if !isEditReadonly && editHeldByTeam}
+          A team has this role, so it can hold only permissions for data.
+        {:else if !isEditReadonly}
           Update the role name, description, and permissions.
         {:else if editReadonlyReason === "member"}
           A member whose access lasts longer than yours has this role.
@@ -341,7 +371,12 @@
       </div>
       <div class="space-y-2">
         <Label>Permissions</Label>
-        <PermissionCategorySelector bind:selected={editPermissions} readonly={isEditReadonly} />
+        <PermissionCategorySelector
+          bind:selected={editPermissions}
+          readonly={isEditReadonly}
+          refusedAtoms={editRefusedAtoms}
+          coveredAtoms={editCoveredAtoms}
+        />
       </div>
       <div class="space-y-2">
         <Label>Summary</Label>

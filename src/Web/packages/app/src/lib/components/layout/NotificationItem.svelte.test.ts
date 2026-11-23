@@ -68,3 +68,31 @@ describe("NotificationItem alert channel notice", () => {
     expect(page.getByRole("link", { name: "Edit this alert" }).elements()).toHaveLength(0);
   });
 });
+
+describe("NotificationItem team rename notice", () => {
+  function renamed(metadata: Record<string, unknown>): InAppNotificationDto {
+    return {
+      id: "n2",
+      type: "team.renamed",
+      urgency: NotificationUrgency.Info,
+      title: "team_renamed",
+      createdAt: new Date().toISOString(),
+      metadata,
+    } as InAppNotificationDto;
+  }
+
+  it("words the notice from the old and the new name", async () => {
+    render(NotificationItem, { notification: renamed({ oldName: "Clinic", newName: "Ward 4" }) });
+
+    await expect.element(page.getByText("The team Clinic is now named Ward 4.")).toBeVisible();
+    expect(page.getByText("team_renamed").elements()).toHaveLength(0);
+  });
+
+  it("never shows the raw title when the metadata lacks a name", async () => {
+    render(NotificationItem, { notification: renamed({ newName: "Ward 4" }) });
+
+    await expect.element(page.getByText("A team has a new name")).toBeVisible();
+    expect(page.getByText("team_renamed").elements()).toHaveLength(0);
+    expect(page.getByText(/is now named/).elements()).toHaveLength(0);
+  });
+});

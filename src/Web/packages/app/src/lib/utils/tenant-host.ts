@@ -19,11 +19,11 @@ export function tenantUrl(
 }
 
 /**
- * Sends the browser to `slug`'s app. Each tenant is its own origin, so this is a document
+ * Sends the browser to `slug`'s app, or to `path` in it. Each tenant is its own origin, so this is a document
  * navigation rather than a client-side one.
  */
-export function goToTenant(slug: string, baseDomain: string): void {
-  window.location.href = tenantUrl(slug, baseDomain);
+export function goToTenant(slug: string, baseDomain: string, path: string = ""): void {
+  window.location.href = `${tenantUrl(slug, baseDomain)}${path}`;
 }
 
 /**

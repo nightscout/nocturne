@@ -30,6 +30,7 @@ public sealed record TeamManagerInvite(
 /// <param name="Invites">The live manager invites; empty unless the caller is a manager.</param>
 /// <param name="AccessLinks">The live access links; empty unless the caller is a manager.</param>
 /// <param name="Sites">The sites the team has access to; empty unless the caller is a manager.</param>
+/// <param name="SuggestableRoles">The roles an access link may suggest; empty unless the caller is a manager.</param>
 /// <param name="CanDelete">Whether the caller may delete the team now.</param>
 /// <param name="CallerKind">What the caller is in the team, a <see cref="TeamMemberKind"/> value.</param>
 public sealed record TeamDetail(
@@ -39,9 +40,27 @@ public sealed record TeamDetail(
     IReadOnlyList<TeamManagerInvite> Invites,
     IReadOnlyList<TeamAccessLinkSummary> AccessLinks,
     IReadOnlyList<TeamSiteAccess> Sites,
+    IReadOnlyList<TeamSuggestableRole> SuggestableRoles,
     bool IsLastManager,
     bool CanDelete,
     string CallerKind);
+
+/// <summary>A seed role an access link may suggest, with its permissions as every new site is seeded with it.</summary>
+public sealed record TeamSuggestableRole(string Slug, string Name, IReadOnlyList<string> Permissions);
+
+/// <summary>The roles an access link may suggest: the seed roles that hold permissions, all for data only.</summary>
+public static class TeamSuggestableRoles
+{
+    public static IReadOnlyList<TeamSuggestableRole> All { get; } = Authorization.RoleSeeds.Permissions
+        .Where(r => r.Value.Count > 0 && Authorization.Scope.IsDataOnly(r.Value))
+        .Select(r => new TeamSuggestableRole(r.Key, Authorization.RoleSeeds.DisplayNames[r.Key], r.Value))
+        .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    /// <summary>The permissions of the suggestable role <paramref name="slug"/>, or null when it is not one.</summary>
+    public static IReadOnlyList<string>? PermissionsOf(string slug) =>
+        All.FirstOrDefault(r => r.Slug == slug)?.Permissions;
+}
 
 /// <summary>A manager invite as it is stored, before it has an id.</summary>
 public sealed record NewTeamInvite(
@@ -118,6 +137,7 @@ public sealed record TeamAccessLinkSummary(
     TeamAccessSuggestion Suggestion);
 
 /// <summary>A site the team has access to, as a manager of the team reads it.</summary>
+/// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="GivenAt">When the access was given.</param>
 public sealed record TeamSiteAccess(
     Guid TenantId,
@@ -125,6 +145,7 @@ public sealed record TeamSiteAccess(
     IReadOnlyList<string> RoleNames,
     bool LimitTo24Hours,
     DateTime? AccessEndsAt,
+    bool HasEnded,
     DateTime GivenAt);
 
 /// <summary>An access link, read by the person holding its token.</summary>

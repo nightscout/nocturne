@@ -276,3 +276,133 @@ describe("MemberHistoryEntryRow joining and leaving", () => {
     expect(row.element().textContent).not.toContain("Through the invite");
   });
 });
+
+describe("MemberHistoryEntryRow team access sentences", () => {
+  const team = { teamId: "t1", name: "Clinic" };
+  const END = accessEndInstant("2026-12-31");
+  const roleList = [
+    { id: "r1", slug: "viewer", name: "Viewer" } as TenantRoleDto,
+    { id: "r2", slug: "caretaker", name: "Caretaker" } as TenantRoleDto,
+  ];
+  const given = (overrides: Partial<MemberHistoryEntry>) =>
+    sentence({ kind: MemberHistoryKind.TeamAccessGiven, member: undefined, team, ...overrides }, roleList);
+
+  it.each([
+    ["one role", { roles: ["viewer"] }, "Alex gave the team Clinic access with the role Viewer."],
+    [
+      "one role and the 24-hour limit",
+      { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours },
+      "Alex gave the team Clinic access with the role Viewer to the last 24 hours only.",
+    ],
+    [
+      "one role and an end",
+      { roles: ["viewer"], accessEndsAt: END },
+      `Alex gave the team Clinic access with the role Viewer until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+    ],
+    [
+      "one role, the limit and an end",
+      { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
+      `Alex gave the team Clinic access with the role Viewer to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+    ],
+    ["two roles", { roles: ["viewer", "caretaker"] }, "Alex gave the team Clinic access with the roles Viewer, Caretaker."],
+    [
+      "two roles and the 24-hour limit",
+      { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours },
+      "Alex gave the team Clinic access with the roles Viewer, Caretaker to the last 24 hours only.",
+    ],
+    [
+      "two roles and an end",
+      { roles: ["viewer", "caretaker"], accessEndsAt: END },
+      `Alex gave the team Clinic access with the roles Viewer, Caretaker until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+    ],
+    [
+      "two roles, the limit and an end",
+      { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
+      `Alex gave the team Clinic access with the roles Viewer, Caretaker to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+    ],
+  ])("states access given with %s", async (_case, overrides, text) => {
+    const row = await given(overrides as Partial<MemberHistoryEntry>);
+    await expect.element(row).toHaveTextContent(text);
+  });
+
+  it("shows a recorded role slug no role of the site matches", async () => {
+    const row = await given({ roles: ["gone"] });
+    await expect.element(row).toHaveTextContent("Alex gave the team Clinic access with the role gone.");
+  });
+
+  it("says the detail is not stored when the row names no role", async () => {
+    const row = await given({ roles: [] });
+    await expect
+      .element(row)
+      .toHaveTextContent("Alex gave the team Clinic access. The detail is no longer stored.");
+  });
+
+  it("states access stopped, with no member in the sentence", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.TeamAccessStopped, member: undefined, team });
+    await expect.element(row).toHaveTextContent("Alex stopped the access of the team Clinic.");
+  });
+
+  it("names a team that was deleted by its recorded name", async () => {
+    const row = await sentence({
+      kind: MemberHistoryKind.TeamAccessStopped,
+      member: undefined,
+      team: { teamId: "t2", name: "Old ward" },
+    });
+    await expect.element(row).toHaveTextContent("Alex stopped the access of the team Old ward.");
+  });
+
+  it("never names the system as a person when the actor is not one", async () => {
+    const row = await sentence({
+      kind: MemberHistoryKind.TeamAccessStopped,
+      member: undefined,
+      team,
+      actor: { kind: MemberHistoryActorKind.System },
+    });
+    await expect.element(row).toHaveTextContent("The system stopped the access of the team Clinic.");
+  });
+});
+
+
+describe("MemberHistoryEntryRow team access with no team name", () => {
+  const unnamed = { teamId: "t3" };
+  const roleList = [{ id: "r1", slug: "viewer", name: "Viewer" } as TenantRoleDto];
+
+  it("states access stopped for a team that was deleted", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.TeamAccessStopped, member: undefined, team: unnamed });
+    await expect.element(row).toHaveTextContent("Alex stopped the access of a team that was deleted.");
+  });
+
+  it("states access given to a team that was deleted", async () => {
+    const row = await sentence(
+      { kind: MemberHistoryKind.TeamAccessGiven, member: undefined, team: unnamed, roles: ["viewer"] },
+      roleList,
+    );
+    await expect.element(row).toHaveTextContent("Alex gave a team that was deleted access with the role Viewer.");
+  });
+
+  it("states access given to a team that was deleted, with two roles, the limit and an end", async () => {
+    const row = await sentence(
+      {
+        kind: MemberHistoryKind.TeamAccessGiven,
+        member: undefined,
+        team: unnamed,
+        roles: ["viewer", "other"],
+        historyLimit: MemberHistoryLimit.TwentyFourHours,
+        accessEndsAt: accessEndInstant("2026-12-31"),
+      },
+      roleList,
+    );
+    await expect
+      .element(row)
+      .toHaveTextContent(
+        `Alex gave a team that was deleted access with the roles Viewer, other to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+      );
+  });
+
+  it("states no role for a team that was deleted when the row names none", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.TeamAccessGiven, member: undefined, team: unnamed, roles: [] });
+    await expect
+      .element(row)
+      .toHaveTextContent("Alex gave a team that was deleted access. The detail is no longer stored.");
+  });
+});

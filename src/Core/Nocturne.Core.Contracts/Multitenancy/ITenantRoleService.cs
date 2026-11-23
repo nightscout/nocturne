@@ -186,6 +186,18 @@ public record TenantRoleDto(
     /// site, so the caller may remove permissions from it but not add any.
     /// </summary>
     public bool OnlyOwnersMayWiden { get; init; }
+
+    /// <summary>
+    /// The permissions no one may give this role while a team holds it, which are the
+    /// <see cref="Scope.AdministrativePermissions"/>. Empty when no team holds the role.
+    /// </summary>
+    public IReadOnlyList<string> TeamRefusedPermissions { get; init; } = [];
+
+    /// <summary>
+    /// Every permission atom the role's permissions already satisfy (<see cref="Scope.Satisfies(IEnumerable{string}, string)"/>),
+    /// which is all the caller may choose when <see cref="OnlyOwnersMayWiden"/> holds. Null otherwise.
+    /// </summary>
+    public IReadOnlyList<string>? CoveredPermissions { get; init; }
 }
 
 /// <summary>
