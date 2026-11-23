@@ -140,7 +140,7 @@ public class GlookoConnectorServicePublishFailureTests
 
     /// <summary>
     /// Only a pending imported entry whose external id resolves to a published carb intake is
-    /// attributed to it, with the entry's own carbs and no time offset.
+    /// attributed to the stored row, with the entry's own carbs and no time offset.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_AttributesOnlyPendingEntriesThatMatchACarbIntake()
@@ -177,6 +177,12 @@ public class GlookoConnectorServicePublishFailureTests
             .Callback<IEnumerable<CarbIntake>, string, WriteOrigin, CancellationToken>(
                 (c, _, _, _) => carbs.AddRange(c))
             .ReturnsAsync(true);
+        var storedCarbId = Guid.CreateVersion7();
+        treatments
+            .Setup(t => t.GetStoredCarbIntakeIdsAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> legacyIds, CancellationToken _) =>
+                legacyIds.Where(id => carbs.Any(c => c.LegacyId == id)).ToDictionary(id => id, _ => storedCarbId));
         var publisher = new Mock<IConnectorPublisher>();
         publisher.SetupGet(p => p.IsAvailable).Returns(true);
         publisher.SetupGet(p => p.Metadata).Returns(metadata.Object);
@@ -190,10 +196,9 @@ public class GlookoConnectorServicePublishFailureTests
         var result = await service.SyncDataAsync(request, BuildConfig(useV3Api: false), CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        var carb = carbs.Should().ContainSingle(c => c.LegacyId == $"glooko_food_{imports.Single().ExternalEntryId}")
-            .Subject;
+        carbs.Should().ContainSingle(c => c.LegacyId == $"glooko_food_{imports.Single().ExternalEntryId}");
         mealMatching.Verify(m => m.AcceptMatchAsync(
-            matched.Id, carb.Id, 12m, 0, It.IsAny<CancellationToken>()), Times.Once);
+            matched.Id, storedCarbId, 12m, 0, It.IsAny<CancellationToken>()), Times.Once);
         mealMatching.VerifyNoOtherCalls();
     }
 

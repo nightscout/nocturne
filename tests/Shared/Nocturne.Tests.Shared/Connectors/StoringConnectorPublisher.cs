@@ -132,6 +132,15 @@ public sealed class StoringConnectorPublisher :
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
     public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
+    public Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyDictionary<string, Guid>>(
+                legacyIds
+                    .Select(id => _stored.TryGetValue((nameof(CarbIntake), id), out var stored) ? (Id: id, Stored: stored as CarbIntake) : default)
+                    .Where(found => found.Stored is not null)
+                    .ToDictionary(found => found.Id, found => found.Stored!.Id));
+    }
     public Task<int?> PublishRecentTreatmentsAsync(IEnumerable<Treatment> treatments, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => KeepCounting(treatments);
     public Task<int> DeleteTreatmentsAsync(string source, IReadOnlySet<string> legacyIds, CancellationToken cancellationToken = default) => Task.FromResult(0);
 
