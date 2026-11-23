@@ -20,11 +20,23 @@ import { errorStatus } from "#lib/forms/submit-error.js";
 import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";
 import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
+import {
+  classifyAuthenticatorError,
+  type AuthenticatorFailure,
+} from "./authenticator-error";
 
 const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, () => string> = {
   // The API deliberately doesn't say which of the two was wrong.
   rejected: () => "That username and recovery code don't match.",
   "rate-limited": rateLimitedError,
+};
+
+const AUTHENTICATOR_FAILURE_MESSAGES: Record<AuthenticatorFailure, () => string> = {
+  "not-a-member": () =>
+    "Your account isn't a member here. Go back to sign in, or request membership.",
+  "rate-limited": rateLimitedError,
+  rejected: () =>
+    "The code was not accepted. Type the current code from your app. If this does not work, go back and sign in again.",
 };
 
 // ============================================================================
@@ -306,39 +318,23 @@ export const signInWithAuthenticator = form(
   async (data, issue) => {
     const api = getApiClient();
 
-    let verified = false;
-    let notAMember = false;
+    let failure: AuthenticatorFailure | null = null;
     try {
       const result = await api.totp.login({
         stepUpToken: data.stepUpToken,
         code: data.code,
         trustDevice: data.trustDevice === true,
       });
-      verified = result?.success === true;
+      if (result?.success !== true) failure = "rejected";
     } catch (err) {
-      // 403: both factors passed, but this address does not admit the account.
-      notAMember = errorStatus(err) === 403;
+      failure = classifyAuthenticatorError(err);
       console.error(
         "Authenticator sign-in failed with status:",
         errorStatus(err) ?? "none"
       );
     }
 
-    if (notAMember) {
-      invalid(
-        issue.code(
-          "Your account isn't a member here. Go back to sign in, or request membership."
-        )
-      );
-    }
-
-    if (!verified) {
-      invalid(
-        issue.code(
-          "That code wasn't accepted. Each code works once and expires after 30 seconds — try the current one."
-        )
-      );
-    }
+    if (failure) invalid(issue.code(AUTHENTICATOR_FAILURE_MESSAGES[failure]()));
 
     redirect(303, safeReturnUrl(data.returnUrl));
   }
