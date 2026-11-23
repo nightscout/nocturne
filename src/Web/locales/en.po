@@ -3332,6 +3332,7 @@ msgstr "IOB only"
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "IOB"
 msgstr "IOB"
 
@@ -3339,10 +3340,12 @@ msgstr "IOB"
 #~ msgstr "Zero Temp"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "ZT"
 msgstr "ZT"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "UAM"
 msgstr "UAM"
 
@@ -5088,6 +5091,7 @@ msgstr "Select an icon"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "ISF"
 msgstr "ISF"
 
@@ -5820,6 +5824,7 @@ msgstr "Basal: {0}U"
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "COB"
 msgstr "COB"
 
@@ -9478,6 +9483,7 @@ msgstr "avg {0}"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "TDD"
 msgstr "TDD"
 
@@ -45852,6 +45858,7 @@ msgstr "carbs taken in a low"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "exercise"
 msgstr "exercise"
 
@@ -46006,6 +46013,7 @@ msgid "BG"
 msgstr "BG"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "sensor"
 msgstr "sensor"
 
@@ -46060,10 +46068,12 @@ msgid "average"
 msgstr "average"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "insulin"
 msgstr "insulin"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "bolus"
 msgstr "bolus"
 
@@ -46076,6 +46086,8 @@ msgid "rate"
 msgstr "rate"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "temp basal"
 msgstr "temp basal"
 
@@ -46104,6 +46116,8 @@ msgid "automation"
 msgstr "automation"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "closed loop"
 msgstr "closed loop"
 
@@ -46140,10 +46154,12 @@ msgid "HR"
 msgstr "HR"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "pulse"
 msgstr "pulse"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "walking"
 msgstr "walking"
 
@@ -46152,6 +46168,7 @@ msgid "sensitivity"
 msgstr "sensitivity"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "carb ratio"
 msgstr "carb ratio"
 
@@ -46188,6 +46205,7 @@ msgid "infusion set"
 msgstr "infusion set"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "cannula"
 msgstr "cannula"
 
@@ -46212,6 +46230,7 @@ msgid "disconnected"
 msgstr "disconnected"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "compression"
 msgstr "compression"
 
@@ -46272,6 +46291,7 @@ msgid "ROC"
 msgstr "ROC"
 
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
 msgid "trend"
 msgstr "trend"
 
@@ -46978,10 +46998,8 @@ msgstr "{0} changed the end date of {1}'s access. The detail is no longer stored
 msgid "· Access ends {0}"
 msgstr "· Access ends {0}"
 
-#. 0: formatMediumDateTime(invite.expiresAt)
-#: src/lib/components/members/PendingInvitesList.svelte
-msgid "Expires {0} <0/> <1/> <2/>"
-msgstr "Expires {0} <0/> <1/> <2/>"
+#~ msgid "Expires {0} <0/> <1/> <2/>"
+#~ msgstr "Expires {0} <0/> <1/> <2/>"
 
 #. 0: inviteName
 #: src/lib/components/members/PendingInvitesList.svelte
@@ -48498,3 +48516,298 @@ msgstr "You can see the last 24 hours only. Ask an owner to create the link."
 #: src/lib/components/members/LockedOutMembers.svelte
 msgid "This member's access lasts longer than yours. Ask an owner to create the link."
 msgstr "This member's access lasts longer than yours. Ask an owner to create the link."
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "overview"
+msgstr "overview"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "summary"
+msgstr "summary"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "report card"
+msgstr "report card"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "snapshot"
+msgstr "snapshot"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "ambulatory glucose profile"
+msgstr "ambulatory glucose profile"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "percentiles"
+msgstr "percentiles"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "target range"
+msgstr "target range"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "spread"
+msgstr "spread"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "signal"
+msgstr "signal"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "rejected uploads"
+msgstr "rejected uploads"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "a1c"
+msgstr "a1c"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "hba1c"
+msgstr "hba1c"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "glycated hemoglobin"
+msgstr "glycated hemoglobin"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "custom"
+msgstr "custom"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "saved"
+msgstr "saved"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "builder"
+msgstr "builder"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "report builder"
+msgstr "report builder"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "annual"
+msgstr "annual"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "yearly"
+msgstr "yearly"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "12 month"
+msgstr "12 month"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "heatmap"
+msgstr "heatmap"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "glucose readings"
+msgstr "glucose readings"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "log"
+msgstr "log"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "history"
+msgstr "history"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "daily"
+msgstr "daily"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "today"
+msgstr "today"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "yesterday"
+msgstr "yesterday"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "comparison"
+msgstr "comparison"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "weekly"
+msgstr "weekly"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "compare"
+msgstr "compare"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "date ranges"
+msgstr "date ranges"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "hourly"
+msgstr "hourly"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "time of day"
+msgstr "time of day"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "best hours"
+msgstr "best hours"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "worst hours"
+msgstr "worst hours"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "activity"
+msgstr "activity"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "movement"
+msgstr "movement"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "BPM"
+msgstr "BPM"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "cardio"
+msgstr "cardio"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "overnight"
+msgstr "overnight"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "night time"
+msgstr "night time"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "sleeping"
+msgstr "sleeping"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "carbs"
+msgstr "carbs"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "corrections"
+msgstr "corrections"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "basal rate"
+msgstr "basal rate"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "background insulin"
+msgstr "background insulin"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "total daily dose"
+msgstr "total daily dose"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "basal bolus ratio"
+msgstr "basal bolus ratio"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "infusion site"
+msgstr "infusion site"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "rotation"
+msgstr "rotation"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "set change"
+msgstr "set change"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "insulin dosing profile"
+msgstr "insulin dosing profile"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "daily insulin"
+msgstr "daily insulin"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "dose adjustment"
+msgstr "dose adjustment"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "pump battery"
+msgstr "pump battery"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "phone battery"
+msgstr "phone battery"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "charge"
+msgstr "charge"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "loop analysis"
+msgstr "loop analysis"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "loopalyzer"
+msgstr "loopalyzer"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "AID"
+msgstr "AID"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "SMB"
+msgstr "SMB"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "meal response"
+msgstr "meal response"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "unannounced meals"
+msgstr "unannounced meals"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "predictions"
+msgstr "predictions"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "forecast"
+msgstr "forecast"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "open loop"
+msgstr "open loop"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "limits"
+msgstr "limits"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "sensitivity ratio"
+msgstr "sensitivity ratio"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "basal"
+msgstr "basal"
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "profile settings"
+msgstr "profile settings"
+
+#. 0: invite.createdByName
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "Made by {0} ·"
+msgstr "Made by {0} ·"
+
+#. 0: formatMediumDateTime(invite.expiresAt)
+#: src/lib/components/members/PendingInvitesList.svelte
+msgid "<0/> Expires {0} <1/> <2/> <3/>"
+msgstr "<0/> Expires {0} <1/> <2/> <3/>"
