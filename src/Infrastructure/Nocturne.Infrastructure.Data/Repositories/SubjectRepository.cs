@@ -247,14 +247,11 @@ public class SubjectRepository : ISubjectRepository
             .ExcludeDemo()
             .Where(s => db.Tenants.Any(t => t.Id == tenantId && t.SetupOwnerSubjectId == s.Id)
                 && !s.IsSystemSubject && s.IsActive
-                && !db.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !db.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id)
                 && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
                 && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now)
                 && !db.LoginCodes.Any(c => c.SubjectId == s.Id && c.ConsumedAt == null && c.ExpiresAt > now
-                    && SetupOwnerRefusedCodePurposes.Contains(c.Purpose)));
-        if (_linkRoute.IsConfigured)
-            candidates = candidates.Where(OrphanedSubjectFilter.LacksConfirmedEmail);
+                    && SetupOwnerRefusedCodePurposes.Contains(c.Purpose)))
+            .WithoutSignInFactor(db, _linkRoute, db.SubjectOidcIdentities);
         return ToRecord(await candidates.FirstOrDefaultAsync(ct));
     }
 

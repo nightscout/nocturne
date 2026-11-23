@@ -75,12 +75,39 @@ public static class OrphanedSubjectFilter
         var identities = withoutProvider is { } excluded
             ? db.WorkingOidcIdentities().Where(i => i.ProviderId != excluded)
             : db.WorkingOidcIdentities();
-        var withoutFactor = subjects
-            .Where(s => s.IsActive
-                && !s.IsSystemSubject
-                && !s.IsDemoSubject
-                && !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
-                && !identities.Any(i => i.SubjectId == s.Id));
+        return subjects
+            .Where(s => s.IsActive && !s.IsSystemSubject && !s.IsDemoSubject)
+            .WithoutSignInFactor(db, linkRoute, identities);
+    }
+
+    /// <summary>
+    /// Those of <paramref name="subjects"/> that hold no passkey, none of <paramref name="identities"/>
+    /// and, while a recovery link can be delivered, no confirmed address: the factor part of
+    /// <see cref="WhoCannotSignIn"/>, without its subject filters.
+    /// </summary>
+    /// <remarks>
+    /// Each caller adds its own conditions beside this one. <see cref="WhoCannotSignIn"/> counts
+    /// working identities only, because a provider that is off cannot sign anyone in, and asks who
+    /// is locked out. <c>ISubjectRepository.FindSetupOwnerCandidateAsync</c> passes every identity,
+    /// because a provider enabled again signs that identity in again, and it also refuses an
+    /// authenticator, an unexpired session and a live login code, which this predicate does not
+    /// read. <c>ISubjectRepository.CountStrandedByProviderAsync</c> reaches this through
+    /// <see cref="WhoCannotSignIn"/> with the provider that goes away left out of the identities.
+    /// </remarks>
+    /// <param name="subjects">The subjects considered.</param>
+    /// <param name="db">The context <paramref name="subjects"/> is read on.</param>
+    /// <param name="linkRoute">Whether a recovery link can be delivered on this instance.</param>
+    /// <param name="identities">The provider identities that count as a factor. Working identities when null.</param>
+    public static IQueryable<SubjectEntity> WithoutSignInFactor(
+        this IQueryable<SubjectEntity> subjects,
+        NocturneDbContext db,
+        IAccountLinkRoute linkRoute,
+        IQueryable<SubjectOidcIdentityEntity>? identities = null)
+    {
+        identities ??= db.WorkingOidcIdentities();
+        var withoutFactor = subjects.Where(s =>
+            !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id)
+            && !identities.Any(i => i.SubjectId == s.Id));
 
         return linkRoute.IsConfigured ? withoutFactor.Where(LacksConfirmedEmail) : withoutFactor;
     }
