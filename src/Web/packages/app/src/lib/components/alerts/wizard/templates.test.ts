@@ -5,6 +5,7 @@ import {
 	type TrackerDefinitionDto,
 } from "@nocturne/api-client";
 import { ALERT_PRESETS } from "#lib/test-stubs/alert-presets.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { buildBody, parseRule } from "../types";
 import {
 	offeredTemplates as offeredFrom,
@@ -189,6 +190,19 @@ describe("alert wizard templates", () => {
 		expect(suggestName(newDraft("low"))).toBe("Low: below 70 mg/dL");
 		expect(suggestName(newDraft("no_readings"))).toBe("No readings for 20 minutes");
 		expect(suggestName(newDraft("site_change_due"))).toBe("Site change due: 3 days");
+	});
+
+	it("names a rate alert with the fraction of its rate in either unit", () => {
+		const draft = newDraft("falling_fast");
+		draft.leaf!.rate_of_change!.rate = 1.5;
+		expect(suggestName(draft)).toBe("Falling fast: 1.5 mg/dL per minute");
+
+		glucoseUnits.current = "mmol";
+		try {
+			expect(suggestName(draft)).toBe("Falling fast: 0.08 mmol/L per minute");
+		} finally {
+			glucoseUnits.current = "mg/dl";
+		}
 	});
 
 	it("adds the wait and the hours to the name", () => {

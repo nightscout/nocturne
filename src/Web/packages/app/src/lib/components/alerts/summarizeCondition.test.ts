@@ -113,6 +113,30 @@ describe("summarizeCondition", () => {
 		).toBe("Glucose falling at least 2 mg/dL per minute, clear margin 0.4 mg/dL per minute");
 	});
 
+	it("says a rate with its fraction in mg/dL", () => {
+		glucoseUnits.current = "mg/dl";
+		expect(
+			summarizeCondition({
+				type: "rate_of_change",
+				rate_of_change: { direction: "falling", rate: 1.5 },
+			}),
+		).toBe("Glucose falling at least 1.5 mg/dL per minute");
+	});
+
+	it("says a rate and its margin with their fraction in mmol/L", () => {
+		glucoseUnits.current = "mmol";
+		try {
+			expect(
+				summarizeCondition({
+					type: "rate_of_change",
+					rate_of_change: { direction: "falling", rate: 1.5, clear_margin: 0.5 },
+				}),
+			).toBe("Glucose falling at least 0.08 mmol/L per minute, clear margin 0.03 mmol/L per minute");
+		} finally {
+			glucoseUnits.current = "mg/dl";
+		}
+	});
+
 	it("says a glucose margin in the display unit", () => {
 		glucoseUnits.current = "mmol";
 		try {
