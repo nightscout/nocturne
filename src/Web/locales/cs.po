@@ -19187,9 +19187,8 @@ msgstr "Nocturne sdružuje data ze všech vašich CGM, pump a aplikací do jedin
 msgid "Speaks the Nightscout v1, v2, and v3 APIs. The apps, watch faces, and followers you use today keep working; you change the URL they point at."
 msgstr "Podporuje API Nightscout v1, v2 a v3. Stávající aplikace, ciferníky a sledovací aplikace fungují dál – stačí změnit jejich cílovou URL."
 
-#: ../portal/src/routes/+page.svelte
-msgid "One install, many people. Run a household, a clinic, or a community on a single deployment, with each person's data and settings kept apart."
-msgstr "Jedna instalace pro více lidí. Na jednom nasazení můžete provozovat domácnost, kliniku nebo komunitu, přičemž data a nastavení jednotlivých uživatelů zůstávají oddělená."
+#~ msgid "One install, many people. Run a household, a clinic, or a community on a single deployment, with each person's data and settings kept apart."
+#~ msgstr "Jedna instalace pro více lidí. Na jednom nasazení můžete provozovat domácnost, kliniku nebo komunitu, přičemž data a nastavení jednotlivých uživatelů zůstávají oddělená."
 
 #: ../portal/src/routes/+page.svelte
 msgid "Real-time by design"
@@ -19448,9 +19447,8 @@ msgstr "Jeden sdílený API Secret pro všechny aplikace a sledující"
 msgid "A fixed set of report pages"
 msgstr "Pevně daná sada reportů"
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "One install for a household, a clinic, or a community"
-msgstr "Jedna instalace pro domácnost, kliniku nebo komunitu"
+#~ msgid "One install for a household, a clinic, or a community"
+#~ msgstr "Jedna instalace pro domácnost, kliniku nebo komunitu"
 
 #. 0: DATA_SOURCES.length
 #: ../portal/src/routes/features/+page.svelte
@@ -22469,9 +22467,8 @@ msgstr "Vytvořeno diabetickou komunitou"
 msgid "The documentation is still growing. If a guide you need is missing, check back soon or contribute one on GitHub."
 msgstr "Dokumentace se stále rozšiřuje. Pokud vám některý návod chybí, zkuste to později nebo jej sami doplňte na GitHubu."
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
-msgstr "Provozujte domácnost, kliniku nebo komunitu v jediném nasazení. Každá instance získá vlastní subdoménu a zabezpečení na úrovni řádků v databázi odděluje její data od ostatních."
+#~ msgid "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
+#~ msgstr "Provozujte domácnost, kliniku nebo komunitu v jediném nasazení. Každá instance získá vlastní subdoménu a zabezpečení na úrovni řádků v databázi odděluje její data od ostatních."
 
 #: ../portal/src/routes/features/+page.svelte
 msgid "Who it serves"
@@ -48477,4 +48474,16 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Set in the rule editor"
+msgstr ""
+
+#: ../portal/src/routes/+page.svelte
+msgid "One install, many people. Run a household, a camp, or a community on a single deployment, with each person's data and settings kept apart."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Run a household, a camp, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "One install for a household, a camp, or a community"
 msgstr ""

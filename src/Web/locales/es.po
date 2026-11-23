@@ -19535,9 +19535,8 @@ msgstr "Nocturne reúne todos los CGM, bombas y aplicaciones que usas en un úni
 msgid "Speaks the Nightscout v1, v2, and v3 APIs. The apps, watch faces, and followers you use today keep working; you change the URL they point at."
 msgstr "Habla las API v1, v2 y v3 de Nightscout. Las aplicaciones, esferas de reloj y seguidores que usas hoy siguen funcionando; solo cambias la URL a la que apuntan."
 
-#: ../portal/src/routes/+page.svelte
-msgid "One install, many people. Run a household, a clinic, or a community on a single deployment, with each person's data and settings kept apart."
-msgstr "Una instalación, muchas personas. Gestiona un hogar, una clínica o una comunidad en un solo despliegue, manteniendo separados los datos y ajustes de cada persona."
+#~ msgid "One install, many people. Run a household, a clinic, or a community on a single deployment, with each person's data and settings kept apart."
+#~ msgstr "Una instalación, muchas personas. Gestiona un hogar, una clínica o una comunidad en un solo despliegue, manteniendo separados los datos y ajustes de cada persona."
 
 #: ../portal/src/routes/+page.svelte
 msgid "Real-time by design"
@@ -19796,9 +19795,8 @@ msgstr "Un secreto API compartido para cada aplicación y seguidor"
 msgid "A fixed set of report pages"
 msgstr "Un conjunto fijo de páginas de informes"
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "One install for a household, a clinic, or a community"
-msgstr "Una instalación para un hogar, una clínica o una comunidad"
+#~ msgid "One install for a household, a clinic, or a community"
+#~ msgstr "Una instalación para un hogar, una clínica o una comunidad"
 
 #. 0: DATA_SOURCES.length
 #: ../portal/src/routes/features/+page.svelte
@@ -22909,9 +22907,8 @@ msgstr "Creado por la comunidad de diabetes"
 msgid "The documentation is still growing. If a guide you need is missing, check back soon or contribute one on GitHub."
 msgstr "La documentación sigue creciendo. Si falta una guía que necesitas, vuelve pronto o contribuye con una en GitHub."
 
-#: ../portal/src/routes/features/+page.svelte
-msgid "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
-msgstr "Gestiona un hogar, una clínica o una comunidad en un solo despliegue. Cada inquilino obtiene su propio subdominio y la seguridad a nivel de fila de la base de datos mantiene los datos de un inquilino fuera del alcance de los demás."
+#~ msgid "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
+#~ msgstr "Gestiona un hogar, una clínica o una comunidad en un solo despliegue. Cada inquilino obtiene su propio subdominio y la seguridad a nivel de fila de la base de datos mantiene los datos de un inquilino fuera del alcance de los demás."
 
 #: ../portal/src/routes/features/+page.svelte
 msgid "Who it serves"
@@ -49416,4 +49413,16 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Set in the rule editor"
+msgstr ""
+
+#: ../portal/src/routes/+page.svelte
+msgid "One install, many people. Run a household, a camp, or a community on a single deployment, with each person's data and settings kept apart."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "Run a household, a camp, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
+msgstr ""
+
+#: ../portal/src/routes/features/+page.svelte
+msgid "One install for a household, a camp, or a community"
 msgstr ""
