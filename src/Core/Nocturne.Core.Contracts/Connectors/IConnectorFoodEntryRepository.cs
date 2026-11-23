@@ -23,14 +23,15 @@ public interface IConnectorFoodEntryRepository
         CancellationToken ct = default);
 
     /// <summary>
-    /// Sets the status of a food entry and forgets any carb intake it was matched to. Linking an
-    /// entry to a carb intake goes through <see cref="AcceptMatchAsync"/>.
+    /// Dismisses a pending food entry as <see cref="ConnectorFoodEntryStatus.Standalone"/> with one
+    /// update conditional on it still being pending, the claim <see cref="AcceptMatchAsync"/> makes, so
+    /// an entry an accept has linked is left as it is.
     /// </summary>
-    /// <param name="status">The new <see cref="ConnectorFoodEntryStatus"/>.</param>
-    Task UpdateStatusAsync(
-        Guid id,
-        ConnectorFoodEntryStatus status,
-        CancellationToken ct = default);
+    /// <remarks>
+    /// An entry already dismissed is <see cref="DismissMatchOutcome.AlreadyDismissed"/>. One matched or
+    /// withdrawn is <see cref="DismissMatchOutcome.AlreadyResolved"/>.
+    /// </remarks>
+    Task<DismissMatchOutcome> DismissAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
     /// Links a pending food entry to a carb intake: claims the entry and writes its
@@ -69,7 +70,8 @@ public interface IConnectorFoodEntryRepository
     /// <summary>
     /// Marks the pending entries of <paramref name="connectorSource"/> consumed in the window and
     /// absent from <paramref name="presentExternalEntryIds"/> as <see cref="ConnectorFoodEntryStatus.Deleted"/>.
-    /// Matched and dismissed entries are left alone.
+    /// Each is claimed with an update conditional on it still being pending, so an entry matched or
+    /// dismissed since the read is left alone and is not returned.
     /// </summary>
     /// <param name="from">Start of the window, inclusive.</param>
     /// <param name="to">End of the window, inclusive.</param>

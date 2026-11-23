@@ -33,9 +33,12 @@ public interface IMealMatchingService
     Task<AcceptMatchOutcome> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
 
     /// <summary>
-    /// Dismiss a match, marking the food entry as standalone
+    /// Dismiss a match, marking the pending food entry as standalone
     /// </summary>
-    Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
+    /// <returns>
+    /// What the dismiss did. See <see cref="IConnectorFoodEntryRepository.DismissAsync"/> for the outcomes.
+    /// </returns>
+    Task<DismissMatchOutcome> DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
 
     /// <summary>
     /// Withdraws any live match suggestion for a food entry that no longer exists upstream.

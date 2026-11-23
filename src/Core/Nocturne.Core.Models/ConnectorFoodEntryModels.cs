@@ -43,6 +43,25 @@ public enum AcceptMatchOutcome
 }
 
 /// <summary>
+/// What dismissing a <see cref="ConnectorFoodEntry"/> did.
+/// </summary>
+/// <remarks>The default is <see cref="NotFound"/>, so an outcome nobody set never reads as a dismissal.</remarks>
+public enum DismissMatchOutcome
+{
+    /// <summary>The food entry does not exist; nothing was changed.</summary>
+    NotFound,
+
+    /// <summary>The food entry is matched or withdrawn; nothing was changed.</summary>
+    AlreadyResolved,
+
+    /// <summary>An earlier dismiss already marked the food entry standalone; nothing was changed.</summary>
+    AlreadyDismissed,
+
+    /// <summary>The food entry was dismissed by this call.</summary>
+    Dismissed,
+}
+
+/// <summary>
 /// Connector-imported food entry for matching and attribution.
 /// </summary>
 /// <seealso cref="ConnectorFoodEntryStatus"/>

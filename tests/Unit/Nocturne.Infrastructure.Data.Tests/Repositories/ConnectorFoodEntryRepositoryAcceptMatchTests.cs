@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -25,6 +26,7 @@ public class ConnectorFoodEntryRepositoryAcceptMatchTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly List<Type> _written = [];
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 7, 21, 9, 30, 0, TimeSpan.Zero));
     private readonly ConnectorFoodEntryRepository _repository;
     private readonly TreatmentFoodRepository _breakdowns;
 
@@ -38,7 +40,7 @@ public class ConnectorFoodEntryRepositoryAcceptMatchTests : IDisposable
             .Callback((IReadOnlyCollection<Type> models) => _written.AddRange(models))
             .Returns(Task.CompletedTask);
         _repository = new ConnectorFoodEntryRepository(
-            _context.AsFactory(), NullLogger<ConnectorFoodEntryRepository>.Instance, legacyReads.Object);
+            _context.AsFactory(), NullLogger<ConnectorFoodEntryRepository>.Instance, legacyReads.Object, _time);
         _breakdowns = new TreatmentFoodRepository(_context.AsFactory());
     }
 
@@ -201,17 +203,66 @@ public class ConnectorFoodEntryRepositoryAcceptMatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DismissingAMatchedEntry_ForgetsTheCarbIntakeItWasMatchedTo()
+    public async Task DismissingAPendingEntry_MarksItStandaloneAtTheTimeProvidersTime()
+    {
+        var entry = await SeedEntryAsync();
+
+        var outcome = await _repository.DismissAsync(entry);
+
+        outcome.Should().Be(DismissMatchOutcome.Dismissed);
+        var stored = await StoredAsync(entry);
+        stored.Status.Should().Be(ConnectorFoodEntryStatus.Standalone);
+        stored.MatchedCarbIntakeId.Should().BeNull();
+        stored.ResolvedAt.Should().Be(_time.GetUtcNow());
+    }
+
+    [Fact]
+    public async Task DismissingAnEntryAnAcceptLinked_LeavesItMatchedToItsCarbIntakeAndItsBreakdown()
     {
         var carbIntake = await SeedCarbIntakeAsync();
         var entry = await SeedEntryAsync();
         await _repository.AcceptMatchAsync(entry, Row(carbIntake));
+        var linked = await StoredAsync(entry);
 
-        await _repository.UpdateStatusAsync(entry, ConnectorFoodEntryStatus.Standalone);
+        var outcome = await _repository.DismissAsync(entry);
 
+        outcome.Should().Be(DismissMatchOutcome.AlreadyResolved);
         var stored = await StoredAsync(entry);
-        stored.Status.Should().Be(ConnectorFoodEntryStatus.Standalone);
-        stored.MatchedCarbIntakeId.Should().BeNull();
+        stored.Status.Should().Be(ConnectorFoodEntryStatus.Matched);
+        stored.MatchedCarbIntakeId.Should().Be(carbIntake);
+        stored.ResolvedAt.Should().Be(linked.ResolvedAt);
+        (await _breakdowns.GetByCarbIntakeIdAsync(carbIntake)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DismissingAWithdrawnEntry_LeavesItWithdrawn()
+    {
+        var entry = await SeedEntryAsync(ConnectorFoodEntryStatus.Deleted);
+
+        var outcome = await _repository.DismissAsync(entry);
+
+        outcome.Should().Be(DismissMatchOutcome.AlreadyResolved);
+        (await StoredAsync(entry)).Status.Should().Be(ConnectorFoodEntryStatus.Deleted);
+    }
+
+    [Fact]
+    public async Task DismissingAnEntryTwice_ReportsTheRepeatAndKeepsTheFirstResolvedTime()
+    {
+        var entry = await SeedEntryAsync();
+        await _repository.DismissAsync(entry);
+        var first = (await StoredAsync(entry)).ResolvedAt;
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        var second = await _repository.DismissAsync(entry);
+
+        second.Should().Be(DismissMatchOutcome.AlreadyDismissed);
+        (await StoredAsync(entry)).ResolvedAt.Should().Be(first);
+    }
+
+    [Fact]
+    public async Task DismissingAnEntryThatDoesNotExist_ReportsNotFound()
+    {
+        (await _repository.DismissAsync(Guid.NewGuid())).Should().Be(DismissMatchOutcome.NotFound);
     }
 
     [Fact]

@@ -220,7 +220,6 @@ public class ErrorEnvelopeCoverageTests
         "V4.Platform.ServicesController.GetUploaderSetup",
         "V4.Platform.ServicesController.ResetConnectorCursor",
         "V4.Platform.ServicesController.TriggerConnectorSync",
-        "V4.Treatments.MealMatchingController.DismissMatch",
         "V4.Treatments.MealMatchingController.GetFoodEntry",
         "V4.Treatments.MealMatchingController.GetSuggestions",
     ];

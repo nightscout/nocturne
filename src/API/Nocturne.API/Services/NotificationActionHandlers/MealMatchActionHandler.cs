@@ -33,14 +33,20 @@ public class MealMatchActionHandler(
                 return NotificationActionResult.Completed;
 
             case "dismiss":
-                if (sourceId != null && Guid.TryParse(sourceId, out var foodEntryId))
+                if (sourceId == null || !Guid.TryParse(sourceId, out var foodEntryId))
                 {
-                    await foodEntryRepository.UpdateStatusAsync(
-                        foodEntryId,
-                        ConnectorFoodEntryStatus.Standalone,
-                        cancellationToken);
+                    return NotificationActionResult.Dismissed;
                 }
-                return NotificationActionResult.Dismissed;
+
+                var outcome = await foodEntryRepository.DismissAsync(foodEntryId, cancellationToken);
+                return outcome switch
+                {
+                    DismissMatchOutcome.Dismissed or DismissMatchOutcome.AlreadyDismissed =>
+                        NotificationActionResult.Dismissed,
+                    DismissMatchOutcome.NotFound or DismissMatchOutcome.AlreadyResolved =>
+                        NotificationActionResult.NotHandled,
+                    _ => throw new InvalidOperationException($"Unhandled dismiss outcome {outcome}."),
+                };
 
             case "review":
                 // Review opens a dialog client-side, no archive
