@@ -29,7 +29,6 @@ public class CareLinkConnectorService
     private readonly CareLinkSensorGlucoseMapper _sgMapper;
 
     private string? _cachedBleVersion;
-    private string? _lastAlarmKey;
     private string? _initialRefreshToken;
     private TokenSession? _session;
 
@@ -290,9 +289,9 @@ public class CareLinkConnectorService
     }
 
     /// <summary>
-    ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. An alarm that did
-    ///     not reach the tenant leaves the dedup key behind so the next cycle retries it;
-    ///     a transport exception is only logged, matching the pre-existing policy for this step.
+    ///     Publishes the latest alarm as a SystemEvent on every sync; the store upserts it by its legacy
+    ///     id (the alarm code and time), so a repeat offer updates the one row. A transport exception is
+    ///     only logged, matching the pre-existing policy for this step.
     ///     System events gate and count under <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     private async Task PublishAlarmStepAsync(
@@ -307,18 +306,13 @@ public class CareLinkConnectorService
 
         try
         {
-            var alarmKey = $"{data.LastAlarm.Datetime}_{data.LastAlarm.Code}";
-            if (alarmKey != _lastAlarmKey)
-            {
-                var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
-                    data.MedicalDeviceTime ?? "", data.CurrentServerTime);
-                var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
-                if (systemEvent != null
-                    && await PublishRecordTypeAsync(result, activeTypes,
-                        [systemEvent], config, cancellationToken,
-                        context: "from the last alarm"))
-                    _lastAlarmKey = alarmKey;
-            }
+            var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
+                data.MedicalDeviceTime ?? "", data.CurrentServerTime);
+            var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
+            if (systemEvent != null)
+                await PublishRecordTypeAsync(result, activeTypes,
+                    [systemEvent], config, cancellationToken,
+                    context: "from the last alarm");
         }
         catch (HttpRequestException ex)
         {
