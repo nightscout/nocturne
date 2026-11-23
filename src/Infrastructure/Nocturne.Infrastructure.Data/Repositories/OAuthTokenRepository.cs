@@ -256,12 +256,17 @@ public class OAuthTokenRepository : IOAuthTokenRepository
 
     /// <inheritdoc/>
     /// <remarks>
-    /// A tracked save rather than an <c>ExecuteUpdate</c>: it is the save between a poll's read of
-    /// the code and its claim, which is where a rival poll can redeem the code, and the exchange
-    /// test for that race stages the rival in a <c>SaveChangesInterceptor</c>.
+    /// One statement, so a code that a rival poll's refusal deleted after this poll read it is
+    /// reported as <c>false</c> instead of throwing.
     /// </remarks>
-    public virtual Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d => d.LastPolledAt = polledAt, ct);
+    public virtual async Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var stamped = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.LastPolledAt, polledAt), ct);
+        return stamped == 1;
+    }
 
     /// <inheritdoc/>
     public virtual async Task<bool> BumpDeviceCodeIntervalAsync(Guid id, int by, CancellationToken ct)
