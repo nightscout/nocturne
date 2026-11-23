@@ -95,6 +95,11 @@ public interface IInAppNotificationService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// Runs an action on a notification the user owns. The handler registered for the notification's
+    /// type gets every action first, including <c>dismiss</c> and <c>navigate</c>. Those two archive
+    /// the notification themselves when the type has no handler or its handler does not handle them.
+    /// </summary>
     /// <param name="userId">The user ID executing the action</param>
     /// <returns>True if action executed successfully, false otherwise</returns>
     Task<bool> ExecuteActionAsync(

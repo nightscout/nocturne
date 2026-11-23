@@ -1,18 +1,25 @@
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Services.NotificationActionHandlers;
 
 /// <summary>
-/// Handles user actions (accept/reject/dismiss) on <c>meal_matching.suggested_match</c>
+/// Handles user actions (accept/review/dismiss) on <c>meal_matching.suggested_match</c>
 /// in-app notifications produced by <see cref="MealMatchingService"/>. Accept is deferred to
-/// <c>MealMatchingController</c>; reject and dismiss are handled here by signalling archive.
+/// <c>MealMatchingController</c>. Dismiss resolves the food entry as the meals page does and signals
+/// archive, for a caller holding <see cref="Scope.FoodReadWrite"/>, the scope
+/// <c>MealMatchingController.DismissMatch</c> requires; a caller without it, a food entry that is
+/// missing and one resolved elsewhere make the handler decline, and the orchestrator archives the
+/// notification as dismissed without writing the food entry.
 /// </summary>
 /// <seealso cref="INotificationActionHandler"/>
 public class MealMatchActionHandler(
     IConnectorFoodEntryRepository foodEntryRepository,
+    IHttpContextAccessor httpContextAccessor,
     ILogger<MealMatchActionHandler> logger
 ) : INotificationActionHandler
 {
@@ -33,6 +40,11 @@ public class MealMatchActionHandler(
                 return NotificationActionResult.Completed;
 
             case "dismiss":
+                if (httpContextAccessor.HttpContext?.HasScope(Scope.FoodReadWrite) != true)
+                {
+                    return NotificationActionResult.NotHandled;
+                }
+
                 if (sourceId == null || !Guid.TryParse(sourceId, out var foodEntryId))
                 {
                     return NotificationActionResult.Dismissed;
