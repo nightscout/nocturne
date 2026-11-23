@@ -409,7 +409,7 @@ public class HubCredentialVerifierTests
         var sessions = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
         var links = new GuestLinkService(
             contexts, new OAuthGrantRepository(contexts), sessions, new GrantRevocationService(sessions),
-            NullLogger<GuestLinkService>.Instance);
+            TimeProvider.System, NullLogger<GuestLinkService>.Instance);
         _guestLinks
             .Setup(g => g.ValidateSessionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns((Guid id, CancellationToken ct) => links.ValidateSessionAsync(id, ct));
@@ -449,7 +449,7 @@ public class HubCredentialVerifierTests
             var grants = new OAuthGrantRepository(unit);
             var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(_subject, DateTime.UtcNow, CancellationToken.None);
             await new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())))
-                .StageAsync(unit, handedOut, CancellationToken.None);
+                .StageAsync(unit, handedOut, DateTime.UtcNow, CancellationToken.None);
             await unit.Context.SaveChangesAsync();
         }
 

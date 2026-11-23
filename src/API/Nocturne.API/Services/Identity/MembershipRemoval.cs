@@ -72,7 +72,7 @@ internal static class MembershipRemoval
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
         if (member.AccessEndsAt is not null)
             await AlertChannelStops.CapAsync(context, member.SubjectId, now, ct);
-        await grantRevocation.StageAsync(unit, revoked, ct);
+        await grantRevocation.StageAsync(unit, revoked, now, ct);
         if (member.AccessEndsAt is not null)
             await grants.CapGrantsCreatedByAsync(member.SubjectId, now, now, ct);
         await context.SaveChangesAsync(ct);

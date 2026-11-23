@@ -45,12 +45,14 @@ public class GuestLinkControllerTests : IDisposable
             _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            TimeProvider.System,
             NullLogger<GuestLinkService>.Instance);
 
         var handler = new GuestSessionHandler(
             new EphemeralDataProtectionProvider(),
             Mock.Of<IServiceScopeFactory>(),
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
+            TimeProvider.System,
             NullLogger<GuestSessionHandler>.Instance);
 
         _controller = new GuestLinkController(service, handler);

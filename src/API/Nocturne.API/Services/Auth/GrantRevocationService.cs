@@ -28,13 +28,14 @@ public sealed class GrantRevocationService
 
     /// <summary>
     /// Stages the revocation of <paramref name="grant"/> with every consequence, as
-    /// <see cref="StageAsync(DbUnitOfWork, IReadOnlyCollection{OAuthGrantRecord}, CancellationToken)"/> does.
+    /// <see cref="StageAsync(DbUnitOfWork, IReadOnlyCollection{OAuthGrantRecord}, DateTime, CancellationToken)"/> does.
     /// </summary>
     public Task<GrantRevocationOutcome> StageAsync(
         DbUnitOfWork unit,
         OAuthGrantRecord grant,
+        DateTime now,
         CancellationToken ct = default) =>
-        StageAsync(unit, [grant], ct);
+        StageAsync(unit, [grant], now, ct);
 
     /// <summary>
     /// Stages on <paramref name="unit"/> the revocation of every one of <paramref name="grants"/>
@@ -43,13 +44,14 @@ public sealed class GrantRevocationService
     /// </summary>
     /// <param name="unit">The caller's unit of work, on the grants' tenant.</param>
     /// <param name="grants">The grants to revoke.</param>
+    /// <param name="now">The moment stamped as the revocation time, from the caller's clock.</param>
     /// <param name="ct">The cancellation token.</param>
     public async Task<GrantRevocationOutcome> StageAsync(
         DbUnitOfWork unit,
         IReadOnlyCollection<OAuthGrantRecord> grants,
+        DateTime now,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
         var grantIds = grants.Select(g => g.Id).ToList();
 
         await new OAuthGrantRepository(unit).RevokeAsync(grantIds, now, ct);
