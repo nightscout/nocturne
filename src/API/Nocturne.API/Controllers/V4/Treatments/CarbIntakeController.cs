@@ -19,7 +19,9 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <remarks>
 /// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// Every intake a read, update, bulk create or restore returns carries <see cref="CarbIntake.FoodType"/>,
-/// read from its food lines. Create answers with the intake as stored.
+/// read from its food lines, except when the enrichment of a committed write fails (see
+/// <see cref="V4ReadOnlyControllerBase{TModel,TRepository}.OnBeforeReturnAsync"/>). Create answers with the
+/// intake as stored.
 ///
 /// On update, <see cref="V4RecordBase.LegacyId"/>, <see cref="V4RecordBase.CreatedAt"/> and
 /// <see cref="V4RecordBase.AdditionalProperties"/> are preserved from the existing record.

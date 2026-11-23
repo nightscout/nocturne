@@ -2,12 +2,15 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Repositories;
@@ -189,6 +192,43 @@ public class NutritionControllerMealsTests : IDisposable
         body.CorrelationId.Should().Be(cid);
         body.Bolus.CorrelationId.Should().Be(cid);
         body.CarbIntake.CorrelationId.Should().Be(cid);
+    }
+
+    [Fact]
+    public async Task CreateMeal_WhenTheFoodTypesFailOnAnExistingMeal_AnswersWithTheStoredMealAndLogsTheFailure()
+    {
+        var logger = new ListLogger<object>();
+        var loggerFactory = new Mock<ILoggerFactory>();
+        loggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>())).Returns(logger);
+        var controller = CreateController();
+        controller.ControllerContext.HttpContext.RequestServices =
+            new ServiceCollection().AddSingleton(loggerFactory.Object).BuildServiceProvider();
+        var request = new CreateMealRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Insulin = 5.5,
+            Carbs = 45.0,
+            DataSource = "aaps",
+            SyncIdentifier = Guid.NewGuid().ToString(),
+        };
+        ExtractStatus(await controller.CreateMeal(request, default)).Should().Be(StatusCodes.Status201Created);
+        var failure = new InvalidOperationException("food types failed");
+        _foodServiceMock
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var retry = await controller.CreateMeal(request, default);
+
+        ExtractStatus(retry).Should().Be(StatusCodes.Status200OK);
+        var body = ExtractBody(retry);
+        body.CarbIntake.Id.Should().Be((await _dbContext.CarbIntakes.SingleAsync()).Id);
+        _foodServiceMock.Verify(
+            s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
+            .Which.Should().Match<(LogLevel Level, string Message, Exception? Exception)>(e =>
+                e.Exception == failure
+                && e.Message.Contains(nameof(CarbIntake))
+                && e.Message.Contains(body.CarbIntake.Id.ToString()));
     }
 
     [Fact]

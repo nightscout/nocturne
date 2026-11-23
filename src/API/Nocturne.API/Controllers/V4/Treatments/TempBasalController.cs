@@ -119,7 +119,7 @@ public class TempBasalController(
         }
 
         var written = results.ToArray();
-        await OnBeforeReturnAsync(written, ct);
+        await EnrichCommittedAsync(written, ct);
         return StatusCode(StatusCodes.Status201Created, written);
     }
 
