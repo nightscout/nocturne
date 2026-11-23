@@ -212,9 +212,9 @@ public class WidgetSummaryService : IWidgetSummaryService
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
             response.IobKnown = reading.HasIob;
-            response.Iob = reading.HasIob ? Math.Round(reading.Iob.Iob * 100) / 100 : 0;
+            response.Iob = reading.HasIob ? OnBoardRounding.Iob(reading.Iob.Iob) : 0;
             response.CobKnown = reading.HasCob;
-            response.Cob = reading.HasCob ? Math.Round(reading.Cob!.Cob) : 0;
+            response.Cob = reading.HasCob ? OnBoardRounding.Cob(reading.Cob!.Cob) : 0;
         }
         catch (Exception ex)
         {

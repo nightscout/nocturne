@@ -344,9 +344,9 @@ public class TenantOverviewService : ITenantOverviewService
             var onBoard = await services.GetRequiredService<IIobCobReader>()
                 .ReadTotalAsync(new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(), live: true, ct);
             therapy = new TenantOverviewTherapy(
-                onBoard.HasIob ? ScaledRounding.Round(onBoard.Iob.Iob, 2) : 0,
+                onBoard.HasIob ? OnBoardRounding.Iob(onBoard.Iob.Iob) : 0,
                 onBoard.HasIob,
-                onBoard.HasCob ? Math.Round(onBoard.Cob!.Cob) : 0,
+                onBoard.HasCob ? OnBoardRounding.Cob(onBoard.Cob!.Cob) : 0,
                 onBoard.HasCob);
         }
 
