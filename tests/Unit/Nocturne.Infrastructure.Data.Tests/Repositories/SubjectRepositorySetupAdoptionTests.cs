@@ -54,12 +54,13 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
 
     public static TheoryData<string> TablesNamingASubject() => new(
         "recovery code", "refresh token", "trusted device", "step-up token", "avatar", "chat identity",
-        "tenant creation invite it created", "role it assigned");
+        "tenant creation invite it created", "role it assigned", "team membership", "team it created",
+        "team invite it created", "team access link it created");
 
     public static TheoryData<string> TenantRowsNamingASubject() => new(
         "login code", "member invite it created", "grant it holds", "grant it created", "authorization code",
         "excursion mute", "membership request", "membership request it decided", "client device", "device code",
-        "alert invite it created", "alert invite it used", "excursion receipt");
+        "alert invite it created", "alert invite it used", "excursion receipt", "team access it approved");
 
     public static TheoryData<string> AdoptedSubjectClauses() => new(
         "inactive", "system", "demo", "platform admin", "member of the setup tenant", "member of another tenant",
@@ -175,11 +176,37 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
             case "role it assigned":
                 db.SubjectRoles.Add(new SubjectRoleEntity { SubjectId = third, RoleId = _publicRole, AssignedById = subject });
                 break;
+            case "team membership":
+                db.TeamMembers.Add(new TeamMemberEntity { Id = Guid.CreateVersion7(), TeamId = Team(db, third), SubjectId = subject });
+                break;
+            case "team it created":
+                Team(db, subject);
+                break;
+            case "team invite it created":
+                db.TeamInvites.Add(new TeamInviteEntity
+                {
+                    Id = Guid.CreateVersion7(), TeamId = Team(db, third), CreatedBySubjectId = subject, TokenHash = "h", ExpiresAt = expires,
+                });
+                break;
+            case "team access link it created":
+                db.TeamAccessLinks.Add(new TeamAccessLinkEntity
+                {
+                    Id = Guid.CreateVersion7(), TeamId = Team(db, third), CreatedBySubjectId = subject, TokenHash = "h",
+                    ExpiresAt = expires, SuggestedRoleSlug = RoleSeeds.Owner,
+                });
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(table), table, null);
         }
 
         db.SaveChanges();
+    }
+
+    private static Guid Team(NocturneDbContext db, Guid createdBy)
+    {
+        var team = new TeamEntity { Id = Guid.CreateVersion7(), Name = "Team", CreatedBySubjectId = createdBy };
+        db.Teams.Add(team);
+        return team.Id;
     }
 
     private static RefreshTokenEntity RefreshToken(Guid subject) => new()
@@ -250,6 +277,12 @@ public class SubjectRepositorySetupAdoptionTests : IDisposable
                 {
                     Id = Guid.CreateVersion7(), TenantId = tenant, AlertExcursionId = other,
                     ActorKind = AlertReceiptActorKind.Member, ActorId = subject, SeenAt = DateTime.UtcNow,
+                });
+                break;
+            case "team access it approved":
+                db.TeamTenantAccess.Add(new TeamTenantAccessEntity
+                {
+                    Id = Guid.CreateVersion7(), TeamId = other, TenantId = tenant, ApprovedBySubjectId = subject,
                 });
                 break;
             default:

@@ -24,7 +24,7 @@ public class IgnoreQueryFiltersGuardTests
     {
         [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.ScrubTenantRowsAsync"] =
             "scrubs the deleted subject from every tenant's audit trail and membership requests, naming each tenant in turn",
-        [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.NamedByTenantRowsAsync"] =
+        [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.TenantRowsNaming"] =
             "proves no tenant's rows name a subject about to be deleted, naming each tenant in turn",
     };
 
