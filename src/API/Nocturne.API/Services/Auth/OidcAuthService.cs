@@ -810,13 +810,13 @@ public class OidcAuthService : IOidcAuthService
 
     /// <inheritdoc />
     public async Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState)
+        string code, string state, string expectedState, Guid tenantId)
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, SetupCallbackPath);
         if (!parsed.Success)
             return OidcSetupCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
 
-        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!);
+        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, tenantId);
     }
 
     /// <summary>
@@ -827,7 +827,8 @@ public class OidcAuthService : IOidcAuthService
     internal async Task<OidcSetupCallbackResult> CompleteSetupAsync(
         OidcStateData stateData,
         OidcProvider provider,
-        OidcIdTokenClaims claims)
+        OidcIdTokenClaims claims,
+        Guid tenantId)
     {
         if (stateData.Intent != "setup")
             return OidcSetupCallbackResult.Failed("invalid_intent", "State was not issued for a setup flow");
@@ -837,13 +838,18 @@ public class OidcAuthService : IOidcAuthService
 
         var subjectId = stateData.SubjectId.Value;
 
-        var (outcome, _) = await _subjectService.AttachOidcIdentityAsync(
+        var outcome = await _subjectService.AttachSetupOwnerOidcIdentityAsync(
+            tenantId,
             subjectId,
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
             claims.Email,
             claims.EmailVerified == true);
+
+        if (outcome is null)
+            return OidcSetupCallbackResult.Failed(
+                "setup_already_complete", "Another completion has claimed the setup");
 
         if (outcome == OidcLinkOutcome.AlreadyLinkedToOther)
         {

@@ -235,18 +235,20 @@ public class PasskeyService : IPasskeyService
                 $"Maximum of {MaxCredentialsPerSubject} passkey credentials per user has been reached.");
         }
 
-        var credentialId = await _passkeys.CreateAsync(
-            new NewPasskeyCredential(
-                subjectId,
-                credential.Id,
-                credential.PublicKey,
-                credential.SignCount,
-                credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
-                string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
-                // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
-                AaGuid: null,
-                DateTime.UtcNow),
-            CancellationToken.None);
+        var stored = new NewPasskeyCredential(
+            subjectId,
+            credential.Id,
+            credential.PublicKey,
+            credential.SignCount,
+            credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
+            string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
+            // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
+            AaGuid: null,
+            DateTime.UtcNow);
+        var credentialId = flow == PasskeyRegistrationFlow.SetupOwner
+            ? await _passkeys.CreateForSetupOwnerAsync(tenantId, stored, CancellationToken.None)
+                ?? throw new SetupOwnerTakenException()
+            : await _passkeys.CreateAsync(stored, CancellationToken.None);
 
         _logger.LogInformation(
             "Passkey credential {CredentialId} registered for subject {SubjectId} in tenant {TenantId}",

@@ -149,6 +149,7 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
             await ExecuteAsync(conn, """
                 INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
                 VALUES (gen_random_uuid(), @subject, @credential, @credential, 0, '{}', now());
+                UPDATE tenants SET setup_owner_subject_id = NULL WHERE setup_owner_subject_id = @subject;
                 """,
                 ("subject", created), ("credential", Guid.NewGuid().ToByteArray()));
             ownerId = created;
@@ -166,8 +167,6 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
         using (var scope = Fixture.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
-            await scope.ServiceProvider.GetRequiredService<ISubjectRepository>()
-                .ClearSetupOwnerAsync(ownerId, CancellationToken.None);
             await scope.ServiceProvider.GetRequiredService<PlatformAdminBootstrapService>()
                 .EnsureFirstOwnerIsPlatformAdminAsync(ownerId, CancellationToken.None);
 
@@ -454,7 +453,8 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
         return await service.CompleteSetupAsync(
             State(intent, createdSubjectId, tenantSlug),
             provider!,
-            new OidcAuthService.OidcIdTokenClaims { Sub = externalId, Name = externalId });
+            new OidcAuthService.OidcIdTokenClaims { Sub = externalId, Name = externalId },
+            Fixture.TenantId);
     }
 
     private OidcAuthService.OidcStateData State(

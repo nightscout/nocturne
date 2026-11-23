@@ -206,8 +206,11 @@ public partial class SetupController : ControllerBase
     /// Verifies attestation, ends setup, generates recovery codes, and signs the owner in.
     /// </summary>
     /// <remarks>
-    /// Setup closes when the passkey is stored (<see cref="IInstanceSetupState.TenantHasCredentialedMemberAsync"/>).
-    /// A failure after that leaves an owner who signs in with the passkey on the login page.
+    /// Setup closes when the passkey is stored (<see cref="IInstanceSetupState.TenantHasCredentialedMemberAsync"/>),
+    /// and the store claims the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>), so
+    /// of two completions under way at once only one stores a passkey; the other is answered as a
+    /// completion that arrives after setup closed. A failure after the store leaves an owner who
+    /// signs in with the passkey on the login page.
     /// </remarks>
     [HttpPost("owner/complete")]
     [EnableRateLimiting("setup")]
@@ -250,8 +253,12 @@ public partial class SetupController : ControllerBase
         {
             return RegistrationFailed(ex);
         }
+        catch (SetupOwnerTakenException)
+        {
+            return OwnerAlreadyExists();
+        }
 
-        await CompleteAsOwnerAsync(credResult.SubjectId);
+        await GrantFirstOwnerPlatformAdminAsync(credResult.SubjectId);
 
         var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 
@@ -273,7 +280,7 @@ public partial class SetupController : ControllerBase
                     ExpiresIn = signedIn.Session.ExpiresInSeconds,
                 });
             case SignInOutcome.SecondFactorRequired:
-                return Conflict(new { error = "owner_already_exists" });
+                return OwnerAlreadyExists();
             case SignInOutcome.Refused { Reason: SignInRefusal.NotAMember }:
                 return StartSetupAgain();
             default:
@@ -380,7 +387,7 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(expectedState))
             return Redirect("/setup?error=missing_state");
 
-        var result = await _oidcAuthService.HandleSetupCallbackAsync(code, state, expectedState);
+        var result = await _oidcAuthService.HandleSetupCallbackAsync(code, state, expectedState, tenant!.Id);
 
         if (!result.Success || result.SubjectId is not { } ownerSubjectId)
         {
@@ -390,7 +397,7 @@ public partial class SetupController : ControllerBase
             return Redirect($"/setup?error={Uri.EscapeDataString(result.Error ?? "unknown")}");
         }
 
-        await CompleteAsOwnerAsync(ownerSubjectId);
+        await GrantFirstOwnerPlatformAdminAsync(ownerSubjectId);
 
         var outcome = await SignInOwnerAsync(
             ownerSubjectId, tenant!, SignInMethod.SetupOidc, "Setup OIDC", result.OidcSessionId, result.ProviderId);
@@ -475,7 +482,7 @@ public partial class SetupController : ControllerBase
         var hasOwnerWithCredentials = await _setupState.TenantHasCredentialedMemberAsync(tenant.Id, ct);
 
         if (hasOwnerWithCredentials)
-            return (null, Conflict(new { error = "owner_already_exists" }));
+            return (null, OwnerAlreadyExists());
 
         return (tenant, null);
     }
@@ -546,28 +553,20 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// Ends the setup owner record (<see cref="ISubjectRepository.ClearSetupOwnerAsync"/>) and
-    /// grants the new owner platform admin now that it holds a credential. The startup
+    /// Grants the new owner platform admin now that it holds a credential. The startup
     /// bootstrap pass ran against an empty database on a fresh install, so without the grant
     /// the owner cannot reach /settings/admin until the API restarts.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The record is cleared first: the credential is already stored, so a grant that throws
-    /// must not leave the record naming a subject that is now the owner.
-    /// </para>
-    /// <para>
     /// Deliberately called from the completion paths rather than
     /// <see cref="EnsureOwnerSubjectAsync"/>: an abandoned WebAuthn ceremony would
     /// otherwise leave a credential-less subject holding the flag, which then suppresses
     /// every later grant — including the startup pass — and locks the instance out for good.
-    /// </para>
     /// </remarks>
-    private async Task CompleteAsOwnerAsync(Guid subjectId)
+    private async Task GrantFirstOwnerPlatformAdminAsync(Guid subjectId)
     {
         // Not the request token: a client that disconnects mid-response would otherwise
-        // abort the clear or the grant and leave the owner locked out of the admin UI.
-        await _subjects.ClearSetupOwnerAsync(subjectId, CancellationToken.None);
+        // abort the grant and leave the owner locked out of the admin UI.
         await _platformAdminBootstrap.EnsureFirstOwnerIsPlatformAdminAsync(
             subjectId, CancellationToken.None);
     }
@@ -616,6 +615,8 @@ public partial class SetupController : ControllerBase
         _logger.LogWarning(ex, "Setup owner passkey registration failed");
         return Problem(detail: "Passkey registration failed during setup", statusCode: 400, title: "Registration Failed");
     }
+
+    private ConflictObjectResult OwnerAlreadyExists() => Conflict(new { error = "owner_already_exists" });
 
     private ObjectResult StartSetupAgain() =>
         Problem(detail: "Start setup again to create the owner account", statusCode: 400, title: "Bad Request");

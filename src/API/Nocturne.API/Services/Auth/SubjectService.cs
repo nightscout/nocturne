@@ -367,6 +367,25 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
+    public async Task<OidcLinkOutcome?> AttachSetupOwnerOidcIdentityAsync(
+        Guid tenantId, Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email,
+        bool emailVerified)
+    {
+        var existing = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        if (existing != null)
+            return existing.Identity.SubjectId == subjectId ? null : OidcLinkOutcome.AlreadyLinkedToOther;
+
+        if (await _subjects.AddSetupOwnerOidcIdentityAsync(
+                tenantId,
+                new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, _time.GetUtcNow().UtcDateTime),
+                CancellationToken.None) is null)
+            return null;
+
+        await ConfirmAssertedEmailAsync(subjectId, email, emailVerified);
+        return OidcLinkOutcome.Created;
+    }
+
+    /// <inheritdoc />
     public async Task<Guid?> AdoptForSetupAsync(Guid createdSubjectId, string oidcSubjectId, string issuer, string tenantSlug)
     {
         var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);

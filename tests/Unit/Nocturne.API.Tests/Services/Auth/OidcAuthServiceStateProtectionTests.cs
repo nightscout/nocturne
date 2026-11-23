@@ -100,7 +100,7 @@ public class OidcAuthServiceStateProtectionTests
         var forged = ForgeState("setup", victimSubjectId);
 
         // The attacker controls the cookie too, so the double-submit check passes.
-        var result = await _service.HandleSetupCallbackAsync("any-code", forged, forged);
+        var result = await _service.HandleSetupCallbackAsync("any-code", forged, forged, Guid.NewGuid());
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("invalid_state");
@@ -178,7 +178,7 @@ public class OidcAuthServiceStateProtectionTests
             .GenerateSetupAuthorizationUrlAsync(ProviderId, Guid.NewGuid());
 
         var result = await _service.HandleSetupCallbackAsync(
-            "any-code", foreign.State, foreign.State);
+            "any-code", foreign.State, foreign.State, Guid.NewGuid());
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("invalid_state");

@@ -913,6 +913,63 @@ public class PasskeyServiceTests
         (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(0);
     }
 
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASetupOwnerRegistration_StoresThePasskeyOnlyWhileTheSetupOwnerRecordNamesItsSubject(bool recorded)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+        var otherOwner = Guid.CreateVersion7();
+        await RecordSetupOwnerAsync(recorded ? _subjectId : otherOwner);
+
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "owner", PasskeyRegistrationFlow.SetupOwner);
+        var complete = () => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.SetupOwner, _tenantId, _subjectId);
+
+        if (recorded)
+            (await complete()).SubjectId.Should().Be(_subjectId);
+        else
+            await complete.Should().ThrowAsync<SetupOwnerTakenException>();
+
+        (await _dbContext.PasskeyCredentials.AsNoTracking().CountAsync(c => c.SubjectId == _subjectId))
+            .Should().Be(recorded ? 1 : 0);
+        (await _dbContext.Tenants.AsNoTracking().SingleAsync(t => t.Id == _tenantId)).SetupOwnerSubjectId
+            .Should().Be(recorded ? null : otherOwner);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistrationOutsideSetup_StoresThePasskeyWithoutReadingTheSetupOwnerRecord()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.OwnAccount);
+        await service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId);
+
+        (await _dbContext.PasskeyCredentials.AsNoTracking().CountAsync(c => c.SubjectId == _subjectId)).Should().Be(1);
+        (await _dbContext.Tenants.AsNoTracking().AnyAsync()).Should().BeFalse();
+    }
+
+    /// <summary>Makes <see cref="_tenantId"/> a tenant whose setup owner record names <paramref name="subjectId"/>.</summary>
+    private async Task RecordSetupOwnerAsync(Guid subjectId)
+    {
+        _dbContext.Tenants.Add(new TenantEntity
+        {
+            Id = _tenantId, Slug = "setup", DisplayName = "Setup", SetupOwnerSubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+    }
+
     /// <summary>The API's own registrations, for a server whose base domain is <c>localhost</c>.</summary>
     private static ServiceProvider RegisteredProvider()
     {
@@ -1104,6 +1161,8 @@ public class PasskeyServiceTests
         using var provider = RegisteredProvider();
         var service = RegisteredService(provider);
         var options = await service.GenerateRegistrationOptionsAsync(_subjectId, "rhys", flow);
+        if (flow == PasskeyRegistrationFlow.SetupOwner)
+            await RecordSetupOwnerAsync(_subjectId);
 
         await service.CompleteRegistrationAsync(
             Attestation(first, options.OptionsJson, "https://localhost"), options.ChallengeToken, flow, _tenantId, _subjectId);

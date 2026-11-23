@@ -457,7 +457,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
         var (invite, _) = await InviteAsync(s, "Setup");
         var end = Now.UtcDateTime.AddDays(30);
-        var created = await subjects.CreateAsync(new NewSubject("Owner Name", Username: "owner"), Ct);
+        var created = await subjects.CreateSetupOwnerAsync(s.Tenant, new NewSubject("Owner Name", Username: "owner"), Ct);
         (await new TenantMembershipRepository(contexts, AccountLinkRoutes.Off).AddMemberAsync(
             new NewTenantMember(
                 s.Tenant, created, [s.OwnerRole], [Scope.GlucoseRead], Label: "Owner", Username: "owner", LimitTo24Hours: true,

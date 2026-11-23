@@ -99,17 +99,6 @@ public class SubjectRepository : ISubjectRepository
         return id;
     }
 
-    /// <inheritdoc/>
-    public virtual async Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var tenants = await db.Tenants.Where(t => t.SetupOwnerSubjectId == subjectId).ToListAsync(ct);
-        foreach (var tenant in tenants)
-            tenant.SetupOwnerSubjectId = null;
-        await SaveAsync(db, ct);
-    }
-
     private async Task<Guid> StageSubjectAsync(NocturneDbContext db, NewSubject subject, CancellationToken ct)
     {
         var entity = new SubjectEntity
@@ -733,6 +722,23 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
+        var id = StageOidcIdentity(db, identity);
+        await SaveAsync(db, ct);
+        return id;
+    }
+
+    /// <inheritdoc/>
+    public virtual Task<Guid?> AddSetupOwnerOidcIdentityAsync(Guid tenantId, NewSubjectOidcIdentity identity, CancellationToken ct) =>
+        SetupOwnerClaim.StoreClaimingSetupAsync(
+            Transactional,
+            tenantId,
+            identity.SubjectId,
+            db => StageOidcIdentity(db, identity),
+            (db, id, token) => db.SubjectOidcIdentities.AnyAsync(o => o.Id == id, token),
+            ct);
+
+    private static Guid StageOidcIdentity(NocturneDbContext db, NewSubjectOidcIdentity identity)
+    {
         var entity = new SubjectOidcIdentityEntity
         {
             Id = Guid.CreateVersion7(),
@@ -744,7 +750,6 @@ public class SubjectRepository : ISubjectRepository
             LinkedAt = identity.LinkedAt,
         };
         db.SubjectOidcIdentities.Add(entity);
-        await SaveAsync(db, ct);
         return entity.Id;
     }
 
@@ -779,10 +784,18 @@ public class SubjectRepository : ISubjectRepository
 
             var tenantId = await db.Tenants.AsNoTracking()
                 .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
+            // Still serializable: the setup lock orders setup stores only, and the holder's and the
+            // created subject's rows are read by predicates that other writers take no lock for. The
+            // snapshot is taken before the lock is granted, so a store that committed in between
+            // fails this transaction's write of the tenant row as a serialization failure, and the
+            // retry reads the ended record.
+            if (tenantId is null || !await db.ClaimSetupAsync(tenantId.Value, createdId, ct))
+                return false;
+
             var holder = await AdoptableBySetup(db, identityId).FirstOrDefaultAsync(s => s.Id == holderId, ct);
             var memberships = await db.TenantMembers.Include(m => m.MemberRoles)
                 .Where(m => m.SubjectId == createdId).Take(2).ToListAsync(ct);
-            if (tenantId is null || holder is null || memberships.Count != 1)
+            if (holder is null || memberships.Count != 1)
                 return false;
 
             var created = await Unclaimed(db, identityId: null, ownerOf: tenantId)

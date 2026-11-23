@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -310,21 +311,112 @@ public class SubjectRepositoryTests : IDisposable
         (await CandidateAsync()).Should().Be(created, "a subject recorded before its membership was written is still resumed");
     }
 
-    [Fact]
-    public async Task ClearingTheSetupOwnerEndsOnlyThatSubjectsRecord()
+    private PasskeyCredentialRepository Passkeys() => new(new TestNocturneDbContextFactory(_db.CreateContext()));
+
+    private static NewPasskeyCredential PasskeyOf(Guid subject) =>
+        new(subject, Guid.NewGuid().ToByteArray(), [1], 0, [], null, null, Now);
+
+    private static NewSubjectOidcIdentity IdentityOf(Guid subject, Guid provider, string sub) =>
+        new(subject, provider, sub, "https://issuer.example", null, Now);
+
+    /// <summary>The first credential stores, each storing for <paramref name="subject"/> on <see cref="_tenant"/>.</summary>
+    private Task<Guid?> StoreFirstCredentialAsync(string store, Guid subject, string sub = "sub-1") => store switch
+    {
+        "passkey" => Passkeys().CreateForSetupOwnerAsync(_tenant, PasskeyOf(subject), CancellationToken.None),
+        "provider identity" => Subjects().AddSetupOwnerOidcIdentityAsync(
+            _tenant, IdentityOf(subject, _provider, sub), CancellationToken.None),
+        _ => throw new ArgumentOutOfRangeException(nameof(store), store, null),
+    };
+
+    private int CredentialsOf(Guid subject)
+    {
+        using var db = _db.CreateContext();
+        return db.PasskeyCredentials.Count(c => c.SubjectId == subject)
+            + db.SubjectOidcIdentities.Count(o => o.SubjectId == subject);
+    }
+
+    [Theory]
+    [InlineData("passkey")]
+    [InlineData("provider identity")]
+    public async Task TheFirstCredentialStoreClaimsTheSetupOfTheRecordedSubjectAndEndsOnlyItsTenantsRecord(string store)
     {
         var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
         var elsewhere = await CreateSetupOwnerAsync(new NewSubject("Elsewhere"), _otherTenant);
 
-        await Subjects().ClearSetupOwnerAsync(Guid.CreateVersion7(), CancellationToken.None);
-        RecordOf(_tenant).Should().Be(owner);
+        var stored = await StoreFirstCredentialAsync(store, owner);
 
-        await Subjects().ClearSetupOwnerAsync(owner, CancellationToken.None);
-
+        stored.Should().NotBeNull();
+        CredentialsOf(owner).Should().Be(1);
         RecordOf(_tenant).Should().BeNull();
-        (await CandidateAsync()).Should().BeNull();
         RecordOf(_otherTenant).Should().Be(elsewhere);
-        (await Subjects().GetAsync(owner, CancellationToken.None)).Should().NotBeNull("clearing the record leaves the subject");
+        (await Subjects().GetAsync(owner, CancellationToken.None)).Should().NotBeNull("ending the record leaves the subject");
+    }
+
+    [Theory]
+    [InlineData("passkey")]
+    [InlineData("provider identity")]
+    public async Task ACredentialStoreForASubjectTheRecordDoesNotNameStoresNothing(string store)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        var stranger = await CreateAsync(new NewSubject("Stranger"));
+
+        var stored = await StoreFirstCredentialAsync(store, stranger);
+
+        stored.Should().BeNull();
+        CredentialsOf(stranger).Should().Be(0);
+        RecordOf(_tenant).Should().Be(owner);
+    }
+
+    [Theory]
+    [InlineData("passkey", "passkey")]
+    [InlineData("passkey", "provider identity")]
+    [InlineData("provider identity", "passkey")]
+    [InlineData("provider identity", "provider identity")]
+    public async Task OnceTheSetupIsClaimedASecondCredentialStoreStoresNothing(string first, string second)
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+
+        (await StoreFirstCredentialAsync(first, owner, "sub-1")).Should().NotBeNull();
+        var again = await StoreFirstCredentialAsync(second, owner, "sub-2");
+
+        again.Should().BeNull();
+        CredentialsOf(owner).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ACredentialStoreForATenantThatDoesNotExistStoresNothing()
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+
+        (await Passkeys().CreateForSetupOwnerAsync(Guid.CreateVersion7(), PasskeyOf(owner), CancellationToken.None))
+            .Should().BeNull();
+        CredentialsOf(owner).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TheFirstCredentialStoreRunsOnlyOnARepositoryThatOpensItsOwnTransaction()
+    {
+        await using var unit = DbUnitOfWork.Own(_db.CreateContext());
+
+        var passkey = () => new PasskeyCredentialRepository(unit)
+            .CreateForSetupOwnerAsync(_tenant, PasskeyOf(Guid.CreateVersion7()), CancellationToken.None);
+        var identity = () => new SubjectRepository(unit, AccountLinkRoutes.Off)
+            .AddSetupOwnerOidcIdentityAsync(_tenant, IdentityOf(Guid.CreateVersion7(), _provider, "sub-1"), CancellationToken.None);
+
+        await passkey.Should().ThrowAsync<InvalidOperationException>();
+        await identity.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task TheSetupIsClaimedOnlyInsideATransaction()
+    {
+        var owner = await CreateSetupOwnerAsync(new NewSubject("Owner"));
+        await using var db = _db.CreateContext();
+
+        var claim = () => db.ClaimSetupAsync(_tenant, owner, CancellationToken.None);
+
+        await claim.Should().ThrowAsync<InvalidOperationException>();
+        RecordOf(_tenant).Should().Be(owner);
     }
 
     [Fact]
