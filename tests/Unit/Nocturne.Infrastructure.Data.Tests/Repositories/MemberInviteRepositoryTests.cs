@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -26,6 +27,7 @@ public class MemberInviteRepositoryTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant).SeedTenant(_otherTenant, "other");
         using var db = _db.CreateContext();
         db.Subjects.Add(new SubjectEntity { Id = _owner, Name = "Owner" });
+        db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenant, SubjectId = _owner });
         db.SaveChanges();
     }
 
@@ -43,8 +45,8 @@ public class MemberInviteRepositoryTests : IDisposable
         var repo = Repository();
         var id = await repo.CreateAsync(Invite("hash"), CancellationToken.None);
 
-        (await repo.TryClaimUseAsync(id, CancellationToken.None)).Should().BeTrue();
-        (await repo.TryClaimUseAsync(id, CancellationToken.None)).Should().BeFalse();
+        (await repo.TryClaimUseAsync(id, Now, CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
+        (await repo.TryClaimUseAsync(id, Now, CancellationToken.None)).Should().Be(MemberInviteClaim.Exhausted);
 
         var stored = await repo.FindByTokenHashAsync("hash", _tenant, CancellationToken.None);
         stored!.UseCount.Should().Be(1);
@@ -53,6 +55,32 @@ public class MemberInviteRepositoryTests : IDisposable
         stored.TenantDisplayName.Should().BeEmpty("the seeded tenant carries no display name");
         stored.CreatedByName.Should().Be("Owner");
         stored.Uses.Should().BeEmpty("the token lookup does not read who joined");
+    }
+
+    [Fact]
+    public async Task ARevokedInviteIsNotClaimed()
+    {
+        var repo = Repository();
+        var id = await repo.CreateAsync(Invite("hash", maxUses: null), CancellationToken.None);
+        await repo.RevokeAsync(id, _tenant, Now, CancellationToken.None);
+
+        (await repo.TryClaimUseAsync(id, Now, CancellationToken.None)).Should().Be(MemberInviteClaim.Revoked);
+    }
+
+    [Fact]
+    public async Task AnInviteWhoseMakerHoldsNoLiveMembershipIsNotClaimed()
+    {
+        var repo = Repository();
+        var id = await repo.CreateAsync(Invite("hash", maxUses: null), CancellationToken.None);
+        await using (var db = _db.CreateContext())
+        {
+            var membership = await db.TenantMembers.SingleAsync(m => m.SubjectId == _owner);
+            membership.AccessEndsAt = Now;
+            await db.SaveChangesAsync();
+        }
+
+        (await repo.TryClaimUseAsync(id, Now.AddTicks(-1), CancellationToken.None)).Should().Be(MemberInviteClaim.Claimed);
+        (await repo.TryClaimUseAsync(id, Now, CancellationToken.None)).Should().Be(MemberInviteClaim.Revoked);
     }
 
     [Fact]
@@ -84,5 +112,21 @@ public class MemberInviteRepositoryTests : IDisposable
         await repo.CreateAsync(Invite("expired", maxUses: null, expiresAt: Now), CancellationToken.None);
         (await repo.AnyUsedOrLiveAsync(Now, CancellationToken.None)).Should().BeFalse("the expiry instant itself is expired");
         (await repo.AnyUsedOrLiveAsync(Now.AddTicks(-1), CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AnUnusedInviteCountsAsLiveOnlyWhileItsMakerIsAMemberInForce()
+    {
+        var repo = Repository();
+        await repo.CreateAsync(Invite("hash", maxUses: null), CancellationToken.None);
+        await using (var db = _db.CreateContext())
+        {
+            var membership = await db.TenantMembers.SingleAsync(m => m.SubjectId == _owner);
+            membership.AccessEndsAt = Now;
+            await db.SaveChangesAsync();
+        }
+
+        (await repo.AnyUsedOrLiveAsync(Now.AddTicks(-1), CancellationToken.None)).Should().BeTrue();
+        (await repo.AnyUsedOrLiveAsync(Now, CancellationToken.None)).Should().BeFalse("its maker's access has ended");
     }
 }

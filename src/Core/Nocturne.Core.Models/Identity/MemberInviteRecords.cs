@@ -50,6 +50,16 @@ public sealed record MemberInviteRecord(
 /// <summary>A membership created through an invite.</summary>
 public sealed record MemberInviteUse(Guid SubjectId, string? SubjectName, DateTime JoinedAt);
 
+/// <summary>What taking a use of an invite found.</summary>
+public enum MemberInviteClaim
+{
+    Claimed,
+    Exhausted,
+
+    /// <summary>The invite is revoked, or its maker is no longer a member in force.</summary>
+    Revoked,
+}
+
 /// <summary>What revoking an invite found.</summary>
 public enum MemberInviteRevocation
 {

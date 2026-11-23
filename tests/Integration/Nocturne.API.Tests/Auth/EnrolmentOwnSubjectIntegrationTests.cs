@@ -231,6 +231,10 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     private string SlugOf(Guid tenantId) =>
         tenantId == _tenantB ? _slugB : ApiIntegrationTestFixture.TenantSlug;
 
+    /// <summary>
+    /// An invite the fixture owner made, who is made a member of <paramref name="tenantId"/> when it has
+    /// no owner of its own: an invite is live only while its maker is a member in force.
+    /// </summary>
     private async Task<string> SeedMemberInviteAsync(NpgsqlConnection conn, Guid tenantId)
     {
         var token = $"invite-{Guid.NewGuid():N}";
@@ -238,9 +242,13 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
             ("tenantText", tenantId.ToString()));
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
         await ExecuteAsync(conn, """
+            INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
+            SELECT @memberId, @tenantId, @ownerId, @permissions::jsonb, now(), now(), false
+            WHERE NOT EXISTS (SELECT 1 FROM tenant_members WHERE tenant_id = @tenantId AND subject_id = @ownerId);
             INSERT INTO member_invites (id, tenant_id, created_by_subject_id, token_hash, role_ids, limit_to_24_hours, expires_at, use_count, created_at)
             VALUES (@inviteId, @tenantId, @ownerId, @hash, @roleIds::jsonb, false, now() + interval '1 day', 0, now());
             """,
+            ("memberId", Guid.CreateVersion7()), ("permissions", $"[\"{Scope.FullAccess}\"]"),
             ("inviteId", Guid.CreateVersion7()), ("tenantId", tenantId),
             ("ownerId", Fixture.OwnerSubjectId), ("hash", HashUtils.Sha256Hex(token)),
             ("roleIds", $"[\"{viewerRoleId}\"]"));

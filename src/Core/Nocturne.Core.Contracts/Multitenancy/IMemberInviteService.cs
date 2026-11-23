@@ -102,6 +102,15 @@ public record MemberInviteResult(
 /// <summary>
 /// Detailed view of an invite, including its current validity state and usage history.
 /// </summary>
+/// <param name="CreatedByName">The display name of the member who made the invite; empty when they have none.</param>
+/// <param name="IsValid">
+/// Whether the invite can be accepted: unexpired, unrevoked, under its cap and made by a subject who is a
+/// member in force.
+/// </param>
+/// <param name="IsRevoked">
+/// Whether the invite was revoked, or its maker is no longer a member in force, so it reads as the
+/// revoked invite an accept refuses.
+/// </param>
 /// <param name="RoleNames">Names of the invite's roles that still exist.</param>
 /// <param name="Permissions">
 /// What accepting the invite grants: the permissions of <paramref name="RoleNames"/> unioned with
