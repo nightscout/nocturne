@@ -9083,7 +9083,6 @@ msgstr "This invite link is invalid or has expired."
 #~ msgstr "Failed to accept invite."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
-#: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Failed to register passkey."
 msgstr "Failed to register passkey."
 
@@ -48872,3 +48871,7 @@ msgstr "{0} is no longer staff of a team. The detail is no longer stored."
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You cannot approve your own request. Ask another member to approve it."
 msgstr "You cannot approve your own request. Ask another member to approve it."
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Nocturne did not add the passkey. To try again, select Add passkey."
+msgstr "Nocturne did not add the passkey. To try again, select Add passkey."

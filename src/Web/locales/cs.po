@@ -9083,7 +9083,6 @@ msgstr "Tento odkaz s pozvánkou je neplatný nebo jeho platnost vypršela."
 #~ msgstr ""
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
-#: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Failed to register passkey."
 msgstr "Registrace přístupového klíče se nezdařila."
 
@@ -48871,4 +48870,8 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You cannot approve your own request. Ask another member to approve it."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Nocturne did not add the passkey. To try again, select Add passkey."
 msgstr ""

@@ -9254,7 +9254,6 @@ msgstr "Este enlace de invitación no es válido o ha caducado."
 #~ msgstr ""
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
-#: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Failed to register passkey."
 msgstr "No se pudo registrar la clave de acceso."
 
@@ -49810,4 +49809,8 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You cannot approve your own request. Ask another member to approve it."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/account/+page.svelte
+msgid "Nocturne did not add the passkey. To try again, select Add passkey."
 msgstr ""
