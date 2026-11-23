@@ -4,6 +4,7 @@ using Fido2NetLib.Objects;
 using Fido2NetLib.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -16,10 +17,9 @@ namespace Nocturne.API.Services.Auth;
 /// request/response bodies (stateless challenge flow — no server-side session required).
 /// </summary>
 /// <remarks>
-/// The service dynamically adds tenant subdomain origins
-/// to the FIDO2 allowed-origins list when the browser's WebAuthn origin is a valid subdomain
-/// of the configured <c>rpId</c>. Maximum passkeys per subject is capped at 20.
-/// Challenge tokens expire after 5 minutes.
+/// Each ceremony is verified against a relying party of its own, which accepts the origin the
+/// ceremony presents when <see cref="IsAcceptedOrigin"/> admits it. Maximum passkeys per subject
+/// is capped at 20. Challenge tokens expire after 5 minutes.
 /// </remarks>
 /// <seealso cref="IPasskeyService"/>
 /// <seealso cref="SubjectService"/>
@@ -34,8 +34,9 @@ public class PasskeyService : IPasskeyService
     private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISubjectRepository _subjects;
     private readonly ITenantMemberService _members;
-    private readonly IFido2 _fido2;
+    private readonly Fido2 _fido2;
     private readonly IDataProtector _protector;
+    private readonly IOptionsFactory<Fido2Configuration> _fido2Configs;
     private readonly Fido2Configuration _fido2Config;
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
@@ -44,9 +45,8 @@ public class PasskeyService : IPasskeyService
     /// <param name="passkeys">Repository for the stored passkey credentials.</param>
     /// <param name="subjects">Repository for finding the tenant member a username names.</param>
     /// <param name="members">Service for checking that a credential's owner is a member of the tenant.</param>
-    /// <param name="fido2">The Fido2NetLib instance for ceremony execution.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting challenge tokens.</param>
-    /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
+    /// <param name="fido2Configs">Builds the relying party (rpId, rpName, configured origins) afresh for each ceremony.</param>
     /// <param name="logger">Logger for credential registration, assertion and removal, and challenge token failures.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
     /// <param name="timeProvider">The clock a member's end date is judged by.</param>
@@ -54,9 +54,8 @@ public class PasskeyService : IPasskeyService
         IPasskeyCredentialRepository passkeys,
         ISubjectRepository subjects,
         ITenantMemberService members,
-        IFido2 fido2,
         IDataProtectionProvider dataProtectionProvider,
-        Microsoft.Extensions.Options.IOptions<Fido2Configuration> fido2Options,
+        IOptionsFactory<Fido2Configuration> fido2Configs,
         ILogger<PasskeyService> logger,
         IHostEnvironment environment,
         TimeProvider timeProvider)
@@ -65,9 +64,10 @@ public class PasskeyService : IPasskeyService
         _passkeys = passkeys ?? throw new ArgumentNullException(nameof(passkeys));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _members = members ?? throw new ArgumentNullException(nameof(members));
-        _fido2 = fido2;
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Passkey.Challenge");
-        _fido2Config = fido2Options.Value;
+        _fido2Configs = fido2Configs;
+        _fido2Config = fido2Configs.Create(Options.DefaultName);
+        _fido2 = new Fido2(_fido2Config);
         _logger = logger;
         _environment = environment;
     }
@@ -103,39 +103,54 @@ public class PasskeyService : IPasskeyService
     }
 
     /// <summary>
-    /// Extracts the origin from the WebAuthn clientDataJSON and, if it is a
-    /// subdomain of the configured rpId, adds it to the FIDO2 allowed origins.
-    /// This is required for tenant subdomains where the browser
-    /// origin (e.g. https://rhys.nocturne.run) isn't known at startup.
+    /// Whether a ceremony may present <paramref name="origin"/>: a page on the rpId's own host or
+    /// any host beneath it (tenant and share hosts are not known at startup), at any scheme and
+    /// port. The configured origins are on the rpId's host, so this rule covers them too.
     /// </summary>
-    private void AllowOriginFromClientData(byte[] clientDataJson)
+    private bool IsAcceptedOrigin(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var uri) && CanUseConfiguredRpId(uri.Host);
+
+    /// <summary>
+    /// The verifier for one ceremony: the configured relying party, accepting also the origin
+    /// <paramref name="clientDataJson"/> names when <see cref="IsAcceptedOrigin"/> admits it.
+    /// </summary>
+    /// <remarks>
+    /// Fido2 reads the accepted origins from the configuration it is given, so the presented
+    /// origin goes into a configuration built for this ceremony alone. A client data that names no
+    /// origin it can read adds nothing, and Fido2 refuses it as it refuses one with no origin.
+    /// </remarks>
+    private Fido2 VerifierFor(byte[]? clientDataJson)
+    {
+        var config = _fido2Configs.Create(Options.DefaultName);
+        if (PresentedOrigin(clientDataJson) is { } origin && IsAcceptedOrigin(origin))
+            config.Origins = new HashSet<string>(config.Origins) { origin };
+
+        return new Fido2(config);
+    }
+
+    /// <summary>
+    /// The <c>origin</c> string of <paramref name="clientDataJson"/>, or null when it is not a JSON
+    /// object naming an origin as text: not JSON, another shape, or a string that is not valid
+    /// UTF-8 or UTF-16 (which <see cref="JsonElement.GetString"/> rejects).
+    /// </summary>
+    private static string? PresentedOrigin(byte[]? clientDataJson)
     {
         try
         {
             using var doc = JsonDocument.Parse(clientDataJson);
-            if (!doc.RootElement.TryGetProperty("origin", out var originProp))
-                return;
-
-            var origin = originProp.GetString();
-            if (string.IsNullOrEmpty(origin) || _fido2Config.FullyQualifiedOrigins.Contains(origin))
-                return;
-
-            var uri = new Uri(origin);
-            if (CanUseConfiguredRpId(uri.Host))
-            {
-                ((HashSet<string>)_fido2Config.Origins).Add(origin);
-
-                // FullyQualifiedOrigins is lazily cached from Origins — adding to
-                // Origins after the cache is built won't update it. Mutate directly.
-                if (_fido2Config.FullyQualifiedOrigins is HashSet<string> fqOrigins)
-                {
-                    fqOrigins.Add(origin);
-                }
-            }
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("origin", out var origin)
+                && origin.ValueKind == JsonValueKind.String
+                    ? origin.GetString()
+                    : null;
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            _logger.LogDebug(ex, "Could not extract origin from clientDataJSON");
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -195,8 +210,8 @@ public class PasskeyService : IPasskeyService
         var attestationResponse = JsonSerializer.Deserialize<AuthenticatorAttestationRawResponse>(attestationResponseJson)
             ?? throw new InvalidOperationException("Failed to deserialize attestation response.");
 
-        AllowOriginFromClientData(attestationResponse.Response.ClientDataJson);
-        var credential = await _fido2.MakeNewCredentialAsync(new MakeNewCredentialParams
+        // Fido2 refuses a response with no authenticator response part.
+        var credential = await VerifierFor(attestationResponse.Response?.ClientDataJson).MakeNewCredentialAsync(new MakeNewCredentialParams
         {
             AttestationResponse = attestationResponse,
             OriginalOptions = originalOptions,
@@ -310,9 +325,7 @@ public class PasskeyService : IPasskeyService
             throw new InvalidOperationException("Credential owner is not active.");
 
         // Fido2 refuses a response with no authenticator response part.
-        if (assertionResponse.Response is { } response)
-            AllowOriginFromClientData(response.ClientDataJson);
-        var result = await _fido2.MakeAssertionAsync(new MakeAssertionParams
+        var result = await VerifierFor(assertionResponse.Response?.ClientDataJson).MakeAssertionAsync(new MakeAssertionParams
         {
             AssertionResponse = assertionResponse,
             OriginalOptions = originalOptions,

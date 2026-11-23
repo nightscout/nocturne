@@ -4,11 +4,16 @@ using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -21,9 +26,8 @@ using Nocturne.API.Services.Identity;
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
-/// Unit tests for PasskeyService focusing on DB operations, removal protection, credential cap,
-/// and challenge cookie expiry. WebAuthn ceremony methods require real Fido2 instances and are
-/// better covered by integration tests.
+/// Unit tests for PasskeyService: DB operations, removal protection, credential cap, challenge
+/// tokens, and ceremonies signed by a software key.
 /// </summary>
 public class PasskeyServiceTests
 {
@@ -647,15 +651,25 @@ public class PasskeyServiceTests
     /// with the signature <paramref name="sign"/> makes over the bytes an authenticator signs.
     /// </summary>
     private static string SignedAssertion(
-        PasskeyCredentialEntity credential, string optionsJson, Func<byte[], byte[]> sign)
+        PasskeyCredentialEntity credential, string optionsJson, Func<byte[], byte[]> sign,
+        string origin = "https://localhost") =>
+        SignedAssertion(credential, ClientData("webauthn.get", optionsJson, origin), sign);
+
+    /// <summary>The client data a browser at <paramref name="origin"/> hands the authenticator.</summary>
+    private static byte[] ClientData(string type, string optionsJson, string origin)
     {
         using var options = System.Text.Json.JsonDocument.Parse(optionsJson);
-        var clientData = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
         {
-            type = "webauthn.get",
+            type,
             challenge = options.RootElement.GetProperty("challenge").GetString(),
-            origin = "https://localhost",
+            origin,
         });
+    }
+
+    private static string SignedAssertion(
+        PasskeyCredentialEntity credential, byte[] clientData, Func<byte[], byte[]> sign)
+    {
         var authenticatorData = new Fido2NetLib.Objects.AuthenticatorData(
             SHA256.HashData("localhost"u8),
             Fido2NetLib.Objects.AuthenticatorFlags.UP | Fido2NetLib.Objects.AuthenticatorFlags.UV,
@@ -672,6 +686,298 @@ public class PasskeyServiceTests
                 Signature = sign([.. authenticatorData, .. SHA256.HashData(clientData)]),
                 ClientDataJson = clientData,
                 UserHandle = credential.SubjectId.ToByteArray(),
+            },
+        });
+    }
+
+    #endregion
+
+    #region The origin a ceremony presents
+
+    public static TheoryData<string, string, bool> PresentedOrigins() => new()
+    {
+        { "Production", "https://localhost", true },
+        { "Production", "https://rhys.localhost", true },
+        { "Production", "https://a.b.localhost", true },
+        { "Production", "https://rhys.localhost:8443", true },
+        { "Production", "https://rhys.localhost:443", true },
+        { "Production", "http://rhys.localhost", true },
+        { "Production", "https://RHYS.LOCALHOST", true },
+        { "Production", "https://notlocalhost", false },
+        { "Production", "https://localhost.example.com", false },
+        { "Production", "https://cgm.example.com", false },
+        { "Production", "localhost", false },
+        { "Development", "https://cgm.example.com", true },
+    };
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(PresentedOrigins))]
+    public async Task AnAssertion_IsAcceptedOnlyFromTheRpIdOrAHostBeneathIt(
+        string environmentName, string origin, bool accepted)
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider, environmentName);
+
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var assertion = SignedAssertion(credential, options.OptionsJson,
+            signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1), origin);
+
+        var thrown = await Record.ExceptionAsync(
+            () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId));
+
+        if (accepted)
+            thrown.Should().BeNull();
+        else
+            thrown.Should().BeOfType<Fido2VerificationException>()
+                .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidAuthenticatorResponseOrigin);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnOriginAcceptedOnOneCeremony_IsJudgedAfreshOnTheNext()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider, "Development");
+        var origin = "https://cgm.example.com";
+
+        var first = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        await service.CompleteAssertionAsync(
+            SignedAssertion(credential, first.OptionsJson,
+                signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1), origin),
+            first.ChallengeToken, _tenantId);
+        await _dbContext.Entry(credential).ReloadAsync();
+        credential.SignCount = 0;
+        await _dbContext.SaveChangesAsync();
+
+        var production = RegisteredService(provider, "Production");
+        var second = await production.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var thrown = await Record.ExceptionAsync(() => production.CompleteAssertionAsync(
+            SignedAssertion(credential, second.OptionsJson,
+                signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1), origin),
+            second.ChallengeToken, _tenantId));
+
+        thrown.Should().BeOfType<Fido2VerificationException>()
+            .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidAuthenticatorResponseOrigin);
+    }
+
+    public static TheoryData<string, byte[]> UnreadableClientData() => new()
+    {
+        { "not JSON", "not json"u8.ToArray() },
+        { "an array", "[]"u8.ToArray() },
+        { "a numeric origin", "{\"origin\":5}"u8.ToArray() },
+        { "no origin", "{}"u8.ToArray() },
+        { "an origin that is not UTF-8", [.. "{\"origin\":\""u8, 0xFF, 0xFE, .. "\"}"u8] },
+        { "an origin holding half a surrogate pair", "{\"origin\":\"\\uD800\"}"u8.ToArray() },
+    };
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(UnreadableClientData))]
+    public async Task AnAssertionWhoseClientDataNamesNoOrigin_IsRefusedByTheVerification(string shape, byte[] clientData)
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var assertion = SignedAssertion(credential, clientData,
+            signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+
+        var thrown = await Record.ExceptionAsync(
+            () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId));
+
+        thrown.Should().BeOfType<Fido2VerificationException>("a client data with {0} names no origin it can read", shape);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AssertionsFromManyHosts_LeaveTheSharedRelyingPartyOriginsAsConfigured()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        using var provider = RegisteredProvider();
+        var (origins, fullyQualified) = SharedOrigins(provider);
+        var service = RegisteredService(provider);
+
+        for (var i = 0; i < 50; i++)
+        {
+            var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+            var assertion = SignedAssertion(credential, options.OptionsJson, _ => [0], $"https://tenant-{i}.localhost");
+
+            var thrown = await Record.ExceptionAsync(
+                () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId));
+
+            thrown.Should().BeOfType<Fido2VerificationException>()
+                .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidSignature,
+                    "the origin is accepted, so the signature is what refuses it");
+        }
+
+        SharedOrigins(provider).Should().Be((origins, fullyQualified));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ConcurrentAssertionsFromManyHosts_LeaveTheSharedRelyingPartyOriginsAsConfigured()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        using var provider = RegisteredProvider();
+        var (origins, fullyQualified) = SharedOrigins(provider);
+        var dataProtection = new EphemeralDataProtectionProvider();
+
+        var refusals = await Task.WhenAll(Enumerable.Range(0, 8).Select(worker => Task.Run(async () =>
+        {
+            var service = RegisteredService(provider, dataProtection: dataProtection);
+            var thrown = new List<Exception?>();
+            for (var i = 0; i < 25; i++)
+            {
+                var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+                var assertion = SignedAssertion(
+                    credential, options.OptionsJson, _ => [0], $"https://tenant-{worker}-{i}.localhost");
+                thrown.Add(await Record.ExceptionAsync(
+                    () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId)));
+            }
+
+            return thrown;
+        })));
+
+        refusals.SelectMany(r => r).Should().HaveCount(200).And.AllSatisfy(thrown =>
+            thrown.Should().BeOfType<Fido2VerificationException>()
+                .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidSignature));
+        SharedOrigins(provider).Should().Be((origins, fullyQualified));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("https://rhys.localhost", true)]
+    [InlineData("https://localhost", true)]
+    [InlineData("https://cgm.example.com", false)]
+    public async Task ARegistration_IsAcceptedOnlyFromTheRpIdOrAHostBeneathIt_AndLeavesTheSharedOriginsAsConfigured(
+        string origin, bool accepted)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var (origins, fullyQualified) = SharedOrigins(provider);
+        var service = RegisteredService(provider);
+
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.OwnAccount);
+        var attestation = Attestation(key, options.OptionsJson, origin);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            attestation, options.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId));
+
+        if (accepted)
+        {
+            thrown.Should().BeNull();
+            (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(1);
+        }
+        else
+        {
+            thrown.Should().BeOfType<Fido2VerificationException>()
+                .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidAuthenticatorResponseOrigin);
+        }
+
+        SharedOrigins(provider).Should().Be((origins, fullyQualified));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistrationWithNoAuthenticatorResponse_IsRefusedByTheVerification()
+    {
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.OwnAccount);
+        var credentialId = Guid.CreateVersion7().ToByteArray();
+        var attestation = System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAttestationRawResponse
+        {
+            Id = System.Buffers.Text.Base64Url.EncodeToString(credentialId),
+            RawId = credentialId,
+            Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+        });
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            attestation, options.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId));
+
+        thrown.Should().BeOfType<Fido2VerificationException>();
+        (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(0);
+    }
+
+    /// <summary>The API's own registrations, for a server whose base domain is <c>localhost</c>.</summary>
+    private static ServiceProvider RegisteredProvider()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [BaseDomainOptions.ConfigKey] = "localhost",
+                [$"{JwtOptions.SectionName}:SecretKey"] = new string('k', 64),
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAuthenticationAndIdentity(configuration);
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>A service holding what <paramref name="provider"/> hands every request for the relying party.</summary>
+    private PasskeyService RegisteredService(
+        IServiceProvider provider, string environmentName = "Production",
+        IDataProtectionProvider? dataProtection = null)
+    {
+        var contexts = _dbContext.AsFactory();
+        return ActivatorUtilities.CreateInstance<PasskeyService>(
+            provider,
+            new PasskeyCredentialRepository(contexts),
+            new SubjectRepository(contexts, AccountLinkRoutes.Off),
+            new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
+            dataProtection ?? new EphemeralDataProtectionProvider(),
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName),
+            TimeProvider.System);
+    }
+
+    private static (string Origins, string FullyQualified) SharedOrigins(IServiceProvider provider)
+    {
+        var shared = provider.GetRequiredService<IOptions<Fido2Configuration>>().Value;
+        return (string.Join(",", shared.Origins.Order()), string.Join(",", shared.FullyQualifiedOrigins.Order()));
+    }
+
+    /// <summary>A "none" attestation of a new P-256 credential, made by a browser at <paramref name="origin"/>.</summary>
+    private static string Attestation(ECDsa key, string optionsJson, string origin)
+    {
+        var credentialId = Guid.CreateVersion7().ToByteArray();
+        var authenticatorData = new Fido2NetLib.Objects.AuthenticatorData(
+            SHA256.HashData("localhost"u8),
+            Fido2NetLib.Objects.AuthenticatorFlags.UP | Fido2NetLib.Objects.AuthenticatorFlags.UV
+                | Fido2NetLib.Objects.AuthenticatorFlags.AT,
+            signCount: 0,
+            new Fido2NetLib.Objects.AttestedCredentialData(
+                Guid.Empty, credentialId,
+                new Fido2NetLib.Objects.CredentialPublicKey(key, Fido2NetLib.Objects.COSE.Algorithm.ES256)),
+            null).ToByteArray();
+
+        return System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAttestationRawResponse
+        {
+            Id = System.Buffers.Text.Base64Url.EncodeToString(credentialId),
+            RawId = credentialId,
+            Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+            Response = new AuthenticatorAttestationRawResponse.AttestationResponse
+            {
+                AttestationObject = new Fido2NetLib.Cbor.CborMap
+                {
+                    { "fmt", "none" },
+                    { "attStmt", new Fido2NetLib.Cbor.CborMap() },
+                    { "authData", authenticatorData },
+                }.Encode(),
+                ClientDataJson = ClientData("webauthn.create", optionsJson, origin),
             },
         });
     }
@@ -742,26 +1048,26 @@ public class PasskeyServiceTests
         string environmentName = "Development", string rpId = "localhost",
         IDataProtectionProvider? dataProtection = null)
     {
-        // We use a mock Fido2 - it won't be called for DB-only tests.
-        // For methods that call Fido2, integration tests are needed.
-        var fido2Config = new Fido2Configuration
-        {
-            RPID = rpId,
-            RPName = "Test",
-            Origins = new HashSet<string> { $"https://{rpId}" },
-        };
-        var fido2 = new Fido2NetLib.Fido2(fido2Config);
-
         var dataProtectionProvider = dataProtection ?? new EphemeralDataProtectionProvider();
-        var fido2Options = Options.Create(fido2Config);
         var logger = NullLogger<PasskeyService>.Instance;
 
         var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
         var contexts = _dbContext.AsFactory();
         return new PasskeyService(
             new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
-            fido2, dataProtectionProvider, fido2Options, logger, environment, TimeProvider.System);
+            dataProtectionProvider, RelyingParty(rpId), logger, environment, TimeProvider.System);
     }
+
+    /// <summary>A relying party on <paramref name="rpId"/> whose one configured origin is <c>https://{rpId}</c>.</summary>
+    internal static IOptionsFactory<Fido2Configuration> RelyingParty(string rpId) =>
+        new OptionsFactory<Fido2Configuration>(
+            [new ConfigureOptions<Fido2Configuration>(o =>
+            {
+                o.RPID = rpId;
+                o.RPName = "Test";
+                o.Origins = new HashSet<string> { $"https://{rpId}" };
+            })],
+            []);
 
     private static PasskeyCredentialEntity CreateCredentialEntity(
         Guid subjectId, string? label = null)
