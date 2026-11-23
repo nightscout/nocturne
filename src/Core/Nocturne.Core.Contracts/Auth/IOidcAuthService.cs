@@ -259,6 +259,12 @@ public class OidcCallbackResult
     public bool IsAccessDenied { get; set; }
 
     /// <summary>
+    /// True when the sign-in completion refused the subject and already wrote the refusal's
+    /// <c>FailedAuth</c> row, so the caller writes none.
+    /// </summary>
+    public bool RefusalAudited { get; set; }
+
+    /// <summary>
     /// Subject resolved from the OIDC identity, when known. Set for successful and
     /// access-denied results so the caller can write an accurate audit entry.
     /// </summary>
