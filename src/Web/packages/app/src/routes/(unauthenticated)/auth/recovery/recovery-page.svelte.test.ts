@@ -46,7 +46,6 @@ vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
         name: "Alex",
         username: "alex",
         hasRecoveryCodes: false,
-        operatorOnly: false,
       },
     ]),
   issueRecoveryCode: vi.fn(),

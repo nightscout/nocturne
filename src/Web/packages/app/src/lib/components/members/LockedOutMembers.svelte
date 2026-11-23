@@ -14,6 +14,7 @@
     issueRecoveryCode,
   } from "#lib/api/generated/memberRecoveries.generated.remote.js";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import { RecoveryIssueRefusal } from "#lib/api/index.js";
   import { page } from "$app/state";
 
   let {
@@ -29,6 +30,16 @@
    */
   const members = getLockedOutMembers();
   const copyFeedback = createCopyFeedback();
+
+  const refusalMessages: Record<RecoveryIssueRefusal, string> = {
+    [RecoveryIssueRefusal.OperatorOnly]: "Only the operator can recover this account",
+    [RecoveryIssueRefusal.MissingPermissions]:
+      "This member holds permissions that you do not hold. Ask an owner to create the link.",
+    [RecoveryIssueRefusal.HistoryClamped]:
+      "You can see the last 24 hours only. Ask an owner to create the link.",
+    [RecoveryIssueRefusal.AccessOutlasts]:
+      "This member's access lasts longer than yours. Ask an owner to create the link.",
+  };
 
   let issuedFor = $state<string | null>(null);
   let issuedLink = $state("");
@@ -76,13 +87,9 @@
                 <p class="truncate text-xs text-muted-foreground">{member.username}</p>
               {/if}
             </div>
-            {#if member.operatorOnly}
+            {#if member.refusal}
               <p class="text-right text-xs text-muted-foreground">
-                Only the operator can recover this account
-              </p>
-            {:else if member.outlastsCaller}
-              <p class="text-right text-xs text-muted-foreground">
-                This member's access lasts longer than yours.
+                {refusalMessages[member.refusal]}
               </p>
             {:else if !signInRequired}
               <Button
@@ -96,7 +103,7 @@
               </Button>
             {/if}
           </div>
-          {#if member.hasRecoveryCodes && !member.operatorOnly}
+          {#if member.hasRecoveryCodes && member.refusal !== RecoveryIssueRefusal.OperatorOnly}
             <p class="text-xs text-muted-foreground">
               They still have recovery codes of their own. If they lost them, a link cancels
               those codes once it is used.

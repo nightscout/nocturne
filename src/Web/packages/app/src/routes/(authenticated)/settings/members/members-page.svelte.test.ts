@@ -450,7 +450,6 @@ describe("members page listing members who cannot sign in", () => {
     name: "Sam",
     username: "sam",
     hasRecoveryCodes: false,
-    operatorOnly: false,
   };
 
   beforeEach(() => {
