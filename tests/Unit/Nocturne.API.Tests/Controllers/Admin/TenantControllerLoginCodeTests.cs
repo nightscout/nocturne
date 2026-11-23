@@ -145,6 +145,31 @@ public class TenantControllerLoginCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task IssueLoginCode_ForAMemberWhoseAccessHasEnded_AnswersAsForANonMemberAndMintsNothing()
+    {
+        await _tenantContext.TenantMembers.Where(m => m.SubjectId == _memberSubjectId)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, DateTime.UtcNow.AddMinutes(-1)));
+
+        var ended = await InvokeAsync(_tenantId, _memberSubjectId);
+        var nonMember = await InvokeAsync(_tenantId, _outsiderSubjectId);
+
+        ended.Should().BeOfType<NotFoundResult>();
+        nonMember.Should().BeOfType<NotFoundResult>();
+        (await _tenantContext.LoginCodes.AnyAsync()).Should().BeFalse();
+        (await _auditContext.AuthAuditLog.AnyAsync(a => a.EventType == AuthAuditEventType.LoginCodeIssued))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IssueLoginCode_ForAMemberWhoseAccessEndsLater_IsIssued()
+    {
+        await _tenantContext.TenantMembers.Where(m => m.SubjectId == _memberSubjectId)
+            .ExecuteUpdateAsync(m => m.SetProperty(x => x.AccessEndsAt, DateTime.UtcNow.AddDays(1)));
+
+        await IssueAsync(_memberSubjectId);
+    }
+
+    [Fact]
     public async Task IssueLoginCode_OnAnInactiveTenant_IsRefusedAndMintsNothing()
     {
         _tenantService
@@ -385,7 +410,10 @@ public class TenantControllerLoginCodeTests : IDisposable
     private async Task<IActionResult> InvokeAsync(Guid tenantId, Guid subjectId) =>
         await _controller.IssueLoginCode(
             tenantId, subjectId, _db.ContextFactory.AsNocturneFactory(), _loginCodeService,
-            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), CancellationToken.None);
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+            new TenantMemberService(
+                new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+            CancellationToken.None);
 
     private async Task<LoginCode> IssueAsync(Guid subjectId)
     {

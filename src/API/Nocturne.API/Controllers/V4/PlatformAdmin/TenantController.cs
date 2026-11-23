@@ -282,11 +282,12 @@ public class TenantController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The code is redeemed at <c>POST /api/auth/handoff</c> on that host for a session that reads
-    /// and writes the member's data, without their second factor. The session is not the member's
-    /// own sign-in, so it cannot manage their sign-in factors or issue credentials
-    /// (<see cref="RequireInteractiveSessionAttribute"/>) and carries no platform-admin standing
-    /// until the member signs in on it. The issue row of the audit trail names the platform-admin
-    /// caller as the actor, and it and the redeem row both name the code.
+    /// and writes the member's data, without their second factor. A member whose access has ended
+    /// is refused as a non-member is, and a code issued before it ended stops redeeming when it
+    /// does. The session is not the member's own sign-in, so it cannot manage their sign-in factors
+    /// or issue credentials (<see cref="RequireInteractiveSessionAttribute"/>) and carries no
+    /// platform-admin standing until the member signs in on it. The issue row of the audit trail
+    /// names the platform-admin caller as the actor, and it and the redeem row both name the code.
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -299,10 +300,13 @@ public class TenantController : ControllerBase
         [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
         [FromServices] ISubjectRepository subjects,
+        [FromServices] ITenantMemberService tenantMembers,
         CancellationToken ct) =>
         IssueCodeAsync(
             id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService,
-            async token => await subjects.GetSignInStateAsync(subjectId, token) is { IsActive: true }, ct);
+            async token => await subjects.GetSignInStateAsync(subjectId, token) is { IsActive: true }
+                && await tenantMembers.IsMemberAsync(subjectId, id, token),
+            ct);
 
     /// <summary>
     /// Mints a single-use recovery code that lets a member enrol a passkey at
@@ -394,7 +398,7 @@ public class TenantController : ControllerBase
     /// <param name="purpose">What the code may be redeemed for.</param>
     /// <param name="dbContextFactory">Opens the context pinned to the tenant that the code is written through.</param>
     /// <param name="loginCodeService">Issues the code.</param>
-    /// <param name="mayIssueFor">Whether the member qualifies for a code of <paramref name="purpose"/>; when not, it is refused as a non-member is.</param>
+    /// <param name="mayIssueFor">Whether the subject is a live member of the tenant who qualifies for a code of <paramref name="purpose"/>; when not, it is refused with 404 whether or not the subject was ever a member.</param>
     /// <param name="ct">Cancels the operation.</param>
     private async Task<IActionResult> IssueCodeAsync(
         Guid id, Guid subjectId, LoginCodePurpose purpose,
@@ -407,7 +411,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var tenant = await _tenantService.GetByIdAsync(id, ct);
-        if (tenant is null || tenant.Members.All(m => m.SubjectId != subjectId))
+        if (tenant is null)
             return NotFound();
 
         if (!await mayIssueFor(ct))
