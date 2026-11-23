@@ -21,10 +21,136 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// The legacy id of the carb intake a V2 food is stored under. The sync writes the carb intake
     /// under it and attributes the food entry to the carb intake stored under it.
     /// </summary>
-    public static string FoodCarbIntakeLegacyId(string? foodGuid, DateTime foodDate, double carbs) =>
-        !string.IsNullOrEmpty(foodGuid)
-            ? LegacyIds.Of("food", foodGuid)
-            : LegacyIds.Hashed("food", foodDate.Ticks, $"carbs:{carbs}");
+    /// <param name="occurrence">
+    /// The rank of this food among the foods with no guid, the same time and the same carbs. 0 adds
+    /// no suffix, so a food with no twin keeps the id it is stored under.
+    /// </param>
+    public static string FoodCarbIntakeLegacyId(string? foodGuid, DateTime foodDate, double carbs, int occurrence = 0) =>
+        !string.IsNullOrEmpty(foodGuid) ? LegacyIds.Of("food", foodGuid)
+        : occurrence == 0 ? LegacyIds.Hashed("food", foodDate.Ticks, $"carbs:{carbs}")
+        : LegacyIds.Hashed("food", foodDate.Ticks, $"carbs:{carbs}", OccurrencePart(occurrence));
+
+    /// <summary>
+    /// The external entry id a V2 food entry is stored under. <paramref name="occurrence"/> is as
+    /// for <see cref="FoodCarbIntakeLegacyId"/>.
+    /// </summary>
+    public static string FoodEntryExternalId(string? foodGuid, DateTime foodDate, double carbs, int occurrence = 0) =>
+        !string.IsNullOrEmpty(foodGuid) ? foodGuid
+        : occurrence == 0 ? LegacyIds.Of("food", foodDate.Ticks, carbs)
+        : LegacyIds.Of("food", foodDate.Ticks, carbs, OccurrencePart(occurrence));
+
+    /// <summary>
+    /// The external entry id a V3 history food entry is stored under. The name is trimmed because
+    /// the repository trims the id it stores. <paramref name="occurrence"/> is the rank of this food
+    /// among the foods of its meal with no guid and the same trimmed name, and is 0 for a food with
+    /// no twin.
+    /// </summary>
+    public static string V3FoodEntryExternalId(string? foodGuid, string? mealGuid, string? foodName, int occurrence = 0) =>
+        !string.IsNullOrEmpty(foodGuid) ? foodGuid
+        : occurrence == 0 ? $"v3meal_{mealGuid}_{foodName?.Trim()}"
+        : $"v3meal_{mealGuid}_{foodName?.Trim()}_{OccurrencePart(occurrence)}";
+
+    private static string OccurrencePart(int occurrence) => $"occurrence:{occurrence}";
+
+    /// <summary>
+    /// Ranks each item within its group, the items <paramref name="groupOf"/> gives the same key. An
+    /// item with a null key is in no group and ranks 0. Ties in <paramref name="tiebreak"/> keep payload
+    /// order. The ranks only move ids between the items of one group, so a group of one keeps its id.
+    /// </summary>
+    private static int[] Occurrences<T>(IReadOnlyList<T> items, Func<T, string?> groupOf, Comparison<T> tiebreak)
+    {
+        var ranks = new int[items.Count];
+        var groups = Enumerable.Range(0, items.Count)
+            .Where(i => groupOf(items[i]) is not null)
+            .GroupBy(i => groupOf(items[i])!, StringComparer.Ordinal);
+
+        foreach (var group in groups)
+        {
+            var rank = 0;
+            foreach (var index in group.OrderBy(i => items[i], Comparer<T>.Create(tiebreak)))
+                ranks[index] = rank++;
+        }
+
+        return ranks;
+    }
+
+    private static int FirstDifference(params int[] comparisons) => comparisons.FirstOrDefault(c => c != 0);
+
+    private static int Compare(double? a, double? b) => (a ?? 0).CompareTo(b ?? 0);
+
+    private static int TiebreakV2Foods(GlookoFood a, GlookoFood b) =>
+        FirstDifference(
+            string.CompareOrdinal(a.Description ?? a.Name, b.Description ?? b.Name),
+            string.CompareOrdinal(a.Name, b.Name),
+            string.CompareOrdinal(a.ExternalId, b.ExternalId),
+            Compare(a.Protein, b.Protein),
+            Compare(a.Fat, b.Fat),
+            Compare(a.Calories, b.Calories),
+            Compare(a.ServingQuantity, b.ServingQuantity),
+            Compare(a.NumberOfServings, b.NumberOfServings),
+            string.CompareOrdinal(a.ServingUnit, b.ServingUnit));
+
+    private static int TiebreakV3Foods(GlookoV3HistoryFood a, GlookoV3HistoryFood b) =>
+        FirstDifference(
+            string.CompareOrdinal(a.Name, b.Name),
+            string.CompareOrdinal(a.Brand, b.Brand),
+            string.CompareOrdinal(a.ExternalId, b.ExternalId),
+            Compare(a.Carbs, b.Carbs),
+            Compare(a.Protein, b.Protein),
+            Compare(a.Fat, b.Fat),
+            Compare(a.Calories, b.Calories),
+            Compare(a.ServingQuantity, b.ServingQuantity),
+            Compare(a.NumberOfServings, b.NumberOfServings),
+            string.CompareOrdinal(a.ServingUnit, b.ServingUnit));
+
+    private readonly record struct MappableFood(
+        GlookoFood Food, DateTime FoodDate, DateTime CorrectedDate, double CarbValue, int Occurrence);
+
+    /// <summary>
+    /// The V2 foods that become a carb intake and a food entry, with the occurrence each is stored
+    /// under. Every V2 food mapping reads this, so a carb intake and its food entry skip the same
+    /// foods and rank the same twins.
+    /// </summary>
+    private IReadOnlyList<MappableFood> MappableFoods(GlookoBatchData batchData)
+    {
+        var foods = new List<MappableFood>();
+        if (batchData.Foods == null) return foods;
+
+        foreach (var food in Records(batchData.Foods, "V2 food"))
+        {
+            try
+            {
+                if (food.SoftDeleted == true) continue;
+
+                var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
+                var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
+                var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
+
+                if (carbValue <= 0) continue;
+
+                foods.Add(new MappableFood(food, foodDate, correctedDate, carbValue, 0));
+            }
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food {Guid}", _connectorSource, food.Guid);
+            }
+        }
+
+        var occurrences = Occurrences(
+            foods,
+            f => string.IsNullOrEmpty(f.Food.Guid) ? FoodCarbIntakeLegacyId(null, f.FoodDate, f.CarbValue) : null,
+            (a, b) => TiebreakV2Foods(a.Food, b.Food));
+
+        return [.. foods.Select((f, i) => f with { Occurrence = occurrences[i] })];
+    }
+
+    private CarbIntake ToCarbIntake(MappableFood f) => new()
+    {
+        Timestamp = f.CorrectedDate,
+        LegacyId = FoodCarbIntakeLegacyId(f.Food.Guid, f.FoodDate, f.CarbValue, f.Occurrence),
+        Device = _connectorSource,
+        Carbs = f.CarbValue,
+    };
 
     /// <summary>
     /// The legacy id of the carb intake a V3 history meal is stored under, shared by every food of the meal.
@@ -109,34 +235,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             }
         }
 
-        if (batchData.Foods != null)
-        {
-            foreach (var food in Records(batchData.Foods, "V2 food"))
-            {
-                try
-                {
-                    if (food.SoftDeleted == true) continue;
-
-                    var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
-                    var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
-                    var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
-
-                    if (carbValue <= 0) continue;
-
-                    carbs.Add(new CarbIntake
-                    {
-                        Timestamp = correctedDate,
-                        LegacyId = FoodCarbIntakeLegacyId(food.Guid, foodDate, carbValue),
-                        Device = _connectorSource,
-                        Carbs = carbValue,
-                    });
-                }
-                catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
-                {
-                    _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food {Guid}", _connectorSource, food.Guid);
-                }
-            }
-        }
+        carbs.AddRange(MappableFoods(batchData).Select(ToCarbIntake));
 
         return (boluses, carbs, batches);
     }
@@ -147,39 +246,8 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     /// for the timeline, while the connector entries store the rich nutritional detail.
     /// Filters out soft-deleted items.
     /// </summary>
-    public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData)
-    {
-        var carbs = new List<CarbIntake>();
-        if (batchData.Foods == null) return carbs;
-
-        foreach (var food in Records(batchData.Foods, "V2 food"))
-        {
-            try
-            {
-                if (food.SoftDeleted == true) continue;
-
-                var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
-                var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
-                var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
-
-                if (carbValue <= 0) continue;
-
-                carbs.Add(new CarbIntake
-                {
-                    Timestamp = correctedDate,
-                    LegacyId = FoodCarbIntakeLegacyId(food.Guid, foodDate, carbValue),
-                    Device = _connectorSource,
-                    Carbs = carbValue,
-                });
-            }
-            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
-            {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed V2 food {Guid}", _connectorSource, food.Guid);
-            }
-        }
-
-        return carbs;
-    }
+    public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData) =>
+        [.. MappableFoods(batchData).Select(ToCarbIntake)];
 
     /// <summary>
     /// Maps standalone V2 Food records to connector food entry imports for the food catalog pipeline.
@@ -190,23 +258,12 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     public List<GlookoFoodEntryImport> MapFoodsToConnectorEntries(GlookoBatchData batchData)
     {
         var results = new List<GlookoFoodEntryImport>();
-        if (batchData.Foods == null) return results;
 
-        foreach (var food in Records(batchData.Foods, "V2 food"))
+        foreach (var (food, foodDate, correctedDate, carbValue, occurrence) in MappableFoods(batchData))
         {
             try
             {
-                if (food.SoftDeleted == true) continue;
-
-                var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
-                var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
-                var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
-
-                if (carbValue <= 0) continue;
-
-                var externalEntryId = !string.IsNullOrEmpty(food.Guid)
-                    ? food.Guid
-                    : LegacyIds.Of("food", foodDate.Ticks, carbValue);
+                var externalEntryId = FoodEntryExternalId(food.Guid, foodDate, carbValue, occurrence);
 
                 var externalFoodId = food.ExternalId ?? food.Guid ?? string.Empty;
 
@@ -231,7 +288,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                         ServingDescription = BuildServingDescription(food),
                         Food = BuildFoodImport(food, externalFoodId),
                     },
-                    FoodCarbIntakeLegacyId(food.Guid, foodDate, carbValue)));
+                    FoodCarbIntakeLegacyId(food.Guid, foodDate, carbValue, occurrence)));
             }
             catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
@@ -573,12 +630,17 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 var mealLabel = meal.MealType ?? "Meal";
                 var mealCarbLegacyId = MealCarbIntakeLegacyId(meal.Guid, timestamp.Value, meal.Carbs ?? 0);
 
-                foreach (var food in Records(meal.Foods, "V3 history food"))
+                var liveFoods = Records(meal.Foods, "V3 history food").Where(f => f.SoftDeleted != true).ToList();
+                var occurrences = Occurrences(
+                    liveFoods,
+                    f => string.IsNullOrEmpty(f.Guid) ? V3FoodEntryExternalId(null, meal.Guid, f.Name) : null,
+                    TiebreakV3Foods);
+
+                for (var foodIndex = 0; foodIndex < liveFoods.Count; foodIndex++)
                 {
+                    var food = liveFoods[foodIndex];
                     try
                     {
-                        if (food.SoftDeleted == true) continue;
-
                         // Try to enrich with V2 food metadata (externalId, brand)
                         var v2Match = food.Guid != null && v2FoodByGuid.TryGetValue(food.Guid, out var v2)
                             ? v2
@@ -586,7 +648,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                         var carbValue = food.Carbs ?? 0;
 
-                        var externalEntryId = food.Guid ?? $"v3meal_{meal.Guid}_{food.Name}";
+                        var externalEntryId = V3FoodEntryExternalId(food.Guid, meal.Guid, food.Name, occurrences[foodIndex]);
 
                         // ExternalFoodId: prefer V2 externalId (Nutritionix ID) for proper deduplication,
                         // fall back to food name when V2 data is unavailable
