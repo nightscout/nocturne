@@ -109,6 +109,52 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 		expect(leaf.cob?.clear_margin).toBe(0);
 	});
 
+	it("steps a value and its clear margin alike, in each unit", async () => {
+		const cases: [ConditionNode, string, string, string][] = [
+			[
+				{ type: "threshold", threshold: { direction: "below", value: 70, clear_margin: 5 } },
+				"Value",
+				"1",
+				"0.1",
+			],
+			[
+				{ type: "rate_of_change", rate_of_change: { direction: "falling", rate: 2, clear_margin: 1 } },
+				"Value",
+				"0.1",
+				"0.01",
+			],
+			[{ type: "cob", cob: { operator: "<", value: 10, clear_margin: 2 } }, "Value", "0.1", "0.1"],
+			[
+				{ type: "carbs_required", carbs_required: { operator: ">", value: 10, clear_margin: 2 } },
+				"Value",
+				"1",
+				"1",
+			],
+			[
+				{ type: "sensitivity_ratio", sensitivity_ratio: { operator: "<", value: 0.9, clear_margin: 0.1 } },
+				"Value",
+				"0.01",
+				"0.01",
+			],
+		];
+		for (const units of ["mg/dl", "mmol"] as const) {
+			glucoseUnits.current = units;
+			try {
+				for (const [node, label, mgdlStep, mmolStep] of cases) {
+					const { unmount } = render(RuleBuilderLeafEditor, { props: { node } });
+					const expected = units === "mmol" ? mmolStep : mgdlStep;
+					await expect.element(page.getByRole("spinbutton", { name: label })).toHaveAttribute("step", expected);
+					await expect
+						.element(page.getByRole("spinbutton", { name: "Clear margin" }))
+						.toHaveAttribute("step", expected);
+					unmount();
+				}
+			} finally {
+				glucoseUnits.current = "mg/dl";
+			}
+		}
+	});
+
 	it("keeps the fraction of a rate margin and rate in mg/dL", async () => {
 		glucoseUnits.current = "mg/dl";
 		const leaf: ConditionNode = $state({

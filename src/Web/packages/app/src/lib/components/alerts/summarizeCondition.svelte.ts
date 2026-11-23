@@ -67,12 +67,9 @@ export function summarizeCondition(
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
-			const rate = `${bg(p.rate ?? 0)} ${bgLabel()} per minute`;
-			return withMargin(
-				rateChip(p.direction, rate),
-				p.clear_margin,
-				(m) => `${convertRateToDisplayUnits(m, glucoseUnits.current)} ${bgLabel()} per minute`,
-			);
+			const perMinute = (mgdl: number) =>
+				`${convertRateToDisplayUnits(mgdl, glucoseUnits.current)} ${bgLabel()} per minute`;
+			return withMargin(rateChip(p.direction, perMinute(p.rate ?? 0)), p.clear_margin, perMinute);
 		}
 		case "staleness": {
 			const p = node.staleness;

@@ -117,7 +117,8 @@
     }
   }
 
-  function marginStep(kind: string): string {
+  /** The step of a leaf's value input and of its clear margin input, which are the same. */
+  function valueStep(kind: string): string {
     switch (kind) {
       case "threshold":
       case "predicted":
@@ -279,7 +280,7 @@
     <Input
       type="number"
       aria-label="Offset"
-      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={bg(reference.offset ?? 0)}
@@ -294,7 +295,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={bg(p.value ?? 0)}
@@ -477,7 +478,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={convertRateToDisplayUnits(node.rate_of_change.rate ?? 0, glucoseUnits.current)}
@@ -608,7 +609,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step={node.type === "sensitivity_ratio" ? "0.01" : node.type === "carbs_required" ? "1" : "0.1"}
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
@@ -701,7 +702,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step="0.1"
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={node.temp_basal.value ?? 0}
@@ -750,7 +751,7 @@
     <Input
       type="number"
       aria-label="Value"
-      step="1"
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
@@ -1128,7 +1129,7 @@
       type="number"
       aria-label="Clear margin"
       min="0"
-      step={marginStep(node.type)}
+      step={valueStep(node.type)}
       size="sm"
       class="w-20 text-right tabular-nums"
       value={marginShown(payload.clear_margin ?? 0)}

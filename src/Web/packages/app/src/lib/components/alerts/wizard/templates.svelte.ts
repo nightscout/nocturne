@@ -6,7 +6,8 @@ import {
 	type TrackerCategory,
 	type TrackerDefinitionDto,
 } from "@nocturne/api-client";
-import { bg, bgLabel, time } from "#lib/utils/formatting.js";
+import { bg, bgLabel, convertRateToDisplayUnits, time } from "#lib/utils/formatting.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { plural } from "#lib/utils/plural.js";
 import { summarizeCondition } from "../summarizeCondition.svelte";
 import { browserTimeZone, ensureCompositeRoot, nodeFromApi, type ConditionNode } from "../types";
@@ -344,9 +345,9 @@ function baseName(draft: AlertDraft): string {
 		case "high":
 			return `High: above ${bg(leaf?.threshold?.value ?? 0)} ${bgLabel()}`;
 		case "falling_fast":
-			return `Falling fast: ${bg(leaf?.rate_of_change?.rate ?? 0)} ${bgLabel()} per minute`;
+			return `Falling fast: ${convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current)} ${bgLabel()} per minute`;
 		case "rising_fast":
-			return `Rising fast: ${bg(leaf?.rate_of_change?.rate ?? 0)} ${bgLabel()} per minute`;
+			return `Rising fast: ${convertRateToDisplayUnits(leaf?.rate_of_change?.rate ?? 0, glucoseUnits.current)} ${bgLabel()} per minute`;
 		case "no_readings":
 			return `No readings for ${minutesText(leaf?.signal_loss?.timeout_minutes ?? 0)}`;
 		case "urgent_low_soon":
