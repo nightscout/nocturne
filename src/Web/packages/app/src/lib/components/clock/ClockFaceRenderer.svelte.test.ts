@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { ClockFaceConfig } from "#lib/api/index.js";
 import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
 import { TRACKER_SHOW_OPTIONS } from "#lib/clock-builder/index.js";
-import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { chartLineColorMode, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { formatLocale } from "#lib/utils/formatting.js";
 import { resolveChartThresholds } from "@nocturne/charts/core";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
@@ -159,6 +159,29 @@ describe("ClockFaceRenderer", () => {
       expect(ticks.length).toBeGreaterThan(0);
       expect(ticks.some((t) => /^\d+\.\d$/.test(t))).toBe(true);
     });
+  });
+
+  it.each([
+    ["a chart", { type: "chart", hours: 3, width: 400, height: 200 }],
+    ["a background chart", { type: "chart", hours: 3, chartConfig: { asBackground: true } }],
+  ] as const)("draws %s's glucose line in the viewer's line colour mode", async (_, element) => {
+    chartLineColorMode.current = "threshold";
+    try {
+      const { container } = render(Harness, {
+        config: { rows: [{ elements: [element, { type: "sg", size: 40 }] }] },
+        glucose: reading,
+        showCharts: true,
+      });
+
+      await vi.waitFor(() => {
+        const stopColors = [...container.querySelectorAll("linearGradient stop")].map(
+          (stop) => stop.getAttribute("stop-color")
+        );
+        expect(stopColors).toContain("var(--glucose-in-range)");
+      });
+    } finally {
+      chartLineColorMode.current = "continuous";
+    }
   });
 
   it("paints a muted element in the theme's muted foreground", () => {
