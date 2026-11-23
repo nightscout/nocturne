@@ -110,9 +110,26 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
             .Select(group => group.Last().entity)
             .ToList();
 
+        var hidden = new HashSet<TEntity>(ReferenceEqualityComparer.Instance);
         var bySyncKey = await Set(db).IncludingDeleted().GoverningRowsBySyncKeyAsync(entities, ct);
+        if (db.HistoryClamped)
+        {
+            var missed = entities.Where(e => e.SyncKey() is { } key && !bySyncKey.ContainsKey(key)).ToList();
+            if (missed.Count > 0)
+            {
+                var held = await db.WriteWithHistoryClampLiftedAsync(
+                    token => Set(db).IncludingDeleted().GoverningRowsBySyncKeyAsync(missed, token), ct);
+                foreach (var (key, row) in held)
+                {
+                    if (bySyncKey.ContainsKey(key))
+                        continue;
+                    bySyncKey[key] = row;
+                    hidden.Add(row);
+                }
+            }
+        }
 
-        var stored = new List<TEntity>(entities.Count);
+        var stored = new List<(TEntity Row, TEntity Sent)>(entities.Count);
         var unmatched = new List<TEntity>();
         foreach (var entity in entities)
         {
@@ -121,7 +138,7 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
                 if (existing.DeletedAt == null)
                 {
                     Apply(existing, ToDomain(entity));
-                    stored.Add(existing);
+                    stored.Add((existing, entity));
                 }
 
                 continue;
@@ -139,6 +156,17 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
             : await Set(db).IncludingDeleted()
                 .Where(e => unmatchedIds.Contains(e.Id))
                 .ToDictionaryAsync(e => e.Id, ct);
+        var missedIds = unmatchedIds.Where(id => !byId.ContainsKey(id)).ToList();
+        if (db.HistoryClamped && missedIds.Count > 0)
+        {
+            var held = await db.WriteWithHistoryClampLiftedAsync(
+                token => Set(db).IncludingDeleted().Where(e => missedIds.Contains(e.Id)).ToListAsync(token), ct);
+            foreach (var row in held)
+            {
+                byId[row.Id] = row;
+                hidden.Add(row);
+            }
+        }
 
         var toInsert = new List<TEntity>();
         foreach (var entity in unmatched)
@@ -146,7 +174,7 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
             if (!byId.TryGetValue(entity.Id, out var existing))
             {
                 toInsert.Add(entity);
-                stored.Add(entity);
+                stored.Add((entity, entity));
                 continue;
             }
 
@@ -155,15 +183,26 @@ public abstract class HealthSeriesRepository<TModel, TEntity> : IHealthSeriesRep
 
             Apply(existing, ToDomain(entity));
             existing.DeletedAt = null;
-            stored.Add(existing);
+            stored.Add((existing, entity));
         }
 
         if (toInsert.Count > 0)
             await Set(db).AddRangeAsync(toInsert, ct);
-        await db.SaveChangesAsync(ct);
+        if (hidden.Count == 0)
+            await db.SaveChangesAsync(ct);
+        else
+            await db.WriteWithHistoryClampLiftedAsync(async token => await db.SaveChangesAsync(token), ct);
 
-        return stored.Select(ToDomain).ToList();
+        return stored.Select(s => hidden.Contains(s.Row) ? AnswerHiddenRow(ToDomain(s.Row), ToDomain(s.Sent)) : ToDomain(s.Row)).ToList();
     }
+
+    /// <summary>
+    /// What an upsert answers for a row a history-clamped writer cannot see, which the writer's record overwrote:
+    /// <paramref name="stored"/> with every field the record left to the stored row taken from <paramref name="sent"/>.
+    /// The row is found by the sync key or the id the unique indexes hold over the whole tenant, so an insert
+    /// beside it would fail with 23505. A series whose record overwrites everything its answer carries needs no override.
+    /// </summary>
+    protected virtual TModel AnswerHiddenRow(TModel stored, TModel sent) => stored;
 
     /// <inheritdoc />
     public async Task<TModel?> UpdateAsync(string id, TModel record, CancellationToken ct = default)

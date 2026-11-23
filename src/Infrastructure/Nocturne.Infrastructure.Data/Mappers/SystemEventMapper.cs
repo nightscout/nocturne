@@ -34,7 +34,13 @@ public static class SystemEventMapper
     /// <summary>
     /// Convert database entity to domain model
     /// </summary>
-    public static SystemEvent ToDomainModel(SystemEventEntity entity)
+    public static SystemEvent ToDomainModel(SystemEventEntity entity) => ToDomainModel(entity, entity.CreatedAt);
+
+    /// <summary>
+    /// Convert database entity to domain model, answering <paramref name="createdAt"/> in place of the
+    /// stored creation time.
+    /// </summary>
+    public static SystemEvent ToDomainModel(SystemEventEntity entity, DateTime? createdAt)
     {
         return new SystemEvent
         {
@@ -51,7 +57,7 @@ public static class SystemEventMapper
             Source = entity.Source,
             Metadata = MapperHelpers.DeserializeJson<Dictionary<string, object>>(entity.MetadataJson),
             OriginalId = entity.OriginalId,
-            CreatedAt = entity.CreatedAt,
+            CreatedAt = createdAt,
         };
     }
 
