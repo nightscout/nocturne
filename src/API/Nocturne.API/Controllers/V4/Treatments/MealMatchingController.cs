@@ -134,6 +134,7 @@ public class MealMatchingController : ControllerBase
     [RemoteCommand(Invalidates = ["GetSuggestions", "Nutrition_GetMeals"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ErrorEnvelope]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
     {
@@ -143,12 +144,20 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        await _mealMatchingService.AcceptMatchAsync(
+        var linked = await _mealMatchingService.AcceptMatchAsync(
             request.FoodEntryId,
             request.CarbIntakeId,
             request.Carbs,
             request.TimeOffsetMinutes,
             HttpContext.RequestAborted);
+
+        if (!linked)
+        {
+            return Problem(
+                detail: "The food entry or the carb intake no longer exists, so nothing was linked.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Match Target Not Found");
+        }
 
         // Archive the notification
         await _notificationService.ArchiveBySourceAsync(

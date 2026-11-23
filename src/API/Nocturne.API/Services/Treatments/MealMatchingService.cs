@@ -102,13 +102,13 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    public async Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
+    public async Task<bool> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
     {
         var foodEntry = await _foodEntryRepository.GetByIdAsync(foodEntryId, ct);
         if (foodEntry == null)
         {
             _logger.LogWarning("Food entry {FoodEntryId} not found", foodEntryId);
-            return;
+            return false;
         }
 
         // treatment_foods.carb_intake_id carries no foreign key, so an unknown id here would
@@ -118,7 +118,7 @@ public class MealMatchingService : IMealMatchingService
         if (carbIntake == null)
         {
             _logger.LogWarning("Carb intake {CarbIntakeId} not found", carbIntakeId);
-            return;
+            return false;
         }
 
         var treatmentFood = new TreatmentFood
@@ -145,6 +145,7 @@ public class MealMatchingService : IMealMatchingService
             "Accepted meal match: food entry {FoodEntryId} linked to carb intake {CarbIntakeId}",
             foodEntryId,
             carbIntakeId);
+        return true;
     }
 
     public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
