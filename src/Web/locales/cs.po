@@ -987,8 +987,12 @@ msgstr "Test připojení selhal"
 #~ msgid "Defines what unauthenticated users can access"
 #~ msgstr ""
 
-#~ msgid "Roles: {0}"
-#~ msgstr ""
+#. 0: (team.roles ?? []).map((r) => r.name).join(", ")
+#. 0: (site.roleNames ?? []).join(", ")
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Roles: {0}"
+msgstr ""
 
 #~ msgid "Created: {0}"
 #~ msgstr ""
@@ -4630,6 +4634,7 @@ msgstr "Přístup: {0}{1}"
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ClientDevices.svelte
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Revoke"
 msgstr "<0/> Odvolat"
@@ -16129,6 +16134,8 @@ msgid "Limit public viewers to recent data only. Older history stays private."
 msgstr "Omezit veřejný přístup pouze na nedávná data. Starší historie zůstane soukromá."
 
 #: src/lib/components/members/PublicAccessCard.svelte
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
 msgid "All history"
 msgstr "Celá historie"
 
@@ -39102,6 +39109,7 @@ msgstr ""
 msgid "Could not save the setting. Try again."
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Could not make the link. Try again."
@@ -39198,6 +39206,7 @@ msgstr ""
 msgid "Make a link"
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "We show the link one time only. Copy it before you leave this page."
@@ -39232,6 +39241,7 @@ msgstr ""
 msgid "Who can use the link"
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "The link stops working after"
@@ -39251,6 +39261,7 @@ msgstr ""
 msgid "Copy the invite link"
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Your link is ready"
@@ -39269,6 +39280,7 @@ msgid "No links yet. Make a link to invite a person."
 msgstr ""
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/invites/+page.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "No label"
@@ -47526,6 +47538,7 @@ msgid "This invite link has no uses left. Ask a manager of the team for a new li
 msgstr ""
 
 #: src/lib/teams/problem-messages.svelte.ts
+#: src/lib/teams/problem-messages.svelte.ts
 msgid "The manager who made this link left the team. Ask a manager of the team for a new link."
 msgstr ""
 
@@ -47647,6 +47660,7 @@ msgstr ""
 msgid "Could not remove the manager. Try again."
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Could not revoke the link. Try again."
 msgstr ""
@@ -47724,16 +47738,21 @@ msgstr ""
 msgid "No link works now."
 msgstr ""
 
+#. 0: link.createdByName; 1: formatMediumDateTime(link.expiresAt)
 #. 0: invite.createdByName; 1: formatMediumDateTime(invite.expiresAt)
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Made by {0} · Stops working {1}"
 msgstr ""
 
+#. 0: link.label ?? "with no label"
 #. 0: invite.label ?? "with no label"
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Revoke the link {0}"
 msgstr ""
 
+#: src/lib/components/teams/AccessLinksSection.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "Links that work now"
 msgstr ""
@@ -47757,6 +47776,7 @@ msgstr ""
 msgid "Delete {0}? Every manager loses the team. You cannot undo this."
 msgstr ""
 
+#: src/lib/components/members/TeamAccessList.svelte
 #: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
 msgid "<0/> Teams"
 msgstr ""
@@ -47946,4 +47966,445 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/sharing/audiences.svelte.ts
 msgid "They can also log insulin and carbs, change alerts, and set up data sources."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A link cannot suggest this role. Choose another role."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The end date must be in the future. Choose a later date."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "This link has expired. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A manager revoked this link. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "This link has no uses left. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The latest end date that this link allows has passed. Ask a manager of the team for a new link."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "This team already has access to this site."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Only an owner of the site can give a team access to it."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "Choose at least one role."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A role that you chose is not a role of this site. Reload the page and try again."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A team can have only roles for data. Choose other roles."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A role that you chose gives more than this link allows. Choose other roles."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "A role that you chose gives more than you hold. Choose other roles."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "This access must be limited to the last 24 hours."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The access must end no later than this link allows. Choose an earlier end date."
+msgstr ""
+
+#: src/lib/teams/problem-messages.svelte.ts
+msgid "The access cannot last longer than your own access. Choose an earlier end date."
+msgstr ""
+
+#. 0: renamedFrom; 1: renamedTo
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "The team {0} is now named {1}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} stopped the access of the team {1}."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} stopped the access of a team that was deleted."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access. The detail is no longer stored."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles; 3: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the role {2} to the last 24 hours only, until {3}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the role {2} to the last 24 hours only."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles; 3: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the role {2} until {3}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the role {2}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles; 3: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the roles {2} to the last 24 hours only, until {3}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the roles {2} to the last 24 hours only."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles; 3: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the roles {2} until {3}."
+msgstr ""
+
+#. 0: actor; 1: entry.team.name; 2: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave the team {1} access with the roles {2}."
+msgstr ""
+
+#. 0: actor
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access. The detail is no longer stored."
+msgstr ""
+
+#. 0: actor; 1: teamRoles; 2: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the role {1} to the last 24 hours only, until {2}."
+msgstr ""
+
+#. 0: actor; 1: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the role {1} to the last 24 hours only."
+msgstr ""
+
+#. 0: actor; 1: teamRoles; 2: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the role {1} until {2}."
+msgstr ""
+
+#. 0: actor; 1: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the role {1}."
+msgstr ""
+
+#. 0: actor; 1: teamRoles; 2: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the roles {1} to the last 24 hours only, until {2}."
+msgstr ""
+
+#. 0: actor; 1: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the roles {1} to the last 24 hours only."
+msgstr ""
+
+#. 0: actor; 1: teamRoles; 2: accessEnd
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the roles {1} until {2}."
+msgstr ""
+
+#. 0: actor; 1: teamRoles
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} gave a team that was deleted access with the roles {1}."
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/teams/AccessLinksSection.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Only the last 24 hours"
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Access does not end"
+msgstr ""
+
+#. 0: formatMediumDate(accessEndDate(team.accessEndsAt))
+#. 0: formatMediumDate(accessEndDate(site.accessEndsAt))
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Access ended {0}"
+msgstr ""
+
+#. 0: formatMediumDate(accessEndDate(team.accessEndsAt))
+#. 0: formatMediumDate(accessEndDate(site.accessEndsAt))
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Access ends {0}"
+msgstr ""
+
+#. 0: team.approvedByName ?? "a deleted member"; 1: formatMediumDateTime(team.givenAt)
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Approved by {0} · {1}"
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Stop access"
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Stop the access of {0}"
+msgstr ""
+
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "<0/> Stop access"
+msgstr ""
+
+#. 0: team.teamName
+#: src/lib/components/members/TeamAccessList.svelte
+msgid "Stop the access of {0}? The staff of the team lose access at once. A manager of the team must ask again."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A team has this role, so it can hold only permissions for data and you cannot delete it."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A team has this role, so only an owner can add permissions to it."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "<0/>Held by a team"
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "Only an owner can add permissions to it."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A team has this role. It cannot be deleted, and it can hold only permissions for data. <0/>"
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A team has this role. You can remove permissions from it, and only an owner can add permissions."
+msgstr ""
+
+#: src/lib/components/members/RolesSection.svelte
+msgid "A team has this role, so it can hold only permissions for data."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "No end date is left that this link and your own access allow."
+msgstr ""
+
+#. 0: formatMediumDate(startOfDay(latestAccessEndDay(site.latestEnd) ?? ""))
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "The access must end on {0} or before. The link or your own access sets this limit."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "No role of this site fits this link and your own access, so the team cannot get access here."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "What the team can see and change with this role"
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "Roles to give the team"
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "The link or your own access requires this limit."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "The team can see only the most recent 24 hours of data."
+msgstr ""
+
+#: src/lib/components/teams/AccessApprovalForm.svelte
+msgid "Give the team access"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Request access"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "A person opens the link and chooses the site to give access to. A link stops working when the manager who made it leaves the team."
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "For example, the name of the person who owns the site"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Label of the access link (optional)"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Choose a role to make the link."
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Role that the link suggests"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Latest end of the access (optional)"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "<0/> Make access link"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Access link"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Copy the access link"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "No access link works now."
+msgstr ""
+
+#. 0: roleName(link.suggestion?.roleSlug)
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Suggests the role {0}"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "Suggests a role that is no longer offered"
+msgstr ""
+
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "· Only the last 24 hours"
+msgstr ""
+
+#. 0: formatMediumDate(accessEndDate(link.suggestion.accessEndsAt))
+#: src/lib/components/teams/AccessLinksSection.svelte
+msgid "· Access ends by {0}"
+msgstr ""
+
+#: src/lib/components/teams/PermissionList.svelte
+msgid "This role gives no permissions."
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "Sites this team has access to"
+msgstr ""
+
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "No site has given this team access."
+msgstr ""
+
+#. 0: site.limitTo24Hours ? "Only the last 24 hours" \\: "All history"; 1: formatMediumDateTime(site.givenAt)
+#: src/lib/components/teams/TeamSitesSection.svelte
+msgid "{0} · <0/> · Given {1}"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "Access of the team stopped."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "Failed to stop the access of the team. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "This team no longer has access."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "This link is not valid. Ask the manager who sent it for a new link."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "This link has no access token. Check the link that you were given."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Your sign-in cannot give a team access."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "This link cannot be used."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Could not give the team access. Try again."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Give a team access - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Give a team access"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "The team has access"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "The team <0/> now has access to <1/>."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Giving access..."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "<0/> asks you to give the team <1/> access to a site."
+msgstr ""
+
+#. 0: view.createdByName
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Nocturne does not check who runs a team. Give access only if you know {0}."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Only an owner of a site can give a team access. You do not own a site."
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Site to give access to"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Link unavailable"
+msgstr ""
+
+#: src/routes/(authenticated)/teams/access/+page.svelte
+msgid "Loading link..."
 msgstr ""
