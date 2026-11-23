@@ -4861,9 +4861,11 @@ msgid "From {0}"
 msgstr ""
 
 #. 0: new Date(settings.dndManualUntil).toLocaleTimeString(formatLocale(), { hour\\: "numeric", minute\\: "2-digit" })
+#. 0: formatShortDate(accessEndDate(reason.accessEndsAt), true)
 #. 0: formatDate(device.endDate)
 #. 0: formatDate(insulin.endDate)
 #: src/lib/components/alerts/DndPanel.svelte
+#: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "Until {0}"
@@ -48810,4 +48812,63 @@ msgstr ""
 #. 0: formatMediumDateTime(invite.expiresAt)
 #: src/lib/components/members/PendingInvitesList.svelte
 msgid "<0/> Expires {0} <1/> <2/> <3/>"
+msgstr ""
+
+#: src/routes/(unauthenticated)/join/+page.svelte
+msgid "You made this invite, so you cannot accept it. Ask another member to invite you."
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Reasons for access"
+msgstr ""
+
+#. 0: reason.teamName
+#: src/lib/components/members/MemberCard.svelte
+msgid "Staff of the team {0}"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Direct access"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "Last 24 hours only"
+msgstr ""
+
+#. 0: formatShortDate(accessEndDate(reason.accessEndsAt), true)
+#: src/lib/components/members/MemberCard.svelte
+msgid "Ended {0}"
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+msgid "This member's direct access has no 24-hour limit, so the 24-hour limit of the team does not apply."
+msgstr ""
+
+#: src/lib/components/members/MemberCard.svelte
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "This member has access only through a team. To change it, stop the team's access to this site."
+msgstr ""
+
+#. 0: memberFirst; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined as staff of the team {1}."
+msgstr ""
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} joined as staff of a team. The detail is no longer stored."
+msgstr ""
+
+#. 0: memberFirst; 1: entry.team.name
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} is no longer staff of the team {1}."
+msgstr ""
+
+#. 0: memberFirst
+#: src/lib/components/members/MemberHistoryEntryRow.svelte
+msgid "{0} is no longer staff of a team. The detail is no longer stored."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "You cannot approve your own request. Ask another member to approve it."
 msgstr ""
