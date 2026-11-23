@@ -711,9 +711,13 @@ in §3 plus:
   bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
   reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
   dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
-- The backend reads a device status's CareLink `cgm.sensorState` (Medtronic Guardian sensors) and
-  its `xdripjs.state` session code (Dexcom G5 and G6 through Lookout, Logger and xdrip-js), each
-  through an allowlist where every other value is no state. An entry is added only from a real
+- When the backend stores a device status, it reads the status's CareLink `cgm.sensorState`
+  (Medtronic Guardian sensors), then its `xdripjs.state` session code (Dexcom G5 and G6 through
+  Lookout, Logger and xdrip-js), each through an allowlist where every other value is no state, and
+  writes a sensor state report (`SensorStateReport`) for the first value an allowlist maps, under
+  the status's device and the data source it was stored under. A status with neither writes none.
+  The host reads the state only from these reports. A newest report whose state this build cannot
+  read is no state, and an older report does not stand in for it. An entry is added only from a real
   upload. CareLink's: `NO_ERROR_MESSAGE` ok, `WARM_UP` warming up, `CALIBRATION_REQUIRED`
   calibration needed, `SENSOR_ERROR` and `CHANGE_SENSOR` error, `SENSOR_END_OF_LIFE` expired.
   xdripjs: `0x02` warming up, `0x06` ok, `0x04`, `0x05`, `0x08` to `0x0a`, `0x0d` calibration
@@ -1182,8 +1186,8 @@ announces itself; it goes stale at an instant the engine reports as a next chang
 move with the clock. `device_ages` moves with a device event written, deleted or restored, and with
 deduplication changing which copy of a site change or sensor start reads show, each of which
 announces itself (§5.2).
-`sensor_state` moves with a reading (one with no value is `no_value`) and with a device status that
-states it, whose extras write announces itself, as does a purge that deletes extras; a report's
+`sensor_state` moves with a reading (one with no value is `no_value`) and with a sensor state report
+written or deleted, each of which announces itself, as does a purge that deletes one; a report's
 lapse is its `until`, which the engine reports as a next change, so it does not move with the
 clock. It waits only while
 the newest canonical reading is usable, the one a write's evaluation measures, and the context
@@ -1751,9 +1755,9 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
   replayed as live reads it (§4): no value, `SensorState` `no_value` from the first such reading
   after the last one with a value, and `LastReadingAt` that last reading's time, found among the
   readings replay has loaded rather than 24 hours back. The sensor state a device status reports
-  is read as of each tick through the same enrichment as live, from statuses stored by the tick
-  (receipt-gated), so replay sees a status where live could first have read it. Unlike live, a
-  status that arrives between readings is evaluated at the next tick, not at its write. `LatestReceivedAt` is its arrival
+  is read as of each tick through the same enrichment as live, from sensor state reports stored by
+  the tick (receipt-gated), so replay sees a report where live could first have read it. Unlike
+  live, a report that arrives between readings is evaluated at the next tick, not at its write. `LatestReceivedAt` is its arrival
   when that was a live arrival, else absent (Ticks). `until` is the window's end.
 - Do Not Disturb: for each tick, the rules an excursion opening on it, or on a step before the
   next tick, is recorded for as suppressed (the gate live delivery applies on open,

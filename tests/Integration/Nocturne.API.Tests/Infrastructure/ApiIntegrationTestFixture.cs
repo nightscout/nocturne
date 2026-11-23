@@ -457,6 +457,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         "pump_snapshots",
         "uploader_snapshots",
         "device_status_extras",
+        "sensor_state_reports",
         // The devices those records are attributed to: a device one test registers would otherwise
         // show up in a later test's device reads and attributions.
         "patient_devices",

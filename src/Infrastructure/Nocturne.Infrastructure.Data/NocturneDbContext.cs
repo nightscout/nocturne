@@ -349,6 +349,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<UploaderSnapshotEntity> UploaderSnapshots { get; set; }
 
+    public DbSet<SensorStateReportEntity> SensorStateReports { get; set; }
+
     public DbSet<DeviceStatusExtrasEntity> DeviceStatusExtras { get; set; }
 
     public DbSet<DeviceEntity> Devices { get; set; }
@@ -549,7 +551,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private static Type[] Implementing<TMarker>() => [.. MappedEntityTypes.Where(typeof(TMarker).IsAssignableFrom)];
 
     /// <summary>
-    /// The device-status snapshot tables, upserted on the <see cref="ISyncDedupable"/> key.
+    /// The tables a device status decomposes into (<see cref="V4RecordKind.DeviceStatus"/>): the APS,
+    /// pump and uploader snapshots, upserted on the <see cref="ISyncDedupable"/> key, and the sensor
+    /// state report, keyed by its status's correlation id.
     /// </summary>
     internal static readonly Type[] V4SnapshotEntities =
         [.. V4RecordTables.OfKind(V4RecordKind.DeviceStatus).Select(t => t.Entity)];

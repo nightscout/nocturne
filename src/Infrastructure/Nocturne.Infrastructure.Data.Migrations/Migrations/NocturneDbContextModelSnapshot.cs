@@ -8714,10 +8714,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("correlation_id");
 
-                    b.Property<string>("DataSource")
-                        .HasColumnType("text")
-                        .HasColumnName("data_source");
-
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -8727,10 +8723,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("deleted_by_user");
-
-                    b.Property<string>("Device")
-                        .HasColumnType("text")
-                        .HasColumnName("device");
 
                     b.Property<string>("ExtrasJson")
                         .HasColumnType("jsonb")
@@ -10056,6 +10048,135 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_by_user");
 
                     b.ToTable("sensor_glucose");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.SensorStateReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AdditionalPropertiesJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("additional_properties");
+
+                    b.Property<string>("App")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("app");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("data_source");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
+
+                    b.Property<string>("Device")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("device");
+
+                    b.Property<string>("LegacyId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("legacy_id");
+
+                    b.Property<string>("ReportedField")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("reported_field");
+
+                    b.Property<string>("ReportedValue")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("reported_value");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.Property<int?>("UtcOffset")
+                        .HasColumnType("integer")
+                        .HasColumnName("utc_offset");
+
+                    b.Property<Guid?>("WriterGrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("writer_grant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("ix_sensor_state_reports_correlation_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_sensor_state_reports_tenant_id");
+
+                    b.HasIndex("Timestamp")
+                        .IsDescending()
+                        .HasDatabaseName("ix_sensor_state_reports_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "DataSource", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "Timestamp", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_timestamp_id")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "DataSource", "Device", "Timestamp")
+                        .IsDescending(false, false, false, true)
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_source_device_timestamp")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex(new[] { "TenantId", "LegacyId" }, "ix_sensor_state_reports_tenant_legacy_id_user_deleted")
+                        .HasDatabaseName("ix_sensor_state_reports_tenant_legacy_id_user_deleted")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+
+                    b.ToTable("sensor_state_reports");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.TargetRangeScheduleEntity", b =>
@@ -12296,6 +12417,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasForeignKey("PatientDeviceId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.SensorStateReportEntity", b =>
+                {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

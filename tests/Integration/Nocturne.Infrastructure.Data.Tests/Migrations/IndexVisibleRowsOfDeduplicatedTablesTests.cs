@@ -96,6 +96,9 @@ public class IndexVisibleRowsOfDeduplicatedTablesTests(IndexVisibleRowsOfDedupli
     private static readonly string[] Untouched =
         ["meter_glucose", "calibrations", "aps_snapshots", "pump_snapshots", "uploader_snapshots"];
 
+    /// <summary>Tables with the same index that a later migration creates, so going down drops them.</summary>
+    private static readonly string[] CreatedLater = ["sensor_state_reports"];
+
     private static Dictionary<string, string> Expected()
     {
         var expected = Deduplicated.ToDictionary(
@@ -106,7 +109,7 @@ public class IndexVisibleRowsOfDeduplicatedTablesTests(IndexVisibleRowsOfDedupli
         expected["ix_state_spans_tenant_visible_start_id"] =
             "CREATE INDEX ix_state_spans_tenant_visible_start_id ON public.state_spans USING btree "
             + "(tenant_id, start_timestamp DESC, id DESC) WHERE ((deleted_at IS NULL) AND (NOT is_duplicate))";
-        foreach (var table in Untouched)
+        foreach (var table in Untouched.Concat(CreatedLater))
             expected[$"ix_{table}_tenant_timestamp_id"] =
                 $"CREATE INDEX ix_{table}_tenant_timestamp_id ON public.{table} USING btree "
                 + "(tenant_id, \"timestamp\" DESC, id DESC) WHERE (deleted_at IS NULL)";

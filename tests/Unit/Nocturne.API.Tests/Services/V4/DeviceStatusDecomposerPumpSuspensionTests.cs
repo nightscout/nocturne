@@ -58,6 +58,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests
             _pumpRepoMock.Object,
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),
+            Mock.Of<ISensorStateReportRepository>(),
             _stateSpanServiceMock.Object,
             new UnresolvedDevices(),
             Mock.Of<IAuditContext>(),

@@ -153,7 +153,7 @@ public class OwnIdAdoptionTests : IDisposable
         var spans = new Mock<IStateSpanService>();
         spans.BacksWith([]);
         var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object,
+            aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<ISensorStateReportRepository>(),
             spans.Object, new UnresolvedDevices(), Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System,
             NullLogger<DeviceStatusDecomposer>.Instance);
