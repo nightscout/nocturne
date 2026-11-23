@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -767,6 +768,30 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.False(await db.OAuthRefreshTokens.AnyAsync());
     }
 
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_ApprovedForASubjectThatIsGone_EndsTheCodeSoTheNextPollIsAnsweredAsAnUnknownCodeIs()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: grantId,
+            subjectId: _testSubjectId);
+        _mockSubjectService.Setup(s => s.GetSubjectByIdAsync(_testSubjectId))
+            .ReturnsAsync((Core.Models.Authorization.Subject?)null);
+        var unknown = await CreateService(db).ExchangeDeviceCodeAsync("unknown-device-code", TestClientId);
+
+        var refused = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+        var next = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.Equal(("server_error", "Subject not found."), (refused.Error, refused.ErrorDescription));
+        Assert.Equal((unknown.Error, unknown.ErrorDescription), (next.Error, next.ErrorDescription));
+        Assert.False(await db.OAuthDeviceCodes.AnyAsync());
+        Assert.False(await db.OAuthRefreshTokens.AnyAsync());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -852,7 +877,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     {
         // The rival redeems the code after this poll has read it as approved and unredeemed, so
         // only the conditional claim can stop a second token pair.
-        var rivalRedemption = new RedeemOnNextSave();
+        var rivalRedemption = new RedeemOnNextPollStamp();
         using var racedDb = TestDbContextFactory.CreateSqliteWithTenant(_testTenantId, "test", rivalRedemption);
         using var db = racedDb.CreateContext();
         await SeedClientAsync(db);
@@ -873,18 +898,20 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         _mockGrantService.Verify(g => g.RevokeGrantAsync(_testGrantId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private sealed class RedeemOnNextSave : SaveChangesInterceptor
+    private sealed class RedeemOnNextPollStamp : DbCommandInterceptor
     {
         public bool Armed { get; set; }
 
-        public override async ValueTask<int> SavedChangesAsync(
-            SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command, CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
         {
-            if (Armed)
+            if (Armed && command.CommandText.Contains("UPDATE", StringComparison.Ordinal)
+                && command.CommandText.Contains("last_polled_at", StringComparison.Ordinal))
             {
                 Armed = false;
-                await eventData.Context!.Database.ExecuteSqlRawAsync(
-                    "UPDATE oauth_device_codes SET redeemed_at = CURRENT_TIMESTAMP", cancellationToken);
+                await using var redeem = command.Connection!.CreateCommand();
+                redeem.CommandText = "UPDATE oauth_device_codes SET redeemed_at = CURRENT_TIMESTAMP";
+                await redeem.ExecuteNonQueryAsync(cancellationToken);
             }
 
             return result;
