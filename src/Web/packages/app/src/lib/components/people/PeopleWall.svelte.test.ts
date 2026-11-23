@@ -90,6 +90,14 @@ function allNameElements() {
   return [...document.querySelectorAll<HTMLElement>("[data-testid='people-wall'] p[title]")];
 }
 
+function clippedCards() {
+  const clip = page.getByTestId("wall-band-box").element().getBoundingClientRect();
+  return page
+    .getByTestId("wall-flagged")
+    .elements()
+    .filter((card) => card.getBoundingClientRect().bottom > clip.bottom + 1).length;
+}
+
 const wall = () => page.getByTestId("people-wall");
 
 beforeEach(async () => {
@@ -519,14 +527,7 @@ describe("People wall display", () => {
           expect(box.bottom, id).toBeLessThanOrEqual(height);
           expect(box.right, id).toBeLessThanOrEqual(width);
         }
-        const clipped = () => {
-          const clip = page.getByTestId("wall-band-box").element().getBoundingClientRect();
-          return page
-            .getByTestId("wall-flagged")
-            .elements()
-            .filter((card) => card.getBoundingClientRect().bottom > clip.bottom + 1).length;
-        };
-        await expect.poll(clipped).toBe(0);
+        await expect.poll(clippedCards).toBe(0);
         expect(page.getByTestId("wall-flagged").elements().length).toBeGreaterThanOrEqual(1);
         const text = page.getByTestId("wall-not-shown").elements()[0]?.textContent ?? "";
         const hidden = Number(/(\d+) more (?:people are|person is) not shown\./.exec(text)?.[1] ?? 0);
@@ -571,6 +572,51 @@ describe("People wall display", () => {
         await new Promise((done) => setTimeout(done, 150));
         expect(namesIn("wall-band"), `refresh ${refresh}`).toEqual(first);
       }
+    });
+  });
+
+  describe("a card that grows after the band was measured", () => {
+    async function drawnFull() {
+      overview.data = { tenants: crowd(48, 6) };
+      render(PeopleWall);
+      await expect.element(page.getByTestId("wall-clock")).toBeVisible();
+      await expect.poll(() => page.getByTestId("wall-flagged").elements().length).toBe(6);
+      await new Promise((done) => setTimeout(done, 300));
+      expect(clippedCards()).toBe(0);
+      return page.getByTestId("wall-flagged").first().element() as HTMLElement;
+    }
+
+    it("is never drawn clipped: the cards that no longer fit go to the columns", async () => {
+      const first = await drawnFull();
+
+      first.style.height = "200px";
+
+      await expect.poll(clippedCards).toBe(0);
+      const inBand = namesIn("wall-band");
+      expect(inBand.length).toBeGreaterThanOrEqual(1);
+      expect(inBand.length).toBeLessThan(6);
+      expect([...inBand, ...namesIn("wall-columns")]).toEqual(
+        expect.arrayContaining(Array.from({ length: 6 }, (_, i) => `Person 00${i}`))
+      );
+    });
+
+    it("keeps the same people in the band across refreshes and when the card shrinks back", async () => {
+      const first = await drawnFull();
+      first.style.height = "200px";
+      await expect.poll(() => page.getByTestId("wall-flagged").elements().length).toBeLessThan(6);
+      await expect.poll(clippedCards).toBe(0);
+      const cut = namesIn("wall-band");
+
+      for (let refresh = 0; refresh < 3; refresh++) {
+        overview.data = { tenants: overview.data!.tenants!.map((person) => ({ ...person })) };
+        await new Promise((done) => setTimeout(done, 150));
+        expect(namesIn("wall-band"), `refresh ${refresh}`).toEqual(cut);
+      }
+
+      first.style.height = "";
+      await new Promise((done) => setTimeout(done, 150));
+      expect(namesIn("wall-band")).toEqual(cut);
+      expect(clippedCards()).toBe(0);
     });
   });
 

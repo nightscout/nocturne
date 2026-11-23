@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import type { TenantOverviewItem } from "@nocturne/api-client";
@@ -68,9 +67,11 @@
   );
 
   // The capacity is an estimate of a card's height. A card that ends below the band's clipped box
-  // would be half drawn, so the cards are measured once for each set of candidates and screen
-  // size, and the ones that do not fit go to the columns. The measurement is keyed, not reactive
-  // on its own result: cutting the band must not ask for another cut.
+  // would be half drawn, so the cards that do not fit go to the columns. The cards are measured
+  // when the list is first drawn for a set of candidates and screen size, and again whenever the
+  // list changes size, as when a font arrives or a reason gets longer. A measurement counts only
+  // the cards drawn, so it can only keep the count or lower it: cutting the band changes nothing a
+  // later measurement can use to cut again, and a card that shrinks back does not restore one.
   let bandBox = $state<HTMLElement>();
   let bandFit = $state<{ key: string; count: number }>();
   const band = $derived(
@@ -79,15 +80,18 @@
   $effect(() => {
     const key = bandKey;
     const box = bandBox;
-    if (!box || untrack(() => bandFit?.key) === key) return;
-    // The first run can come before the template has redrawn at the measured width.
-    void tick().then(() => {
-      if (key !== bandKey || !box.isConnected) return;
+    const list = box?.querySelector(":scope > ul");
+    if (!box || !list) return;
+    const observer = new ResizeObserver(() => {
       const floor = box.getBoundingClientRect().bottom + 0.5;
-      const cards = [...box.querySelectorAll(":scope > ul > li")];
-      const count = cards.filter((card) => card.getBoundingClientRect().bottom <= floor).length;
+      const count = [...list.children].filter(
+        (card) => card.getBoundingClientRect().bottom <= floor
+      ).length;
+      if (bandFit?.key === key && bandFit.count === count) return;
       bandFit = { key, count };
     });
+    observer.observe(list);
+    return () => observer.disconnect();
   });
   const rest = $derived(people.filter((person) => !band.includes(person)));
   const capacity = $derived(wallColumnCapacity(columnsWidth, columnsHeight));
