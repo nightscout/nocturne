@@ -39,6 +39,7 @@ public class HttpContextReaderGuardTests
         "src/API/Nocturne.API/Reports/ReportCatalogue.cs: ReportCatalogue",
         "src/API/Nocturne.API/Reports/ReportRenderer.cs: ReportRenderer",
         "src/API/Nocturne.API/Services/NotificationActionHandlers/AlertActionHandler.cs: AlertActionHandler",
+        "src/API/Nocturne.API/Services/NotificationActionHandlers/MealMatchActionHandler.cs: MealMatchActionHandler",
         "src/API/Nocturne.API/Services/Platform/AlexaService.cs: AlexaService",
         "src/API/Nocturne.API/Services/Platform/StatusService.cs: StatusService",
         "src/API/Nocturne.API/Services/TranslationDraftService.cs: TranslationDraftService",
