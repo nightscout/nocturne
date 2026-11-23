@@ -893,11 +893,14 @@ public class SubjectRepository : ISubjectRepository
     /// show, by the rule <see cref="ISubjectRepository.TakeUnclaimedOidcIdentityAsync"/> states.
     /// With <paramref name="ownerOf"/>, only what the setup owner step writes (<see cref="LeftByOwnerStep"/>).
     /// Every table with a foreign key to <c>subjects</c> is named here or in
-    /// <see cref="NamedByTenantRowsAsync"/>, and a caller reads both in one transaction, except
+    /// <see cref="TenantRowsNaming"/>, and a caller reads both in one transaction, except
     /// <c>tenants.setup_owner_subject_id</c>, which the delete sets to null: a subject that record
     /// names is one the owner step made, and deleting it ends the record.
+    /// <c>SubjectForeignKeyCoverageTests</c> fails on a foreign key that neither names nor that
+    /// exception covers. The team tables other than <c>team_tenant_access</c> carry no tenant, so they
+    /// are read here.
     /// </summary>
-    private static IQueryable<SubjectEntity> Unclaimed(NocturneDbContext db, Guid? identityId, Guid? ownerOf)
+    internal static IQueryable<SubjectEntity> Unclaimed(NocturneDbContext db, Guid? identityId, Guid? ownerOf)
     {
         var otherIdentities = identityId is { } kept
             ? db.SubjectOidcIdentities.Where(o => o.Id != kept)
@@ -915,6 +918,10 @@ public class SubjectRepository : ISubjectRepository
             && !db.SubjectAvatars.Any(a => a.SubjectId == s.Id)
             && !db.ChatIdentityDirectory.Any(c => c.NocturneUserId == s.Id)
             && !db.TenantCreationInvites.Any(i => i.CreatedBySubjectId == s.Id)
+            && !db.TeamMembers.Any(m => m.SubjectId == s.Id)
+            && !db.Teams.Any(t => t.CreatedBySubjectId == s.Id)
+            && !db.TeamInvites.Any(i => i.CreatedBySubjectId == s.Id)
+            && !db.TeamAccessLinks.Any(l => l.CreatedBySubjectId == s.Id)
             && !db.SubjectRoles.Any(r => r.AssignedById == s.Id));
 
         return ownerOf is { } tenantId
@@ -935,10 +942,11 @@ public class SubjectRepository : ISubjectRepository
             && !db.SubjectRoles.Any(r => r.SubjectId == s.Id && r.Role!.Name != GlobalRoles.Admin));
 
     /// <summary>
-    /// Whether a row of a tenant-scoped table names the subject, in any tenant: of every table with a
-    /// foreign key to <c>subjects</c>, and of the subject-id columns without one that a single lookup
-    /// checks. Each tenant's reads run with its id set local to the transaction, as
-    /// <see cref="ScrubTenantRowsAsync"/> does; the statements after them touch no tenant-scoped table.
+    /// Whether a row of a table that carries a tenant names the subject, in any tenant: of every table
+    /// with a foreign key to <c>subjects</c> that <see cref="Unclaimed"/> cannot read, and of the
+    /// subject-id columns without one that a single lookup checks. Each tenant's reads run with its id
+    /// set local to the transaction, as <see cref="ScrubTenantRowsAsync"/> does; the statements after
+    /// them touch no tenant-scoped table.
     /// </summary>
     private static async Task<bool> NamedByTenantRowsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
@@ -951,20 +959,34 @@ public class SubjectRepository : ISubjectRepository
                     "SELECT set_config('app.current_tenant_id', {0}, true)", [tenantId.ToString()], ct);
             }
 
-            if (await db.LoginCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
-                || await db.MemberInvites.IgnoreQueryFilters().AnyAsync(i => i.TenantId == tenantId && i.CreatedBySubjectId == subjectId, ct)
-                || await db.OAuthGrants.IgnoreQueryFilters().AnyAsync(g => g.TenantId == tenantId && (g.SubjectId == subjectId || g.CreatedBySubjectId == subjectId), ct)
-                || await db.OAuthAuthorizationCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
-                || await db.AlertExcursionMutes.IgnoreQueryFilters().AnyAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct)
-                || await db.MembershipRequests.IgnoreQueryFilters().AnyAsync(r => r.TenantId == tenantId && (r.SubjectId == subjectId || r.DecidedBySubjectId == subjectId), ct)
-                || await db.ClientDevices.IgnoreQueryFilters().AnyAsync(d => d.TenantId == tenantId && d.SubjectId == subjectId, ct)
-                || await db.OAuthDeviceCodes.IgnoreQueryFilters().AnyAsync(c => c.TenantId == tenantId && c.SubjectId == subjectId, ct)
-                || await db.AlertInvites.IgnoreQueryFilters().AnyAsync(i => i.TenantId == tenantId && (i.CreatedBy == subjectId || i.UsedBy == subjectId), ct)
-                || await db.AlertExcursionReceipts.IgnoreQueryFilters().AnyAsync(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId, ct))
-                return true;
+            foreach (var rows in TenantRowsNaming(db, tenantId, subjectId))
+            {
+                if (await rows.AnyAsync(ct))
+                    return true;
+            }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// One query per place a row of tenant <paramref name="tenantId"/> can name <paramref name="subjectId"/>,
+    /// each yielding the ids of the rows that do. Lazy, so a caller that stops at the first hit builds
+    /// no more.
+    /// </summary>
+    internal static IEnumerable<IQueryable<Guid>> TenantRowsNaming(NocturneDbContext db, Guid tenantId, Guid subjectId)
+    {
+        yield return db.LoginCodes.IgnoreQueryFilters().Where(c => c.TenantId == tenantId && c.SubjectId == subjectId).Select(c => c.Id);
+        yield return db.MemberInvites.IgnoreQueryFilters().Where(i => i.TenantId == tenantId && i.CreatedBySubjectId == subjectId).Select(i => i.Id);
+        yield return db.OAuthGrants.IgnoreQueryFilters().Where(g => g.TenantId == tenantId && (g.SubjectId == subjectId || g.CreatedBySubjectId == subjectId)).Select(g => g.Id);
+        yield return db.OAuthAuthorizationCodes.IgnoreQueryFilters().Where(c => c.TenantId == tenantId && c.SubjectId == subjectId).Select(c => c.Id);
+        yield return db.AlertExcursionMutes.IgnoreQueryFilters().Where(m => m.TenantId == tenantId && m.SubjectId == subjectId).Select(m => m.Id);
+        yield return db.MembershipRequests.IgnoreQueryFilters().Where(r => r.TenantId == tenantId && (r.SubjectId == subjectId || r.DecidedBySubjectId == subjectId)).Select(r => r.Id);
+        yield return db.ClientDevices.IgnoreQueryFilters().Where(d => d.TenantId == tenantId && d.SubjectId == subjectId).Select(d => d.Id);
+        yield return db.OAuthDeviceCodes.IgnoreQueryFilters().Where(c => c.TenantId == tenantId && c.SubjectId == subjectId).Select(c => c.Id);
+        yield return db.AlertInvites.IgnoreQueryFilters().Where(i => i.TenantId == tenantId && (i.CreatedBy == subjectId || i.UsedBy == subjectId)).Select(i => i.Id);
+        yield return db.AlertExcursionReceipts.IgnoreQueryFilters().Where(r => r.TenantId == tenantId && r.ActorKind == AlertReceiptActorKind.Member && r.ActorId == subjectId).Select(r => r.Id);
+        yield return db.TeamTenantAccess.Where(a => a.TenantId == tenantId && a.ApprovedBySubjectId == subjectId).Select(a => a.Id);
     }
 
     /// <inheritdoc/>
