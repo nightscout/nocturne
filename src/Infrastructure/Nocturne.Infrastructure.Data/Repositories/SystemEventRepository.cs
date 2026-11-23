@@ -167,18 +167,21 @@ public class SystemEventRepository : ISystemEventRepository
 
         var originalIds = events
             .Select(e => e.OriginalId)
-            .Where(id => !string.IsNullOrEmpty(id))
+            .OfType<string>()
+            .Where(id => id.Length > 0)
             .Distinct()
             .ToList();
         var existingRows = originalIds.Count == 0
             ? []
             : await db.SystemEvents
-                .Where(e => originalIds.Contains(e.OriginalId))
+                .Where(e => originalIds.Contains(e.OriginalId!))
                 .ToListAsync(cancellationToken);
+        var hidden = await HiddenRowsAsync(db, originalIds, existingRows, cancellationToken);
+        existingRows.AddRange(hidden);
         var existingByOriginalId = existingRows
             .ToDictionary(e => e.OriginalId!);
 
-        var written = new List<SystemEventEntity>(events.Count);
+        var written = new List<(SystemEventEntity Row, SystemEvent Sent, bool Hidden)>(events.Count);
         foreach (var systemEvent in events)
         {
             var hasOriginalId = !string.IsNullOrEmpty(systemEvent.OriginalId);
@@ -194,12 +197,43 @@ public class SystemEventRepository : ISystemEventRepository
                     existingByOriginalId[systemEvent.OriginalId!] = entity;
             }
 
-            written.Add(entity);
+            written.Add((entity, systemEvent, hidden.Contains(entity)));
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        if (hidden.Count == 0)
+            await db.SaveChangesAsync(cancellationToken);
+        else
+            await db.WriteWithHistoryClampLiftedAsync(async token => await db.SaveChangesAsync(token), cancellationToken);
 
-        return written.Select(SystemEventMapper.ToDomainModel).ToList();
+        return written.Select(w => w.Hidden
+            ? SystemEventMapper.ToDomainModel(w.Row, createdAt: w.Sent.CreatedAt)
+            : SystemEventMapper.ToDomainModel(w.Row)).ToList();
+    }
+
+    /// <summary>
+    /// The rows of <paramref name="originalIds"/> the unique <c>(tenant, original_id)</c> index holds that
+    /// a history-clamped writer cannot see, tracked for the update the writer's event makes of them. The
+    /// index spans the whole tenant, so an insert beside one fails with 23505 however the clamp reads. The
+    /// event overwrites every field the answer carries, so the answer is the writer's own event
+    /// (<see cref="SystemEventMapper.ToDomainModel(SystemEventEntity, DateTime?)"/>) and reveals nothing the
+    /// clamp hides.
+    /// </summary>
+    private static async Task<List<SystemEventEntity>> HiddenRowsAsync(
+        NocturneDbContext db,
+        List<string> originalIds,
+        List<SystemEventEntity> visible,
+        CancellationToken cancellationToken)
+    {
+        if (!db.HistoryClamped)
+            return [];
+
+        var unseen = originalIds.Except(visible.Select(e => e.OriginalId!)).ToList();
+        if (unseen.Count == 0)
+            return [];
+
+        return await db.WriteWithHistoryClampLiftedAsync(
+            token => db.SystemEvents.Where(e => unseen.Contains(e.OriginalId!)).ToListAsync(token),
+            cancellationToken);
     }
 
     /// <summary>
