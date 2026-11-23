@@ -85,6 +85,9 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100 MB
 });
 
+builder.Services.Configure<HostOptions>(options =>
+    options.ShutdownTimeout = TimeSpan.FromSeconds(ApplicationConstants.Shutdown.HostTimeoutSeconds));
+
 builder.AddServiceDefaults();
 builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
