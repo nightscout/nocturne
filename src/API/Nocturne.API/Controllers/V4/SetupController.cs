@@ -165,6 +165,7 @@ public partial class SetupController : ControllerBase
     [ProducesResponseType(typeof(SetupOwnerOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> OwnerOptions(
         [FromBody] SetupOwnerOptionsRequest request, CancellationToken ct)
     {
@@ -182,9 +183,10 @@ public partial class SetupController : ControllerBase
         if (UsernameRules.Refusal(normalizedUsername) is { } usernameRefusal)
             return Problem(detail: usernameRefusal, statusCode: 400, title: "Bad Request");
 
-        if (await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct)
-            is not { } subjectId)
-            return UsernameTaken();
+        var (subjectId, ownerRefusal) =
+            await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (ownerRefusal != null)
+            return ownerRefusal;
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
             subjectId, normalizedUsername, PasskeyRegistrationFlow.SetupOwner);
@@ -276,6 +278,7 @@ public partial class SetupController : ControllerBase
     [ProducesResponseType(typeof(SetupOwnerOidcResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> OwnerOidc(
         [FromBody] SetupOwnerOidcRequest request, CancellationToken ct)
     {
@@ -293,9 +296,10 @@ public partial class SetupController : ControllerBase
         if (request.ProviderId == Guid.Empty)
             return Problem(detail: "Provider ID is required", statusCode: 400, title: "Bad Request");
 
-        if (await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct)
-            is not { } subjectId)
-            return UsernameTaken();
+        var (subjectId, ownerRefusal) =
+            await EnsureOwnerSubjectAsync(tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
+        if (ownerRefusal != null)
+            return ownerRefusal;
 
         try
         {
@@ -479,18 +483,27 @@ public partial class SetupController : ControllerBase
     /// Find (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>) or create the owner
     /// subject, ensure it is a member of the given tenant with the owner role, and assign the
     /// global admin role. Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony.
-    /// Null, with nothing written, when another member of the tenant holds <paramref name="username"/>:
-    /// setup reopens while former members still hold their usernames.
     /// </summary>
-    private async Task<Guid?> EnsureOwnerSubjectAsync(
+    /// <returns>
+    /// The subject, or a refusal with nothing written: <see cref="UsernameTaken"/> when another member
+    /// of the tenant holds <paramref name="username"/> (setup reopens while former members still hold
+    /// their usernames), or <see cref="OwnerRoleMissing"/> when the tenant has no owner role.
+    /// </returns>
+    private async Task<(Guid SubjectId, ObjectResult? Refusal)> EnsureOwnerSubjectAsync(
         TenantRecord tenant, string displayName, string username, CancellationToken ct)
     {
+        if (await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct) is not { } roleId)
+        {
+            _logger.LogError("Setup: tenant {TenantId} has no owner role, so no owner can be created", tenant.Id);
+            return (default, OwnerRoleMissing());
+        }
+
         var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
 
         if (await _members.UsernameExistsAsync(tenant.Id, username, ct)
             && (existingSubject is null
                 || (await _members.FindMemberAsync(tenant.Id, existingSubject.Id, ct))?.Username != username))
-            return null;
+            return (default, UsernameTaken());
 
         Guid subjectId;
         if (existingSubject != null)
@@ -508,16 +521,11 @@ public partial class SetupController : ControllerBase
                 subjectId, username, tenant.Id);
         }
 
-        var ownerRoleId = await _members.FindRoleIdBySlugAsync(tenant.Id, RoleSeeds.Owner, ct);
-        if (ownerRoleId is { } roleId)
-        {
-            // Setup retries, so a subject that is already a member is the state it wants, and the
-            // result of the add is not read.
-            _ = await _members.AddMemberAsync(
-                new NewTenantMember(
-                    tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Setup, By = null },
-                ct);
-        }
+        // False means the subject is already a member, which a retry wants; any other failed add throws.
+        _ = await _members.AddMemberAsync(
+            new NewTenantMember(
+                tenant.Id, subjectId, [roleId], MadeBy: MembershipMadeBy.Member) { How = MembershipJoinHow.Setup, By = null },
+            ct);
 
         // Set per-tenant username on the membership
         if (await _members.FindMemberAsync(tenant.Id, subjectId, ct) is { } membership)
@@ -525,7 +533,7 @@ public partial class SetupController : ControllerBase
 
         await _subjectService.AssignRoleAsync(subjectId, GlobalRoles.Admin);
 
-        return subjectId;
+        return (subjectId, null);
     }
 
     /// <summary>
@@ -557,6 +565,11 @@ public partial class SetupController : ControllerBase
 
     private ObjectResult UsernameTaken() =>
         Problem(detail: "This username is already taken", statusCode: 400, title: "Bad Request");
+
+    private ObjectResult OwnerRoleMissing() =>
+        Problem(
+            detail: "This tenant has no owner role, so setup cannot create the owner account.",
+            statusCode: 500, title: "Internal Server Error");
 
     // Through the shared writer: the setup flow reuses the login flow's state-cookie name, so a
     // scope of its own would leave two same-named cookies the callback cannot tell apart.
