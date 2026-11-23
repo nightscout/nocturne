@@ -44,7 +44,7 @@ namespace Nocturne.API.Controllers.Authentication;
 ///   <item><description><b>Invite acceptance:</b> <c>POST /invite/options</c> → <c>POST /invite/complete</c> using a pre-issued invite token.</description></item>
 /// </list>
 ///
-/// On successful login or setup, the controller uses
+/// Login hands the proved subject to <see cref="SignInCompletion"/>. Invite acceptance uses
 /// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions)"/> to set session cookies.
 ///
 /// Passkey deletion is guarded by <see cref="ISubjectService.TryRemovePasskeyCredentialAsync"/> which
@@ -66,7 +66,7 @@ public class PasskeyController : ControllerBase
     private const string AccessRequestActor = "passkey:access-request";
 
     private readonly IPasskeyService _passkeyService;
-    private readonly ITotpService _totpService;
+    private readonly SignInCompletion _signIn;
     private readonly ITrustedDeviceService _trustedDevices;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly RecoverySession _recoverySession;
@@ -85,11 +85,11 @@ public class PasskeyController : ControllerBase
     private readonly TimeProvider _time;
 
     /// <param name="passkeyService">Generates each ceremony's options, verifies its response, lists a subject's passkeys, and removes the passkey of a refused invite.</param>
-    /// <param name="totpService">Tells whether a login needs a second factor, and issues the step-up token when it does.</param>
+    /// <param name="signIn">Finishes a passkey login once the assertion has proved the subject.</param>
     /// <param name="trustedDevices">Forgets a subject's trusted devices when a recovery code is spent.</param>
     /// <param name="recoveryCodeService">Generates, counts, verifies and voids recovery codes.</param>
     /// <param name="recoverySession">Starts, reads and spends the recovery session a recovery code buys.</param>
-    /// <param name="sessionService">Issues the session a completed login or invite acceptance signs in with.</param>
+    /// <param name="sessionService">Issues the session an invite acceptance signs in with.</param>
     /// <param name="subjectService">Counts a subject's sign-in factors, removes a passkey under the last-factor check, and records when a sign-in completes.</param>
     /// <param name="auditService">Records the login and recovery outcomes in the auth audit log.</param>
     /// <param name="tenantAccessor">For the id of the request's tenant.</param>
@@ -104,7 +104,7 @@ public class PasskeyController : ControllerBase
     /// <param name="timeProvider">The clock a member's end date is judged by.</param>
     public PasskeyController(
         IPasskeyService passkeyService,
-        ITotpService totpService,
+        SignInCompletion signIn,
         ITrustedDeviceService trustedDevices,
         IRecoveryCodeService recoveryCodeService,
         RecoverySession recoverySession,
@@ -124,7 +124,7 @@ public class PasskeyController : ControllerBase
     {
         _time = timeProvider;
         _passkeyService = passkeyService;
-        _totpService = totpService;
+        _signIn = signIn;
         _trustedDevices = trustedDevices;
         _recoveryCodeService = recoveryCodeService;
         _recoverySession = recoverySession;
@@ -515,79 +515,76 @@ public class PasskeyController : ControllerBase
         }
 
         var tenantId = _tenantAccessor.TenantId;
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ua = Request.Headers.UserAgent.ToString();
 
+        PasskeyAssertionResult assertionResult;
         try
         {
-            var assertionResult = await _passkeyService.CompleteAssertionAsync(
+            assertionResult = await _passkeyService.CompleteAssertionAsync(
                 request.AssertionResponseJson, request.ChallengeToken, tenantId);
-
-            // A subject with an authenticator enrolled finishes signing in at
-            // POST /api/auth/totp/login. No session is issued here, so the passkey alone does
-            // not grant access, unless the device is one the subject trusted after an earlier code.
-            var secondFactor = await _totpService.GetSecondFactorRequirementAsync(
-                assertionResult.SubjectId,
-                Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]);
-
-            if (secondFactor == SecondFactorRequirement.CodeRequired)
-            {
-                // Not a completed login, so not a successful one; the success row is written when
-                // the second factor lands.
-                await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: false,
-                    ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                    userAgent: Request.Headers.UserAgent.ToString(),
-                    detailsJson: JsonSerializer.Serialize(new { method = "passkey", secondFactorPending = true }));
-                Response.SetLastSignInCookie(
-                    SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
-
-                return Ok(new PasskeyLoginCompleteResponse
-                {
-                    Success = true,
-                    TotpRequired = true,
-                    StepUpToken = await _totpService.CreateStepUpTokenAsync(
-                        assertionResult.SubjectId, tenantId, admittedByInvite: false),
-                });
-            }
-
-            var session = await _sessionService.IssueSessionAsync(
-                assertionResult.SubjectId,
-                new SessionContext(
-                    DeviceDescription: "Passkey",
-                    IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                    UserAgent: Request.Headers.UserAgent.ToString()));
-
-            Response.SetSessionCookies(session, _oidcOptions);
-            await HttpContext.EndReplacedHandedOffSessionAsync(_oidcOptions);
-            Response.SetLastSignInCookie(
-                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
-
-            await _subjectService.UpdateLastLoginAsync(assertionResult.SubjectId);
-
-            await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                userAgent: Request.Headers.UserAgent.ToString(),
-                detailsJson: secondFactor == SecondFactorRequirement.SatisfiedByTrustedDevice
-                    ? JsonSerializer.Serialize(new { method = "passkey", secondFactor = "trusted_device" })
-                    : JsonSerializer.Serialize(new { method = "passkey" }));
-
-            return Ok(new PasskeyLoginCompleteResponse
-            {
-                Success = true,
-                AccessToken = session.AccessToken,
-                ExpiresIn = session.ExpiresInSeconds,
-            });
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Passkey login completion failed");
-
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
-                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                userAgent: Request.Headers.UserAgent.ToString(),
-                errorMessage: ex.Message,
-                detailsJson: JsonSerializer.Serialize(new { method = "passkey" }));
-
-            return Problem(detail: "Passkey authentication failed", statusCode: 400, title: "Bad Request");
+            return await RefuseLoginAsync(ex.Message, ip, ua);
         }
+        catch (Fido2VerificationException ex)
+        {
+            _logger.LogWarning(ex, "Passkey login completion failed");
+            return await RefuseLoginAsync(ex.Message, ip, ua);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Passkey login completion failed");
+            return await RefuseLoginAsync(ex.Message, ip, ua);
+        }
+
+        // Member(tenantId): the assertion admitted the holder on this tenant only.
+        var outcome = await _signIn.CompleteAsync(new SignInAttempt(
+            assertionResult.SubjectId,
+            SignInMethod.Passkey,
+            new SignInAdmission.Member(tenantId),
+            new SecondFactorProof.Primary(Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]),
+            new SessionContext(DeviceDescription: "Passkey", IpAddress: ip, UserAgent: ua),
+            RefusalAudit: new RefusalAudit.MethodRow()));
+
+        await HttpContext.ApplySignInAsync(outcome, _oidcOptions);
+
+        return outcome switch
+        {
+            SignInOutcome.SignedIn signedIn => Ok(new PasskeyLoginCompleteResponse
+            {
+                Success = true,
+                AccessToken = signedIn.Session.AccessToken,
+                ExpiresIn = signedIn.Session.ExpiresInSeconds,
+            }),
+            SignInOutcome.SecondFactorRequired required => Ok(new PasskeyLoginCompleteResponse
+            {
+                Success = true,
+                TotpRequired = true,
+                StepUpToken = required.StepUpToken,
+            }),
+            SignInOutcome.Refused { Reason: SignInRefusal.NotAMember } =>
+                await RefuseLoginAsync(PasskeyService.OwnerNotAMemberMessage, ip, ua),
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
+        };
+    }
+
+    /// <summary>
+    /// The answer and row of a refused assertion. A membership that ends between the assertion
+    /// and the sign-in is answered the same as one the assertion found missing.
+    /// </summary>
+    private async Task<ActionResult<PasskeyLoginCompleteResponse>> RefuseLoginAsync(
+        string errorMessage, string? ip, string ua)
+    {
+        await _auditService.LogAsync(AuthAuditEventType.FailedAuth, targetSubjectId: null, success: false,
+            ipAddress: ip,
+            userAgent: ua,
+            errorMessage: errorMessage,
+            detailsJson: JsonSerializer.Serialize(new { method = "passkey" }));
+
+        return Problem(detail: "Passkey authentication failed", statusCode: 400, title: "Bad Request");
     }
 
     /// <summary>

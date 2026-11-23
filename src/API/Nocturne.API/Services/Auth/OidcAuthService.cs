@@ -427,7 +427,7 @@ public class OidcAuthService : IOidcAuthService
                 IpAddress: ipAddress,
                 UserAgent: userAgent),
             provider.Id,
-            new RefusalAudit(ReasonAsErrorMessage: true, [new("providerId", provider.Id)])));
+            new RefusalAudit.ModuleRow(ReasonAsErrorMessage: true, [new("providerId", provider.Id)])));
 
         SessionTokenPair session;
         bool usedTrustedDevice;

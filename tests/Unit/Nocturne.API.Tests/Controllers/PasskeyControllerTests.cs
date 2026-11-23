@@ -83,15 +83,7 @@ public class PasskeyControllerTests : IDisposable
         _subjectService = new Mock<ISubjectService>();
         _tenantAccessor = MockTenantAccessor.Create(_tenantId);
 
-        var oidcOptions = Options.Create(new OidcOptions
-        {
-            Cookie = new CookieSettings
-            {
-                AccessTokenName = ".Nocturne.AccessToken",
-                RefreshTokenName = ".Nocturne.RefreshToken",
-                Secure = true,
-            },
-        });
+        var oidcOptions = Options.Create(FixtureCookieOptions());
 
         var logger = new Mock<ILogger<PasskeyController>>();
 
@@ -108,7 +100,12 @@ public class PasskeyControllerTests : IDisposable
 
         _controller = new PasskeyController(
             _passkeyService.Object,
-            _totpService.Object,
+            new SignInCompletion(
+                _totpService.Object,
+                new TenantMemberService(new TenantMembershipRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System),
+                _sessionService.Object,
+                _subjectService.Object,
+                _auditService.Object),
             _trustedDevices.Object,
             _recoveryCodeService.Object,
             _recoverySession,
@@ -777,7 +774,10 @@ public class PasskeyControllerTests : IDisposable
         // request pipeline hands out.
         var tenantContexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
         var controller = new PasskeyController(
-            _passkeyService.Object, _totpService.Object, _trustedDevices.Object, _recoveryCodeService.Object, _recoverySession,
+            _passkeyService.Object,
+            new SignInCompletion(_totpService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
+                _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
+            _trustedDevices.Object, _recoveryCodeService.Object, _recoverySession,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
             new SubjectRepository(tenantContexts, AccountLinkRoutes.Off), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off),
@@ -813,7 +813,10 @@ public class PasskeyControllerTests : IDisposable
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database unavailable"));
         var controller = new PasskeyController(
-            _passkeyService.Object, _totpService.Object, _trustedDevices.Object, _recoveryCodeService.Object,
+            _passkeyService.Object,
+            new SignInCompletion(_totpService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
+                _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
+            _trustedDevices.Object, _recoveryCodeService.Object,
             new RecoverySession(failingContexts.Object, _loginCodes, Options.Create(new OidcOptions()), NullLogger<RecoverySession>.Instance),
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
@@ -2244,6 +2247,336 @@ public class PasskeyControllerTests : IDisposable
             s => s.GetSecondFactorRequirementAsync(subjectId, "device-token"),
             Times.Once,
             "the cookie is checked against the subject the assertion verified, never one the cookie names");
+    }
+
+    #endregion
+
+    #region Passkey login finishes through the sign-in completion
+
+    private sealed record AuditRow(
+        string Type, Guid? Subject, bool Success, string? Ip, string? Agent, string? Error, string? Details);
+
+    private const string ClientIp = "203.0.113.7";
+    private const string ClientAgent = "agent/1";
+
+    /// <summary>Records every row written through <paramref name="audit"/>, in order, and names each in <paramref name="steps"/>.</summary>
+    private static List<AuditRow> RecordRows(Mock<IAuthAuditService> audit, List<string>? steps = null)
+    {
+        var rows = new List<AuditRow>();
+        audit.Setup(a => a.LogAsync(
+                It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()))
+            .Callback((string type, Guid? subject, bool success, string? ip, string? agent, string? error, string? details,
+                Guid? _, AuthAuditActor? _, Guid? _) =>
+            {
+                rows.Add(new AuditRow(type, subject, success, ip, agent, error, details));
+                steps?.Add($"audit:{type}");
+            })
+            .Returns(Task.CompletedTask);
+        return rows;
+    }
+
+    private void FromTheTestClient()
+    {
+        _controller.HttpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(ClientIp);
+        _controller.HttpContext.Request.Headers.UserAgent = ClientAgent;
+    }
+
+    private void StubSession(Guid subjectId, List<string>? steps = null) =>
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => steps?.Add("session"))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+
+    /// <summary>The cookie settings the fixture builds the controller with.</summary>
+    private static OidcOptions FixtureCookieOptions() => new()
+    {
+        Cookie = new CookieSettings
+        {
+            AccessTokenName = ".Nocturne.AccessToken",
+            RefreshTokenName = ".Nocturne.RefreshToken",
+            Secure = true,
+        },
+    };
+
+    public static TheoryData<Exception> RefusedAssertions() => new()
+    {
+        new InvalidOperationException("Credential not found."),
+        new Fido2NetLib.Fido2VerificationException("Invalid signature"),
+        new System.Text.Json.JsonException("not an assertion"),
+    };
+
+    [Theory]
+    [MemberData(nameof(RefusedAssertions))]
+    public async Task LoginComplete_WhenTheAssertionIsRefused_AnswersBadRequestWithTheRowItAlwaysHas(Exception refusal)
+    {
+        FromTheTestClient();
+        var rows = RecordRows(_auditService);
+        _passkeyService
+            .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", _tenantId))
+            .ThrowsAsync(refusal);
+
+        var result = await LoginCompleteAsync();
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        Assert.IsType<ProblemDetails>(problem.Value).Detail.Should().Be("Passkey authentication failed");
+        rows.Should().Equal(new AuditRow(
+            AuthAuditEventType.FailedAuth, null, false, ClientIp, ClientAgent, refusal.Message, "{\"method\":\"passkey\"}"));
+        _totpService.Verify(s => s.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Only a refused assertion is answered as one. A proof that cannot be checked, here because a
+    /// read timed out, is an error and records no failed sign-in.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_WhenTheProofFailsForAnotherReason_IsAnErrorAndNotARefusal()
+    {
+        var rows = RecordRows(_auditService);
+        _passkeyService
+            .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", _tenantId))
+            .ThrowsAsync(new TimeoutException("the credential read timed out"));
+
+        var act = () => LoginCompleteAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        rows.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The assertion checks membership before the signature. A membership that ends after that
+    /// check is refused by the sign-in completion with the answer and the row the assertion gives a
+    /// non-member, and no second row.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_WhenTheMembershipEndsAfterTheAssertion_IsRefusedAsTheAssertionRefusesANonMember()
+    {
+        FromTheTestClient();
+        var rows = RecordRows(_auditService);
+        var formerMember = Guid.CreateVersion7();
+        StubSuccessfulAssertion(formerMember, "rhys");
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(formerMember, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+
+        var result = await LoginCompleteAsync();
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        Assert.IsType<ProblemDetails>(problem.Value).Detail.Should().Be("Passkey authentication failed");
+        rows.Should().Equal(new AuditRow(
+            AuthAuditEventType.FailedAuth, null, false, ClientIp, ClientAgent,
+            "Credential owner is not a member of this tenant.", "{\"method\":\"passkey\"}"));
+        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// On a host that resolves no tenant the request's tenant id is empty. The assertion refuses
+    /// there, and the sign-in completion admits no one either, a member of another tenant included.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_OnAHostWithNoTenant_AdmitsNoOne()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        _tenantAccessor.Setup(a => a.TenantId).Returns(Guid.Empty);
+        _passkeyService
+            .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", Guid.Empty))
+            .ReturnsAsync(new PasskeyAssertionResult(subjectId, "rhys", "rhys"));
+        StubSession(subjectId);
+
+        var result = await LoginCompleteAsync();
+
+        Assert.IsType<ObjectResult>(result.Result).StatusCode.Should().Be(400);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    public static TheoryData<SecondFactorRequirement, bool, string> SignInRows() => new()
+    {
+        { SecondFactorRequirement.NotEnrolled, true, "{\"method\":\"passkey\"}" },
+        { SecondFactorRequirement.SatisfiedByTrustedDevice, true, "{\"method\":\"passkey\",\"secondFactor\":\"trusted_device\"}" },
+        { SecondFactorRequirement.CodeRequired, false, "{\"method\":\"passkey\",\"secondFactorPending\":true}" },
+    };
+
+    [Theory]
+    [MemberData(nameof(SignInRows))]
+    public async Task LoginComplete_RecordsTheSameLoginRowAsBefore(
+        SecondFactorRequirement gate, bool success, string details)
+    {
+        FromTheTestClient();
+        var rows = RecordRows(_auditService);
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        StubSession(subjectId);
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(gate);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
+
+        await LoginCompleteAsync();
+
+        rows.Should().Equal(new AuditRow(AuthAuditEventType.Login, subjectId, success, ClientIp, ClientAgent, null, details));
+        _sessionService.Verify(s => s.IssueSessionAsync(
+                subjectId, new SessionContext(null, "Passkey", ClientIp, ClientAgent, null),
+                It.IsAny<CancellationToken>()),
+            success ? Times.Once() : Times.Never());
+    }
+
+    /// <summary>
+    /// The session, then the sign-in time, then the <c>Login</c> row; the handed-off session the
+    /// sign-in replaces is ended after them, so its <c>Logout</c> row follows the <c>Login</c> row.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_OverAHandedOffSession_RecordsTheSignInBeforeEndingTheReplacedSession()
+    {
+        var steps = new List<string>();
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        StubSession(subjectId, steps);
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(subjectId))
+            .Callback(() => steps.Add("last-login")).Returns(Task.CompletedTask);
+        RecordRows(_auditService, steps);
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ReturnsAsync(new RefreshTokenSession(subjectId, "previous-session", true));
+        refreshTokens.Setup(r => r.RevokeSessionForSubjectAsync(subjectId, "previous-session", It.IsAny<string>()))
+            .Callback(() => steps.Add("end-handed-off"));
+        _controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+        _controller.HttpContext.Request.Headers.Cookie = ".Nocturne.RefreshToken=presented";
+
+        await LoginCompleteAsync();
+
+        steps.Should().Equal(
+            "session", "last-login", $"audit:{AuthAuditEventType.Login}",
+            "end-handed-off", $"audit:{AuthAuditEventType.Logout}");
+    }
+
+    /// <summary>
+    /// A failed sign-in time write is an error after the session row is stored: no cookie carries
+    /// that session, no row records the sign-in or a failure, and the handed-off session stays live.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_WhenTheSignInTimeCannotBeRecorded_IsAnErrorThatSetsNoCookieAndEndsNothing()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        StubSession(subjectId);
+        var rows = RecordRows(_auditService);
+        _subjectService.Setup(s => s.UpdateLastLoginAsync(subjectId))
+            .ThrowsAsync(new DbUpdateException("the update failed"));
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        _controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+        _controller.HttpContext.Request.Headers.Cookie = ".Nocturne.RefreshToken=presented";
+
+        var act = () => LoginCompleteAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once, "the refresh token it stored is never delivered");
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        rows.Should().BeEmpty();
+        refreshTokens.Verify(r => r.FindOwnerAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Ending the handed-off session runs after the <c>Login</c> row, so when it fails the sign-in
+    /// time and the row stand behind the error, and the handed-off session stays live.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_WhenEndingTheHandedOffSessionFails_LeavesTheSignInRecordedBehindTheError()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        StubSession(subjectId);
+        var rows = RecordRows(_auditService);
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        refreshTokens.Setup(r => r.FindOwnerAsync("presented"))
+            .ThrowsAsync(new TimeoutException("the token read timed out"));
+        _controller.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(refreshTokens.Object).AddSingleton(_auditService.Object).BuildServiceProvider();
+        _controller.HttpContext.Request.Headers.Cookie = ".Nocturne.RefreshToken=presented";
+
+        var act = () => LoginCompleteAsync();
+
+        await act.Should().ThrowAsync<TimeoutException>();
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(subjectId), Times.Once);
+        rows.Select(r => (r.Type, r.Success)).Should().Equal((AuthAuditEventType.Login, true));
+        refreshTokens.Verify(
+            r => r.RevokeSessionForSubjectAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The pending row is written before the token is minted, as before, so a failed mint leaves a
+    /// pending row with no token. It is now an error with no cookie and no failure row.
+    /// </summary>
+    [Fact]
+    public async Task LoginComplete_WhenTheStepUpTokenCannotBeMinted_LeavesThePendingRowAndSetsNoCookie()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        var rows = RecordRows(_auditService);
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false))
+            .ThrowsAsync(new DbUpdateException("the insert failed"));
+
+        var act = () => LoginCompleteAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        rows.Select(r => (r.Type, r.Success, r.Details)).Should().Equal(
+            (AuthAuditEventType.Login, false, "{\"method\":\"passkey\",\"secondFactorPending\":true}"));
+        _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LoginComplete_WritesTheSameSignInHintAsTheDirectWriter(bool codeOwed)
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        StubSession(subjectId);
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(codeOwed ? SecondFactorRequirement.CodeRequired : SecondFactorRequirement.NotEnrolled);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
+
+        await LoginCompleteAsync();
+
+        var direct = new DefaultHttpContext().Response;
+        if (!codeOwed)
+            direct.SetSessionCookies(new SessionTokenPair("access", "refresh", 900, subjectId), FixtureCookieOptions());
+        direct.SetLastSignInCookie(SessionCookieExtensions.SignInMethods.Passkey, providerId: null, FixtureCookieOptions());
+
+        var written = _controller.HttpContext.Response.Headers.SetCookie.ToArray();
+        var expected = direct.Headers.SetCookie.ToArray();
+        written.Select(CookieName).Should().Equal(expected.Select(CookieName));
+        var writtenHint = Microsoft.Net.Http.Headers.SetCookieHeaderValue.Parse(written.Last());
+        var expectedHint = Microsoft.Net.Http.Headers.SetCookieHeaderValue.Parse(expected.Last());
+        writtenHint.Expires.Should().BeCloseTo(expectedHint.Expires!.Value, TimeSpan.FromSeconds(1),
+            "the expiry is read from the clock at each write and formatted to the second");
+        WithoutExpiry(written.Last()).Should().Be(WithoutExpiry(expected.Last()),
+            "the hint is the last cookie either answer writes");
+    }
+
+    private static string CookieName(string? setCookie) => setCookie![..setCookie.IndexOf('=')];
+
+    private static string WithoutExpiry(string? setCookie)
+    {
+        var cookie = Microsoft.Net.Http.Headers.SetCookieHeaderValue.Parse(setCookie);
+        cookie.Expires = null;
+        return cookie.ToString();
     }
 
     #endregion
