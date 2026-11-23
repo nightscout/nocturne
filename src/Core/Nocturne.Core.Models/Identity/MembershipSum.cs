@@ -84,4 +84,11 @@ public static class MembershipReasonKind
     /// system for the Public and device subjects.
     /// </summary>
     public const string Direct = "direct";
+
+    /// <summary>
+    /// Access a team's access to the tenant gives a member of the team. Its source is that access
+    /// (<c>team_tenant_access</c>), which cannot be deleted while a reason names it, and it never gives
+    /// the owner role.
+    /// </summary>
+    public const string Team = "team";
 }

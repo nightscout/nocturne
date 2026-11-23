@@ -85,12 +85,27 @@ public class AddTenantMemberReasonsFixture : IAsyncLifetime
     {
         var reason = Guid.CreateVersion7();
         Guid? sourceId = kind == MembershipReasonKind.Direct ? null : source ?? Guid.CreateVersion7();
+        if (sourceId is { } access)
+            await NewTeamAccessAsync(access);
         await ExecuteAsync($"""
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, created_from_invite_id)
             VALUES ('{reason}', '{member}', '{kind}', {(sourceId is { } s ? $"'{s}'" : "NULL")},
                     false, {(invite is { } id ? $"'{id}'" : "NULL")});
             """);
         return reason;
+    }
+
+    /// <summary>A team's access to <see cref="Tenant"/> with id <paramref name="access"/>, which a team reason's source must name.</summary>
+    private Task<int> NewTeamAccessAsync(Guid access)
+    {
+        var team = Guid.CreateVersion7();
+        return ExecuteAsync($"""
+            SELECT set_config('app.current_tenant_id', '{Tenant}', false);
+            INSERT INTO teams (id, name) VALUES ('{team}', 'Team {team:N}');
+            INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
+            VALUES ('{access}', '{team}', '{Tenant}', false)
+            ON CONFLICT (id) DO NOTHING;
+            """);
     }
 
     internal Task NewReasonRoleAsync(Guid reason, Guid role) => ExecuteAsync($"""

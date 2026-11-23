@@ -36,6 +36,9 @@ public class MemberInviteService : IMemberInviteService
     private static readonly AcceptMemberInviteResult AlreadyMember =
         new(false, "already_member", "You are already a member of this tenant.");
 
+    private static readonly AcceptMemberInviteResult OwnInvite =
+        new(false, SelfAdmission.OwnInviteCode, SelfAdmission.OwnInviteDetail);
+
     private static readonly AcceptMemberInviteResult AccessEnded =
         new(false, "access_ended", "The access this invite gives has already ended.");
 
@@ -215,7 +218,7 @@ public class MemberInviteService : IMemberInviteService
         if (invite.IsExhausted)
             return Exhausted;
 
-        if (await _members.IsMemberAsync(invite.TenantId, acceptingSubjectId, now, CancellationToken.None))
+        if (await _members.IsDirectMemberAsync(invite.TenantId, acceptingSubjectId, now, CancellationToken.None))
             return AlreadyMember;
 
         if (invite.AccessEndsAt is { } accessEndsAt && MembershipLiveness.HasEnded(accessEndsAt, now))
@@ -249,7 +252,11 @@ public class MemberInviteService : IMemberInviteService
                             unit, members, _grantRevocation, invite.TenantId, acceptingSubjectId, now, token)
                         ?? throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
 
-                    if (!await members.AddMemberAsync(
+                    if (invite.CreatedBySubjectId == acceptingSubjectId
+                        && await members.FindMemberAsync(invite.TenantId, acceptingSubjectId, token) is { DirectReason: null })
+                        throw new RefusedCommitException<AcceptMemberInviteResult>(OwnInvite);
+
+                    if (!await members.AddDirectMemberAsync(
                             new NewTenantMember(
                                 invite.TenantId,
                                 acceptingSubjectId,
@@ -260,6 +267,7 @@ public class MemberInviteService : IMemberInviteService
                                 CreatedFromInviteId: invite.Id,
                                 MadeBy: MembershipMadeBy.Member,
                                 AccessEndsAt: invite.AccessEndsAt) { How = MembershipJoinHow.Invite, By = invite.CreatedBySubjectId },
+                            now,
                             token))
                         throw new RefusedCommitException<AcceptMemberInviteResult>(AlreadyMember);
 

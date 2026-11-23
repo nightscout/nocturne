@@ -463,7 +463,7 @@ public class TeamsControllerTests
         new TenantMemberRecord(
             Guid.CreateVersion7(), site, Caller, "Sam", null, true, false, false, false, false,
             [new TenantMemberRoleRecord(Guid.CreateVersion7(), "Owner", RoleSeeds.Owner, [Scope.FullAccess])],
-            null, null, null, false, null, null, null, DateTime.UtcNow));
+            null, null, null, false, null, null, null, DateTime.UtcNow, []));
 
     private TeamRenameAnnouncer Announcer() => new(
         _teams.Object, _members.Object, Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider(),

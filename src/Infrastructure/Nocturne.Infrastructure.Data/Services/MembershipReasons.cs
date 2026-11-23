@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -29,7 +30,10 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// A membership's start and end are audited here, so no way of adding or removing one goes
 /// unrecorded: <see cref="AddMember"/> stages its <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType.MemberJoined"/>
 /// row and <see cref="RemoveMemberAsync"/> its <see cref="Nocturne.Core.Contracts.Auth.AuthAuditEventType.MemberRemoved"/>
-/// row. The rows of what changed within it are not staged here: <see cref="MemberAccessAudit"/> stages
+/// row. So are a reason's start and end while the membership holds another: adding a direct reason
+/// beside a team's, removing the direct reason while a team's remains, and adding or removing a team's
+/// reason each stage the joined or removed row a membership starting or ending with it would.
+/// The rows of what changed within it are not staged here: <see cref="MemberAccessAudit"/> stages
 /// them from the change the caller asked for.
 /// </para>
 /// <para>
@@ -64,13 +68,157 @@ internal static class MembershipReasons
         NocturneDbContext db, TenantMemberEntity member, MembershipGrant direct, Guid? createdFromInviteId,
         MembershipJoinHow how, Guid? by, MemberAccessSource? source)
     {
-        MemberAccessAudit.StageJoined(db, member.TenantId, member.SubjectId, how, createdFromInviteId, by, source);
+        MemberAccessAudit.StageJoined(db, member.TenantId, member.SubjectId, how, createdFromInviteId, by, team: null, source);
         db.TenantMembers.Add(member);
-        var reason = Described(db, NewDirectReason(db, member.Id, direct.RoleIds, direct.DirectPermissions,
-            direct.LimitTo24Hours, direct.AccessEndsAt, createdFromInviteId));
+        var reason = Described(db, NewReason(db, member.Id, MembershipReasonKind.Direct, sourceId: null, direct, createdFromInviteId));
         // Its one reason is the sum at any instant, and nothing can lapse before it.
         Write(db, member, new MembershipProjection(reason.Grant, NextReasonLapseAt: null), [reason]);
     }
+
+    /// <summary>
+    /// Gives <paramref name="member"/>, which holds only reasons of other kinds, a direct reason that
+    /// gives <paramref name="direct"/>, and stages its joined row as <see cref="AddMember"/> does for a
+    /// new member. The row takes <paramref name="label"/> and <paramref name="username"/> as a new
+    /// member's would; one that is null leaves the row's, since a username is what a passkey sign-in
+    /// by name finds the member by.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The member already holds a direct reason.</exception>
+    public static async Task AddDirectReasonAsync(
+        NocturneDbContext db, TenantMemberEntity member, MembershipGrant direct, Guid? createdFromInviteId,
+        string? label, string? username, MembershipJoinHow how, Guid? by, MemberAccessSource? source, DateTime now,
+        CancellationToken ct)
+    {
+        if ((await AlignedAsync(db, member, now, ct)).Any(r => r.Kind == MembershipReasonKind.Direct))
+            throw new InvalidOperationException($"Member {member.Id} already holds a direct reason.");
+
+        member.Label = label ?? member.Label;
+        member.Username = username ?? member.Username;
+        MemberAccessAudit.StageJoined(db, member.TenantId, member.SubjectId, how, createdFromInviteId, by, team: null, source);
+        NewReason(db, member.Id, MembershipReasonKind.Direct, sourceId: null, direct, createdFromInviteId);
+        Project(db, member, now);
+    }
+
+    /// <summary>
+    /// What the member's direct reason gives once <see cref="AlignWithRow"/> has brought it into line
+    /// with the row; null when the member holds no direct reason. Takes the member's lock.
+    /// </summary>
+    public static async Task<MembershipGrant?> DirectGrantAsync(
+        NocturneDbContext db, TenantMemberEntity member, DateTime now, CancellationToken ct) =>
+        (await AlignedAsync(db, member, now, ct)).FirstOrDefault(r => r.Kind == MembershipReasonKind.Direct) is { } direct
+            ? Described(db, direct).Grant
+            : null;
+
+    /// <summary>
+    /// Removes the member's direct reason and stages its removed row naming <paramref name="how"/>,
+    /// attributed to the scope's actor. A member whose only reason it is is removed with it
+    /// (<see cref="RemoveMemberAsync"/>); any other keeps its row, projected from what is left.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The member holds no direct reason.</exception>
+    public static async Task RemoveDirectReasonAsync(
+        NocturneDbContext db, TenantMemberEntity member, MembershipEndHow how, DateTime now, CancellationToken ct)
+    {
+        var reasons = await AlignedAsync(db, member, now, ct);
+        var direct = reasons.FirstOrDefault(r => r.Kind == MembershipReasonKind.Direct)
+            ?? throw new InvalidOperationException($"Member {member.Id} has no direct reason to remove.");
+        if (reasons.Count == 1)
+        {
+            await RemoveMemberAsync(db, member, how, ct);
+            return;
+        }
+
+        MemberAccessAudit.StageRemoved(db, member.TenantId, member.SubjectId, how, team: null, source: null);
+        RemoveReason(db, direct);
+        Project(db, member, now);
+    }
+
+    /// <summary>
+    /// Gives <paramref name="subjectId"/> on <paramref name="tenantId"/> the reason a team's access to the
+    /// tenant (<paramref name="teamAccessId"/>) gives, adding the membership when they hold none, and
+    /// stages its joined row naming the team, attributed to <paramref name="source"/>.
+    /// </summary>
+    /// <remarks>
+    /// The source is explicit, never the scope's actor: the team side acts for the team, and
+    /// <see cref="MemberAccessAudit.StageRemoved"/> reads a removal whose actor is the member as the
+    /// member leaving the site. Takes the member's lock, after the team access lock the caller holds
+    /// (<see cref="MembershipLock"/>).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The access is not of <paramref name="tenantId"/>, the member already holds its reason, or
+    /// <paramref name="grant"/> gives the owner role, which no team reason may.
+    /// </exception>
+    public static async Task<TenantMemberEntity> AddTeamReasonAsync(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, Guid teamAccessId, MembershipGrant grant,
+        MemberAccessSource source, DateTime now, CancellationToken ct)
+    {
+        var access = await db.TeamTenantAccess.AsNoTracking().Include(a => a.Team)
+            .FirstOrDefaultAsync(a => a.Id == teamAccessId && a.TenantId == tenantId, ct)
+            ?? throw new InvalidOperationException($"Team access {teamAccessId} is not of tenant {tenantId}.");
+        var roleIds = grant.RoleIds.ToList();
+        if (await db.TenantRoles.AnyAsync(r => roleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct))
+            throw new InvalidOperationException("A team reason cannot give the owner role.");
+
+        await db.LockMembershipAsync(tenantId, subjectId, ct);
+        var team = new MemberAccessTeam(access.TeamId, access.Team!.Name);
+        var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
+        if (member is null)
+        {
+            member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId };
+            MemberAccessAudit.StageJoined(db, tenantId, subjectId, MembershipJoinHow.Team, inviteId: null, by: null, team, source);
+            db.TenantMembers.Add(member);
+            var reason = Described(db, NewReason(db, member.Id, MembershipReasonKind.Team, access.Id, grant, createdFromInviteId: null));
+            Write(db, member, new MembershipProjection(reason.Grant, NextReasonLapseAt: null), [reason]);
+            return member;
+        }
+
+        if ((await AlignedAsync(db, member, now, ct)).Any(r => r.SourceId == access.Id))
+            throw new InvalidOperationException($"Member {member.Id} already holds the reason of team access {access.Id}.");
+
+        MemberAccessAudit.StageJoined(db, tenantId, subjectId, MembershipJoinHow.Team, inviteId: null, by: null, team, source);
+        NewReason(db, member.Id, MembershipReasonKind.Team, access.Id, grant, createdFromInviteId: null);
+        Project(db, member, now);
+        return member;
+    }
+
+    /// <summary>
+    /// What the reason a team's access (<paramref name="teamAccessId"/>) gives the member; null when they
+    /// hold none from it. Takes the member's lock.
+    /// </summary>
+    public static async Task<MembershipGrant?> TeamGrantAsync(
+        NocturneDbContext db, TenantMemberEntity member, Guid teamAccessId, DateTime now, CancellationToken ct) =>
+        (await AlignedAsync(db, member, now, ct)).FirstOrDefault(r => IsOfTeamAccess(r, teamAccessId)) is { } reason
+            ? Described(db, reason).Grant
+            : null;
+
+    /// <summary>
+    /// Removes the reason a team's access (<paramref name="teamAccessId"/>) gives the member and stages
+    /// its removed row naming the team, attributed to <paramref name="source"/> as
+    /// <see cref="AddTeamReasonAsync"/> explains. A member whose only reason it is is removed with it;
+    /// any other keeps its row, projected from what is left. False when the member holds no such reason.
+    /// </summary>
+    public static async Task<bool> RemoveTeamReasonAsync(
+        NocturneDbContext db, TenantMemberEntity member, Guid teamAccessId, MemberAccessSource source, DateTime now,
+        CancellationToken ct)
+    {
+        var reasons = await AlignedAsync(db, member, now, ct);
+        if (reasons.FirstOrDefault(r => IsOfTeamAccess(r, teamAccessId)) is not { } reason)
+            return false;
+
+        var access = await db.TeamTenantAccess.AsNoTracking().Include(a => a.Team).FirstAsync(a => a.Id == teamAccessId, ct);
+        MemberAccessAudit.StageRemoved(
+            db, member.TenantId, member.SubjectId, MembershipEndHow.Team, new MemberAccessTeam(access.TeamId, access.Team!.Name), source);
+        if (reasons.Count == 1)
+        {
+            RemoveReasonsAndRow(db, member);
+            return true;
+        }
+
+        RemoveReason(db, reason);
+        Project(db, member, now);
+        return true;
+    }
+
+    private static bool IsOfTeamAccess(TenantMemberReasonEntity reason, Guid teamAccessId) =>
+        reason.Kind == MembershipReasonKind.Team && reason.SourceId == teamAccessId;
 
     /// <summary>Sets the direct permissions the member's direct reason gives.</summary>
     public static async Task SetDirectPermissionsAsync(
@@ -121,16 +269,24 @@ internal static class MembershipReasons
     public static async Task RemoveMemberAsync(
         NocturneDbContext db, TenantMemberEntity member, MembershipEndHow how, CancellationToken ct)
     {
-        MemberAccessAudit.StageRemoved(db, member.TenantId, member.SubjectId, how, source: null);
+        MemberAccessAudit.StageRemoved(db, member.TenantId, member.SubjectId, how, team: null, source: null);
         await LockAndLoadAsync(db, member, ct);
+        RemoveReasonsAndRow(db, member);
+    }
+
+    private static void RemoveReasonsAndRow(NocturneDbContext db, TenantMemberEntity member)
+    {
         foreach (var reason in ReasonsOf(db, member.Id))
-        {
-            db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, reason.Id));
-            db.TenantMemberReasons.Remove(reason);
-        }
+            RemoveReason(db, reason);
 
         db.TenantMemberRoles.RemoveRange(LinksOf(db, member.Id));
         db.TenantMembers.Remove(member);
+    }
+
+    private static void RemoveReason(NocturneDbContext db, TenantMemberReasonEntity reason)
+    {
+        db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, reason.Id));
+        db.TenantMemberReasons.Remove(reason);
     }
 
     /// <summary>
@@ -151,8 +307,7 @@ internal static class MembershipReasons
         await db.LockMembershipsAsync(members.Select(m => (m.TenantId, m.SubjectId)), ct);
         foreach (var member in members)
         {
-            await DirectReasonAsync(db, member, now, ct);
-            foreach (var reason in ReasonsOf(db, member.Id))
+            foreach (var reason in await AlignedAsync(db, member, now, ct))
                 db.TenantMemberReasonRoles.RemoveRange(RolesOf(db, reason.Id).Where(rr => rr.TenantRoleId == roleId));
             Project(db, member, now);
         }
@@ -411,12 +566,21 @@ internal static class MembershipReasons
     }
 
     /// <summary>
-    /// The member's direct reason, after <see cref="AlignWithRow"/> has brought it into line with the
-    /// row. Takes the member's lock and loads its reasons and links onto the context. A re-sync is
-    /// logged at warning and writes no audit row: no access changed, only the reason had fallen behind
-    /// the row.
+    /// The member's direct reason among <see cref="AlignedAsync"/>. Its callers have read under the
+    /// member's lock that it holds one (<see cref="DirectGrantAsync"/>), so a member with no direct
+    /// reason never reaches it.
     /// </summary>
     private static async Task<TenantMemberReasonEntity> DirectReasonAsync(
+        NocturneDbContext db, TenantMemberEntity member, DateTime now, CancellationToken ct) =>
+        (await AlignedAsync(db, member, now, ct)).FirstOrDefault(r => r.Kind == MembershipReasonKind.Direct)
+            ?? throw new InvalidOperationException($"Member {member.Id} has reasons but no direct reason to change.");
+
+    /// <summary>
+    /// The member's reasons after <see cref="AlignWithRow"/> has brought them into line with the row.
+    /// Takes the member's lock and loads its reasons and links onto the context. A re-sync is logged at
+    /// warning and writes no audit row: no access changed, only the reason had fallen behind the row.
+    /// </summary>
+    private static async Task<List<TenantMemberReasonEntity>> AlignedAsync(
         NocturneDbContext db, TenantMemberEntity member, DateTime now, CancellationToken ct)
     {
         await LockAndLoadAsync(db, member, ct);
@@ -426,8 +590,7 @@ internal static class MembershipReasons
                 "Re-synced the direct reason of membership {MemberId} from its row, which did not match it.", member.Id);
         }
 
-        return ReasonsOf(db, member.Id).FirstOrDefault(r => r.Kind == MembershipReasonKind.Direct)
-            ?? throw new InvalidOperationException($"Member {member.Id} has reasons but no direct reason to change.");
+        return ReasonsOf(db, member.Id);
     }
 
     private enum RowAgreement
@@ -471,9 +634,12 @@ internal static class MembershipReasons
             case RowAgreement.Matches:
                 return agreement;
             case RowAgreement.Adopted:
-                NewDirectReason(
-                    db, member.Id, LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToList(),
-                    member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt, member.CreatedFromInviteId);
+                NewReason(
+                    db, member.Id, MembershipReasonKind.Direct, sourceId: null,
+                    new MembershipGrant(
+                        LinksOf(db, member.Id).Select(mr => mr.TenantRoleId).ToList(),
+                        member.DirectPermissions, member.LimitTo24Hours, member.AccessEndsAt),
+                    member.CreatedFromInviteId);
                 return agreement;
             case RowAgreement.Reprojected:
                 Project(db, member, now);
@@ -583,21 +749,21 @@ internal static class MembershipReasons
     private static bool SamePermissions(IReadOnlyList<string>? row, IReadOnlyList<string>? sum) =>
         row is null ? sum is null : sum is not null && row.SequenceEqual(sum, StringComparer.Ordinal);
 
-    private static TenantMemberReasonEntity NewDirectReason(
-        NocturneDbContext db, Guid memberId, IReadOnlyCollection<Guid> roleIds, IReadOnlyList<string>? permissions,
-        bool limitTo24Hours, DateTime? accessEndsAt, Guid? createdFromInviteId)
+    private static TenantMemberReasonEntity NewReason(
+        NocturneDbContext db, Guid memberId, string kind, Guid? sourceId, MembershipGrant grant, Guid? createdFromInviteId)
     {
         var reason = new TenantMemberReasonEntity
         {
             Id = Guid.CreateVersion7(),
             TenantMemberId = memberId,
-            Kind = MembershipReasonKind.Direct,
-            DirectPermissions = permissions?.ToList(),
-            LimitTo24Hours = limitTo24Hours,
-            AccessEndsAt = accessEndsAt,
+            Kind = kind,
+            SourceId = sourceId,
+            DirectPermissions = grant.DirectPermissions?.ToList(),
+            LimitTo24Hours = grant.LimitTo24Hours,
+            AccessEndsAt = grant.AccessEndsAt,
             CreatedFromInviteId = createdFromInviteId,
         };
-        reason.ReasonRoles = roleIds.Distinct().Select(roleId => NewReasonRole(reason.Id, roleId)).ToList();
+        reason.ReasonRoles = grant.RoleIds.Distinct().Select(roleId => NewReasonRole(reason.Id, roleId)).ToList();
         db.TenantMemberReasons.Add(reason);
         return reason;
     }

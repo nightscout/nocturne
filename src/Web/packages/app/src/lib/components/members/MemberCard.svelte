@@ -30,6 +30,8 @@
   import History from "@lucide/svelte/icons/history";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Users from "@lucide/svelte/icons/users";
   import { formatMediumDateTime, formatShortDate } from "#lib/utils/formatting.js";
   import AccessEndField from "#lib/components/members/AccessEndField.svelte";
   import {
@@ -40,7 +42,7 @@
   } from "#lib/components/members/access-end.js";
   import { Now } from "#lib/hooks/now.svelte.js";
   import FormError from "#lib/forms/FormError.svelte";
-  import type { TenantMemberDto, TenantRoleDto } from "@nocturne/api-client";
+  import { MemberReasonKind, type TenantMemberDto, type TenantRoleDto } from "@nocturne/api-client";
 
   interface Props {
     member: TenantMemberDto;
@@ -92,6 +94,24 @@
   const outlastsCaller = $derived(member.outlastsCaller === true);
   const outlastsReasonId = $derived(`member-outlasts-${member.subjectId}`);
 
+  /** The member holds no direct reason, so the API refuses every change and removal on this site. */
+  const accessFromTeamOnly = $derived(member.hasDirect === false);
+  const fromTeamReasonId = $derived(`member-from-team-${member.subjectId}`);
+  const canEdit = $derived(canEditRoles && !accessFromTeamOnly);
+  const showsFromTeamReason = $derived(accessFromTeamOnly && (canEditRoles || canManage));
+  const describedBy = $derived(
+    [outlastsCaller ? outlastsReasonId : null, showsFromTeamReason ? fromTeamReasonId : null]
+      .filter(Boolean)
+      .join(" ") || undefined,
+  );
+
+  const teamReasons = $derived((member.reasons ?? []).filter((r) => r.kind === MemberReasonKind.Team));
+
+  /** Only the direct reason is edited, so a member who also holds a team's reason starts the editor from it. */
+  const edited = $derived(
+    (teamReasons.length > 0 && member.reasons?.find((r) => r.kind === MemberReasonKind.Direct)) || member,
+  );
+
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
   let originalRoleIds = $state<string[]>([]);
@@ -106,7 +126,7 @@
 
   /** The server keeps a held role the editor cannot grant as is, so it shows read-only. */
   const ungrantableHeldRoles = $derived(
-    (member.roles ?? []).filter((held) => !grantableRoles.some((r) => r.id === held.roleId))
+    (edited.roles ?? []).filter((held) => !grantableRoles.some((r) => r.id === held.roleId))
   );
 
   /** Union of all permissions from the currently selected roles */
@@ -129,7 +149,7 @@
   function isOwnerRole(roleId: string | undefined): boolean {
     return (
       roles.find((r) => r.id === roleId)?.slug === "owner" ||
-      (member.roles ?? []).some((r) => r.roleId === roleId && r.slug === "owner")
+      (edited.roles ?? []).some((r) => r.roleId === roleId && r.slug === "owner")
     );
   }
 
@@ -153,13 +173,13 @@
 
   function toggleExpand() {
     if (!isExpanded) {
-      editingRoleIds = (member.roles ?? []).map((r) => r.roleId ?? '').filter(Boolean);
-      editingPermissions = [...(member.directPermissions ?? [])];
+      editingRoleIds = (edited.roles ?? []).map((r) => r.roleId ?? '').filter(Boolean);
+      editingPermissions = [...(edited.directPermissions ?? [])];
       originalRoleIds = [...editingRoleIds];
       originalPermissions = [...editingPermissions];
-      editingLimitTo24Hours = member.limitTo24Hours ?? false;
-      originalLimitTo24Hours = member.limitTo24Hours ?? false;
-      editingEndDay = member.accessEndsAt ? accessEndDay(member.accessEndsAt) : "";
+      editingLimitTo24Hours = edited.limitTo24Hours ?? false;
+      originalLimitTo24Hours = edited.limitTo24Hours ?? false;
+      editingEndDay = edited.accessEndsAt ? accessEndDay(edited.accessEndsAt) : "";
       originalEndDay = editingEndDay;
       showDirectPermissions = false;
     }
@@ -201,7 +221,7 @@
   class="@container"
   role="group"
   aria-label={member.name ?? "Unknown"}
-  aria-describedby={outlastsCaller ? outlastsReasonId : undefined}
+  aria-describedby={describedBy}
 >
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
@@ -251,9 +271,45 @@
         {#if member.label}
           <Card.Description>{member.label}</Card.Description>
         {/if}
+        {#if teamReasons.length > 0}
+          <ul class="space-y-0.5 text-xs text-muted-foreground" aria-label="Reasons for access">
+            {#each member.reasons ?? [] as reason (reason.teamId ?? "direct")}
+              <li class="flex flex-wrap items-center gap-x-1.5">
+                {#if reason.kind === MemberReasonKind.Team}
+                  <Users class="h-3 w-3" />
+                  <span>Staff of the team {reason.teamName}</span>
+                {:else}
+                  <KeyRound class="h-3 w-3" />
+                  <span>Direct access</span>
+                {/if}
+                {#if reason.roles?.length}
+                  <span>({reason.roles.map((r) => r.name ?? r.slug).join(", ")})</span>
+                {/if}
+                {#if reason.limitTo24Hours}
+                  <span>Last 24 hours only</span>
+                {/if}
+                {#if reason.accessEndsAt && reason.hasEnded}
+                  <span>Ended {formatShortDate(accessEndDate(reason.accessEndsAt), true)}</span>
+                {:else if reason.accessEndsAt}
+                  <span>Until {formatShortDate(accessEndDate(reason.accessEndsAt), true)}</span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if member.directLiftsTeamLimit}
+          <p class="text-xs text-muted-foreground">
+            This member's direct access has no 24-hour limit, so the 24-hour limit of the team does not apply.
+          </p>
+        {/if}
         {#if outlastsCaller}
           <p id={outlastsReasonId} class="text-xs text-muted-foreground">
             This member's access lasts longer than yours.
+          </p>
+        {/if}
+        {#if showsFromTeamReason}
+          <p id={fromTeamReasonId} class="text-xs text-muted-foreground">
+            This member has access only through a team. To change it, stop the team's access to this site.
           </p>
         {/if}
       </div>
@@ -269,7 +325,7 @@
             View history
           </Button>
         {/if}
-        {#if canEditRoles}
+        {#if canEdit}
           <Button
             variant="outline"
             size="sm"
@@ -279,7 +335,7 @@
             {isExpanded ? "Close" : outlastsCaller ? "View" : "Edit"}
           </Button>
         {/if}
-        {#if canManage && !isSelf && !outlastsCaller}
+        {#if canManage && !isSelf && !outlastsCaller && !accessFromTeamOnly}
           <ConfirmDialog
             title="Remove member"
             confirmLabel="Remove"
@@ -310,14 +366,14 @@
     </div>
   </Card.Header>
 
-  {#if isExpanded && canEditRoles && isSelf}
+  {#if isExpanded && canEdit && isSelf}
     <Card.Content class="border-t pt-4">
       <p class="text-sm text-muted-foreground">
         You cannot change your own roles or permissions. Ask another member who can manage
         members to change them for you.
       </p>
     </Card.Content>
-  {:else if isExpanded && canEditRoles && outlastsCaller}
+  {:else if isExpanded && canEdit && outlastsCaller}
     <Card.Content class="space-y-4 border-t pt-4">
       <div class="space-y-2">
         <Label>Permissions from roles</Label>
@@ -334,7 +390,7 @@
         </div>
       {/if}
     </Card.Content>
-  {:else if isExpanded && canEditRoles}
+  {:else if isExpanded && canEdit}
     <Card.Content class="space-y-4 border-t pt-4">
       <!-- Role selection -->
       <div class="space-y-2">

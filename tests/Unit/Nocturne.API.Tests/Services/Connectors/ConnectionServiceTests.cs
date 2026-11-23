@@ -100,7 +100,7 @@ public class ConnectionServiceTests
         [
             new TenantMemberRecord(
                 Guid.NewGuid(), TenantId, subjectId, name, null, true, false, false, false, true, [], null,
-                null, null, false, Now.UtcDateTime.AddDays(5), null, null, Now.UtcDateTime.AddDays(-30)),
+                null, null, false, Now.UtcDateTime.AddDays(5), null, null, Now.UtcDateTime.AddDays(-30), []),
         ]);
 
     private static WriterBucket Bucket(

@@ -48,6 +48,12 @@ public class EndOnlyMembershipReadGuardTests
             "whether a row has ended and may be replaced; a due row that has not ended is still a member",
         ["src/API/Nocturne.API/Services/Identity/TenantService.cs: TenantService.GetByIdAsync"] =
             "the ended flag the member list shows beside the end it shows",
+        ["src/API/Nocturne.API/Services/Identity/TenantService.cs: TenantService.ReasonsOf"] =
+            "the ended flag the member list shows beside each reason's own end",
+        ["src/API/Nocturne.API/Services/Identity/TenantService.cs: TenantService.DirectLiftsTeamLimit"] =
+            "which reasons the member list's note on a lifted limit names, not whether the row is a member",
+        [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.IsDirectMemberAsync"] =
+            "whether the direct reason itself is in force, so a person is not let in directly twice; access checks keep IsMemberAsync",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.ListAccessOfTenantAsync"] =
             "a team's access to a site, not a membership",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.SitesOfAsync"] =

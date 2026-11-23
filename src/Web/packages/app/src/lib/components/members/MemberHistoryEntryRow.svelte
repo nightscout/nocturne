@@ -106,6 +106,10 @@
           {memberFirst} set up this site.
         {:else if entry.joinedHow === MembershipJoinHow.System}
           The system added {member}.
+        {:else if entry.joinedHow === MembershipJoinHow.Team && entry.team?.name}
+          {memberFirst} joined as staff of the team {entry.team.name}.
+        {:else if entry.joinedHow === MembershipJoinHow.Team}
+          {memberFirst} joined as staff of a team. The detail is no longer stored.
         {:else}
           {memberFirst} joined. The detail is no longer stored.
         {/if}
@@ -120,6 +124,10 @@
           {memberFirst} joined again. The earlier membership was replaced.
         {:else if entry.removedHow === MembershipEndHow.System}
           The system removed {member}.
+        {:else if entry.removedHow === MembershipEndHow.Team && entry.team?.name}
+          {memberFirst} is no longer staff of the team {entry.team.name}.
+        {:else if entry.removedHow === MembershipEndHow.Team}
+          {memberFirst} is no longer staff of a team. The detail is no longer stored.
         {:else}
           {memberFirst}'s membership ended. The detail is no longer stored.
         {/if}

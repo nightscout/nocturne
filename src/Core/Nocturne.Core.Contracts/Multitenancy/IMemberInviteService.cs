@@ -178,7 +178,10 @@ public record JoinInviteInfo(
 /// </summary>
 /// <param name="SubjectId">The signed-in caller's subject, or null when nobody is signed in.</param>
 /// <param name="Name">The signed-in caller's display name.</param>
-/// <param name="IsMember">Whether that subject already belongs to the invite's tenant.</param>
+/// <param name="IsMember">
+/// Whether that subject was already let in to the invite's tenant directly, which the invite would repeat.
+/// Access through a team alone is not, so a team's staff member can still accept.
+/// </param>
 public record InviteViewer(
     Guid? SubjectId,
     string? Name,

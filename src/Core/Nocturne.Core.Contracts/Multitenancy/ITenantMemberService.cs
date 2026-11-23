@@ -16,6 +16,12 @@ public interface ITenantMemberService
     Task<bool> IsMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether the subject was let in to the tenant directly, by an invite, a request or a manager,
+    /// and that access has not ended. Access through a team alone is not.
+    /// </summary>
+    Task<bool> IsDirectMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct);
+
+    /// <summary>
     /// Returns all tenant identifiers that the specified subject belongs to, including tenants whose
     /// membership has ended (<see cref="ITenantMembershipRepository.ListTenantIdsOfSubjectAsync"/>).
     /// </summary>

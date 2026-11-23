@@ -129,6 +129,9 @@ public class TenantMemberEntity : ISystemTimestamped
     /// </summary>
     public List<TenantMemberRoleEntity> MemberRoles { get; set; } = [];
 
+    /// <summary>The reasons the member holds its access, whose sum the row stores.</summary>
+    public List<TenantMemberReasonEntity> Reasons { get; set; } = [];
+
     /// <summary>
     /// The membership's effective permissions: every role's permissions unioned with the direct
     /// permissions. Requires <see cref="MemberRoles"/> to be loaded with their roles.

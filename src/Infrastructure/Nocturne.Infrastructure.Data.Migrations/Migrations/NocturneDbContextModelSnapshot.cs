@@ -6249,6 +6249,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("CreatedFromInviteId");
 
+                    b.HasIndex("SourceId");
+
                     b.HasIndex(new[] { "TenantMemberId" }, "ix_tenant_member_reasons_one_direct")
                         .IsUnique()
                         .HasFilter("kind = 'direct'");
@@ -6259,7 +6261,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex(new[] { "TenantMemberId" }, "ix_tenant_member_reasons_tenant_member_id");
 
-                    b.ToTable("tenant_member_reasons");
+                    b.ToTable("tenant_member_reasons", t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_member_reasons_team_source", "(kind = 'team') = (source_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonRoleEntity", b =>
@@ -11812,13 +11817,20 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasForeignKey("CreatedFromInviteId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", "TenantMember")
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity", "TeamAccess")
                         .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.ClientNoAction);
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", "TenantMember")
+                        .WithMany("Reasons")
                         .HasForeignKey("TenantMemberId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("CreatedFromInvite");
+
+                    b.Navigation("TeamAccess");
 
                     b.Navigation("TenantMember");
                 });
@@ -12446,6 +12458,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberEntity", b =>
                 {
                     b.Navigation("MemberRoles");
+
+                    b.Navigation("Reasons");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantMemberReasonEntity", b =>

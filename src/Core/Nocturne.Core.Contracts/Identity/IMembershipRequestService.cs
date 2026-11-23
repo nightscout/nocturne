@@ -22,7 +22,11 @@ public record CreateMembershipRequestResult(CreateMembershipRequestOutcome Outco
     public bool Success => Outcome == CreateMembershipRequestOutcome.Created;
 }
 
-public record DecideMembershipRequestResult(bool Success, string? Error);
+public record DecideMembershipRequestResult(bool Success, string? Error)
+{
+    /// <summary>The problem code of a refusal the client tells apart; null for any other outcome.</summary>
+    public string? Code { get; init; }
+}
 
 public interface IMembershipRequestService
 {
