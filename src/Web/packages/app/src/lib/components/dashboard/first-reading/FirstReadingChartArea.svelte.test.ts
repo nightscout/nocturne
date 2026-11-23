@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { ConnectorStatusDto } from "@nocturne/api-client";
@@ -134,7 +134,31 @@ describe("FirstReadingChartArea", () => {
       totalEntries: 0,
     };
 
+    const heldAnimations: Animation[] = [];
+
+    // The fade runs in real time, so a loaded runner can finish it between two awaits.
+    function holdAnimations() {
+      const animate = Element.prototype.animate;
+      vi.spyOn(Element.prototype, "animate").mockImplementation(function (
+        this: Element,
+        ...args: Parameters<Element["animate"]>
+      ) {
+        const animation = animate.apply(this, args);
+        animation.pause();
+        heldAnimations.push(animation);
+        return animation;
+      });
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      heldAnimations.length = 0;
+    });
+
     async function renderWaiting() {
+      // The painting under the empty state comes from another chunk, so it says nothing about
+      // whether the sunrise has loaded. A reading that lands first plays no sunrise.
+      await import("#lib/watercolour/artwork.js");
       state.connectors = [waiting];
       const screen = render(FirstReadingChartArea, {
         chart,
@@ -145,15 +169,18 @@ describe("FirstReadingChartArea", () => {
       await expect
         .element(page.getByTestId("first-reading-empty-state"))
         .toBeVisible();
-      // The painting and the sunrise load together once deferred watercolour is due.
+      // The sunrise module was requested after the painting chunk, so once the painting is drawn
+      // one more task lets the sunrise import settle too.
       await expect
         .poll(() => document.querySelector('[data-testid="first-reading-empty-state"] canvas'))
         .not.toBeNull();
+      await new Promise((resolve) => setTimeout(resolve));
       return screen;
     }
 
     it("shows the chart at once and fades the sunrise off it when the first reading arrives", async () => {
       state.reducedMotion = false;
+      holdAnimations();
       const screen = await renderWaiting();
 
       await screen.rerender({ bypass: true });
@@ -165,9 +192,15 @@ describe("FirstReadingChartArea", () => {
       await expect
         .element(page.getByTestId("first-reading-empty-state"))
         .not.toBeInTheDocument();
+
+      expect(heldAnimations).not.toHaveLength(0);
+      // The fade is a delay animation and then the fade proper, the second made when the first ends.
       await expect
-        .element(page.getByTestId("first-reading-arrival"), { timeout: 3000 })
-        .not.toBeInTheDocument();
+        .poll(() => {
+          for (const animation of heldAnimations.splice(0)) animation.finish();
+          return document.querySelector('[data-testid="first-reading-arrival"]');
+        })
+        .toBeNull();
     });
 
     it("plays no sunrise for a reading that lands before deferred watercolour is due", async () => {
