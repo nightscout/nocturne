@@ -70,14 +70,17 @@ public sealed class RecoverySession(
         http.Response.Cookies.Append(CookieName, code, options);
     }
 
-    /// <summary>The member whose live session the request carries, without spending it; otherwise null.</summary>
+    /// <summary>
+    /// The member whose live session the request carries, without spending it; otherwise null.
+    /// Admits the same members <see cref="EnrolAsync{T}"/> does.
+    /// </summary>
     public async Task<Guid?> ReadSubjectAsync(HttpContext http, CancellationToken ct)
     {
         if (CodeOf(http) is not { } code)
             return null;
 
         await using var db = await contexts.CreateAsync(ct);
-        return (await loginCodes.FindLiveAsync(db, code, Purposes, ct))?.SubjectId;
+        return (await loginCodes.FindLiveAsync(db, code, Purposes, Admits(db), ct))?.SubjectId;
     }
 
     /// <summary>
@@ -105,7 +108,7 @@ public sealed class RecoverySession(
         try
         {
             spent = await loginCodes.RedeemAsync(
-                db, code, Purposes, admits: LoginCodeAdmission.LiveMemberOf(tenantMembers, db.TenantId),
+                db, code, Purposes, admits: Admits(db),
                 withSpend: async (session, token) =>
                 {
                     outcome = await enrol(session.SubjectId, token);
@@ -146,6 +149,9 @@ public sealed class RecoverySession(
             logger.LogWarning(ex, "Could not void outstanding recovery codes for {SubjectId}", subjectId);
         }
     }
+
+    private Func<RedeemedLoginCode, CancellationToken, Task<bool>> Admits(NocturneDbContext db) =>
+        LoginCodeAdmission.LiveMemberOf(tenantMembers, db.TenantId);
 
     private static string? CodeOf(HttpContext http) =>
         http.Request.Cookies[CookieName] is { Length: > 0 } code ? code : null;

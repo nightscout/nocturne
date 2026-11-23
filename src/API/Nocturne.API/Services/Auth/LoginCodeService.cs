@@ -76,12 +76,14 @@ public interface ILoginCodeService
 
     /// <summary>
     /// The member and purpose of <paramref name="code"/> when it is live and minted for one of
-    /// <paramref name="purposes"/> on the context's tenant, without spending it; otherwise null.
+    /// <paramref name="purposes"/> on the context's tenant and <paramref name="admits"/> accepts it
+    /// (as in <see cref="RedeemAsync"/>), without spending it; otherwise null.
     /// </summary>
     Task<RedeemedLoginCode?> FindLiveAsync(
         NocturneDbContext dbContext,
         string code,
         IReadOnlyCollection<LoginCodePurpose> purposes,
+        Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -331,14 +333,18 @@ public class LoginCodeService : ILoginCodeService
             tenantId: dbContext.TenantIdOrNull);
 
     /// <inheritdoc />
-    public Task<RedeemedLoginCode?> FindLiveAsync(
+    public async Task<RedeemedLoginCode?> FindLiveAsync(
         NocturneDbContext dbContext,
         string code,
         IReadOnlyCollection<LoginCodePurpose> purposes,
-        CancellationToken ct = default) =>
-        LiveCodes(dbContext, code, purposes, DateTime.UtcNow)
+        Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits = null,
+        CancellationToken ct = default)
+    {
+        var found = await LiveCodes(dbContext, code, purposes, DateTime.UtcNow)
             .Select(c => new RedeemedLoginCode(c.SubjectId, c.Purpose, c.Email) { CodeId = c.Id })
             .FirstOrDefaultAsync(ct);
+        return found is not null && admits is not null && !await admits(found, ct) ? null : found;
+    }
 
     private static IQueryable<LoginCodeEntity> LiveCodes(
         NocturneDbContext dbContext, string code, IReadOnlyCollection<LoginCodePurpose> purposes, DateTime now)
