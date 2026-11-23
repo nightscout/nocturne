@@ -32,7 +32,9 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// The <c>POST /meals</c> endpoint is idempotent on <c>(DataSource, SyncIdentifier)</c>: if a matching
 /// bolus already exists its <c>CorrelationId</c> is propagated to both records. The two repositories
 /// write on their own contexts, so <see cref="GuardRecreationAsync"/> is what keeps a refused meal
-/// from writing one half.
+/// from writing one half. The food types of the carb intake of an existing meal are filled through
+/// <see cref="CommittedWriteEnrichment"/>, so a failure there leaves them unset and the meal is still
+/// answered.
 ///
 /// Meal retrieval, including its demo-mode filtering, is <see cref="IMealReadService"/>.
 /// </remarks>
@@ -251,7 +253,10 @@ public class NutritionController : ControllerBase, IWriteScopedController
         var carb = await _carbIntakeRepo.UpsertAsync(carbModel, WriteOrigin.Live, ct);
 
         if (!carb.Created)
-            await _treatmentFoodService.ApplyFoodTypesAsync([carb.Record], ct);
+        {
+            CarbIntake[] carbs = [carb.Record];
+            await CommittedWriteEnrichment.RunAsync(this, carbs, () => _treatmentFoodService.ApplyFoodTypesAsync(carbs, ct), ct);
+        }
 
         var response = new CreateMealResponse
         {
