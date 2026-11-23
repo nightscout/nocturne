@@ -80,19 +80,23 @@ public sealed class SignInCompletion(
 
     private async Task<SignInOutcome> RefuseAsync(SignInAttempt attempt, SignInRefusal reason)
     {
+        if (attempt.RefusalAudit is RefusalAudit.MethodRow)
+            return new SignInOutcome.Refused(reason);
+
+        var added = attempt.RefusalAudit as RefusalAudit.ModuleRow;
         var reasonName = ReasonName(reason);
         var details = new JsonObject
         {
             ["method"] = MethodName(attempt.Method),
             ["reason"] = reasonName,
         };
-        foreach (var (name, value) in attempt.RefusalAudit?.Details ?? [])
+        foreach (var (name, value) in added?.Details ?? [])
             details.Add(name, JsonSerializer.SerializeToNode(value));
 
         await audit.LogAsync(AuthAuditEventType.FailedAuth, attempt.SubjectId, success: false,
             ipAddress: attempt.Session.IpAddress,
             userAgent: attempt.Session.UserAgent,
-            errorMessage: attempt.RefusalAudit is { ReasonAsErrorMessage: true } ? reasonName : null,
+            errorMessage: added is { ReasonAsErrorMessage: true } ? reasonName : null,
             detailsJson: details.ToJsonString());
         return new SignInOutcome.Refused(reason);
     }
@@ -172,7 +176,8 @@ public abstract record SecondFactorProof
 /// <param name="Session">The session's device description and the request's address and agent,
 /// which the audit rows record too.</param>
 /// <param name="ProviderId">The identity provider, for <see cref="SignInMethod.Oidc"/>.</param>
-/// <param name="RefusalAudit">What the method adds to the row of a refusal.</param>
+/// <param name="RefusalAudit">How a refusal is recorded; null records the module's row with
+/// nothing added.</param>
 public sealed record SignInAttempt(
     Guid SubjectId,
     SignInMethod Method,
@@ -182,13 +187,26 @@ public sealed record SignInAttempt(
     Guid? ProviderId = null,
     RefusalAudit? RefusalAudit = null);
 
-/// <summary>
-/// What a method adds to the <see cref="AuthAuditEventType.FailedAuth"/> row of a refused sign-in,
-/// which records the method and the <see cref="SignInRefusal"/> whatever is added.
-/// </summary>
-/// <param name="ReasonAsErrorMessage">Whether the row's error message is the reason too.</param>
-/// <param name="Details">Recorded after the method and the reason, in this order.</param>
-public sealed record RefusalAudit(bool ReasonAsErrorMessage, IReadOnlyList<KeyValuePair<string, object?>> Details);
+/// <summary>How the <see cref="AuthAuditEventType.FailedAuth"/> row of a refused sign-in is recorded.</summary>
+public abstract record RefusalAudit
+{
+    private RefusalAudit() { }
+
+    /// <summary>
+    /// The module records the row: the subject, the method and the <see cref="SignInRefusal"/>,
+    /// whatever is added.
+    /// </summary>
+    /// <param name="ReasonAsErrorMessage">Whether the row's error message is the reason too.</param>
+    /// <param name="Details">Recorded after the method and the reason, in this order.</param>
+    public sealed record ModuleRow(bool ReasonAsErrorMessage, IReadOnlyList<KeyValuePair<string, object?>> Details)
+        : RefusalAudit;
+
+    /// <summary>
+    /// The method records the row itself, in the shape its proof's own refusals take, and the
+    /// module records none.
+    /// </summary>
+    public sealed record MethodRow : RefusalAudit;
+}
 
 /// <summary>Why a proved subject was not signed in.</summary>
 public enum SignInRefusal

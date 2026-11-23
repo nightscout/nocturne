@@ -209,7 +209,7 @@ public class SignInCompletionTests
         var providerId = Guid.NewGuid();
         var attempt = Attempt(SignInMethod.Oidc, providerId: providerId) with
         {
-            RefusalAudit = new RefusalAudit(ReasonAsErrorMessage: true, [new("providerId", providerId)]),
+            RefusalAudit = new RefusalAudit.ModuleRow(ReasonAsErrorMessage: true, [new("providerId", providerId)]),
         };
 
         var outcome = await Completion().CompleteAsync(attempt);
@@ -230,7 +230,7 @@ public class SignInCompletionTests
         NotAMember();
         var attempt = Attempt(SignInMethod.Oidc) with
         {
-            RefusalAudit = new RefusalAudit(ReasonAsErrorMessage: false, [new(reserved, "other")]),
+            RefusalAudit = new RefusalAudit.ModuleRow(ReasonAsErrorMessage: false, [new(reserved, "other")]),
         };
 
         var act = () => Completion().CompleteAsync(attempt);
@@ -240,6 +240,18 @@ public class SignInCompletionTests
             AuthAuditEventType.FailedAuth, It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<AuthAuditActor?>(), It.IsAny<Guid?>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task A_method_that_records_its_own_refusals_is_refused_with_no_row_from_the_module()
+    {
+        NotAMember();
+
+        var outcome = await Completion().CompleteAsync(Attempt() with { RefusalAudit = new RefusalAudit.MethodRow() });
+
+        outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
+        _steps.Should().Equal("admission");
+        _rows.Should().BeEmpty();
     }
 
     [Fact]

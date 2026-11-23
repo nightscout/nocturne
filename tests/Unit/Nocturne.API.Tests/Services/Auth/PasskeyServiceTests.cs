@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Fido2NetLib;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
@@ -531,13 +532,13 @@ public class PasskeyServiceTests
     }
 
     /// <summary>
-    /// An assertion naming <paramref name="rawId"/> whose signature is never valid: it reaches every
-    /// check made before the signature, and no further.
+    /// An assertion naming <paramref name="rawId"/> whose authenticator data does not parse: it
+    /// reaches every check the service makes before Fido2, and Fido2 refuses it.
     /// </summary>
     private static string AssertionNaming(byte[] rawId) =>
         System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAssertionRawResponse
         {
-            Id = Convert.ToBase64String(rawId).TrimEnd('=').Replace('+', '-').Replace('/', '_'),
+            Id = System.Buffers.Text.Base64Url.EncodeToString(rawId),
             RawId = rawId,
             Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
             Response = new AuthenticatorAssertionRawResponse.AssertionResponse
@@ -547,6 +548,133 @@ public class PasskeyServiceTests
                 ClientDataJson = System.Text.Encoding.UTF8.GetBytes("{}"),
             },
         });
+
+    #endregion
+
+    #region Assertion refusals are of the three types login answers as a refusal
+
+    public static TheoryData<string, Type> RefusedAssertions() => new()
+    {
+        { "no-response", typeof(Fido2VerificationException) },
+        { "malformed-authenticator-data", typeof(Fido2VerificationException) },
+        { "wrong-signature", typeof(Fido2VerificationException) },
+        { "signature-of-the-wrong-length", typeof(Fido2VerificationException) },
+        { "empty", typeof(System.Text.Json.JsonException) },
+        { "not-json", typeof(System.Text.Json.JsonException) },
+        { "raw-id-not-base64url", typeof(System.Text.Json.JsonException) },
+        { "unknown-credential", typeof(InvalidOperationException) },
+        { "no-tenant", typeof(InvalidOperationException) },
+    };
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(RefusedAssertions))]
+    public async Task CompleteAssertionAsync_RefusesAnAssertionItCannotAccept_WithANamedType(string shape, Type refusal)
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var assertion = shape switch
+        {
+            "no-response" => System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAssertionRawResponse
+            {
+                Id = System.Buffers.Text.Base64Url.EncodeToString(credential.CredentialId),
+                RawId = credential.CredentialId,
+                Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+            }),
+            "empty" => "",
+            "not-json" => "not json",
+            "raw-id-not-base64url" => "{\"id\":\"x\",\"rawId\":\"!!!\",\"type\":\"public-key\"}",
+            "unknown-credential" => AssertionNaming(Guid.CreateVersion7().ToByteArray()),
+            "wrong-signature" => SignedAssertion(credential, options.OptionsJson,
+                _ => key.SignData("other data"u8.ToArray(), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            "signature-of-the-wrong-length" => SignedAssertion(credential, options.OptionsJson, _ => [0]),
+            _ => AssertionNaming(credential.CredentialId),
+        };
+        var tenantId = shape == "no-tenant" ? Guid.Empty : _tenantId;
+
+        var thrown = await Record.ExceptionAsync(
+            () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, tenantId));
+
+        thrown.Should().BeOfType(refusal);
+        if (shape == "no-tenant")
+            thrown!.Message.Should().Be(PasskeyService.OwnerNotAMemberMessage);
+        if (shape is "wrong-signature" or "signature-of-the-wrong-length")
+            thrown.Should().BeOfType<Fido2VerificationException>()
+                .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidSignature);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteAssertionAsync_SignedByTheCredentialsKey_AdmitsItsHolder()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var assertion = SignedAssertion(credential, options.OptionsJson,
+            signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+
+        var result = await service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId);
+
+        result.SubjectId.Should().Be(_subjectId);
+    }
+
+    /// <summary>An active member's credential whose stored public key is <paramref name="key"/> (RS256).</summary>
+    private async Task<PasskeyCredentialEntity> SeedActiveMemberCredentialAsync(RSA key)
+    {
+        var publicKey = key.ExportParameters(includePrivateParameters: false);
+        var credential = CreateCredentialEntity(_subjectId);
+        credential.PublicKey = new Fido2NetLib.Cbor.CborMap
+        {
+            { 1, 3 },
+            { 3, -257 },
+            { -1, publicKey.Modulus! },
+            { -2, publicKey.Exponent! },
+        }.Encode();
+        _dbContext.Subjects.Add(new SubjectEntity { Id = _subjectId, Name = "rhys", Username = "rhys", IsActive = true });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = _subjectId });
+        _dbContext.PasskeyCredentials.Add(credential);
+        await _dbContext.SaveChangesAsync();
+        return credential;
+    }
+
+    /// <summary>
+    /// An assertion for <paramref name="credential"/> that passes every check before the signature,
+    /// with the signature <paramref name="sign"/> makes over the bytes an authenticator signs.
+    /// </summary>
+    private static string SignedAssertion(
+        PasskeyCredentialEntity credential, string optionsJson, Func<byte[], byte[]> sign)
+    {
+        using var options = System.Text.Json.JsonDocument.Parse(optionsJson);
+        var clientData = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            type = "webauthn.get",
+            challenge = options.RootElement.GetProperty("challenge").GetString(),
+            origin = "https://localhost",
+        });
+        var authenticatorData = new Fido2NetLib.Objects.AuthenticatorData(
+            SHA256.HashData("localhost"u8),
+            Fido2NetLib.Objects.AuthenticatorFlags.UP | Fido2NetLib.Objects.AuthenticatorFlags.UV,
+            signCount: 1, null, null).ToByteArray();
+
+        return System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAssertionRawResponse
+        {
+            Id = System.Buffers.Text.Base64Url.EncodeToString(credential.CredentialId),
+            RawId = credential.CredentialId,
+            Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+            Response = new AuthenticatorAssertionRawResponse.AssertionResponse
+            {
+                AuthenticatorData = authenticatorData,
+                Signature = sign([.. authenticatorData, .. SHA256.HashData(clientData)]),
+                ClientDataJson = clientData,
+                UserHandle = credential.SubjectId.ToByteArray(),
+            },
+        });
+    }
 
     #endregion
 

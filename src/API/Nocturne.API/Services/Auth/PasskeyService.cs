@@ -28,6 +28,9 @@ public class PasskeyService : IPasskeyService
     private const int MaxCredentialsPerSubject = 20;
     private static readonly TimeSpan ChallengeExpiry = TimeSpan.FromMinutes(5);
 
+    /// <summary>Why an assertion by a credential whose holder is not a member of the tenant is refused.</summary>
+    internal const string OwnerNotAMemberMessage = "Credential owner is not a member of this tenant.";
+
     private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISubjectRepository _subjects;
     private readonly ITenantMemberService _members;
@@ -301,12 +304,14 @@ public class PasskeyService : IPasskeyService
         // Verify the credential's subject is a member of the current tenant
         // (the membership read excludes revoked memberships).
         if (!await _members.IsMemberAsync(stored.Credential.SubjectId, tenantId))
-            throw new InvalidOperationException("Credential owner is not a member of this tenant.");
+            throw new InvalidOperationException(OwnerNotAMemberMessage);
 
         if (!stored.Holder.IsActive)
             throw new InvalidOperationException("Credential owner is not active.");
 
-        AllowOriginFromClientData(assertionResponse.Response.ClientDataJson);
+        // Fido2 refuses a response with no authenticator response part.
+        if (assertionResponse.Response is { } response)
+            AllowOriginFromClientData(response.ClientDataJson);
         var result = await _fido2.MakeAssertionAsync(new MakeAssertionParams
         {
             AssertionResponse = assertionResponse,
