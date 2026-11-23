@@ -15,24 +15,15 @@ public interface IOAuthGrantService
     /// </summary>
     /// <param name="subjectId">The subject (user) ID who is granting access</param>
     /// <param name="scopes">The scopes being granted</param>
-    /// <param name="grantType">The type of grant (app or follower)</param>
-    /// <param name="label">Optional user-friendly label for the grant</param>
     /// <param name="limitTo24Hours">
     /// Whether tokens minted from the grant may read only the last 24 hours. The latest consent
-    /// sets it, as it does the label.
-    /// </param>
-    /// <param name="approvedByDeviceCode">
-    /// Whether a device-code approval is creating or updating the grant. Once set it stays set, and
-    /// the grant's client is no longer reported as verified.
+    /// sets it.
     /// </param>
     Task<OAuthGrantInfo> CreateOrUpdateGrantAsync(
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthGrantTypes.App,
-        string? label = null,
         bool limitTo24Hours = false,
-        bool approvedByDeviceCode = false,
         CancellationToken ct = default
     );
 

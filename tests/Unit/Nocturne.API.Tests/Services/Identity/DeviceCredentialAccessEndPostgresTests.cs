@@ -630,7 +630,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             .AddSingleton(revocations.Object)
             .AddSingleton<IOAuthGrantService>(new OAuthGrantService(
                 seeded.Contexts, new OAuthGrantRepository(seeded.Contexts), Mock.Of<IOAuthClientService>(), Sessions(),
-                Revocation(Sessions()), clock, NullLogger<OAuthGrantService>.Instance))
+                Revocation(Sessions()), new GrantConsentService(NullLogger<GrantConsentService>.Instance), clock, NullLogger<OAuthGrantService>.Instance))
             .AddScoped<IJwtCredentialValidator, JwtCredentialValidator>()
             .AddSingleton<ILogger<JwtCredentialValidator>>(NullLogger<JwtCredentialValidator>.Instance)
             .BuildServiceProvider();

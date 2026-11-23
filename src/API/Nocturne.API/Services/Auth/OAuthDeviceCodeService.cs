@@ -1,5 +1,9 @@
 using System.Security.Cryptography;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -25,7 +29,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private readonly IOAuthTokenRepository _tokens;
     private readonly IJwtService _jwtService;
     private readonly IOAuthClientService _clientService;
-    private readonly IOAuthGrantService _grantService;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly GrantConsentService _consent;
     private readonly ILogger<OAuthDeviceCodeService> _logger;
 
     /// <summary>
@@ -34,20 +39,23 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <param name="tokens">The stored device codes.</param>
     /// <param name="jwtService">Used to generate and hash the opaque device code value.</param>
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
-    /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
+    /// <param name="contexts">Opens the unit of work an approval writes its grant and its decision on.</param>
+    /// <param name="consent">Writes the grant an approval creates or widens.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthDeviceCodeService(
         IOAuthTokenRepository tokens,
         IJwtService jwtService,
         IOAuthClientService clientService,
-        IOAuthGrantService grantService,
+        INocturneDbContextFactory contexts,
+        GrantConsentService consent,
         ILogger<OAuthDeviceCodeService> logger
     )
     {
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
         _jwtService = jwtService;
         _clientService = clientService;
-        _grantService = grantService;
+        _contexts = contexts;
+        _consent = consent;
         _logger = logger;
     }
 
@@ -233,22 +241,41 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        var grant = await _grantService.CreateOrUpdateGrantAsync(
-            client.Id,
-            subjectId,
-            scopes,
-            limitTo24Hours: limitTo24Hours,
-            approvedByDeviceCode: true,
-            ct: ct
-        );
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts, ct);
+        var codes = new OAuthTokenRepository(unit);
+        StagedGrantConsent consent;
+        try
+        {
+            consent = await unit.CommitAsync(
+                async token =>
+                {
+                    var staged = await _consent.StageAsync(
+                        unit,
+                        client.Id,
+                        subjectId,
+                        scopes,
+                        limitTo24Hours: limitTo24Hours,
+                        approvedByDeviceCode: true,
+                        ct: token);
 
-        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
+                    if (!await codes.ApproveDeviceCodeAsync(entity.Id, subjectId, staged.Grant.Id, DateTime.UtcNow, token))
+                        throw new RefusedCommitException<ApprovalRefusal>(ApprovalRefusal.NoLongerPending);
+                    return staged;
+                },
+                verifySucceeded: async (staged, token) =>
+                    (await codes.FindDeviceCodeByUserCodeAsync(normalized, token))?.GrantId == staged.Grant.Id,
+                ct: ct);
+        }
+        catch (RefusedCommitException<ApprovalRefusal>)
         {
             _logger.LogWarning(
                 "Cannot approve device code {UserCode}: it is no longer pending",
                 normalized);
             return false;
         }
+
+        _consent.LogCommitted(consent);
+        var grant = consent.Grant;
 
         _logger.LogInformation(
             "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
@@ -314,6 +341,11 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         );
 
         return true;
+    }
+
+    private enum ApprovalRefusal
+    {
+        NoLongerPending,
     }
 
     private static bool IsExpired(DeviceCodeRecord code) => DateTime.UtcNow >= code.ExpiresAt;

@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
@@ -25,7 +26,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private readonly SqliteTestDatabase _db;
     private readonly Mock<IJwtService> _mockJwtService;
     private readonly Mock<IOAuthClientService> _mockClientService;
-    private readonly Mock<IOAuthGrantService> _mockGrantService;
     private readonly Mock<ILogger<OAuthDeviceCodeService>> _mockLogger;
 
     // Deterministic test values
@@ -36,7 +36,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private readonly Guid _testTenantId = Guid.CreateVersion7();
     private readonly Guid _testClientEntityId = Guid.CreateVersion7();
     private readonly Guid _testSubjectId = Guid.CreateVersion7();
-    private readonly Guid _testGrantId = Guid.CreateVersion7();
 
     private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
@@ -46,7 +45,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
 
         _mockJwtService = new Mock<IJwtService>();
         _mockClientService = new Mock<IOAuthClientService>();
-        _mockGrantService = new Mock<IOAuthGrantService>();
         _mockLogger = new Mock<ILogger<OAuthDeviceCodeService>>();
 
         SetupDefaultMocks();
@@ -73,26 +71,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
                 DisplayName = "Test App",
                 IsKnown = false,
             });
-
-        _mockGrantService.Setup(g => g.CreateOrUpdateGrantAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<Guid>(),
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<string>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool>(),
-                It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, CancellationToken _) =>
-                new OAuthGrantInfo
-                {
-                    LimitTo24Hours = limitTo24Hours,
-                    Id = _testGrantId,
-                    ClientEntityId = clientEntityId,
-                    ClientId = TestClientId,
-                    SubjectId = subjectId,
-                    Scopes = scopes.ToList(),
-                });
     }
 
     private OAuthDeviceCodeService CreateService(NocturneDbContext dbContext)
@@ -101,7 +79,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             new OAuthTokenRepository(dbContext.AsFactory()),
             _mockJwtService.Object,
             _mockClientService.Object,
-            _mockGrantService.Object,
+            _db.ContextFactory.AsNocturneFactory(),
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
             _mockLogger.Object
         );
     }
@@ -135,23 +114,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             RedirectUris = "[]",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-        });
-        await db.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seed an OAuthGrantEntity so FK constraints are satisfied.
-    /// </summary>
-    private async Task SeedGrantAsync(NocturneDbContext db, Guid? id = null)
-    {
-        db.OAuthGrants.Add(new OAuthGrantEntity
-        {
-            Id = id ?? _testGrantId,
-            ClientEntityId = _testClientEntityId,
-            SubjectId = _testSubjectId,
-            Scopes = new List<string> { "glucose.read" },
-            GrantType = "app",
-            CreatedAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();
     }
@@ -307,39 +269,26 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     [Fact]
     public async Task ApproveDeviceCodeAsync_ValidPendingCode_SetsApprovedAndCreatesGrant()
     {
-        // Arrange — seed client + subject + grant so FKs are satisfied when the
-        // service sets entity.GrantId = grant.Id (from the mocked grant service).
         using var db = CreateDbContext();
         await SeedClientAsync(db);
         await SeedSubjectAsync(db);
-        await SeedGrantAsync(db);
         await SeedDeviceCodeAsync(db, userCode: "PNDNG001");
 
         var service = CreateService(db);
 
-        // Act
         var result = await service.ApproveDeviceCodeAsync("PNDNG001", _testSubjectId, FullAccess);
 
-        // Assert
         Assert.True(result);
 
-        // Verify entity was updated
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync();
+        Assert.Equal(_testClientEntityId, grant.ClientEntityId);
+        Assert.Equal(_testSubjectId, grant.SubjectId);
+        Assert.True(grant.ApprovedByDeviceCode);
         var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "PNDNG001");
         Assert.NotNull(entity.ApprovedAt);
-        Assert.Equal(_testGrantId, entity.GrantId);
+        Assert.Equal(grant.Id, entity.GrantId);
         Assert.Equal(_testSubjectId, entity.SubjectId);
-
-        // Verify grant creation was called with correct arguments
-        _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
-            _testClientEntityId,
-            _testSubjectId,
-            It.IsAny<IEnumerable<string>>(),
-            It.IsAny<string>(),
-            It.IsAny<string?>(),
-            It.IsAny<bool>(),
-            true,
-            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -348,7 +297,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         using var db = CreateDbContext();
         await SeedClientAsync(db);
         await SeedSubjectAsync(db);
-        await SeedGrantAsync(db);
         await SeedDeviceCodeAsync(db, userCode: "CAPPED01",
             scopes: [Scope.FullAccess, Scope.GlucoseRead, Scope.TreatmentsReadWrite]);
 
@@ -358,15 +306,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             "CAPPED01", _testSubjectId, new HashSet<string> { Scope.GlucoseRead });
 
         Assert.True(result);
-        _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
-            _testClientEntityId,
-            _testSubjectId,
-            It.Is<IEnumerable<string>>(s => s.SequenceEqual(new[] { Scope.GlucoseRead })),
-            It.IsAny<string>(),
-            It.IsAny<string?>(),
-            It.IsAny<bool>(),
-            It.IsAny<bool>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        var grant = await db.OAuthGrants.AsNoTracking().SingleAsync();
+        Assert.Equal([Scope.GlucoseRead], grant.Scopes);
     }
 
     [Fact]
@@ -383,11 +324,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             "NOSCOPE1", _testSubjectId, new HashSet<string> { Scope.GlucoseRead });
 
         Assert.False(result);
-        _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>(),
-            It.IsAny<bool>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(await db.OAuthGrants.AsNoTracking().ToListAsync());
     }
 
     [Fact]

@@ -75,6 +75,7 @@ public class GuestLinkGrantListingTests : IDisposable
             Mock.Of<IOAuthClientService>(),
             sessionCache,
             revocation,
+            new GrantConsentService(NullLogger<GrantConsentService>.Instance),
             TimeProvider.System,
             NullLogger<OAuthGrantService>.Instance);
         var result = await CreateController(grantService).GetGrants();
