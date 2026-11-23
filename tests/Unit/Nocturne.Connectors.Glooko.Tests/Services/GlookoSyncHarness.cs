@@ -314,6 +314,10 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Whether each window carries one normal bolus with carbs and one CGM reading, on the V3 graph
 ///     and on the V2 endpoints alike.
 /// </param>
+/// <param name="withGuidlessFoods">
+///     Whether the foods carry no Glooko guid: the V2 foods, and the food of the V3 history meal,
+///     whose name ends in a space, so its entry id is stored trimmed.
+/// </param>
 internal sealed class GlookoEndpointHandler(
     Func<int, int>? recordsPerWindow = null,
     IReadOnlyCollection<string>? failingPaths = null,
@@ -322,7 +326,8 @@ internal sealed class GlookoEndpointHandler(
     bool recoversAfterForbidden = false,
     bool withHistoryMeals = false,
     ExpiredSessionAnswer? expiredFirstSession = null,
-    bool withBolusAndGlucose = false) : HttpMessageHandler
+    bool withBolusAndGlucose = false,
+    bool withGuidlessFoods = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<(string Start, string End)> _windows = [];
@@ -409,7 +414,9 @@ internal sealed class GlookoEndpointHandler(
             return Json(DeviceSettingsPayload());
 
         if (Matches(path, GlookoConstants.V3HistoriesPath))
-            return Json(withHistoryMeals ? HistoryMealsPayload : "{\"histories\":[]}");
+            return Json(withHistoryMeals
+                ? withGuidlessFoods ? GuidlessHistoryMealsPayload : HistoryMealsPayload
+                : "{\"histories\":[]}");
 
         var window = ResolveWindow(request.RequestUri?.Query ?? string.Empty);
 
@@ -441,7 +448,7 @@ internal sealed class GlookoEndpointHandler(
 
         if (Matches(path, GlookoConstants.FoodsPath))
             return Json(Records("foods", window with { Records = 1 },
-                at => $"{{\"guid\":\"food_{at.Ticks}\",\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
+                at => $"{{{(withGuidlessFoods ? string.Empty : $"\"guid\":\"food_{at.Ticks}\",")}\"timestamp\":\"{Iso(at)}\",\"carbs\":30.0,\"name\":\"Toast\"}}"));
 
         // MeterReadingsPath is a prefix of the CGM path's parent, so it is matched last.
         if (Matches(path, GlookoConstants.MeterReadingsPath))
@@ -515,6 +522,13 @@ internal sealed class GlookoEndpointHandler(
         {"histories":[{"type":"meals","guid":"meal-1","item":{
           "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
           "foods":[{"guid":"food-1","name":"Toast","carbs":30.0}]}}]}
+        """;
+
+    private const string GuidlessHistoryMealsPayload =
+        """
+        {"histories":[{"type":"meals","guid":"meal-1","item":{
+          "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
+          "foods":[{"name":"Toast ","carbs":30.0}]}}]}
         """;
 
     /// <summary>

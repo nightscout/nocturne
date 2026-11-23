@@ -28,7 +28,7 @@ public class GlookoFoodEnergyTests
               "carbs":30.0,"calories":100.0}]}
             """)!;
 
-        var entry = _mapper.MapFoodsToConnectorEntries(batch).Should().ContainSingle().Subject;
+        var entry = _mapper.MapFoodsToConnectorEntries(batch).Should().ContainSingle().Subject.Entry;
 
         entry.Energy.Should().Be(418.4m);
         entry.Food!.Energy.Should().Be(418.4m);
@@ -44,7 +44,7 @@ public class GlookoFoodEnergyTests
               "foods":[{"guid":"food-1","name":"Toast","carbs":30.0,"calories":250.0}]}}]}
             """)!;
 
-        var entry = _mapper.MapV3HistoryMealsToConnectorEntries(histories).Should().ContainSingle().Subject;
+        var entry = _mapper.MapV3HistoryMealsToConnectorEntries(histories).Should().ContainSingle().Subject.Entry;
 
         entry.Energy.Should().Be(1046m);
         entry.Food!.Energy.Should().Be(1046m);

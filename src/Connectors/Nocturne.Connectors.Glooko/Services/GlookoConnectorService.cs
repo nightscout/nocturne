@@ -25,8 +25,6 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService
     : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
-    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
-
     private readonly IMealMatchingService? _mealMatchingService;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
@@ -710,9 +708,8 @@ public class GlookoConnectorService
         // After the carbs above, so a carb intake this batch inserts is stored when its foods are attributed.
         var foodEntryImports = batchData.Foods is { Length: > 0 }
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
-        Func<string, string?> foodResolver = externalEntryId => LegacyIds.Of("food", externalEntryId);
         landed &= await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, foodResolver, config, result, activeTypes, cancellationToken);
+            foodEntryImports, config, result, activeTypes, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
         landed &= Landed(activeTypes, SyncDataType.StateSpans, stateSpans,
@@ -809,27 +806,8 @@ public class GlookoConnectorService
             var foodEntryImports = historyMealCarbs.Count > 0 && v3Histories.Histories != null
                 ? context.V4TreatmentMapper.MapV3HistoryMealsToConnectorEntries(v3Histories, v2Foods) : [];
 
-            Func<string, string?>? foodResolver = null;
-            if (historyMealCarbs.Count > 0 && v3Histories.Histories != null)
-            {
-                var foodGuidToMealGuid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var meal in GlookoV4TreatmentMapper.ExtractMeals(v3Histories))
-                {
-                    if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
-                    foreach (var food in meal.Foods)
-                    {
-                        if (food is { SoftDeleted: not true, Guid.Length: > 0 })
-                            foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
-                    }
-                }
-
-                foodResolver = externalEntryId =>
-                    foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
-                        ? LegacyIds.Of("v3meal", mealGuid) : null;
-            }
-
             await PublishFoodEntriesAndAttributeAsync(
-                foodEntryImports, foodResolver, config, result, activeTypes, cancellationToken);
+                foodEntryImports, config, result, activeTypes, cancellationToken);
         }
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
@@ -865,8 +843,7 @@ public class GlookoConnectorService
     ///     attribution does not count: the entries are already in the catalog.
     /// </returns>
     private async Task<bool> PublishFoodEntriesAndAttributeAsync(
-        List<ConnectorFoodEntryImport> foodEntryImports,
-        Func<string, string?>? foodEntryToCarbLegacyId,
+        List<GlookoFoodEntryImport> foodEntryImports,
         GlookoConnectorConfiguration config,
         SyncResult result,
         HashSet<SyncDataType> activeTypes,
@@ -884,7 +861,7 @@ public class GlookoConnectorService
         // The publisher returns null only from its own catch (or the route found it unavailable); an
         // import that reached the catalog returns a list, empty when nothing was accepted.
         var importedEntries = await PublishByRouteForResultAsync<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
-            foodEntryImports, config, cancellationToken);
+            [.. foodEntryImports.Select(i => i.Entry)], config, cancellationToken);
 
         RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, importedEntries is not null);
 
@@ -892,7 +869,7 @@ public class GlookoConnectorService
             return false;
 
         if (importedEntries.Count == 0
-            || _mealMatchingService == null || foodEntryToCarbLegacyId == null
+            || _mealMatchingService == null
             || Publisher is not { IsAvailable: true } publisher)
             return true;
 
@@ -902,8 +879,12 @@ public class GlookoConnectorService
 
         if (pendingEntries.Count == 0) return true;
 
+        var carbLegacyIdByExternalEntryId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var import in foodEntryImports)
+            carbLegacyIdByExternalEntryId.TryAdd(import.Entry.ExternalEntryId.Trim(), import.CarbIntakeLegacyId);
+
         var carbLegacyIdByEntry = pendingEntries
-            .Select(e => (Entry: e, LegacyId: foodEntryToCarbLegacyId(e.ExternalEntryId)))
+            .Select(e => (Entry: e, LegacyId: carbLegacyIdByExternalEntryId.GetValueOrDefault(e.ExternalEntryId)))
             .Where(e => e.LegacyId != null)
             .ToList();
 

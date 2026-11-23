@@ -118,6 +118,62 @@ public class GlookoLegacyIdTests
     }
 
     [Fact]
+    public void V2FoodEntriesNameTheLegacyIdTheirCarbIntakeIsStoredUnder()
+    {
+        var batch = new GlookoBatchData
+        {
+            Foods =
+            [
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 20, Guid = "food-1" },
+                new GlookoFood { Timestamp = V2Time, PumpTimestamp = V2Time, Carbs = 25.5 },
+            ],
+        };
+
+        var entries = Treatments().MapFoodsToConnectorEntries(batch);
+
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
+            "glooko_food_food-1", "glooko_4a9ba130561a4e74092a6432e1950b7f283ba7e7");
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
+            Treatments().MapFoodsToCarbIntakes(batch).Select(c => c.LegacyId));
+    }
+
+    [Fact]
+    public void V3HistoryFoodEntriesNameTheLegacyIdTheirMealCarbIntakeIsStoredUnder()
+    {
+        var histories = new GlookoV3HistoriesResponse
+        {
+            Histories =
+            [
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Guid = "meal-1", Timestamp = V2Time, Carbs = 50,
+                        Foods = [new GlookoV3HistoryFood { Guid = "f-1", Name = "Toast", Carbs = 50 }],
+                    },
+                },
+                new GlookoV3HistoryEntry
+                {
+                    Type = "meals",
+                    Item = new GlookoV3HistoryMeal
+                    {
+                        Timestamp = V2Time, Carbs = 35,
+                        Foods = [new GlookoV3HistoryFood { Guid = "f-2", Name = "Rice", Carbs = 35 }],
+                    },
+                },
+            ],
+        };
+
+        var entries = Treatments().MapV3HistoryMealsToConnectorEntries(histories);
+
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
+            "glooko_v3meal_meal-1", "glooko_dda59db23bd51c84d4fc4a402324d79507f71dca");
+        entries.Select(e => e.CarbIntakeLegacyId).Should().Equal(
+            Treatments().MapV3HistoryMealsToCarbIntakes(histories).Select(c => c.LegacyId));
+    }
+
+    [Fact]
     public void V3Boluses()
     {
         var graph = Graph(new GlookoV3Series
@@ -344,7 +400,7 @@ public class GlookoLegacyIdTests
         var settings = GlookoProfileMapperActivationTests.Build(("device-1", [("2026-04-01T10:00:00Z", "A")]));
 
         SensorGlucose().TransformBatchDataToSensorGlucose(batch).Single().SyncIdentifier.Should().Be("glooko_cgm_raw_2026-04-28T10:05:00Z");
-        Treatments().MapFoodsToConnectorEntries(batch).Single().ExternalEntryId.Should().Be("glooko_food_639129672000000000_25.5");
+        Treatments().MapFoodsToConnectorEntries(batch).Single().Entry.ExternalEntryId.Should().Be("glooko_food_639129672000000000_25.5");
         StateSpans().TransformV3ToProfileActivations(graph).Single().SyncIdentifier.Should().Be("glooko_profile_1779230416");
         new GlookoProfileMapper(Source, NullLogger.Instance).TransformDeviceSettingsToProfileActivations(settings)
             .Single().SyncIdentifier.Should().Be("glooko_active_profile_device-1_1775037600000");
