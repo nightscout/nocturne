@@ -209,7 +209,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.MemberInviteRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
         {
             [InviteKey] = inviteId.ToString(),
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         }, source: null);
 
     /// <summary>
