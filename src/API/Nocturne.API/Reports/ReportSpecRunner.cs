@@ -745,7 +745,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 continue;
             foreach (var field in marked)
                 if (Number(row.GetValueOrDefault(field.Name)) is { } amount and > 0)
-                    markers.Add(new ReportMarker((long)at, field.Marker!.Value, Math.Round(amount, 2),
+                    markers.Add(new ReportMarker((long)at, field.Marker!.Value, ScaledRounding.Round(amount, 2),
                         Equals(row.GetValueOrDefault(ReportField.AutomaticField), "yes")));
         }
         return [.. markers.OrderBy(m => m.Time)];

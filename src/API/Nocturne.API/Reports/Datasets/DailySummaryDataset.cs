@@ -127,7 +127,7 @@ internal sealed class DailySummaryDataset : IReportDataset
         var rows = days.Select(d =>
         {
             var any = d.TotalReadings > 0;
-            double? P(double percent) => any ? Math.Round(percent, 1) : null;
+            double? P(double percent) => any ? ScaledRounding.Round(percent, 1) : null;
             var row = new Dictionary<string, object?>
             {
                 ["date"] = d.Date,
@@ -141,10 +141,10 @@ internal sealed class DailySummaryDataset : IReportDataset
             };
             if (treatments)
             {
-                row["totalInsulin"] = Math.Round(d.TotalInsulin, 1);
-                row["totalBolus"] = Math.Round(d.TotalBolus, 1);
-                row["totalBasal"] = Math.Round(d.TotalBasal, 1);
-                row["totalCarbs"] = Math.Round(d.TotalCarbs, 0);
+                row["totalInsulin"] = ScaledRounding.Round(d.TotalInsulin, 1);
+                row["totalBolus"] = ScaledRounding.Round(d.TotalBolus, 1);
+                row["totalBasal"] = ScaledRounding.Round(d.TotalBasal, 1);
+                row["totalCarbs"] = ScaledRounding.Round(d.TotalCarbs, 0);
             }
             return (IReadOnlyDictionary<string, object?>)row;
         }).ToList();

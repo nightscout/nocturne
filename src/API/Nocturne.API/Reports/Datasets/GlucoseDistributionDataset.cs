@@ -86,11 +86,11 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
                 {
                     ["band"] = b.Label,
                     ["range"] = Limits(b, useMmol),
-                    ["percent"] = Math.Round(b.Percent, 1),
+                    ["percent"] = ScaledRounding.Round(b.Percent, 1),
                     ["minutes"] = Math.Round(b.Minutes),
                     ["color"] = b.Color,
                 })]
-                : [new Dictionary<string, object?>(bands.Select(b => KeyValuePair.Create(b.Key, (object?)Math.Round(b.Percent, 1))))
+                : [new Dictionary<string, object?>(bands.Select(b => KeyValuePair.Create(b.Key, (object?)ScaledRounding.Round(b.Percent, 1))))
                 {
                     [PeriodField.Name] = $"{request.Clock.Date(request.From)} to {request.Clock.Date(request.To.AddTicks(-1))}",
                 }];
@@ -99,7 +99,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         {
             Rows = rows,
             Summary = Summarise(bands, count, request.From, request.To, useMmol, request.Clock),
-            Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)).Of("percent|minutes"))],
+            Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, ScaledRounding.Round(b.Percent, 1), Limits(b, useMmol)).Of("percent|minutes"))],
             Sentence = count == 0
                 ? "No glucose readings in this period."
                 : $"Below range, total: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "

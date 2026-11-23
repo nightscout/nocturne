@@ -128,7 +128,7 @@ internal static class ReportDerivedOps
                 continue;
             var row = new Dictionary<string, object?> { [SlotField] = keys[i] };
             foreach (var (name, values) in columns)
-                row[name] = values[i] is { } v ? Math.Round(v, 4) : null;
+                row[name] = values[i] is { } v ? ScaledRounding.Round(v, 4) : null;
             rows.Add(row);
         }
         return rows;
@@ -305,9 +305,9 @@ internal sealed class ScatterOp : PairedOp
         var b = input.SourceB!;
         var rows = pairs.OrderBy(p => p.X).Select(p => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
-            ["a"] = Math.Round(p.X, 4),
-            ["b"] = Math.Round(p.Y, 4),
-            ["fit"] = line is null ? null : Math.Round(line.At(p.X), 4),
+            ["a"] = ScaledRounding.Round(p.X, 4),
+            ["b"] = ScaledRounding.Round(p.Y, 4),
+            ["fit"] = line is null ? null : ScaledRounding.Round(line.At(p.X), 4),
         }).ToList();
         var facts = new List<ReportFact> { ReportFacts.Count("Pairs", pairs.Count) };
         if (r is not { } rValue || line is null)
@@ -363,7 +363,7 @@ internal sealed class LagCorrelationOp : PairedOp
         var rows = lags.Select(l => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
             ["lag"] = l.Lag,
-            ["r"] = l.R is { } r ? Math.Round(r, 4) : null,
+            ["r"] = l.R is { } r ? ScaledRounding.Round(r, 4) : null,
             ["pairs"] = l.Pairs,
         }).ToList();
         var a = input.SourceA.Label;

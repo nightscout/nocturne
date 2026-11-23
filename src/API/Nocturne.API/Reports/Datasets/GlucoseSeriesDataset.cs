@@ -159,9 +159,9 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             ["direction"] = r.Direction,
             ["targetLow"] = low,
             ["targetHigh"] = high,
-            ["iob"] = AtOrBefore(iob, r.Time, p => p.Timestamp, p => Math.Round(p.Value, 2)),
-            ["cob"] = AtOrBefore(cob, r.Time, p => p.Timestamp, p => Math.Round(p.Value, 1)),
-            ["basalRate"] = AtOrBefore(basal, r.Time, p => p.Timestamp, p => Math.Round(p.Rate, 3)),
+            ["iob"] = AtOrBefore(iob, r.Time, p => p.Timestamp, p => ScaledRounding.Round(p.Value, 2)),
+            ["cob"] = AtOrBefore(cob, r.Time, p => p.Timestamp, p => ScaledRounding.Round(p.Value, 1)),
+            ["basalRate"] = AtOrBefore(basal, r.Time, p => p.Timestamp, p => ScaledRounding.Round(p.Rate, 3)),
         })];
     }
 

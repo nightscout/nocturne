@@ -104,7 +104,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
             [
                 new Dictionary<string, object?>
                 {
-                    ["reservoir"] = latestPump?.Reservoir is { } r ? Math.Round(r, 1) : null,
+                    ["reservoir"] = latestPump?.Reservoir is { } r ? ScaledRounding.Round(r, 1) : null,
                     ["pumpBattery"] = latestPump?.BatteryPercent,
                     ["uploaderBattery"] = latestUploader?.Battery,
                     ["sensorAgeHours"] = sensor?.Age,
@@ -121,7 +121,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
                 .Select(p => (p.Mills, Row: (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
                     ["time"] = p.Mills,
-                    ["reservoir"] = p.Reservoir is { } r ? Math.Round(r, 1) : null,
+                    ["reservoir"] = p.Reservoir is { } r ? ScaledRounding.Round(r, 1) : null,
                     ["pumpBattery"] = p.BatteryPercent,
                     ["uploaderBattery"] = null,
                 }));

@@ -80,13 +80,13 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
 
         var row = new Dictionary<string, object?>
         {
-            ["timeInRangePercent"] = IfAny(Math.Round(percentages.Target, 1)),
-            ["timeBelow"] = IfAny(Math.Round(percentages.VeryLow + percentages.Low, 1)),
-            ["timeAbove"] = IfAny(Math.Round(percentages.High + percentages.VeryHigh, 1)),
+            ["timeInRangePercent"] = IfAny(ScaledRounding.Round(percentages.Target, 1)),
+            ["timeBelow"] = IfAny(ScaledRounding.Round(percentages.VeryLow + percentages.Low, 1)),
+            ["timeAbove"] = IfAny(ScaledRounding.Round(percentages.High + percentages.VeryHigh, 1)),
             ["mean"] = IfAny(ReportGlucose.Scale(analysis.BasicStats.Mean, useMmol)),
-            ["gmi"] = IfAny(Math.Round(analysis.GMI.Value, 1)),
+            ["gmi"] = IfAny(ScaledRounding.Round(analysis.GMI.Value, 1)),
             ["cv"] = analysis.GlycemicVariability is { } variability && count > 0
-                ? Math.Round(variability.CoefficientOfVariation, 1)
+                ? ScaledRounding.Round(variability.CoefficientOfVariation, 1)
                 : null,
             ["sd"] = IfAny(ReportGlucose.Scale(analysis.BasicStats.StandardDeviation, useMmol)),
             ["readings"] = count,
@@ -98,9 +98,9 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         if (treatments)
         {
             var insulin = await InsulinAsync(request, cancellationToken);
-            row["tdd"] = insulin is null ? null : Math.Round(insulin.Tdd, 1);
-            row["basalPercent"] = insulin is null || insulin.TotalInsulin <= 0 ? null : Math.Round(insulin.BasalPercent, 1);
-            row["carbsPerDay"] = insulin is null ? null : Math.Round(insulin.CarbsPerDay, 0);
+            row["tdd"] = insulin is null ? null : ScaledRounding.Round(insulin.Tdd, 1);
+            row["basalPercent"] = insulin is null || insulin.TotalInsulin <= 0 ? null : ScaledRounding.Round(insulin.BasalPercent, 1);
+            row["carbsPerDay"] = insulin is null ? null : ScaledRounding.Round(insulin.CarbsPerDay, 0);
         }
 
         IReadOnlyList<ReportOmittedField> omitted = treatments

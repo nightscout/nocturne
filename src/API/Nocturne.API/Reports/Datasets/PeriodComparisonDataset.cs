@@ -290,14 +290,14 @@ internal sealed class PeriodComparisonDataset : IReportDataset
                 var value = metric.Get(side);
                 if (value is not { } v || double.IsNaN(v) || double.IsInfinity(v))
                     return null;
-                return Math.Round(glucose ? ReportGlucose.Scale(v, useMmol) : v, digits);
+                return ScaledRounding.Round(glucose ? ReportGlucose.Scale(v, useMmol) : v, digits);
             }
 
             var va = Read(a);
             var vb = Read(b);
-            double? delta = va is { } x && vb is { } y ? Math.Round(y - x, digits) : null;
+            double? delta = va is { } x && vb is { } y ? ScaledRounding.Round(y - x, digits) : null;
             double? change = va is { } from && vb is { } to
-                ? Math.Round(from == 0 ? (to == from ? 0 : Math.Sign(to - from) * 100) : (to - from) / Math.Abs(from) * 100, 1)
+                ? ScaledRounding.Round(from == 0 ? (to == from ? 0 : Math.Sign(to - from) * 100) : (to - from) / Math.Abs(from) * 100, 1)
                 : null;
             var verdict = delta is { } d && d != 0 && metric.Better != Better.Neither
                 ? (d > 0) == (metric.Better == Better.Higher) ? "better" : "worse"
