@@ -129,6 +129,22 @@ public class SubjectUnclaimedTeamRowsPostgresTests(SubjectUnclaimedTeamRowsPostg
     }
 
     [Fact]
+    public async Task A_holder_who_made_a_staff_invite_is_kept()
+    {
+        var scene = await SceneAsync();
+        var (holder, identity) = await HolderAsync(scene, "staff-invite-maker", (db, subject) =>
+            db.TeamStaffInvites.Add(new TeamStaffInviteEntity
+            {
+                Id = Guid.CreateVersion7(), TeamId = scene.Team, CreatedBySubjectId = subject,
+                TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddDays(1),
+            }));
+
+        (await scene.Subjects.TakeUnclaimedOidcIdentityAsync(identity, scene.Taker, null, Ct)).Should().BeNull();
+
+        (await ExistsAsync(holder)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task A_holder_who_approved_a_teams_access_to_another_tenant_is_kept()
     {
         var scene = await SceneAsync();

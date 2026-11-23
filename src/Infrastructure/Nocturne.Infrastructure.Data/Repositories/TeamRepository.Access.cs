@@ -41,21 +41,7 @@ public partial class TeamRepository
     /// <inheritdoc/>
     public virtual Task<bool> RevokeAccessLinkAsync(
         Guid teamId, Guid callerSubjectId, Guid linkId, DateTime now, CancellationToken ct) =>
-        AsManagerAsync(teamId, callerSubjectId, false, async (db, token) =>
-        {
-            var link = await db.TeamAccessLinks.FirstOrDefaultAsync(l => l.Id == linkId && l.TeamId == teamId, token);
-            if (link is null)
-                return false;
-
-            if (link.RevokedAt is null)
-            {
-                link.RevokedAt = now;
-                TeamAudit.StageAccessLinkRevoked(db, teamId, linkId);
-                await db.SaveChangesAsync(token);
-            }
-
-            return true;
-        }, ct);
+        RevokeLinkAsync(teamId, callerSubjectId, linkId, now, db => db.TeamAccessLinks, TeamAudit.StageAccessLinkRevoked, ct);
 
     /// <inheritdoc/>
     public virtual async Task<TeamAccessLinkInfo?> GetAccessLinkInfoAsync(string tokenHash, DateTime now, CancellationToken ct)
@@ -170,6 +156,7 @@ public partial class TeamRepository
                 AccessEndsAt = grant.AccessEndsAt,
                 ApprovedBySubjectId = approver.SubjectId,
                 CreatedFromLinkId = link.Id,
+                TeamManagesStaff = grant.TeamManagesStaff,
                 AccessRoles = roleIds.Select(roleId => new TeamTenantAccessRoleEntity
                 {
                     Id = Guid.CreateVersion7(),
@@ -177,6 +164,13 @@ public partial class TeamRepository
                 }).ToList(),
             };
             db.TeamTenantAccess.Add(access);
+
+            var staff = await db.TeamMembers.AsNoTracking()
+                .Where(m => m.TeamId == id && m.Kind == TeamMemberKind.Staff)
+                .Select(m => m.Id)
+                .ToListAsync(token);
+            foreach (var memberId in staff)
+                db.TeamSiteStaff.Add(NewSiteStaff(access.Id, memberId, grant.TeamManagesStaff));
 
             var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(token);
             TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));

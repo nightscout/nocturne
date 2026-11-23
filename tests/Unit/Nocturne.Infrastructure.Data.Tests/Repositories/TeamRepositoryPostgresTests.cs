@@ -433,7 +433,8 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
 
         var detail = await teams.GetAsync(team, staff, Now, default);
         detail.Should().NotBeNull();
-        detail!.Managers.Select(m => m.SubjectId).Should().Equal(a);
+        detail!.Managers.Should().BeEmpty("a staff member reads no manager's subject id");
+        detail.ManagerNames.Should().HaveCount(1);
         detail.Invites.Should().BeEmpty();
         detail.CanDelete.Should().BeFalse();
         detail.IsLastManager.Should().BeFalse();

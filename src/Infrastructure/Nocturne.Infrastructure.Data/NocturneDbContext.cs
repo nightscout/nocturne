@@ -289,11 +289,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TeamInviteEntity> TeamInvites { get; set; } = null!;
 
+    public DbSet<TeamStaffInviteEntity> TeamStaffInvites { get; set; } = null!;
+
     public DbSet<TeamAccessLinkEntity> TeamAccessLinks { get; set; } = null!;
 
     public DbSet<TeamTenantAccessEntity> TeamTenantAccess { get; set; } = null!;
 
     public DbSet<TeamTenantAccessRoleEntity> TeamTenantAccessRoles { get; set; } = null!;
+
+    public DbSet<TeamSiteStaffEntity> TeamSiteStaff { get; set; } = null!;
 
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
