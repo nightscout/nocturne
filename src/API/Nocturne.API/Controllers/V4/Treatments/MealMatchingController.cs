@@ -127,7 +127,8 @@ public class MealMatchingController : ControllerBase
     /// Writes a <c>treatment_foods</c> row keyed by the carb intake, which
     /// <see cref="NutritionController"/> gates on <c>treatments.readwrite</c>, and marks the
     /// connector food entry matched. Gated on the treatments category rather than food because the
-    /// carb breakdown is a COB input.
+    /// carb breakdown is a COB input. A repeat of an accept that linked answers 204 and writes
+    /// nothing; an entry matched to another carb intake, dismissed or withdrawn answers 409.
     /// </remarks>
     [HttpPost("accept")]
     [RequireScope(Scope.TreatmentsReadWrite)]
@@ -135,6 +136,7 @@ public class MealMatchingController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ErrorEnvelope]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
     {
@@ -144,19 +146,30 @@ public class MealMatchingController : ControllerBase
             return Unauthorized();
         }
 
-        var linked = await _mealMatchingService.AcceptMatchAsync(
+        var outcome = await _mealMatchingService.AcceptMatchAsync(
             request.FoodEntryId,
             request.CarbIntakeId,
             request.Carbs,
             request.TimeOffsetMinutes,
             HttpContext.RequestAborted);
 
-        if (!linked)
+        ActionResult? refusal = outcome switch
         {
-            return Problem(
-                detail: "The food entry or the carb intake no longer exists, so nothing was linked.",
+            AcceptMatchOutcome.Linked or AcceptMatchOutcome.AlreadyLinked => null,
+            AcceptMatchOutcome.NotFound => Problem(
+                detail: "This food or this carb entry no longer exists. Nothing changed.",
                 statusCode: StatusCodes.Status404NotFound,
-                title: "Match Target Not Found");
+                title: "Match Not Found"),
+            AcceptMatchOutcome.AlreadyResolved => Problem(
+                detail: "This food is already linked to a different carb entry, or it was dismissed or removed. Nothing changed.",
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Food Cannot Be Linked"),
+            _ => throw new InvalidOperationException($"Unhandled accept outcome {outcome}."),
+        };
+
+        if (refusal is not null)
+        {
+            return refusal;
         }
 
         // Archive the notification

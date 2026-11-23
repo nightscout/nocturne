@@ -14,7 +14,7 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// Matches connector food entries (primarily from MyFitnessPal) to existing carb intake records
-/// within a configurable time window, linking them via <see cref="ITreatmentFoodService"/>. Raises
+/// within a configurable time window, linking them through <see cref="IConnectorFoodEntryRepository"/>. Raises
 /// an in-app notification for new matches so users can review auto-linked meals.
 /// </summary>
 /// <seealso cref="IMealMatchingService"/>
@@ -31,7 +31,6 @@ public class MealMatchingService : IMealMatchingService
 
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
-    private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IInAppNotificationService _notificationService;
     private readonly IInAppNotificationRepository _notificationRepository;
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
@@ -42,7 +41,6 @@ public class MealMatchingService : IMealMatchingService
     public MealMatchingService(
         IConnectorFoodEntryRepository foodEntryRepository,
         ICarbIntakeRepository carbIntakeRepository,
-        ITreatmentFoodService treatmentFoodService,
         IInAppNotificationService notificationService,
         IInAppNotificationRepository notificationRepository,
         IMyFitnessPalMatchingSettingsService settingsService,
@@ -52,7 +50,6 @@ public class MealMatchingService : IMealMatchingService
     {
         _foodEntryRepository = foodEntryRepository;
         _carbIntakeRepository = carbIntakeRepository;
-        _treatmentFoodService = treatmentFoodService;
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
         _settingsService = settingsService;
@@ -102,13 +99,13 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    public async Task<bool> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
+    public async Task<AcceptMatchOutcome> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
     {
         var foodEntry = await _foodEntryRepository.GetByIdAsync(foodEntryId, ct);
         if (foodEntry == null)
         {
             _logger.LogWarning("Food entry {FoodEntryId} not found", foodEntryId);
-            return false;
+            return AcceptMatchOutcome.NotFound;
         }
 
         // treatment_foods.carb_intake_id carries no foreign key, so an unknown id here would
@@ -118,7 +115,7 @@ public class MealMatchingService : IMealMatchingService
         if (carbIntake == null)
         {
             _logger.LogWarning("Carb intake {CarbIntakeId} not found", carbIntakeId);
-            return false;
+            return AcceptMatchOutcome.NotFound;
         }
 
         var treatmentFood = new TreatmentFood
@@ -133,19 +130,14 @@ public class MealMatchingService : IMealMatchingService
             CarbsPerPortion = foodEntry.Servings > 0 ? carbs / foodEntry.Servings : null,
         };
 
-        await _treatmentFoodService.AddAsync(treatmentFood, ct);
-
-        // Update food entry status
-        await _foodEntryRepository.UpdateStatusAsync(
-            foodEntryId,
-            ConnectorFoodEntryStatus.Matched,
-            ct);
+        var outcome = await _foodEntryRepository.AcceptMatchAsync(foodEntryId, treatmentFood, ct);
 
         _logger.LogInformation(
-            "Accepted meal match: food entry {FoodEntryId} linked to carb intake {CarbIntakeId}",
+            "Accepted meal match for food entry {FoodEntryId} and carb intake {CarbIntakeId}: {Outcome}",
             foodEntryId,
-            carbIntakeId);
-        return true;
+            carbIntakeId,
+            outcome);
+        return outcome;
     }
 
     public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)

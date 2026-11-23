@@ -90,13 +90,15 @@ public class GlookoConnectorServiceFoodAttributionTests
     }
 
     [Theory]
-    [InlineData(true, "Attributed 1/1 food entries")]
-    [InlineData(false, "Attributed 0/1 food entries")]
-    public async Task SyncDataAsync_CountsAFoodEntryAsAttributedOnlyWhenTheMatchWasLinked(
-        bool linked, string expectedLine)
+    [InlineData(AcceptMatchOutcome.Linked, "Attributed 1/1 food entries")]
+    [InlineData(AcceptMatchOutcome.AlreadyLinked, "Attributed 0/1 food entries")]
+    [InlineData(AcceptMatchOutcome.AlreadyResolved, "Attributed 0/1 food entries")]
+    [InlineData(AcceptMatchOutcome.NotFound, "Attributed 0/1 food entries")]
+    public async Task SyncDataAsync_CountsAFoodEntryAsAttributedOnlyWhenThisSyncLinkedIt(
+        AcceptMatchOutcome outcome, string expectedLine)
     {
         var harness = new Harness();
-        harness.AcceptMatchReports(linked);
+        harness.AcceptMatchReports(outcome);
 
         await harness.SyncAsync(harness.Service(), carbIntakes: true);
 
@@ -150,11 +152,11 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public MessageLogger<GlookoConnectorService> Log { get; } = new();
 
-        public void AcceptMatchReports(bool linked) =>
+        public void AcceptMatchReports(AcceptMatchOutcome outcome) =>
             MealMatching
                 .Setup(m => m.AcceptMatchAsync(
                     It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(linked);
+                .ReturnsAsync(outcome);
 
         private IConnectorPublisher Publisher { get; }
 

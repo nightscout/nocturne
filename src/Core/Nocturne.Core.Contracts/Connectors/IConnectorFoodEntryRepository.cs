@@ -23,12 +23,30 @@ public interface IConnectorFoodEntryRepository
         CancellationToken ct = default);
 
     /// <summary>
-    /// Update the status and matched treatment for a food entry.
+    /// Sets the status of a food entry and forgets any carb intake it was matched to. Linking an
+    /// entry to a carb intake goes through <see cref="AcceptMatchAsync"/>.
     /// </summary>
     /// <param name="status">The new <see cref="ConnectorFoodEntryStatus"/>.</param>
     Task UpdateStatusAsync(
         Guid id,
         ConnectorFoodEntryStatus status,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Links a pending food entry to a carb intake: claims the entry and writes its
+    /// <see cref="TreatmentFood"/> row in one transaction, so two accepts racing for one entry write
+    /// one row and only the winner reports <see cref="AcceptMatchOutcome.Linked"/>.
+    /// </summary>
+    /// <remarks>
+    /// An entry already matched to <see cref="TreatmentFood.CarbIntakeId"/> is
+    /// <see cref="AcceptMatchOutcome.AlreadyLinked"/>. One matched to another carb intake or to none
+    /// on record, dismissed or withdrawn is <see cref="AcceptMatchOutcome.AlreadyResolved"/>.
+    /// </remarks>
+    /// <param name="foodEntryId">The food entry to link.</param>
+    /// <param name="treatmentFood">The row to write when this call wins the claim. Its id must be set.</param>
+    Task<AcceptMatchOutcome> AcceptMatchAsync(
+        Guid foodEntryId,
+        TreatmentFood treatmentFood,
         CancellationToken ct = default);
 
     /// <summary>
