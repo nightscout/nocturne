@@ -143,6 +143,34 @@ public class NutritionControllerMealsTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateMeal_TakesTheRequestsHeaderOntoTheBolusAndTheCarbIntake()
+    {
+        var controller = CreateController();
+        var sent = new DateTimeOffset(2026, 7, 1, 12, 30, 0, TimeSpan.FromHours(10));
+        var request = new CreateMealRequest
+        {
+            Timestamp = sent,
+            UtcOffset = 600,
+            Device = "device-sent",
+            App = "app-sent",
+            DataSource = "source-sent",
+            Insulin = 5.0,
+            Carbs = 30.0,
+        };
+
+        var body = ExtractBody(await controller.CreateMeal(request, default));
+
+        foreach (var record in new IV4Record[] { body.Bolus, body.CarbIntake })
+        {
+            record.Timestamp.Should().Be(sent.UtcDateTime);
+            record.UtcOffset.Should().Be(600);
+            record.Device.Should().Be("device-sent");
+            record.App.Should().Be("app-sent");
+            record.DataSource.Should().Be("source-sent");
+        }
+    }
+
+    [Fact]
     public async Task CreateMeal_WithSuppliedCorrelationId_Propagates()
     {
         var controller = CreateController();

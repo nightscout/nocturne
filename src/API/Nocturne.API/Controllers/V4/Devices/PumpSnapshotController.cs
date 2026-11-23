@@ -57,7 +57,7 @@ public class PumpSnapshotController(IPumpSnapshotRepository repo)
         [FromBody] UpsertPumpSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (await this.ValidateBulkAsync(requests, "Pump snapshot", "snapshot", "snapshots", ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Pump snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
@@ -65,13 +65,8 @@ public class PumpSnapshotController(IPumpSnapshotRepository repo)
         return StatusCode(201, persisted.ToArray());
     }
 
-    private static PumpSnapshot MapToModel(UpsertPumpSnapshotRequest request) => new()
+    private static PumpSnapshot MapToModel(UpsertPumpSnapshotRequest request) => new PumpSnapshot
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         Manufacturer = request.Manufacturer,
@@ -88,5 +83,5 @@ public class PumpSnapshotController(IPumpSnapshotRepository repo)
         Iob = request.Iob,
         BolusIob = request.BolusIob,
         AdditionalProperties = request.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

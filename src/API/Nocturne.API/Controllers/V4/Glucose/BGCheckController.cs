@@ -41,25 +41,20 @@ public class BGCheckController(IBGCheckRepository repo)
     public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("BG check", "check", "checks");
+    protected override V4BulkNaming BulkNaming => new("BG check", "checks");
 
     /// <summary>
     /// Maps a <see cref="UpsertBGCheckRequest"/> to a new <see cref="BGCheck"/> domain model for creation.
     /// </summary>
     /// <param name="request">The create request containing glucose value, units, and measurement metadata.</param>
     /// <returns>A new <see cref="BGCheck"/> instance ready for persistence.</returns>
-    protected override BGCheck MapCreateToModel(UpsertBGCheckRequest request) => new()
+    protected override BGCheck MapCreateToModel(UpsertBGCheckRequest request) => new BGCheck
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Glucose = request.Glucose,
         Units = request.Units,
         GlucoseType = request.GlucoseType,
         SyncIdentifier = request.SyncIdentifier,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Maps a <see cref="UpsertBGCheckRequest"/> to an updated <see cref="BGCheck"/>, preserving
@@ -70,14 +65,9 @@ public class BGCheckController(IBGCheckRepository repo)
     /// <param name="request">The update request.</param>
     /// <param name="existing">The existing record whose immutable fields are carried forward.</param>
     /// <returns>A <see cref="BGCheck"/> instance with updated mutable fields and preserved immutable fields.</returns>
-    protected override BGCheck MapUpdateToModel(Guid id, UpsertBGCheckRequest request, BGCheck existing) => new()
+    protected override BGCheck MapUpdateToModel(Guid id, UpsertBGCheckRequest request, BGCheck existing) => new BGCheck
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Glucose = request.Glucose,
         Units = request.Units,
         GlucoseType = request.GlucoseType,
@@ -86,5 +76,5 @@ public class BGCheckController(IBGCheckRepository repo)
         CreatedAt = existing.CreatedAt,
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 }

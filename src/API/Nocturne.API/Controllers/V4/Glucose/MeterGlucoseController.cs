@@ -43,7 +43,7 @@ public class MeterGlucoseController(
     public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Meter glucose", "reading", "readings");
+    protected override V4BulkNaming BulkNaming => new("Meter glucose", "readings");
 
     /// <inheritdoc/>
     /// <remarks>
@@ -79,15 +79,10 @@ public class MeterGlucoseController(
     /// </summary>
     /// <param name="request">The create request containing the mg/dL value and device metadata.</param>
     /// <returns>A new <see cref="MeterGlucose"/> instance ready for persistence.</returns>
-    protected override MeterGlucose MapCreateToModel(UpsertMeterGlucoseRequest request) => new()
+    protected override MeterGlucose MapCreateToModel(UpsertMeterGlucoseRequest request) => new MeterGlucose
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Mgdl = request.Mgdl,
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>
     /// Maps a <see cref="UpsertMeterGlucoseRequest"/> to an updated <see cref="MeterGlucose"/>, preserving
@@ -98,20 +93,15 @@ public class MeterGlucoseController(
     /// <param name="request">The update request.</param>
     /// <param name="existing">The existing record whose immutable fields are carried forward.</param>
     /// <returns>A <see cref="MeterGlucose"/> instance with updated mutable fields and preserved immutable fields.</returns>
-    protected override MeterGlucose MapUpdateToModel(Guid id, UpsertMeterGlucoseRequest request, MeterGlucose existing) => new()
+    protected override MeterGlucose MapUpdateToModel(Guid id, UpsertMeterGlucoseRequest request, MeterGlucose existing) => new MeterGlucose
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         Mgdl = request.Mgdl,
         CorrelationId = existing.CorrelationId,
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <inheritdoc/>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(

@@ -52,7 +52,7 @@ public class TempBasalController(
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Temp basal", "temp basal", "temp basals");
+    protected override V4BulkNaming BulkNaming => new("Temp basal", "temp basals");
 
     /// <inheritdoc/>
     /// <remarks>
@@ -93,7 +93,7 @@ public class TempBasalController(
         [FromBody] IReadOnlyList<CreateTempBasalRequest> requests, CancellationToken ct = default)
     {
         var naming = BulkNaming;
-        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
             return invalid;
 
         var results = new List<TempBasal>(requests.Count);
@@ -148,14 +148,9 @@ public class TempBasalController(
         return null;
     }
 
-    protected override TempBasal MapCreateToModel(CreateTempBasalRequest request) => new()
+    protected override TempBasal MapCreateToModel(CreateTempBasalRequest request) => new TempBasal
     {
-        StartTimestamp = request.Timestamp.UtcDateTime,
         EndTimestamp = EndOf(request.Timestamp, request.DurationMinutes),
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId,
         Rate = request.Rate,
@@ -167,17 +162,12 @@ public class TempBasalController(
         AdditionalProperties = request.Origin is { } origin
             ? TempBasalAutomaticFlag.Keep(null, TempBasalAutomaticFlag.Of(origin))
             : null,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override TempBasal MapUpdateToModel(Guid id, UpdateTempBasalRequest request, TempBasal existing) => new()
+    protected override TempBasal MapUpdateToModel(Guid id, UpdateTempBasalRequest request, TempBasal existing) => new TempBasal
     {
         Id = id,
-        StartTimestamp = request.Timestamp.UtcDateTime,
         EndTimestamp = EndOf(request.Timestamp, request.DurationMinutes),
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         CorrelationId = request.CorrelationId ?? existing.CorrelationId,
         Rate = request.Rate,
@@ -196,7 +186,7 @@ public class TempBasalController(
                 existing.AdditionalProperties is null ? null : new(existing.AdditionalProperties),
                 TempBasalAutomaticFlag.Of(origin))
             : existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     private static DateTime? EndOf(DateTimeOffset start, double? durationMinutes)
         => durationMinutes is { } duration ? start.UtcDateTime.AddMinutes(duration) : null;

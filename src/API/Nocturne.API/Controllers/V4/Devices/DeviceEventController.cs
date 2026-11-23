@@ -62,7 +62,7 @@ public class DeviceEventController(
     public override string WriteScope => Scope.DevicesReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Device event", "event", "events");
+    protected override V4BulkNaming BulkNaming => new("Device event", "events");
 
     /// <summary>
     /// Lists device events. Adds optional <c>patientDeviceId</c> and <c>eventType</c> filters on top of the
@@ -133,29 +133,19 @@ public class DeviceEventController(
         DeviceEvent model, UpsertDeviceEventRequest request, DeviceEvent existing, CancellationToken ct)
         => ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
 
-    protected override DeviceEvent MapCreateToModel(UpsertDeviceEventRequest request) => new()
+    protected override DeviceEvent MapCreateToModel(UpsertDeviceEventRequest request) => new DeviceEvent
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         EventType = request.EventType,
         Notes = request.Notes,
         SyncIdentifier = request.SyncIdentifier,
-    };
+    }.WithHeaderFrom(request);
 
-    protected override DeviceEvent MapUpdateToModel(Guid id, UpsertDeviceEventRequest request, DeviceEvent existing) => new()
+    protected override DeviceEvent MapUpdateToModel(Guid id, UpsertDeviceEventRequest request, DeviceEvent existing) => new DeviceEvent
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
         // Preserve the legacy device link across edits; rebuilding the model without this would
         // silently drop it. PatientDeviceId is settled by ApplyAttributionAsync.
         DeviceId = existing.DeviceId,
-        App = request.App,
-        DataSource = request.DataSource,
         EventType = request.EventType,
         Notes = request.Notes,
         CorrelationId = existing.CorrelationId,
@@ -163,7 +153,7 @@ public class DeviceEventController(
         CreatedAt = existing.CreatedAt,
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
-    };
+    }.WithHeaderFrom(request);
 
     /// <inheritdoc/>
     /// <remarks>
