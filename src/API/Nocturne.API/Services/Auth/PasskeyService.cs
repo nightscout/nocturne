@@ -13,13 +13,14 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// Implements WebAuthn/FIDO2 passkey registration and authentication ceremonies using Fido2NetLib.
-/// Challenge state is persisted in ASP.NET Data Protection-encrypted tokens passed via
-/// request/response bodies (stateless challenge flow — no server-side session required).
+/// Challenge state is carried in ASP.NET Data Protection-encrypted tokens passed via
+/// request/response bodies; the server records only which challenges have been spent.
 /// </summary>
 /// <remarks>
 /// Each ceremony is verified against a relying party of its own, which accepts the origin the
 /// ceremony presents when <see cref="IsAcceptedOrigin"/> admits it. Maximum passkeys per subject
-/// is capped at 20. Challenge tokens expire after 5 minutes.
+/// is capped at 20. Challenge tokens expire after 5 minutes, and each completes at most one
+/// ceremony (<see cref="SpendChallengeAsync"/>).
 /// </remarks>
 /// <seealso cref="IPasskeyService"/>
 /// <seealso cref="SubjectService"/>
@@ -32,6 +33,7 @@ public class PasskeyService : IPasskeyService
     internal const string OwnerNotAMemberMessage = "Credential owner is not a member of this tenant.";
 
     private readonly IPasskeyCredentialRepository _passkeys;
+    private readonly ISpentPasskeyChallengeRepository _spentChallenges;
     private readonly ISubjectRepository _subjects;
     private readonly ITenantMemberService _members;
     private readonly Fido2 _fido2;
@@ -43,6 +45,7 @@ public class PasskeyService : IPasskeyService
     private readonly TimeProvider _time;
 
     /// <param name="passkeys">Repository for the stored passkey credentials.</param>
+    /// <param name="spentChallenges">Records the challenges a ceremony has been attempted with.</param>
     /// <param name="subjects">Repository for finding the tenant member a username names.</param>
     /// <param name="members">Service for checking that a credential's owner is a member of the tenant.</param>
     /// <param name="dataProtectionProvider">ASP.NET Data Protection provider for encrypting challenge tokens.</param>
@@ -52,6 +55,7 @@ public class PasskeyService : IPasskeyService
     /// <param name="timeProvider">The clock a member's end date is judged by.</param>
     public PasskeyService(
         IPasskeyCredentialRepository passkeys,
+        ISpentPasskeyChallengeRepository spentChallenges,
         ISubjectRepository subjects,
         ITenantMemberService members,
         IDataProtectionProvider dataProtectionProvider,
@@ -62,6 +66,7 @@ public class PasskeyService : IPasskeyService
     {
         _time = timeProvider;
         _passkeys = passkeys ?? throw new ArgumentNullException(nameof(passkeys));
+        _spentChallenges = spentChallenges ?? throw new ArgumentNullException(nameof(spentChallenges));
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _members = members ?? throw new ArgumentNullException(nameof(members));
         _protector = dataProtectionProvider.CreateProtector("Nocturne.Passkey.Challenge");
@@ -207,6 +212,8 @@ public class PasskeyService : IPasskeyService
             FidoModelSerializerContext.Default.CredentialCreateOptions)
             ?? throw new InvalidOperationException("Failed to deserialize registration options from challenge cookie.");
 
+        await SpendChallengeAsync(originalOptions.Challenge, cookie.ExpiresAt);
+
         var attestationResponse = JsonSerializer.Deserialize<AuthenticatorAttestationRawResponse>(attestationResponseJson)
             ?? throw new InvalidOperationException("Failed to deserialize attestation response.");
 
@@ -308,6 +315,8 @@ public class PasskeyService : IPasskeyService
             cookie.OptionsJson,
             FidoModelSerializerContext.Default.AssertionOptions)
             ?? throw new InvalidOperationException("Failed to deserialize assertion options from challenge cookie.");
+
+        await SpendChallengeAsync(originalOptions.Challenge, cookie.ExpiresAt);
 
         var assertionResponse = JsonSerializer.Deserialize<AuthenticatorAssertionRawResponse>(assertionResponseJson)
             ?? throw new InvalidOperationException("Failed to deserialize assertion response.");
@@ -413,6 +422,31 @@ public class PasskeyService : IPasskeyService
         }
 
         return payload;
+    }
+
+    /// <summary>
+    /// Spends the challenge a ceremony presents, or refuses the ceremony when it was spent before.
+    /// </summary>
+    /// <remarks>
+    /// Spent on the attempt, before the response is read or any credential looked up, so a
+    /// challenge buys one verification whatever its outcome and a retry starts from new options.
+    /// The key is the challenge inside the token's options, which every token carries, so a token
+    /// minted before the record existed is spent like any other. Options with no challenge are
+    /// refused and spend nothing. A failure to record the spend is not caught: the ceremony fails
+    /// as an error, not as a refusal.
+    /// </remarks>
+    private async Task SpendChallengeAsync(byte[]? challenge, DateTime expiresAt)
+    {
+        if (challenge is not { Length: > 0 })
+        {
+            throw new InvalidOperationException("Challenge token carries no challenge. Please restart the authentication flow.");
+        }
+
+        if (!await _spentChallenges.TrySpendAsync(
+                System.Buffers.Text.Base64Url.EncodeToString(challenge), expiresAt, CancellationToken.None))
+        {
+            throw new InvalidOperationException("Challenge token has already been presented. Please restart the authentication flow.");
+        }
     }
 
     /// <summary>

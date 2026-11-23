@@ -13,6 +13,7 @@ using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -34,6 +35,7 @@ public class PasskeyServiceTests
     private readonly NocturneDbContext _dbContext;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
+    private readonly SpentPasskeyChallenges _spent = new();
 
     public PasskeyServiceTests()
     {
@@ -652,8 +654,8 @@ public class PasskeyServiceTests
     /// </summary>
     private static string SignedAssertion(
         PasskeyCredentialEntity credential, string optionsJson, Func<byte[], byte[]> sign,
-        string origin = "https://localhost") =>
-        SignedAssertion(credential, ClientData("webauthn.get", optionsJson, origin), sign);
+        string origin = "https://localhost", uint signCount = 1) =>
+        SignedAssertion(credential, ClientData("webauthn.get", optionsJson, origin), sign, signCount);
 
     /// <summary>The client data a browser at <paramref name="origin"/> hands the authenticator.</summary>
     private static byte[] ClientData(string type, string optionsJson, string origin)
@@ -668,12 +670,12 @@ public class PasskeyServiceTests
     }
 
     private static string SignedAssertion(
-        PasskeyCredentialEntity credential, byte[] clientData, Func<byte[], byte[]> sign)
+        PasskeyCredentialEntity credential, byte[] clientData, Func<byte[], byte[]> sign, uint signCount = 1)
     {
         var authenticatorData = new Fido2NetLib.Objects.AuthenticatorData(
             SHA256.HashData("localhost"u8),
             Fido2NetLib.Objects.AuthenticatorFlags.UP | Fido2NetLib.Objects.AuthenticatorFlags.UV,
-            signCount: 1, null, null).ToByteArray();
+            signCount, null, null).ToByteArray();
 
         return System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAssertionRawResponse
         {
@@ -937,6 +939,7 @@ public class PasskeyServiceTests
         return ActivatorUtilities.CreateInstance<PasskeyService>(
             provider,
             new PasskeyCredentialRepository(contexts),
+            _spent,
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             dataProtection ?? new EphemeralDataProtectionProvider(),
@@ -980,6 +983,295 @@ public class PasskeyServiceTests
                 ClientDataJson = ClientData("webauthn.create", optionsJson, origin),
             },
         });
+    }
+
+    #endregion
+
+    #region A challenge completes one ceremony
+
+    private const string SpentChallengeMessage = "*already been presented*";
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(0u)]
+    [InlineData(1u)]
+    public async Task AnAssertionChallenge_CompletesOneCeremony(uint signCount)
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var assertion = SignedAssertion(credential, options.OptionsJson,
+            signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1),
+            signCount: signCount);
+
+        await service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId);
+        var again = () => service.CompleteAssertionAsync(assertion, options.ChallengeToken, _tenantId);
+
+        await again.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnAssertionChallenge_IsSpentByARefusedAttempt()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+
+        var refused = () => service.CompleteAssertionAsync(
+            SignedAssertion(credential, options.OptionsJson, _ => [0]), options.ChallengeToken, _tenantId);
+        await refused.Should().ThrowAsync<Fido2VerificationException>();
+
+        var valid = () => service.CompleteAssertionAsync(
+            SignedAssertion(credential, options.OptionsJson,
+                signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            options.ChallengeToken, _tenantId);
+        await valid.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+        (await _dbContext.PasskeyCredentials.AsNoTracking().SingleAsync(c => c.Id == credential.Id))
+            .LastUsedAt.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnAssertionChallenge_IsSpentUntilItsTokenExpires()
+    {
+        var service = CreateService();
+        var options = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+
+        await Record.ExceptionAsync(() => service.CompleteAssertionAsync("{}", options.ChallengeToken, _tenantId));
+
+        using var json = System.Text.Json.JsonDocument.Parse(options.OptionsJson);
+        _spent.Spent.Should().ContainKey(json.RootElement.GetProperty("challenge").GetString()!)
+            .WhoseValue.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(5), TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>A challenge token in the shape every build since tokens named their purpose has minted.</summary>
+    private static string MintedToken(
+        EphemeralDataProtectionProvider provider, string optionsJson, string purpose, Guid? subjectId,
+        PasskeyRegistrationFlow? flow = null) =>
+        provider.CreateProtector("Nocturne.Passkey.Challenge").Protect(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            OptionsJson = optionsJson,
+            SubjectId = subjectId,
+            Purpose = purpose,
+            Flow = flow,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+        }));
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnAssertionChallengeMintedBeforeTheSpendWasRecorded_CompletesOneCeremony()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        var provider = new EphemeralDataProtectionProvider();
+        var service = CreateService(dataProtection: provider);
+        var optionsJson = (await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId)).OptionsJson;
+        var token = MintedToken(provider, optionsJson, "assertion", subjectId: null);
+        var assertion = SignedAssertion(credential, optionsJson,
+            signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1), signCount: 0);
+
+        (await service.CompleteAssertionAsync(assertion, token, _tenantId)).SubjectId.Should().Be(_subjectId);
+        var again = () => service.CompleteAssertionAsync(assertion, token, _tenantId);
+
+        await again.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AChallengeTokenWhoseOptionsCarryNoChallenge_IsRefused()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var service = CreateService(dataProtection: provider);
+        var token = MintedToken(provider, "{\"challenge\":\"\"}", "assertion", subjectId: null);
+
+        var act = () => service.CompleteAssertionAsync("{}", token, _tenantId);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*carries no challenge*"))
+            .Which.Message.Should().NotContain("already been presented");
+        _spent.Spent.Should().BeEmpty();
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(EveryFlow))]
+    public async Task ARegistrationChallenge_CompletesOneCeremony_EvenForAnotherAuthenticator(PasskeyRegistrationFlow flow)
+    {
+        using var first = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var second = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+        var options = await service.GenerateRegistrationOptionsAsync(_subjectId, "rhys", flow);
+
+        await service.CompleteRegistrationAsync(
+            Attestation(first, options.OptionsJson, "https://localhost"), options.ChallengeToken, flow, _tenantId, _subjectId);
+        var again = () => service.CompleteRegistrationAsync(
+            Attestation(second, options.OptionsJson, "https://localhost"), options.ChallengeToken, flow, _tenantId, _subjectId);
+
+        await again.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+        (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistrationChallenge_IsSpentByARefusedAttempt()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+        var options = await service.GenerateRegistrationOptionsAsync(_subjectId, "rhys", PasskeyRegistrationFlow.OwnAccount);
+
+        var refused = () => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://cgm.example.com"), options.ChallengeToken,
+            PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId);
+        await refused.Should().ThrowAsync<Fido2VerificationException>();
+
+        var valid = () => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId);
+        await valid.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+        (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistrationChallengeMintedBeforeTheSpendWasRecorded_CompletesOneCeremony()
+    {
+        using var first = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var second = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var protection = new EphemeralDataProtectionProvider();
+        var service = RegisteredService(provider, dataProtection: protection);
+        var optionsJson = (await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.MemberInvite)).OptionsJson;
+        var token = MintedToken(protection, optionsJson, "registration", _subjectId, PasskeyRegistrationFlow.MemberInvite);
+
+        await service.CompleteRegistrationAsync(
+            Attestation(first, optionsJson, "https://localhost"), token, PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId);
+        var again = () => service.CompleteRegistrationAsync(
+            Attestation(second, optionsJson, "https://localhost"), token, PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId);
+
+        await again.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistrationChallengeForAnotherSubject_IsRefusedWithoutBeingSpent()
+    {
+        var service = CreateService();
+        var options = await service.GenerateRegistrationOptionsAsync(
+            Guid.CreateVersion7(), "other", PasskeyRegistrationFlow.OwnAccount);
+
+        var act = () => service.CompleteRegistrationAsync(
+            "{}", options.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, _tenantId, expectedSubjectId: _subjectId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not issued for the enrolling subject*");
+        _spent.Spent.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A service whose credential, subject and membership stores refuse every call, so a test that
+    /// passes proves none of them was reached.
+    /// </summary>
+    private static PasskeyService ServiceThatReadsNoCredential(
+        ISpentPasskeyChallengeRepository spent, IDataProtectionProvider dataProtection) =>
+        new(
+            new Mock<IPasskeyCredentialRepository>(MockBehavior.Strict).Object,
+            spent,
+            new Mock<ISubjectRepository>(MockBehavior.Strict).Object,
+            new Mock<ITenantMemberService>(MockBehavior.Strict).Object,
+            dataProtection, RelyingParty("localhost"), NullLogger<PasskeyService>.Instance,
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Development"), TimeProvider.System);
+
+    private static Mock<ISpentPasskeyChallengeRepository> SpendAnswering(bool spent)
+    {
+        var mock = new Mock<ISpentPasskeyChallengeRepository>();
+        mock.Setup(s => s.TrySpendAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spent);
+        return mock;
+    }
+
+    private static Mock<ISpentPasskeyChallengeRepository> SpendThrowing()
+    {
+        var mock = new Mock<ISpentPasskeyChallengeRepository>();
+        mock.Setup(s => s.TrySpendAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new SpendStoreUnavailableException());
+        return mock;
+    }
+
+    private sealed class SpendStoreUnavailableException : System.Data.Common.DbException;
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ASpentAssertionChallenge_IsRefusedBeforeTheCredentialOrMembershipIsRead()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        var provider = new EphemeralDataProtectionProvider();
+        var options = await CreateService(dataProtection: provider).GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var service = ServiceThatReadsNoCredential(SpendAnswering(false).Object, provider);
+
+        var act = () => service.CompleteAssertionAsync(
+            SignedAssertion(credential, options.OptionsJson,
+                signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            options.ChallengeToken, _tenantId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ASpentRegistrationChallenge_IsRefusedBeforeAnyCredentialIsReadOrStored()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var provider = new EphemeralDataProtectionProvider();
+        var options = await CreateService(dataProtection: provider).GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.OwnAccount);
+        var service = ServiceThatReadsNoCredential(SpendAnswering(false).Object, provider);
+
+        var act = () => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(SpentChallengeMessage);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnAssertion_WhoseSpendCannotBeRecorded_FailsAsAnErrorRatherThanARefusal()
+    {
+        using var key = RSA.Create(2048);
+        var credential = await SeedActiveMemberCredentialAsync(key);
+        var provider = new EphemeralDataProtectionProvider();
+        var options = await CreateService(dataProtection: provider).GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+        var service = ServiceThatReadsNoCredential(SpendThrowing().Object, provider);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteAssertionAsync(
+            SignedAssertion(credential, options.OptionsJson,
+                signed => key.SignData(signed, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)),
+            options.ChallengeToken, _tenantId));
+
+        thrown.Should().BeOfType<SpendStoreUnavailableException>(
+            "login answers InvalidOperationException, Fido2VerificationException and JsonException as a refusal");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ARegistration_WhoseSpendCannotBeRecorded_FailsAsAnErrorAndStoresNothing()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var provider = new EphemeralDataProtectionProvider();
+        var options = await CreateService(dataProtection: provider).GenerateRegistrationOptionsAsync(
+            _subjectId, "rhys", PasskeyRegistrationFlow.AccessRequest);
+        var service = ServiceThatReadsNoCredential(SpendThrowing().Object, provider);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.AccessRequest, _tenantId, _subjectId));
+
+        thrown.Should().BeOfType<SpendStoreUnavailableException>();
     }
 
     #endregion
@@ -1054,7 +1346,7 @@ public class PasskeyServiceTests
         var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
         var contexts = _dbContext.AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
+            new PasskeyCredentialRepository(contexts), _spent, new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             dataProtectionProvider, RelyingParty(rpId), logger, environment, TimeProvider.System);
     }
 

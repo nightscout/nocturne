@@ -188,6 +188,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TotpStepUpTokenEntity> TotpStepUpTokens { get; set; }
 
+    public DbSet<SpentPasskeyChallengeEntity> SpentPasskeyChallenges { get; set; }
+
     public DbSet<TrustedDeviceEntity> TrustedDevices { get; set; }
 
     /// <summary>

@@ -39,7 +39,7 @@ public class PasskeyCeremonyHostExtensionsTests
     {
         var contexts = TestDbContextFactory.CreateInMemoryContext().AsFactory();
         return new PasskeyService(
-            new PasskeyCredentialRepository(contexts), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
+            new PasskeyCredentialRepository(contexts), new SpentPasskeyChallenges(), new SubjectRepository(contexts, AccountLinkRoutes.Off), new TenantMemberService(new TenantMembershipRepository(contexts, AccountLinkRoutes.Off), TimeProvider.System),
             new EphemeralDataProtectionProvider(),
             PasskeyServiceTests.RelyingParty(rpId),
             NullLogger<PasskeyService>.Instance,
