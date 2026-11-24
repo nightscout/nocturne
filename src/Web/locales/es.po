@@ -394,6 +394,7 @@ msgstr "N"
 #: ../portal/src/lib/components/SiteHeader.svelte
 #: ../portal/src/routes/features/+page.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
+#: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
@@ -2639,6 +2640,7 @@ msgstr "No hay conectores del servidor registrados en esta instalación."
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Active"
 msgstr "Activo"
@@ -4554,6 +4556,7 @@ msgstr "Ninguna comida coincide con los filtros actuales."
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 #: src/lib/constants/entry-category-labels.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Insulin"
 msgstr "Insulina"
@@ -6872,6 +6875,7 @@ msgstr "Actividad"
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
+#: src/lib/components/status-pills/LoopPill.svelte
 msgid "Loop"
 msgstr "Loop"
 
@@ -7130,6 +7134,7 @@ msgstr "Información"
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Warning"
 msgstr "Advertencia"
 
@@ -7142,6 +7147,7 @@ msgstr "Riesgo"
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Urgent"
 msgstr "Urgente"
 
@@ -8011,6 +8017,7 @@ msgstr "Ninguno"
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Nightscout"
 msgstr "Nightscout"
@@ -11497,6 +11504,7 @@ msgstr "Métricas del sistema automatizado de administración de insulina"
 msgid "CGM"
 msgstr "CGM"
 
+#: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/people/PeopleRoster.svelte
 #: src/lib/components/reports/AidSystemUseCard.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
@@ -23984,6 +23992,7 @@ msgstr "Hora"
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "In range"
 msgstr "En rango"
 
@@ -33935,6 +33944,7 @@ msgstr "Variación de glucemia"
 msgid "Last updated"
 msgstr "Última actualización"
 
+#: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 msgid "<0/> Demo mode"
 msgstr "<0/> Modo de demostración"
@@ -49905,4 +49915,16 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "You are not a member of this site. Ask the site owner for access."
+msgstr ""
+
+#: src/lib/components/dashboard/CurrentBGDisplay.svelte
+msgid "Hours:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Forecast"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Use the Nightscout dashboard layout, pills, and chart"
 msgstr ""
