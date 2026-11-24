@@ -120,6 +120,28 @@
   // The Nightscout theme draws cgm-remote-monitor's focus and context charts: no card chrome,
   // no legend, ticks inside the right edge. Paper keeps the default chart.
   const nightscout = $derived(colorTheme.current === "nightscout" && !print.active);
+  /** Below this the focus chart has no room for its treatment bubbles. */
+  const NIGHTSCOUT_MIN_HEIGHT = 360;
+
+  // index.js: the charts fill the window below the header, 70% focus and 30% context (chart.js).
+  let nightscoutFrame = $state<HTMLDivElement>();
+  let nightscoutHeight = $state(0);
+  $effect(() => {
+    const frame = nightscoutFrame;
+    if (!frame) return;
+    const measure = () => {
+      const top = frame.getBoundingClientRect().top + window.scrollY;
+      nightscoutHeight = Math.max(NIGHTSCOUT_MIN_HEIGHT, window.innerHeight - top - 10);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  });
 
   const chartPadding = $derived(
     nightscout
@@ -311,7 +333,7 @@
       printing={print.active}
       padding={chartPadding}
       {brushDomain}
-      heightClass={heightClass ?? (nightscout ? "h-[420px] @md:h-[480px]" : undefined)}
+      heightClass={heightClass ?? (nightscout ? "h-(--ns-focus-height)" : undefined)}
       variant={nightscout ? "nightscout" : "default"}
       draw={plotDrawn}
       bind:plotWidth
@@ -374,7 +396,13 @@
 
 <div class="@container/chart-card" bind:clientWidth={cardWidth}>
   {#if nightscout}
-    <div class="@container bg-(--ns-chart-bg)" data-testid="nightscout-chart">
+    <div
+      bind:this={nightscoutFrame}
+      class="@container bg-(--ns-chart-bg)"
+      style:--ns-focus-height="{Math.round((nightscoutHeight || 600) * 0.7)}px"
+      style:--ns-context-height="{Math.round((nightscoutHeight || 600) * 0.3)}px"
+      data-testid="nightscout-chart"
+    >
       {@render chartBody()}
     </div>
   {:else}
