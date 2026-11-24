@@ -5,6 +5,8 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
+using System.Net.WebSockets;
+using System.Web;
 using SocketIOClient;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -147,18 +149,19 @@ public class NightscoutConnectorBackgroundService
             ? config.Url
             : config.RealtimeUrl;
 
-        if (ResolveListenerBaseUrl(realtimeUrl, tenantSlug) is not { } socketUrl)
+        if (ResolveListenerBaseUrl(realtimeUrl, tenantSlug) is not { } resolvedUrl)
             return;
 
-        var client = new SocketIO(new Uri(socketUrl), new SocketIOOptions
-        {
-            Reconnection = true,
-            ReconnectionAttempts = ReconnectionAttempts,
-            ReconnectionDelayMax = ReconnectionDelayMaxMs,
-        });
+        var address = NightscoutAddress.Resolve(resolvedUrl);
+        var client = NewClient(address);
 
         foreach (var evt in new[] { "dataUpdate", "create", "update" })
             client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
+
+        // Nightscout sends data events only to a socket that has authorized with read access, and
+        // forgets it on every reconnect.
+        var authorize = AuthorizeMessage(config.ApiSecret, address.Token);
+        client.OnConnected += (_, _) => _ = AuthorizeAsync(client, authorize, tenantSlug);
 
         try
         {
@@ -178,7 +181,7 @@ public class NightscoutConnectorBackgroundService
             Logger.LogWarning(
                 ex,
                 "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
-                tenantSlug, socketUrl);
+                tenantSlug, address.Base);
 
             return;
         }
@@ -192,6 +195,57 @@ public class NightscoutConnectorBackgroundService
         Logger.LogInformation(
             "Started real-time listener for Nightscout tenant {TenantSlug}",
             tenantSlug);
+    }
+
+    /// <summary>
+    /// A client for the Socket.IO endpoint of <paramref name="address"/>. The client reads a URL's
+    /// path as a Socket.IO namespace, so a site under a sub-path is reached by its origin and the
+    /// endpoint path instead. The URL's query goes with the handshake, as it goes with every read.
+    /// </summary>
+    internal static SocketIO NewClient(NightscoutAddress address)
+    {
+        var options = new SocketIOOptions
+        {
+            Path = address.SocketIoPath,
+            Reconnection = true,
+            ReconnectionAttempts = ReconnectionAttempts,
+            ReconnectionDelayMax = ReconnectionDelayMaxMs,
+        };
+        if (address.Query is { } query)
+            options.Query = HttpUtility.ParseQueryString(query);
+
+        return new SocketIO(new Uri(address.Origin), options);
+    }
+
+    /// <summary>
+    /// The <c>authorize</c> message Nightscout's own web client sends: the SHA-1 of the API secret
+    /// and the access token, each only when there is one. With neither, Nightscout gives the
+    /// socket its default role, which reads on a site that is readable without a secret.
+    /// </summary>
+    internal static Dictionary<string, object> AuthorizeMessage(string? apiSecret, string? token)
+    {
+        var message = new Dictionary<string, object> { ["client"] = "web", ["history"] = 1 };
+        if (NightscoutConnectorService.ApiSecretHeaderValue(apiSecret) is { } secret)
+            message["secret"] = secret;
+        if (!string.IsNullOrEmpty(token))
+            message["token"] = token;
+        return message;
+    }
+
+    private async Task AuthorizeAsync(SocketIO client, Dictionary<string, object> message, string tenantSlug)
+    {
+        try
+        {
+            await client.EmitAsync("authorize", [message]);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or IOException
+                                       or HttpRequestException or WebSocketException or OperationCanceledException)
+        {
+            Logger.LogWarning(
+                ex,
+                "Could not authorize the Socket.IO listener for tenant {TenantSlug}, will rely on polling",
+                tenantSlug);
+        }
     }
 
     private static async Task DisconnectAndDisposeAsync(SocketIO client)

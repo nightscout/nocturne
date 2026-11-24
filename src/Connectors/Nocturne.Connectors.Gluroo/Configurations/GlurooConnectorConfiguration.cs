@@ -33,4 +33,8 @@ public class GlurooConnectorConfiguration : NightscoutConnectorConfiguration
     {
         ConnectSource = ConnectSource.Gluroo;
     }
+
+    /// <summary>Gluroo Global Connect issues every connection a secret, and reads nothing without it.</summary>
+    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
+    public override string ApiSecret { get; set; } = string.Empty;
 }

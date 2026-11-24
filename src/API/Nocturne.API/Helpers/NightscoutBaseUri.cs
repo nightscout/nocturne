@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Nightscout.Services;
 
 namespace Nocturne.API.Helpers;
 
@@ -8,11 +8,12 @@ namespace Nocturne.API.Helpers;
 /// behind a reverse proxy.
 /// </summary>
 /// <remarks>
-/// A value with no scheme is read as a host and given https, as <see cref="ConnectorUrl.TryResolveBase"/>
-/// reads the connector's URL. A base whose path lacks a trailing slash loses its last segment when
-/// a relative path is resolved against it, and a rooted path discards the base path entirely;
-/// either drops the sub-path. User info, query and fragment are dropped: they would otherwise end
-/// up inside the path, and a Nightscout <c>?token=</c> is a credential.
+/// The address is read by <see cref="NightscoutAddress"/>, as the connector reads it. A base whose
+/// path lacks a trailing slash loses its last segment when a relative path is resolved against it,
+/// and a rooted path discards the base path entirely; either drops the sub-path. The base here
+/// carries no query: a Nightscout <c>?token=</c> is a credential, so what is stored or shown never
+/// holds one. A client that reads the site keeps the query on every request through
+/// <see cref="NightscoutAddress.BaseUri"/> and <see cref="NightscoutAddress.For"/>.
 /// </remarks>
 public static class NightscoutBaseUri
 {
@@ -26,16 +27,8 @@ public static class NightscoutBaseUri
     /// </summary>
     public static bool TryFor(string? nightscoutUrl, [NotNullWhen(true)] out Uri? baseUri)
     {
-        baseUri = null;
-        if (!ConnectorUrl.TryResolveBase(nightscoutUrl?.Trim(), out var resolved)
-            || !Uri.TryCreate(resolved, UriKind.Absolute, out var configured))
-            return false;
-
-        baseUri = new UriBuilder(configured.Scheme, configured.Host, configured.Port)
-        {
-            Path = configured.AbsolutePath.TrimEnd('/') + "/",
-        }.Uri;
-        return true;
+        baseUri = NightscoutAddress.TryResolve(nightscoutUrl, out var address) ? new Uri(address.Base + "/") : null;
+        return baseUri is not null;
     }
 
     /// <inheritdoc cref="TryFor" path="/summary"/>

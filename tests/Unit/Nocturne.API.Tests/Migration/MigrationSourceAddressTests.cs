@@ -24,10 +24,14 @@ public class MigrationSourceAddressTests
     {
         public ConcurrentQueue<Uri> Requests { get; } = new();
 
+        /// <summary>Whether each request carried an <c>api-secret</c> header.</summary>
+        public ConcurrentQueue<bool> CarriedSecret { get; } = new();
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Enqueue(request.RequestUri!);
+            CarriedSecret.Enqueue(request.Headers.Contains("api-secret"));
             var path = request.RequestUri!.AbsolutePath;
             if (!path.StartsWith(Prefix + "/", StringComparison.Ordinal))
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
@@ -76,7 +80,7 @@ public class MigrationSourceAddressTests
 
         var paths = source.Requests.Select(u => u.AbsolutePath).ToList();
         paths.Should().OnlyContain(p => p.StartsWith(Prefix + "/api/", StringComparison.Ordinal));
-        source.Requests.Should().NotContain(u => u.Query.Contains("token"));
+        source.CarriedSecret.Should().OnlyContain(carried => !carried, "the run was given no secret");
         paths.Should().Contain(
         [
             $"{Prefix}/api/v1/count/entries/where",
@@ -90,10 +94,79 @@ public class MigrationSourceAddressTests
         ]);
     }
 
+    /// <summary>
+    /// A URL's query can be the credential: a Nightscout <c>?token=</c>, or a key a proxy checks.
+    /// Every read repeats it, after its own query and never inside the path, and nothing stored or
+    /// shown carries it.
+    /// </summary>
+    [Fact]
+    public async Task A_run_sends_the_urls_query_with_every_read()
+    {
+        var source = new PrefixedNightscout();
+        await using var provider = MigrationJobHarness.BuildProvider(source);
+
+        var status = await MigrationJobHarness.RunAsync(
+            provider,
+            onCreated: null,
+            ["subjects", "entries", "treatments", "profile", "devicestatus", "food"],
+            nightscoutUrl: "https://example-nightscout.invalid/nightscout/?token=synthetic-token&key=proxy");
+
+        status.State.Should().Be(MigrationJobState.Completed, status.ErrorMessage);
+        source.Requests.Should().HaveCountGreaterThan(5).And.OnlyContain(u =>
+            u.AbsolutePath.StartsWith(Prefix + "/api/", StringComparison.Ordinal)
+            && !u.AbsolutePath.Contains("token")
+            && u.Query.Contains("token=synthetic-token&key=proxy"));
+        source.Requests.Select(u => u.AbsolutePath).Should().Contain(
+        [
+            $"{Prefix}/api/v1/count/entries/where",
+            $"{Prefix}/api/v2/authorization/subjects",
+            $"{Prefix}/api/v1/entries.json",
+            $"{Prefix}/api/v1/treatments.json",
+            $"{Prefix}/api/v1/profile.json",
+            $"{Prefix}/api/v1/devicestatus.json",
+            $"{Prefix}/api/v1/food.json",
+        ]);
+        MigrationJob.ApiSourceIdentifier("https://example-nightscout.invalid/nightscout/?token=synthetic-token&key=proxy")
+            .Should().Be("https://example-nightscout.invalid/nightscout", "the source a run records is stored");
+    }
+
+    [Fact]
+    public async Task The_connection_test_sends_the_urls_query_with_the_status_read()
+    {
+        var source = new PrefixedNightscout();
+        await using var provider = MigrationJobHarness.BuildProvider(source);
+        var service = MigrationJobHarness.CreateService(provider);
+
+        var result = await service.TestConnectionAsync(new TestMigrationConnectionRequest
+        {
+            Mode = MigrationMode.Api,
+            NightscoutUrl = "https://example-nightscout.invalid/nightscout?token=synthetic-token#section",
+        });
+
+        result.IsSuccess.Should().BeTrue(result.ErrorMessage);
+        result.SiteName.Should().Be("https://example-nightscout.invalid/nightscout");
+        source.Requests.Select(u => u.AbsoluteUri).Should().Equal(
+            "https://example-nightscout.invalid/nightscout/api/v1/status?token=synthetic-token");
+        source.CarriedSecret.Should().Equal(false);
+    }
+
+    [Fact]
+    public async Task A_run_with_a_secret_sends_it_with_every_read()
+    {
+        var source = new PrefixedNightscout();
+        await using var provider = MigrationJobHarness.BuildProvider(source);
+
+        var status = await MigrationJobHarness.RunAsync(
+            provider, onCreated: null, ["entries", "profile"],
+            nightscoutUrl: "https://example-nightscout.invalid/nightscout", apiSecret: "secret");
+
+        status.State.Should().Be(MigrationJobState.Completed, status.ErrorMessage);
+        source.CarriedSecret.Should().NotBeEmpty().And.OnlyContain(carried => carried);
+    }
+
     [Theory]
     [InlineData("https://example-nightscout.invalid/nightscout")]
     [InlineData("https://example-nightscout.invalid/nightscout/")]
-    [InlineData("https://example-nightscout.invalid/nightscout?token=synthetic-token#section")]
     [InlineData("example-nightscout.invalid/nightscout")]
     public async Task The_connection_test_reads_status_under_the_configured_path(string nightscoutUrl)
     {

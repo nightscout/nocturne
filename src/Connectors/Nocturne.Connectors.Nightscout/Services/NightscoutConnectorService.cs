@@ -25,7 +25,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     // tenant sync, and SyncDataAsync is not invoked concurrently on the same instance.
     private TConfig _currentConfig;
     private string? _apiSecretHash;
-    private string? _resolvedBaseUrl;
+    private NightscoutAddress? _address;
 
     public NightscoutConnectorServiceBase(
         HttpClient httpClient,
@@ -62,29 +62,20 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<bool> AuthenticateWithConfigAsync(TConfig config, CancellationToken cancellationToken)
     {
         _currentConfig = config;
-        _resolvedBaseUrl = ConnectorUrl.ResolveBase(config.Url, "Nightscout");
-
-        if (string.IsNullOrEmpty(config.ApiSecret))
-        {
-            _logger.LogError(
-                "[{ConnectorSource}] API secret is not configured",
-                ConnectorSource);
-            TrackFailedAuthentication(NightscoutMessages.ApiSecretMissing);
-            return false;
-        }
-
-        _apiSecretHash = ComputeApiSecretHash(config.ApiSecret);
+        _address = NightscoutAddress.Resolve(config.Url);
+        _apiSecretHash = ApiSecretHeaderValue(config.ApiSecret);
 
         _logger.LogDebug(
-            "[{ConnectorSource}] Authenticating with Nightscout at {Url}",
+            "[{ConnectorSource}] Authenticating with Nightscout at {Url} ({Credential})",
             ConnectorSource,
-            _resolvedBaseUrl);
+            _address.Base,
+            _apiSecretHash is null ? "no API secret" : "API secret");
 
         try
         {
             var headers = GetAuthHeaders();
             var response = await GetWithHeadersAsync(
-                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers, cancellationToken);
+                _address.For("/api/v1/entries.json?count=1"), headers, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -95,7 +86,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
-                        _resolvedBaseUrl);
+                        _address.Base);
                     TrackFailedAuthentication(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
@@ -108,7 +99,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (int)response.StatusCode,
                     body);
                 TrackFailedAuthentication(NightscoutMessages.ForStatus(
-                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe));
+                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe,
+                    secretSent: _apiSecretHash is not null));
                 return false;
             }
 
@@ -133,7 +125,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
-                _resolvedBaseUrl);
+                _address.Base);
             return false;
         }
     }
@@ -754,7 +746,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             ConnectorSource, deleted, gone.Count);
     }
 
-    private string PresenceKey(string id) => $"{_resolvedBaseUrl}\n{id}";
+    private string PresenceKey(string id) => $"{_address?.Base}\n{id}";
 
     private bool IsConfirmedPresent(string id, DateTime now)
     {
@@ -861,7 +853,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<T?> FetchDataCoreAsync<T>(string url, CancellationToken cancellationToken) where T : class
     {
         var headers = GetAuthHeaders();
-        var absoluteUrl = _resolvedBaseUrl != null ? $"{_resolvedBaseUrl}{url}" : url;
+        var absoluteUrl = _address?.For(url) ?? url;
         var response = await GetWithHeadersAsync(absoluteUrl, headers, cancellationToken);
 
         await response.EnsureSuccessWithBodyAsync(cancellationToken);
@@ -901,13 +893,17 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private Dictionary<string, string> GetAuthHeaders()
-    {
-        return new Dictionary<string, string>
-        {
-            ["api-secret"] = _apiSecretHash ?? ComputeApiSecretHash(_currentConfig.ApiSecret)
-        };
-    }
+    private Dictionary<string, string>? GetAuthHeaders() =>
+        (_apiSecretHash ?? ApiSecretHeaderValue(_currentConfig.ApiSecret)) is { } hash
+            ? new Dictionary<string, string> { ["api-secret"] = hash }
+            : null;
+
+    /// <summary>
+    ///     The <c>api-secret</c> header for <paramref name="apiSecret"/>, or null when there is no
+    ///     secret to send: a hash of an empty secret is a wrong secret, not an absent one.
+    /// </summary>
+    public static string? ApiSecretHeaderValue(string? apiSecret) =>
+        string.IsNullOrWhiteSpace(apiSecret) ? null : ComputeApiSecretHash(apiSecret);
 
     internal static string ComputeApiSecretHash(string apiSecret)
     {
