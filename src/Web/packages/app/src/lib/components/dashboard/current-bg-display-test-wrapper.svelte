@@ -4,14 +4,15 @@
 
   interface Props {
     showPills?: boolean;
+    layout?: "default" | "nightscout";
   }
 
-  let { showPills = true }: Props = $props();
+  let { showPills = true, layout = "default" }: Props = $props();
 </script>
 
 <!-- The dashboard page is the container the mobile rail's breakpoint reads. -->
 <Tooltip.Provider>
   <div class="@container">
-    <CurrentBGDisplay {showPills} />
+    <CurrentBGDisplay {showPills} {layout} />
   </div>
 </Tooltip.Provider>

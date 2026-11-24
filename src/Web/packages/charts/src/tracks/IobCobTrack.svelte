@@ -1,11 +1,16 @@
 <script lang="ts">
   import { Area, ChartClipPath, Highlight, getChartContext } from "layerchart";
-  import { curveMonotoneX } from "d3";
+  import { bisector, curveMonotoneX } from "d3";
+  import {
+    bubbleScale,
+    DEFAULT_BUBBLE_CARB_RATIO,
+    treatmentBubble,
+  } from "../view/nightscout-sizing.js";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
   import { carbMarkerKey, markerKey } from "../keys.js";
   import { getGlucoseChartContext } from "../context.svelte.js";
-  import type { SeriesPoint } from "../view/chart-data-view.svelte.js";
+  import type { GlucosePoint, SeriesPoint } from "../view/chart-data-view.svelte.js";
   import {
     placeCenteredLabels,
     placeTrailingLabels,
@@ -21,9 +26,17 @@
     carbRatio?: number;
     onMarkerClick?: (treatmentId: string) => void;
     onPointClick?: (time: Date) => void;
+    /**
+     * "nightscout" draws each entry as cgm-remote-monitor does: a carb/insulin pie on the
+     * reading nearest its time, sized by its amount, with no IOB/COB track.
+     */
+    variant?: "default" | "nightscout";
   }
 
-  let { carbRatio = 15, onMarkerClick, onPointClick }: Props = $props();
+  let { carbRatio, onMarkerClick, onPointClick, variant = "default" }: Props = $props();
+  const ratio = $derived(
+    carbRatio ?? (variant === "nightscout" ? DEFAULT_BUBBLE_CARB_RATIO : 15)
+  );
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
@@ -110,6 +123,43 @@
     return placeTrailingLabels(named, glyphXs, MARKER_HALF_WIDTH, MEAL_LABEL_GAP, amountCharWidth);
   });
 
+  // ---- Nightscout bubbles ----
+  // One entry can carry both a bolus and carbs; the engine hands them over as two markers,
+  // and both halves of the pie take the entry's size.
+  const entryKey = (id: string | undefined, time: Date) => id || `t${time.getTime()}`;
+  const entryAmounts = $derived.by(() => {
+    const amounts: Record<string, { carbs: number; insulin: number }> = {};
+    const add = (key: string, carbs: number, insulin: number) => {
+      const entry = (amounts[key] ??= { carbs: 0, insulin: 0 });
+      entry.carbs += carbs;
+      entry.insulin += insulin;
+    };
+    if (showBolus) for (const m of bolusMarkers) add(entryKey(m.treatmentId, m.time), 0, m.insulin ?? 0);
+    if (showCarbs) for (const m of carbMarkers) add(entryKey(m.treatmentId, m.time), m.carbs ?? 0, 0);
+    return amounts;
+  });
+  const entryCount = $derived(Object.keys(entryAmounts).length);
+  const bubbleDivisor = $derived.by(() => {
+    const [from, to] = chartCtx.xScale.domain();
+    return bubbleScale(chartCtx.width, Number(new Date(to)) - Number(new Date(from)));
+  });
+  function bubbleFor(key: string) {
+    const entry = entryAmounts[key] ?? { carbs: 0, insulin: 0 };
+    return {
+      ...entry,
+      bubble: treatmentBubble(entry.carbs, entry.insulin, ratio, bubbleDivisor, entryCount),
+    };
+  }
+
+  const glucoseData = $derived(ctx.view.glucoseData);
+  const nearestReading = bisector((d: GlucosePoint) => d.time).center;
+  /** Nightscout pins an entry to the reading nearest its time. */
+  function glucoseY(time: Date): number | null {
+    if (glucoseData.length === 0) return null;
+    const sgv = glucoseData[nearestReading(glucoseData, time)]?.sgv;
+    return sgv == null ? null : chartCtx.yScale(ctx.layout.glucose.scale(sgv));
+  }
+
   /** Food names win over the meal period, which only stands in when none were logged. */
   function carbMarkerName(marker: CarbMarkerItem): string | undefined {
     if (marker.label) return marker.label;
@@ -140,7 +190,49 @@
   }
 </script>
 
-{#if iobCobLayout}
+{#if variant === "nightscout"}
+  <ChartClipPath>
+    {#if showBolus}
+      {#each bolusMarkers as marker, i (markerKey(marker.treatmentId, marker.time, i))}
+        {@const yPos = glucoseY(marker.time)}
+        {@const entry = bubbleFor(entryKey(marker.treatmentId, marker.time))}
+        {#if yPos != null && (marker.insulin ?? 0) > 0}
+          <BolusMarker
+            xPos={chartCtx.xScale(marker.time)}
+            {yPos}
+            insulin={marker.insulin ?? 0}
+            isOverride={marker.isOverride ?? false}
+            bolusType={marker.bolusType}
+            treatmentId={marker.treatmentId ?? ""}
+            onMarkerClick={effectiveOnMarkerClick}
+            shape="bubble"
+            bubble={entry.bubble}
+            outlineCarbHalf={entry.carbs <= 0}
+          />
+        {/if}
+      {/each}
+    {/if}
+    {#if showCarbs}
+      {#each carbMarkers as marker, i (markerKey(carbMarkerKey(marker), marker.time, i))}
+        {@const yPos = glucoseY(marker.time)}
+        {@const entry = bubbleFor(entryKey(marker.treatmentId, marker.time))}
+        {#if yPos != null && (marker.carbs ?? 0) > 0}
+          <CarbMarker
+            xPos={chartCtx.xScale(marker.time)}
+            {yPos}
+            carbs={marker.carbs ?? 0}
+            label={null}
+            treatmentId={marker.treatmentId ?? ""}
+            onMarkerClick={effectiveOnMarkerClick}
+            shape="bubble"
+            bubble={entry.bubble}
+            outlineInsulinHalf={entry.insulin <= 0}
+          />
+        {/if}
+      {/each}
+    {/if}
+  </ChartClipPath>
+{:else if iobCobLayout}
   {@const iobScale = iobCobLayout.scale}
   {@const iobZero = iobCobLayout.zero}
   {@const iobAxisScale = iobCobLayout.axisScale}
@@ -159,7 +251,7 @@
         data={cobData}
         x={(d) => d.time}
         y0={() => iobZero}
-        y1={(d) => iobScale(d.value / carbRatio)}
+        y1={(d) => iobScale(d.value / ratio)}
         motion="spring"
         curve={curveMonotoneX}
         fill=""
@@ -227,7 +319,7 @@
         y={(d) => {
           const cob = findSeriesValue(cobData, d.time);
           if (!cob || cob.value <= 0) return null;
-          return iobScale(cob.value / carbRatio);
+          return iobScale(cob.value / ratio);
         }}
         points={{ class: "fill-carbs" }}
         onPointClick={effectiveOnPointClick
