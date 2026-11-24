@@ -49405,256 +49405,256 @@ msgstr ""
 
 #: ../portal/src/routes/+page.svelte
 msgid "One install, many people. Run a household, a camp, or a community on a single deployment, with each person's data and settings kept apart."
-msgstr ""
+msgstr "Una instalación para varias personas. Aloja a una familia, un campamento o una comunidad en una sola instalación, con los datos y ajustes de cada persona separados."
 
 #: ../portal/src/routes/features/+page.svelte
 msgid "Run a household, a camp, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's."
-msgstr ""
+msgstr "Aloja a una familia, un campamento o una comunidad en una sola instalación. Cada espacio tiene su propio subdominio y la seguridad por filas de la base de datos mantiene separados sus datos."
 
 #: ../portal/src/routes/features/+page.svelte
 msgid "One install for a household, a camp, or a community"
-msgstr ""
+msgstr "Una instalación para una familia, un campamento o una comunidad"
 
 #: src/lib/components/members/LockedOutMembers.svelte
 msgid "This member holds permissions that you do not hold. Ask an owner to create the link."
-msgstr ""
+msgstr "Este miembro tiene permisos que tú no tienes. Pide a un propietario que cree el enlace."
 
 #: src/lib/components/members/LockedOutMembers.svelte
 msgid "You can see the last 24 hours only. Ask an owner to create the link."
-msgstr ""
+msgstr "Solo puedes ver las últimas 24 horas. Pide a un propietario que cree el enlace."
 
 #: src/lib/components/members/LockedOutMembers.svelte
 msgid "This member's access lasts longer than yours. Ask an owner to create the link."
-msgstr ""
+msgstr "El acceso de este miembro caduca después que el tuyo. Pide a un propietario que cree el enlace."
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "overview"
-msgstr ""
+msgstr "vista general"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "summary"
-msgstr ""
+msgstr "resumen"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "report card"
-msgstr ""
+msgstr "ficha de resultados"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "snapshot"
-msgstr ""
+msgstr "vista rápida"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "ambulatory glucose profile"
-msgstr ""
+msgstr "perfil glucémico ambulatorio"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "percentiles"
-msgstr ""
+msgstr "percentiles"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "target range"
-msgstr ""
+msgstr "intervalo objetivo"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "spread"
-msgstr ""
+msgstr "dispersión"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "signal"
-msgstr ""
+msgstr "señal"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "rejected uploads"
-msgstr ""
+msgstr "cargas rechazadas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "a1c"
-msgstr ""
+msgstr "a1c"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "hba1c"
-msgstr ""
+msgstr "hba1c"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "glycated hemoglobin"
-msgstr ""
+msgstr "hemoglobina glucosilada"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "custom"
-msgstr ""
+msgstr "personalizado"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "saved"
-msgstr ""
+msgstr "guardados"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "builder"
-msgstr ""
+msgstr "editor"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "report builder"
-msgstr ""
+msgstr "editor de informes"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "annual"
-msgstr ""
+msgstr "anual"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "yearly"
-msgstr ""
+msgstr "anual"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "12 month"
-msgstr ""
+msgstr "12 meses"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "heatmap"
-msgstr ""
+msgstr "mapa de calor"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "glucose readings"
-msgstr ""
+msgstr "lecturas de glucemia"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "log"
-msgstr ""
+msgstr "registro"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "history"
-msgstr ""
+msgstr "historial"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "daily"
-msgstr ""
+msgstr "diario"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "today"
-msgstr ""
+msgstr "hoy"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "yesterday"
-msgstr ""
+msgstr "ayer"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "comparison"
-msgstr ""
+msgstr "comparación"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "weekly"
-msgstr ""
+msgstr "semanal"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "compare"
-msgstr ""
+msgstr "comparar"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "date ranges"
-msgstr ""
+msgstr "intervalos de fechas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "hourly"
-msgstr ""
+msgstr "por horas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "time of day"
-msgstr ""
+msgstr "hora del día"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "best hours"
-msgstr ""
+msgstr "mejores horas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "worst hours"
-msgstr ""
+msgstr "peores horas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "activity"
-msgstr ""
+msgstr "actividad"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "movement"
-msgstr ""
+msgstr "movimiento"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "BPM"
-msgstr ""
+msgstr "lpm"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "cardio"
-msgstr ""
+msgstr "cardio"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "overnight"
-msgstr ""
+msgstr "durante la noche"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "night time"
-msgstr ""
+msgstr "horario nocturno"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "sleeping"
-msgstr ""
+msgstr "sueño"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "carbs"
-msgstr ""
+msgstr "hidratos de carbono"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "corrections"
-msgstr ""
+msgstr "correcciones"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "basal rate"
-msgstr ""
+msgstr "tasa basal"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "background insulin"
-msgstr ""
+msgstr "insulina basal"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "total daily dose"
-msgstr ""
+msgstr "dosis diaria total"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "basal bolus ratio"
-msgstr ""
+msgstr "proporción basal/bolus"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "infusion site"
-msgstr ""
+msgstr "zona de infusión"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "rotation"
-msgstr ""
+msgstr "rotación"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "set change"
-msgstr ""
+msgstr "cambio del equipo de infusión"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "insulin dosing profile"
-msgstr ""
+msgstr "perfil de administración de insulina"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "daily insulin"
-msgstr ""
+msgstr "insulina diaria"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "dose adjustment"
-msgstr ""
+msgstr "ajuste de dosis"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "pump battery"
-msgstr ""
+msgstr "pila de la bomba"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "phone battery"
-msgstr ""
+msgstr "batería del teléfono"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "charge"
-msgstr ""
+msgstr "carga"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -49662,144 +49662,144 @@ msgstr ""
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "loop analysis"
-msgstr ""
+msgstr "análisis del bucle"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "loopalyzer"
-msgstr ""
+msgstr "loopalyzer"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "AID"
-msgstr ""
+msgstr "AID"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "SMB"
-msgstr ""
+msgstr "SMB"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "meal response"
-msgstr ""
+msgstr "respuesta a las comidas"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "unannounced meals"
-msgstr ""
+msgstr "comidas sin anunciar"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "predictions"
-msgstr ""
+msgstr "predicciones"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "forecast"
-msgstr ""
+msgstr "previsión"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "open loop"
-msgstr ""
+msgstr "bucle abierto"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "limits"
-msgstr ""
+msgstr "límites"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "sensitivity ratio"
-msgstr ""
+msgstr "coeficiente de sensibilidad"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "basal"
-msgstr ""
+msgstr "basal"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "profile settings"
-msgstr ""
+msgstr "ajustes del perfil"
 
 #. 0: invite.createdByName
 #: src/lib/components/members/PendingInvitesList.svelte
 msgid "Made by {0} ·"
-msgstr ""
+msgstr "Creado por {0} ·"
 
 #. 0: formatMediumDateTime(invite.expiresAt)
 #: src/lib/components/members/PendingInvitesList.svelte
 msgid "<0/> Expires {0} <1/> <2/> <3/>"
-msgstr ""
+msgstr "<0/> Caduca {0} <1/> <2/> <3/>"
 
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You made this invite, so you cannot accept it. Ask another member to invite you."
-msgstr ""
+msgstr "Has creado esta invitación, así que no puedes aceptarla. Pide a otro miembro que te invite."
 
 #: src/lib/components/members/MemberCard.svelte
 msgid "Reasons for access"
-msgstr ""
+msgstr "Motivos del acceso"
 
 #. 0: reason.teamName
 #: src/lib/components/members/MemberCard.svelte
 msgid "Staff of the team {0}"
-msgstr ""
+msgstr "Personal del equipo {0}"
 
 #: src/lib/components/members/MemberCard.svelte
 msgid "Direct access"
-msgstr ""
+msgstr "Acceso directo"
 
 #: src/lib/components/members/MemberCard.svelte
 msgid "Last 24 hours only"
-msgstr ""
+msgstr "Solo las últimas 24 horas"
 
 #. 0: formatShortDate(accessEndDate(reason.accessEndsAt), true)
 #: src/lib/components/members/MemberCard.svelte
 msgid "Ended {0}"
-msgstr ""
+msgstr "Finalizó {0}"
 
 #: src/lib/components/members/MemberCard.svelte
 msgid "This member's direct access has no 24-hour limit, so the 24-hour limit of the team does not apply."
-msgstr ""
+msgstr "El acceso directo de este miembro no tiene un límite de 24 horas, así que el límite del equipo no se aplica."
 
 #: src/lib/components/members/MemberCard.svelte
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "This member has access only through a team. To change it, stop the team's access to this site."
-msgstr ""
+msgstr "Este miembro solo tiene acceso a través de un equipo. Para cambiarlo, retira el acceso del equipo a este sitio."
 
 #. 0: memberFirst; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} joined as staff of the team {1}."
-msgstr ""
+msgstr "{0} se incorporó al equipo {1} como personal."
 
 #. 0: memberFirst
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} joined as staff of a team. The detail is no longer stored."
-msgstr ""
+msgstr "{0} se incorporó a un equipo como personal. El detalle ya no se conserva."
 
 #. 0: memberFirst; 1: entry.team.name
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} is no longer staff of the team {1}."
-msgstr ""
+msgstr "{0} ya no forma parte del personal del equipo {1}."
 
 #. 0: memberFirst
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} is no longer staff of a team. The detail is no longer stored."
-msgstr ""
+msgstr "{0} ya no forma parte del personal de un equipo. El detalle ya no se conserva."
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You cannot approve your own request. Ask another member to approve it."
-msgstr ""
+msgstr "No puedes aprobar tu propia solicitud. Pide a otro miembro que la apruebe."
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Nocturne did not add the passkey. To try again, select Add passkey."
-msgstr ""
+msgstr "Nocturne no pudo añadir la llave de acceso. Para volver a intentarlo, selecciona Añadir llave de acceso."
 
 #: src/lib/teams/member-kind.svelte.ts
 msgid "Staff"
-msgstr ""
+msgstr "Personal"
 
 #: src/lib/teams/problem-messages.svelte.ts
 msgid "Staff cannot have this role ceiling. Choose another role."
-msgstr ""
+msgstr "Este rol no se puede establecer como máximo para el personal. Elige otro rol."
 
 #: src/lib/teams/problem-messages.svelte.ts
 msgid "The end date that this invite gives has passed. Ask a manager of the team for a new link."
-msgstr ""
+msgstr "La fecha de finalización de esta invitación ya ha pasado. Pide a un responsable del equipo un enlace nuevo."
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Time zone <0/> <1/>"
-msgstr ""
+msgstr "Zona horaria <0/> <1/>"
 
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/dashboard/widgets/CurrentGlucoseWidget.svelte
@@ -49807,124 +49807,124 @@ msgstr ""
 #: src/lib/components/layout/SidebarGlucoseWidget.svelte
 #: src/lib/components/layout/SidebarGlucoseWidget.svelte
 msgid "No glucose reading"
-msgstr ""
+msgstr "Sin lectura de glucemia"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "(optional)"
-msgstr ""
+msgstr "(opcional)"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Hide secret"
-msgstr ""
+msgstr "Ocultar secreto"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Show secret"
-msgstr ""
+msgstr "Mostrar secreto"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "<0/> Nocturne keeps secrets encrypted and does not show them again."
-msgstr ""
+msgstr "<0/> Nocturne guarda los secretos cifrados y no vuelve a mostrarlos."
 
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
 msgid "Reservoir level"
-msgstr ""
+msgstr "Nivel del reservorio"
 
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 msgid "Select the pills that show next to the glucose value. Drag a pill to change its position. On a phone, the first four pills show. Trackers that give a warning also show. To see the other pills, select Show all."
-msgstr ""
+msgstr "Selecciona los indicadores que aparecen junto al valor de glucemia. Arrástralos para cambiar su orden. En el móvil se muestran los cuatro primeros y también los seguimientos con avisos. Para ver los demás indicadores, selecciona Mostrar todos."
 
 #: src/lib/components/status-pills/StatusRail.svelte
 msgid "Show fewer"
-msgstr ""
+msgstr "Mostrar menos"
 
 #. 0: daysOption
 #. 0: days
 #: src/lib/components/ui/date-range-picker.svelte
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "{0}d<0/>"
-msgstr ""
+msgstr "{0} d<0/>"
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "See when your profile changed."
-msgstr ""
+msgstr "Consulta cuándo cambió tu perfil."
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "<0/> Nightscout migration"
-msgstr ""
+msgstr "<0/> Migración desde Nightscout"
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "<0/> Fresh start"
-msgstr ""
+msgstr "<0/> Empezar de cero"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Migration settings found"
-msgstr ""
+msgstr "Se han encontrado ajustes de migración"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "The server settings give a migration source, and the form shows them. Check them, then start the migration."
-msgstr ""
+msgstr "El formulario muestra el origen de migración configurado en el servidor. Revísalo e inicia la migración."
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "API secret <0>(optional)</0>"
-msgstr ""
+msgstr "Secreto de la API <0>(opcional)</0>"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Leave the dates empty to import all data."
-msgstr ""
+msgstr "Deja las fechas en blanco para importar todos los datos."
 
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 msgid "Migration status"
-msgstr ""
+msgstr "Estado de la migración"
 
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 msgid "Write-back health (last 24 hours)"
-msgstr ""
+msgstr "Estado de la escritura en el origen (últimas 24 horas)"
 
 #: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
 msgid "Enter the address of your Nightscout site. If the site needs an API secret to show its data, also enter the API secret. Nocturne only reads from the site."
-msgstr ""
+msgstr "Introduce la dirección de tu sitio de Nightscout. Si el sitio requiere un secreto de API para mostrar los datos, introdúcelo también. Nocturne solo lee datos del sitio."
 
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Nocturne can copy the history from a Nightscout site, or start with no data."
-msgstr ""
+msgstr "Nocturne puede copiar el historial de un sitio de Nightscout o empezar sin datos."
 
 #: src/lib/test-stubs/LoginForm.test-stub.svelte
 msgid "Show recovery codes"
-msgstr ""
+msgstr "Mostrar códigos de recuperación"
 
 #: src/lib/components/auth/FirstRecoveryCodes.svelte
 msgid "You are signed in. Your account had no recovery codes, so we made them now."
-msgstr ""
+msgstr "Has iniciado sesión. Tu cuenta no tenía códigos de recuperación, así que los hemos generado."
 
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your passkey is saved, but setup did not finish. Sign in with the passkey you made to continue."
-msgstr ""
+msgstr "Tu llave de acceso se ha guardado, pero la configuración no ha terminado. Inicia sesión con esa llave para continuar."
 
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Go to sign in"
-msgstr ""
+msgstr "Ir al inicio de sesión"
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your passkey is ready."
-msgstr ""
+msgstr "Tu llave de acceso está lista."
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "Nocturne has no account for that sign-in. To get an account, use an invite link."
-msgstr ""
+msgstr "Nocturne no tiene ninguna cuenta asociada a ese inicio de sesión. Usa un enlace de invitación para obtener una cuenta."
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
 msgid "You are not a member of this site. Ask the site owner for access."
-msgstr ""
+msgstr "No eres miembro de este sitio. Pide acceso al propietario del sitio."
 
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 msgid "Hours:"
-msgstr ""
+msgstr "Horas:"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Forecast"
-msgstr ""
+msgstr "Previsión"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Use the Nightscout dashboard layout, pills, and chart"
-msgstr ""
+msgstr "Usar el diseño, los indicadores y el gráfico del panel de Nightscout"
