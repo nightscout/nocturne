@@ -90,7 +90,7 @@ public class RecoveryEmailControllerTests : IDisposable
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }),
             TimeProvider.System);
         var service = new SubjectService(
-            subjects, _audit.Object, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
+            subjects, _audit.Object, Mock.Of<IRecoveryCodeService>(), new NoProviderGrants(), NullLogger<SubjectService>.Instance, TimeProvider.System);
         return new RecoveryEmailController(subjects, service, links, AccountLinkRoutes.Of(deliveryConfigured))
         {
             ControllerContext = new ControllerContext { HttpContext = http },

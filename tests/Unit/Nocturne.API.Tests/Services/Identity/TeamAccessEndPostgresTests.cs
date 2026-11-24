@@ -24,6 +24,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
+using Nocturne.API.Tests.Services.Auth;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -131,6 +132,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
             new GrantRevocationService(NewSessions()),
+            new NoProviderGrants(),
             Mock.Of<IAuthAuditService>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
             NullLogger<SubjectDeletion>.Instance);

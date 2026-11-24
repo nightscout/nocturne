@@ -377,6 +377,18 @@ public class RefreshTokenService : IRefreshTokenService
     }
 
     /// <inheritdoc />
+    public async Task<int> RevokeAllSessionsForSubjectAsync(Guid subjectId, string reason, CancellationToken ct = default)
+    {
+        var count = await _repository.RevokeAllForSubjectAsync(subjectId, reason, ct);
+
+        _logger.LogInformation(
+            "Revoked {Count} refresh tokens across every session of subject {SubjectId}. Reason: {Reason}",
+            count, subjectId, reason);
+
+        return count;
+    }
+
+    /// <inheritdoc />
     public async Task UpdateLastUsedAsync(string refreshToken)
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);

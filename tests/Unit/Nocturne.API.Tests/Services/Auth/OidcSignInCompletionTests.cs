@@ -98,6 +98,7 @@ public class OidcSignInCompletionTests
             Mock.Of<ITenantCreationInviteService>(),
             Mock.Of<ITenantRepository>(),
             new SignInCompletion(_totp.Object, _members.Object, _sessions.Object, _subjects.Object, _audit.Object),
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

@@ -56,6 +56,21 @@ public interface IOidcAuthService
     bool IsRecoveryState(string state);
 
     /// <summary>
+    /// The server-relative URL of the GET that continues a callback a provider delivered as a form
+    /// POST (Sign in with Apple), carrying the same code, state and error, and the user's name when
+    /// the provider sent one.
+    /// </summary>
+    /// <param name="state">The state posted back.</param>
+    /// <param name="code">The authorization code posted back, absent on an error.</param>
+    /// <param name="error">The provider's error code, if any.</param>
+    /// <param name="user">Apple's <c>user</c> field: JSON naming the user, sent on first consent only.</param>
+    /// <returns>
+    /// The URL, or <see langword="null"/> when the state was not issued by this instance or names a
+    /// provider that does not answer by form POST.
+    /// </returns>
+    Task<string?> GetFormPostRelayUrlAsync(string state, string? code, string? error, string? user);
+
+    /// <summary>
     /// Handle the OIDC callback - exchange code for tokens and create session
     /// </summary>
     /// <param name="code">Authorization code from provider</param>
@@ -70,6 +85,7 @@ public interface IOidcAuthService
     /// The trusted-device cookie the callback request carried, if any. See
     /// <see cref="ITotpService.GetSecondFactorRequirementAsync"/>.
     /// </param>
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
     /// <returns>Authentication result with session tokens</returns>
     Task<OidcCallbackResult> HandleCallbackAsync(
         string code,
@@ -78,7 +94,8 @@ public interface IOidcAuthService
         string? ipAddress = null,
         string? userAgent = null,
         Guid? currentTenantId = null,
-        string? trustedDeviceToken = null
+        string? trustedDeviceToken = null,
+        string? providerUser = null
     );
 
     /// <param name="ipAddress">Client IP address</param>
@@ -129,11 +146,12 @@ public interface IOidcAuthService
     /// <param name="authenticatedSubjectId">The subject ID of the currently authenticated user.</param>
     /// <param name="ipAddress">Client IP address for audit logging.</param>
     /// <param name="userAgent">Client user-agent string for audit logging.</param>
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
     /// <returns>An <see cref="OidcLinkResult"/> indicating success or failure of the link attempt.</returns>
     Task<OidcLinkResult> HandleLinkCallbackAsync(
         string code, string state, string expectedState,
         Guid authenticatedSubjectId,
-        string? ipAddress = null, string? userAgent = null);
+        string? ipAddress = null, string? userAgent = null, string? providerUser = null);
 
     /// <summary>
     /// Generate an authorisation URL for linking an identity to <paramref name="subjectId"/> under
@@ -153,8 +171,9 @@ public interface IOidcAuthService
     /// session the callback presents, when the state was issued for a recovery link for that
     /// subject. An identity already linked to another subject is refused.
     /// </summary>
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
     Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
-        string code, string state, string expectedState, Guid recoverySubjectId);
+        string code, string state, string expectedState, Guid recoverySubjectId, string? providerUser = null);
 
     /// <summary>
     /// Generate an authorization URL for OIDC-based owner creation during setup.
@@ -172,7 +191,9 @@ public interface IOidcAuthService
     /// The tenant being set up, whose setup the link or adoption claims. Fails with
     /// <c>setup_already_complete</c> when another completion has claimed it first.
     /// </param>
-    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(string code, string state, string expectedState, Guid tenantId);
+    /// <param name="providerUser">The protected name a form-post relay carried (<see cref="GetFormPostRelayUrlAsync"/>).</param>
+    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
+        string code, string state, string expectedState, Guid tenantId, string? providerUser = null);
 }
 
 /// <summary>

@@ -1,8 +1,8 @@
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
-/// A row of <c>oidc_providers</c> as stored: the client secret as ciphertext, the OAuth2 settings,
-/// claim mappings and discovery document as the JSON they are kept in. The service that owns the
+/// A row of <c>oidc_providers</c> as stored: the client secret as ciphertext, the OAuth2 and Apple
+/// settings, claim mappings and discovery document as the JSON they are kept in. The service that owns the
 /// key and the shapes does the encrypting and the parsing.
 /// </summary>
 public sealed record OidcProviderRecord(
@@ -23,7 +23,8 @@ public sealed record OidcProviderRecord(
     string? Icon,
     string? ButtonColor,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? AppleSettingsJson = null);
 
 /// <summary>
 /// A provider to store. <paramref name="Id"/> is given for a config-managed provider, whose id is
@@ -43,7 +44,8 @@ public sealed record NewOidcProvider(
     bool IsEnabled = true,
     int DisplayOrder = 0,
     string? Icon = null,
-    string? ButtonColor = null);
+    string? ButtonColor = null,
+    string? AppleSettingsJson = null);
 
 /// <summary>An administrator's edit of a provider. A null <paramref name="ClientSecretEncrypted"/> keeps the stored secret.</summary>
 public sealed record OidcProviderEdit(
@@ -57,7 +59,10 @@ public sealed record OidcProviderEdit(
     string ClaimMappingsJson,
     IReadOnlyList<string> DefaultRoles,
     bool IsEnabled,
-    int DisplayOrder);
+    int DisplayOrder,
+    string? Icon = null,
+    string? ButtonColor = null,
+    string? AppleSettingsJson = null);
 
 /// <summary>A global role to store.</summary>
 public sealed record NewRole(string Name, string? Description, IReadOnlyList<string> Permissions, bool IsSystemRole);

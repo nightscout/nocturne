@@ -202,7 +202,7 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.OriginalString.Should().StartWith("/auth/error");
         _factory.Oidc.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class PasskeyRecoverySessionTests : IClassFixture<PasskeyRecoverySessionT
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.OriginalString.Should().StartWith("/auth/error");
         _factory.Oidc.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Theory]

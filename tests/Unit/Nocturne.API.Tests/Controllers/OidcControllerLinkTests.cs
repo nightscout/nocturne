@@ -185,7 +185,7 @@ public class OidcControllerLinkTests
         _authService
             .Setup(s => s.HandleLinkCallbackAsync(
                 "code", "expected-state", "expected-state", subjectId,
-                It.IsAny<string?>(), It.IsAny<string?>()))
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(OidcLinkResult.Succeeded(Guid.NewGuid(), "/settings/account"));
 
         var result = await _controller.LinkCallback("code", "expected-state", null, null);
@@ -213,7 +213,7 @@ public class OidcControllerLinkTests
         _authService
             .Setup(s => s.HandleLinkCallbackAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), subjectId,
-                It.IsAny<string?>(), It.IsAny<string?>()))
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(OidcLinkResult.Failed("identity_already_linked", "already linked"));
 
         var result = await _controller.LinkCallback("code", "state", null, null);

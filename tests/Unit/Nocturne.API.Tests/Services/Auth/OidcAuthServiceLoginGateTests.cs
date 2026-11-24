@@ -60,6 +60,7 @@ public class OidcAuthServiceLoginGateTests
             _tenants.Object,
             new SignInCompletion(_totpService.Object, _tenantMemberService.Object,
                 _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

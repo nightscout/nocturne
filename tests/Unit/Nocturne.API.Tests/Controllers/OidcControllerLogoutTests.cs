@@ -51,6 +51,7 @@ public class OidcControllerLogoutTests
             new Mock<ITenantRepository>().Object,
             new SignInCompletion(new Mock<ITotpService>().Object, tenantMembers.Object,
                 sessions.Object, subjects.Object, new Mock<IAuthAuditService>().Object),
+            new Mock<IOidcProviderGrantService>().Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

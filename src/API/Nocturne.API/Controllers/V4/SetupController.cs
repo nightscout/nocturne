@@ -355,7 +355,8 @@ public partial class SetupController : ControllerBase
         [FromQuery] string? state,
         [FromQuery] string? error,
         [FromQuery] string? error_description,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromQuery(Name = "provider_user")] string? providerUser = null)
     {
         if (!string.IsNullOrEmpty(error))
         {
@@ -386,7 +387,8 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(expectedState))
             return Redirect("/setup?error=missing_state");
 
-        var result = await _oidcAuthService.HandleSetupCallbackAsync(code, state, expectedState, tenant!.Id);
+        var result = await _oidcAuthService.HandleSetupCallbackAsync(
+            code, state, expectedState, tenant!.Id, providerUser);
 
         if (!result.Success || result.SubjectId is not { } ownerSubjectId)
         {

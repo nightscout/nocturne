@@ -175,7 +175,8 @@ public class OidcController : ControllerBase
         [FromQuery] string? code,
         [FromQuery] string? state,
         [FromQuery] string? error,
-        [FromQuery] string? error_description
+        [FromQuery] string? error_description,
+        [FromQuery(Name = "provider_user")] string? providerUser = null
     )
     {
         // Handle provider errors
@@ -223,7 +224,8 @@ public class OidcController : ControllerBase
             HttpContext.GetClientAddress(),
             Request.Headers.UserAgent,
             currentTenantId,
-            Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName]
+            Request.Cookies[SessionCookieExtensions.TrustedDeviceCookieName],
+            providerUser
         );
 
         // The sign-in outcome reaches here flattened into the result; the outcomes rebuilt from it
@@ -413,10 +415,11 @@ public class OidcController : ControllerBase
         [FromQuery] string? code,
         [FromQuery] string? state,
         [FromQuery] string? error,
-        [FromQuery] string? error_description)
+        [FromQuery] string? error_description,
+        [FromQuery(Name = "provider_user")] string? providerUser = null)
     {
         if (!string.IsNullOrEmpty(state) && _authService.IsRecoveryState(state))
-            return await RecoveryLinkCallbackAsync(code, state, error, error_description);
+            return await RecoveryLinkCallbackAsync(code, state, error, error_description, providerUser);
 
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
@@ -457,7 +460,8 @@ public class OidcController : ControllerBase
             code, state, expectedState,
             auth.SubjectId.Value,
             HttpContext.GetClientAddress(),
-            Request.Headers.UserAgent);
+            Request.Headers.UserAgent,
+            providerUser);
 
         if (!result.Success)
         {
@@ -483,7 +487,7 @@ public class OidcController : ControllerBase
     }
 
     private async Task<IActionResult> RecoveryLinkCallbackAsync(
-        string? code, string state, string? error, string? errorDescription)
+        string? code, string state, string? error, string? errorDescription, string? providerUser)
     {
         ClearLinkStateCookie();
         if (!string.IsNullOrEmpty(error))
@@ -498,7 +502,8 @@ public class OidcController : ControllerBase
 
         var enrolment = await _recoverySession.EnrolAsync(
             HttpContext,
-            (subjectId, _) => _authService.HandleRecoveryLinkCallbackAsync(code, state, expectedState, subjectId),
+            (subjectId, _) => _authService.HandleRecoveryLinkCallbackAsync(
+                code, state, expectedState, subjectId, providerUser),
             result => result.Success,
             HttpContext.RequestAborted);
 

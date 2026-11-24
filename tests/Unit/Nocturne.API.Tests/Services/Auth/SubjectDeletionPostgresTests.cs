@@ -179,6 +179,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
             new SubjectRepository(contexts, AccountLinkRoutes.Off),
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
             new GrantRevocationService(_sessions),
+            new NoProviderGrants(),
             new AuthAuditService(
                 contexts, new HttpContextAccessor { HttpContext = new DefaultHttpContext() }, new AuditContext(),
                 NullLogger<AuthAuditService>.Instance),

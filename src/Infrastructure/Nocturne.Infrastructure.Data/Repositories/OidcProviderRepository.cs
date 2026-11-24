@@ -80,6 +80,7 @@ public class OidcProviderRepository : IOidcProviderRepository
             Name = provider.Name,
             ProviderType = provider.ProviderType,
             OAuth2SettingsJson = provider.OAuth2SettingsJson,
+            AppleSettingsJson = provider.AppleSettingsJson,
             IssuerUrl = provider.IssuerUrl,
             ClientId = provider.ClientId,
             ClientSecretEncrypted = provider.ClientSecretEncrypted,
@@ -111,6 +112,7 @@ public class OidcProviderRepository : IOidcProviderRepository
         entity.Name = edit.Name;
         entity.ProviderType = edit.ProviderType;
         entity.OAuth2SettingsJson = edit.OAuth2SettingsJson;
+        entity.AppleSettingsJson = edit.AppleSettingsJson;
         entity.IssuerUrl = edit.IssuerUrl;
         entity.ClientId = edit.ClientId;
         if (edit.ClientSecretEncrypted is not null)
@@ -120,6 +122,8 @@ public class OidcProviderRepository : IOidcProviderRepository
         entity.DefaultRoles = [.. edit.DefaultRoles];
         entity.IsEnabled = edit.IsEnabled;
         entity.DisplayOrder = edit.DisplayOrder;
+        entity.Icon = edit.Icon;
+        entity.ButtonColor = edit.ButtonColor;
 
         await SaveAsync(lease.Context, ct);
         return ToRecord(entity);
@@ -190,6 +194,7 @@ public class OidcProviderRepository : IOidcProviderRepository
             entity.Name = config.Name;
             entity.ProviderType = config.ProviderType;
             entity.OAuth2SettingsJson = config.OAuth2SettingsJson;
+            entity.AppleSettingsJson = config.AppleSettingsJson;
             entity.IssuerUrl = config.IssuerUrl;
             entity.ClientId = config.ClientId;
             entity.IsEnabled = config.IsEnabled;
@@ -236,5 +241,6 @@ public class OidcProviderRepository : IOidcProviderRepository
         p.Icon,
         p.ButtonColor,
         p.CreatedAt,
-        p.UpdatedAt);
+        p.UpdatedAt,
+        p.AppleSettingsJson);
 }

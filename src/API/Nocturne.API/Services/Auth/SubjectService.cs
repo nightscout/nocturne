@@ -20,18 +20,21 @@ public class SubjectService : ISubjectService
     private readonly ISubjectRepository _subjects;
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
+    private readonly IOidcProviderGrantService _providerGrants;
     private readonly ILogger<SubjectService> _logger;
     private readonly TimeProvider _time;
 
     /// <param name="subjects">Repository for the stored subjects, their roles and their OIDC identities.</param>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
+    /// <param name="providerGrants">Revokes the grants a provider holds for an identity that is removed.</param>
     /// <param name="logger">Logger for subject and role changes.</param>
     /// <param name="time">Clock for every timestamp the service stamps.</param>
     public SubjectService(
         ISubjectRepository subjects,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
+        IOidcProviderGrantService providerGrants,
         ILogger<SubjectService> logger,
         TimeProvider time
     )
@@ -39,6 +42,7 @@ public class SubjectService : ISubjectService
         _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
+        _providerGrants = providerGrants;
         _logger = logger;
         _time = time;
     }
@@ -414,8 +418,18 @@ public class SubjectService : ISubjectService
             .FirstOrDefault();
 
     /// <inheritdoc />
-    public Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId) =>
-        _subjects.TryRemoveFactorAsync(subjectId, new SignInFactor.OidcIdentity(identityId), CancellationToken.None);
+    public async Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId)
+    {
+        var providerGrants = await _providerGrants.CaptureAsync(subjectId, identityId);
+
+        var result = await _subjects.TryRemoveFactorAsync(
+            subjectId, new SignInFactor.OidcIdentity(identityId), CancellationToken.None);
+
+        if (result == FactorRemovalResult.Removed)
+            await _providerGrants.RevokeAsync(providerGrants);
+
+        return result;
+    }
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemovePasskeyCredentialAsync(Guid subjectId, Guid credentialId) =>

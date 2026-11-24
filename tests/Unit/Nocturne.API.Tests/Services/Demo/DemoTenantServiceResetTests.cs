@@ -19,6 +19,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.API.Tests.Services.Auth;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -57,7 +58,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            Mock.Of<IAuthAuditService>(), _time, NullLogger<SubjectDeletion>.Instance);
+            new NoProviderGrants(), Mock.Of<IAuthAuditService>(), _time, NullLogger<SubjectDeletion>.Instance);
         _service = new DemoTenantService(
             contexts, new TenantRepository(contexts), members, subjects, deletion,
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),

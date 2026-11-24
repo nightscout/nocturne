@@ -98,11 +98,11 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
             contexts, new HttpContextAccessor { HttpContext = new DefaultHttpContext() }, new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            subjects, audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
+            subjects, audit, Mock.Of<IRecoveryCodeService>(), new NoProviderGrants(), NullLogger<SubjectService>.Instance, TimeProvider.System);
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            audit, TimeProvider.System, NullLogger<SubjectDeletion>.Instance);
+            new NoProviderGrants(), audit, TimeProvider.System, NullLogger<SubjectDeletion>.Instance);
         return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));
     }
 

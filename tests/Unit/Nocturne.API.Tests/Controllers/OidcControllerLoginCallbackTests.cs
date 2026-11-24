@@ -56,7 +56,7 @@ public class OidcControllerLoginCallbackTests
         _authService
             .Setup(s => s.HandleCallbackAsync(
                 "code", "state", "state", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(),
-                It.IsAny<string?>()))
+                It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(result);
 
     private string SetCookieHeader() => _controller.HttpContext.Response.Headers.SetCookie.ToString();
@@ -161,7 +161,7 @@ public class OidcControllerLoginCallbackTests
 
         _authService.Verify(s => s.HandleCallbackAsync(
             "code", "state", "state", It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<Guid?>(),
-            "device-token"));
+            "device-token", It.IsAny<string?>()));
     }
 
     [Fact]

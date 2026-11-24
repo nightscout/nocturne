@@ -31,6 +31,7 @@ public class SubjectServiceEmailConfirmationTests : IDisposable
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             Mock.Of<IAuthAuditService>(),
             Mock.Of<IRecoveryCodeService>(),
+            new NoProviderGrants(),
             NullLogger<SubjectService>.Instance,
             TimeProvider.System);
     }
@@ -302,6 +303,7 @@ public class SubjectServiceEmailConfirmationTests : IDisposable
             .ReturnsAsync(new OidcIdentityMatch(identity, record));
         var service = new SubjectService(
             repository.Object, Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(),
+            new NoProviderGrants(),
             NullLogger<SubjectService>.Instance,
             TimeProvider.System);
 
