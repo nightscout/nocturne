@@ -168,34 +168,6 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public async Task<SubjectChange> DeleteSubjectAsync(Guid subjectId)
-    {
-        var subject = await _subjects.GetAsync(subjectId, CancellationToken.None);
-        if (subject == null)
-        {
-            return new SubjectChange.NotFound();
-        }
-
-        if (subject.IsSystemSubject)
-        {
-            _logger.LogWarning("Attempted to delete system subject {SubjectId}", subjectId);
-            return new SubjectChange.NotFound();
-        }
-
-        var change = await _subjects.DeleteAsync(subjectId, CancellationToken.None);
-        if (change is not SubjectChange.Changed)
-        {
-            return change;
-        }
-
-        _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
-
-        await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
-
-        return change;
-    }
-
-    /// <inheritdoc />
     public async Task<bool> ActivateSubjectAsync(Guid subjectId) =>
         await _subjects.UpdateAsync(subjectId, new SubjectEdit(IsActive: true), CancellationToken.None)
             is SubjectChange.Changed;

@@ -31,7 +31,7 @@ public sealed class AccessRequestControllerTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly Mock<IAccessRequestService> _accessRequests = new();
-    private readonly Mock<ISubjectService> _subjectService = new();
+    private readonly Mock<ISubjectDeletion> _subjectDeletion = new();
     private readonly AccessRequestController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -41,11 +41,14 @@ public sealed class AccessRequestControllerTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqlite();
         _dbContext = _db.CreateContext(_tenantId);
+        _subjectDeletion
+            .Setup(s => s.DeleteAsync(It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectDeletionOutcome(new SubjectChange.Changed(), []));
 
         _controller = new AccessRequestController(
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
-            _subjectService.Object,
+            _subjectDeletion.Object,
             _accessRequests.Object,
             MockTenantAccessor.Create(_tenantId).Object,
             _notifications.Object,
@@ -167,12 +170,24 @@ public sealed class AccessRequestControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Deny_deletesTheSubjectThroughTheSubjectDeletionThatStopsWhatTheyMade()
+    {
+        var requestorId = await SeedPendingRequestAsync();
+
+        await _controller.Deny(requestorId, CancellationToken.None);
+
+        _subjectDeletion.Verify(s => s.DeleteAsync(requestorId, false, It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [Fact]
     public async Task Deny_isRefusedWithAConflictNamingTheTenantsWhenTheSubjectIsTheirLastOwner()
     {
         var requestorId = await SeedPendingRequestAsync();
-        _subjectService
-            .Setup(s => s.DeleteSubjectAsync(requestorId))
-            .ReturnsAsync(new SubjectChange.LastOwnerOf([new LastOwnerTenant(_tenantId, "test"), new LastOwnerTenant(Guid.CreateVersion7(), "other")]));
+        _subjectDeletion
+            .Setup(s => s.DeleteAsync(requestorId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectDeletionOutcome(
+                new SubjectChange.LastOwnerOf([new LastOwnerTenant(_tenantId, "test"), new LastOwnerTenant(Guid.CreateVersion7(), "other")]),
+                []));
 
         var result = await _controller.Deny(requestorId, CancellationToken.None);
 

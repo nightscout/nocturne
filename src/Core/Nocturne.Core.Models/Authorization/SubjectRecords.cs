@@ -138,6 +138,12 @@ public abstract record SubjectChange
     public sealed record LastManagerOf(IReadOnlyList<LastManagerTeam> ManagedTeams) : SubjectChange;
 }
 
+/// <summary>
+/// What deleting a subject found, with the tenants a delete that removes even a last owner's
+/// memberships left without an owner who can sign in.
+/// </summary>
+public sealed record SubjectDeletionOutcome(SubjectChange Change, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
+
 /// <summary>What keeps a subject's credentials valid between requests.</summary>
 public sealed record SubjectSignInState(bool IsActive, bool IsPlatformAdmin)
 {
