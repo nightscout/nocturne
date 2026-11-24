@@ -596,7 +596,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         public Task<string?> GetNotificationTypeAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<bool> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
+        public Task<NotificationActionResult> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<bool> MarkAsReadAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>

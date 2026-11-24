@@ -400,7 +400,7 @@ public class InAppNotificationService : IInAppNotificationService
     }
 
     /// <inheritdoc />
-    public async Task<bool> ExecuteActionAsync(
+    public async Task<NotificationActionResult> ExecuteActionAsync(
         Guid notificationId,
         string actionId,
         string userId,
@@ -415,7 +415,7 @@ public class InAppNotificationService : IInAppNotificationService
                 "Attempted to execute action on non-existent notification {NotificationId}",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         // Verify the notification belongs to the user
@@ -426,7 +426,7 @@ public class InAppNotificationService : IInAppNotificationService
                 userId,
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         _logger.LogDebug(
@@ -454,14 +454,14 @@ public class InAppNotificationService : IInAppNotificationService
                 cancellationToken
             );
 
-            if (result.Handled || builtInArchive is null)
+            if (result.Handled || result.RefusedScope is not null || builtInArchive is null)
             {
-                if (result.Archive is { } reason)
+                if (result.RefusedScope is null && result.Archive is { } reason)
                 {
                     await ArchiveNotificationAsync(notificationId, reason, userId, cancellationToken);
                 }
 
-                return result.Handled;
+                return result;
             }
 
             _logger.LogInformation(
@@ -472,12 +472,9 @@ public class InAppNotificationService : IInAppNotificationService
             );
         }
 
-        return await ArchiveNotificationAsync(
-            notificationId,
-            builtInArchive ?? NotificationArchiveReason.Completed,
-            userId,
-            cancellationToken
-        );
+        var archiveReason = builtInArchive ?? NotificationArchiveReason.Completed;
+        var archived = await ArchiveNotificationAsync(notificationId, archiveReason, userId, cancellationToken);
+        return new NotificationActionResult(archived, archived ? archiveReason : null);
     }
 
     /// <inheritdoc />
