@@ -64,6 +64,14 @@ public abstract partial class BaseConnectorService<TConfig>
         WriteResumeStateAsync(new() { [key] = at }, cancellationToken);
 
     /// <summary>
+    ///     Applies <paramref name="changes"/> to the resume state in one write, as <see cref="SetResumeStampAsync"/>
+    ///     does each, so keys that only mean something together are never stored one without the other.
+    /// </summary>
+    protected Task SetResumeStampsAsync(
+        IReadOnlyDictionary<string, DateTime?> changes, CancellationToken cancellationToken) =>
+        WriteResumeStateAsync(new Dictionary<string, DateTime?>(changes), cancellationToken);
+
+    /// <summary>
     ///     The stamps this connector keeps through <see cref="SetResumeStampAsync"/>, each with the data
     ///     types whose sync it schedules. A cursor reset clears a stamp only when it re-pulls every one
     ///     of those types the tenant has switched on (<see cref="ResetClears"/>).

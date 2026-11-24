@@ -472,6 +472,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<GoogleHealthGrantHolderEntity> GoogleHealthGrantHolders => Set<GoogleHealthGrantHolderEntity>();
 
+    public DbSet<GoogleHealthWorkEntity> GoogleHealthWork => Set<GoogleHealthWorkEntity>();
+
     /// <summary>
     /// Configure the database model and relationships
     /// </summary>

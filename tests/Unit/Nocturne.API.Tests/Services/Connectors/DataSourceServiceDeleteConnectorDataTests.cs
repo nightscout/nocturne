@@ -611,26 +611,41 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     }
 
     /// <summary>
-    /// GoogleHealth's vendor state also holds its sync coordinator's progress and disconnect keys, so
-    /// no purge clears it.
+    /// GoogleHealth's registration keeps both slots when the purge keeps its data out, and a purge
+    /// that allows re-import clears both. Its work in flight is its own table, which no purge touches.
     /// </summary>
-    [Fact]
-    public async Task DeleteConnectorData_GoogleHealth_AllowingReimport_KeepsItsVendorState()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeleteConnectorData_GoogleHealth_KeepsItsPositionUnlessItAllowsReimportAndAlwaysItsWorkInFlight(bool allowReimport)
     {
         await SeedStateAsync("googlehealth");
+        var request = Guid.CreateVersion7();
+        await using (var seed = NewContext())
+        {
+            seed.GoogleHealthWork.Add(new GoogleHealthWorkEntity
+            {
+                TenantId = TenantId, ProgressPhase = "queued", ProgressTotalDataTypes = 2, ProgressWorkerOwned = true,
+                DisconnectRequestId = request, DisconnectSubjectId = Guid.CreateVersion7()
+            });
+            await seed.SaveChangesAsync();
+        }
 
         await using (var ctx = NewContext())
             (await CreateService(ctx, [GoogleHealthSleepPurge().Object], GoogleHealthGuard(InMemoryGoogleHealthCoordinator.Create()))
-                .DeleteConnectorDataAsync(GoogleHealthConnectorService.ConnectorName, allowReimport: true))
+                .DeleteConnectorDataAsync(GoogleHealthConnectorService.ConnectorName, allowReimport))
                 .Success.Should().BeTrue();
 
         await using var read = NewContext();
         var stored = await read.ConnectorConfigurations.SingleAsync(c => c.ConnectorName == "googlehealth");
-        stored.ResumeStateJson.Should().BeNull();
-        stored.VendorStateJson.Should().Be(VendorState);
+        stored.ResumeStateJson.Should().Be(allowReimport ? null : ResumeState);
+        stored.VendorStateJson.Should().Be(allowReimport ? null : VendorState);
+        var work = await read.GoogleHealthWork.SingleAsync();
+        (work.ProgressPhase, work.ProgressWorkerOwned, work.DisconnectRequestId).Should().Be(("queued", true, request));
     }
 
     private const string VendorState = """{"kept":"value"}""";
+    private const string ResumeState = """{"full-walk":"2026-11-20T03:04:05Z"}""";
 
     private async Task SeedStateAsync(string row)
     {
@@ -640,7 +655,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
             ConnectorName = row,
-            ResumeStateJson = """{"full-walk":"2026-11-20T03:04:05Z"}""",
+            ResumeStateJson = ResumeState,
             VendorStateJson = VendorState,
         });
         await seed.SaveChangesAsync();
