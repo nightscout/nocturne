@@ -132,7 +132,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         (await teams.RemoveManagerAsync(team.Id, stranger, manager, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
         (await teams.CreateInviteAsync(team.Id, stranger, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team.Id, stranger, invite!.Value, Now, default)).Should().BeFalse();
-        (await TeamEnds.DeleteAsync(Contexts(stranger), team.Id, stranger)).Should().Be(TeamDeletion.NotFound);
+        (await TeamWrites.DeleteAsync(Contexts(stranger), team.Id, stranger)).Should().Be(TeamDeletion.NotFound);
 
         var detail = await Teams().GetAsync(team.Id, manager, Now, default);
         detail!.Name.Should().Be("Family");
@@ -277,7 +277,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var team = await Teams(a).CreateInviteTeamAsync(a);
         var b = await AddManagerAsync(team, a, await NewSubjectAsync());
 
-        (await TeamEnds.DeleteAsync(Contexts(b), team, b)).Should().Be(TeamDeletion.Deleted);
+        (await TeamWrites.DeleteAsync(Contexts(b), team, b)).Should().Be(TeamDeletion.Deleted);
 
         (await Teams().GetTeamsOfAsync(a, default)).Should().BeEmpty();
         await using (var db = Context())
@@ -444,7 +444,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         (await teams.CreateInviteAsync(team, staff, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team, staff, invite!.Value, Now, default)).Should().BeFalse();
         (await teams.RemoveManagerAsync(team, staff, a, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
-        (await TeamEnds.DeleteAsync(Contexts(staff), team, staff)).Should().Be(TeamDeletion.Refused);
+        (await TeamWrites.DeleteAsync(Contexts(staff), team, staff)).Should().Be(TeamDeletion.Refused);
 
         var forManager = await Teams().GetAsync(team, a, Now, default);
         forManager!.Name.Should().Be("Invite team");

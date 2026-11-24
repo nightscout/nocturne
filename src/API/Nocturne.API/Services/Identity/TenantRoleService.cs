@@ -5,7 +5,10 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.API.Services.Auth;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -20,7 +23,8 @@ namespace Nocturne.API.Services.Identity;
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
 public partial class TenantRoleService(
-    ITenantMembershipRepository members, TimeProvider time, IMemberInviteRepository invites, ITeamRepository teams)
+    ITenantMembershipRepository members, TimeProvider time, IMemberInviteRepository invites, ITeamRepository teams,
+    INocturneDbContextFactory contexts, GrantRevocationService grantRevocation)
     : ITenantRoleService
 {
     public async Task<List<TenantRoleDto>> GetRolesAsync(
@@ -119,8 +123,8 @@ public partial class TenantRoleService(
 
         try
         {
-            var updated = await members.UpdateRoleAsync(
-                tenantId, roleId, new TenantRoleEdit(name, slug, description, permissions),
+            var updated = await TeamReasonWrites.EditRoleAsync(
+                contexts, grantRevocation, tenantId, roleId, new TenantRoleEdit(name, slug, description, permissions),
                 editorSubjectId, time.GetUtcNow().UtcDateTime, ct);
             return updated switch
             {

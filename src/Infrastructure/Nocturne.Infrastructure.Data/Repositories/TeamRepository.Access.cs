@@ -80,111 +80,135 @@ public partial class TeamRepository
             .ToListAsync(ct)).ToHashSet();
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<TeamAccessApproval> ApproveAccessAsync(
-        string tokenHash, TeamAccessApproverCredential approver, TeamAccessGrant grant, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// Gives the link's team access to <see cref="TeamAccessGrant.TenantId"/> and takes one use of the
+    /// link, as <paramref name="approver"/>, on <paramref name="unit"/>, which must not be pinned to a
+    /// tenant, and saves it. Returns with it the team reasons the team's staff now hold at the site
+    /// (<see cref="TeamReasonChanges.SyncAsync"/>), none when it is refused.
+    /// </summary>
+    /// <remarks>
+    /// Everything is decided under the site's owners lock, the team's manager lock and the site's team
+    /// access lock, from what those locks hold still: the link, the approver's live membership of the
+    /// site (an owner, and what its direct reason gives: the scopes it resolves to on the credential, its
+    /// end and its 24-hour limit, never what a team reason beside it gives), and the chosen roles. Refused,
+    /// taking no use and writing nothing, on any <see cref="TeamAccessRefusal"/>. Before those locks it
+    /// locks the rows of the approver and of the team's staff (<see cref="MembershipLock"/>). Null, writing
+    /// nothing, when a staff member joined between the two: the caller runs it again.
+    /// </remarks>
+    public static async Task<(TeamAccessApproval Approval, TeamReasonChanges? Changes)?> LockAccessApprovalAsync(
+        DbUnitOfWork unit, string tokenHash, TeamAccessApproverCredential approver, TeamAccessGrant grant, DateTime now,
+        CancellationToken ct)
     {
-        await using var db = await contexts.CreatePlatformAsync(ct);
-        return await db.ExecuteInTransactionAsync(async token =>
+        var db = unit.Context;
+        var teamId = await db.TeamAccessLinks.AsNoTracking()
+            .Where(l => l.TokenHash == tokenHash)
+            .Select(l => (Guid?)l.TeamId)
+            .FirstOrDefaultAsync(ct);
+        if (teamId is not { } id)
+            return (Refused(TeamAccessRefusal.NotFound), null);
+
+        var locked = (await StaffSubjectsAsync(db, id, ct)).Append(approver.SubjectId).ToHashSet();
+        await db.LockSubjectRowsSharedAsync(locked, ct);
+        await db.LockTenantOwnersAsync(grant.TenantId, ct);
+        await db.LockTeamManagersAsync(id, ct);
+        await db.LockTeamAccessAsync(grant.TenantId, ct);
+
+        var staffSubjects = await StaffSubjectsAsync(db, id, ct);
+        if (!locked.IsSupersetOf(staffSubjects))
+            return null;
+
+        var link = await db.TeamAccessLinks.FirstOrDefaultAsync(l => l.TokenHash == tokenHash, ct);
+        if (link is null)
+            return (Refused(TeamAccessRefusal.NotFound), null);
+        if (await AccessLinkRefusalAsync(db, link, now, ct) is { } refusal)
+            return (Refused(refusal), null);
+
+        var membership = await db.TenantMembers.AsNoTracking()
+            .LiveAt(now)
+            .Where(m => m.TenantId == grant.TenantId && m.SubjectId == approver.SubjectId && m.Tenant!.IsActive)
+            .Select(m => new
+            {
+                m.AccessEndsAt,
+                m.LimitTo24Hours,
+                m.DirectPermissions,
+                Roles = m.MemberRoles.Select(r => new { r.TenantRole!.Slug, r.TenantRole.Permissions }).ToList(),
+                Reasons = m.Reasons.AsQueryable().Select(MembershipReasonColumns.Of).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
+        if (membership is null || !membership.Roles.Any(r => r.Slug == RoleSeeds.Owner))
+            return (Refused(TeamAccessRefusal.NotOwner), null);
+
+        var row = new TenantMemberAccess(
+            MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions).ToHashSet(),
+            membership.LimitTo24Hours,
+            membership.AccessEndsAt);
+        // The owner role is held only directly, so an owner with no direct reason in force owns nothing.
+        if (MembershipReasonColumns.DirectAccess(membership.Reasons, row, now) is not { } direct)
+            return (Refused(TeamAccessRefusal.NotOwner), null);
+
+        if (await db.TeamTenantAccess.AnyAsync(a => a.TeamId == id && a.TenantId == grant.TenantId, ct))
+            return (Refused(TeamAccessRefusal.AlreadyGiven), null);
+
+        var roleIds = grant.RoleIds.Distinct().ToList();
+        if (roleIds.Count == 0)
+            return (Refused(TeamAccessRefusal.NoRoles), null);
+
+        var roles = await db.TenantRoles.AsNoTracking()
+            .Where(r => r.TenantId == grant.TenantId && roleIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.Slug, r.Permissions })
+            .ToListAsync(ct);
+        if (roles.Count != roleIds.Count)
+            return (Refused(TeamAccessRefusal.RoleNotInTenant), null);
+        if (roles.Any(r => !Scope.IsDataOnly(r.Permissions)))
+            return (Refused(TeamAccessRefusal.RoleAdministrative), null);
+        var suggested = RoleSeeds.Permissions[link.SuggestedRoleSlug];
+        if (roles.Any(r => Scope.ValidateGrant(r.Permissions, suggested) is not null))
+            return (Refused(TeamAccessRefusal.RoleWiderThanLink), null);
+
+        var (scopes, limited) = TeamAccessRules.Approver(direct.EffectivePermissions, direct.LimitTo24Hours, approver);
+        if (roles.Any(r => Scope.ValidateGrant(r.Permissions, scopes) is not null))
+            return (Refused(TeamAccessRefusal.RoleWiderThanApprover), null);
+        if (TeamAccessRules.Refusal(SuggestionOf(link), limited, direct.AccessEndsAt, grant, now) is { } narrowing)
+            return (Refused(narrowing), null);
+
+        link.UseCount++;
+        var access = new TeamTenantAccessEntity
         {
-            await db.LockTenantOwnersAsync(grant.TenantId, token);
-
-            var teamId = await db.TeamAccessLinks.AsNoTracking()
-                .Where(l => l.TokenHash == tokenHash)
-                .Select(l => (Guid?)l.TeamId)
-                .FirstOrDefaultAsync(token);
-            if (teamId is not { } id)
-                return Refused(TeamAccessRefusal.NotFound);
-
-            await db.LockTeamManagersAsync(id, token);
-            await db.LockTeamAccessAsync(grant.TenantId, token);
-
-            var link = await db.TeamAccessLinks.FirstOrDefaultAsync(l => l.TokenHash == tokenHash, token);
-            if (link is null)
-                return Refused(TeamAccessRefusal.NotFound);
-            if (await AccessLinkRefusalAsync(db, link, now, token) is { } refusal)
-                return Refused(refusal);
-
-            var membership = await db.TenantMembers.AsNoTracking()
-                .LiveAt(now)
-                .Where(m => m.TenantId == grant.TenantId && m.SubjectId == approver.SubjectId && m.Tenant!.IsActive)
-                .Select(m => new
-                {
-                    m.AccessEndsAt,
-                    m.LimitTo24Hours,
-                    m.DirectPermissions,
-                    Roles = m.MemberRoles.Select(r => new { r.TenantRole!.Slug, r.TenantRole.Permissions }).ToList(),
-                    Reasons = m.Reasons.AsQueryable().Select(MembershipReasonColumns.Of).ToList(),
-                })
-                .FirstOrDefaultAsync(token);
-            if (membership is null || !membership.Roles.Any(r => r.Slug == RoleSeeds.Owner))
-                return Refused(TeamAccessRefusal.NotOwner);
-
-            var row = new TenantMemberAccess(
-                MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions).ToHashSet(),
-                membership.LimitTo24Hours,
-                membership.AccessEndsAt);
-            // The owner role is held only directly, so an owner with no direct reason in force owns nothing.
-            if (MembershipReasonColumns.DirectAccess(membership.Reasons, row, now) is not { } direct)
-                return Refused(TeamAccessRefusal.NotOwner);
-
-            if (await db.TeamTenantAccess.AnyAsync(a => a.TeamId == id && a.TenantId == grant.TenantId, token))
-                return Refused(TeamAccessRefusal.AlreadyGiven);
-
-            var roleIds = grant.RoleIds.Distinct().ToList();
-            if (roleIds.Count == 0)
-                return Refused(TeamAccessRefusal.NoRoles);
-
-            var roles = await db.TenantRoles.AsNoTracking()
-                .Where(r => r.TenantId == grant.TenantId && roleIds.Contains(r.Id))
-                .Select(r => new { r.Id, r.Slug, r.Permissions })
-                .ToListAsync(token);
-            if (roles.Count != roleIds.Count)
-                return Refused(TeamAccessRefusal.RoleNotInTenant);
-            if (roles.Any(r => !Scope.IsDataOnly(r.Permissions)))
-                return Refused(TeamAccessRefusal.RoleAdministrative);
-            var suggested = RoleSeeds.Permissions[link.SuggestedRoleSlug];
-            if (roles.Any(r => Scope.ValidateGrant(r.Permissions, suggested) is not null))
-                return Refused(TeamAccessRefusal.RoleWiderThanLink);
-
-            var (scopes, limited) = TeamAccessRules.Approver(direct.EffectivePermissions, direct.LimitTo24Hours, approver);
-            if (roles.Any(r => Scope.ValidateGrant(r.Permissions, scopes) is not null))
-                return Refused(TeamAccessRefusal.RoleWiderThanApprover);
-            if (TeamAccessRules.Refusal(SuggestionOf(link), limited, direct.AccessEndsAt, grant, now) is { } narrowing)
-                return Refused(narrowing);
-
-            link.UseCount++;
-            var access = new TeamTenantAccessEntity
+            Id = Guid.CreateVersion7(),
+            TeamId = id,
+            TenantId = grant.TenantId,
+            LimitTo24Hours = grant.LimitTo24Hours,
+            AccessEndsAt = grant.AccessEndsAt,
+            ApprovedBySubjectId = approver.SubjectId,
+            CreatedFromLinkId = link.Id,
+            TeamManagesStaff = grant.TeamManagesStaff,
+            AccessRoles = roleIds.Select(roleId => new TeamTenantAccessRoleEntity
             {
                 Id = Guid.CreateVersion7(),
-                TeamId = id,
-                TenantId = grant.TenantId,
-                LimitTo24Hours = grant.LimitTo24Hours,
-                AccessEndsAt = grant.AccessEndsAt,
-                ApprovedBySubjectId = approver.SubjectId,
-                CreatedFromLinkId = link.Id,
-                TeamManagesStaff = grant.TeamManagesStaff,
-                AccessRoles = roleIds.Select(roleId => new TeamTenantAccessRoleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantRoleId = roleId,
-                }).ToList(),
-            };
-            db.TeamTenantAccess.Add(access);
+                TenantRoleId = roleId,
+            }).ToList(),
+        };
+        db.TeamTenantAccess.Add(access);
 
-            var staff = await db.TeamMembers.AsNoTracking()
-                .Where(m => m.TeamId == id && m.Kind == TeamMemberKind.Staff)
-                .Select(m => m.Id)
-                .ToListAsync(token);
-            foreach (var memberId in staff)
-                db.TeamSiteStaff.Add(NewSiteStaff(access.Id, memberId, grant.TeamManagesStaff));
+        var staff = await db.TeamMembers.AsNoTracking()
+            .Where(m => m.TeamId == id && m.Kind == TeamMemberKind.Staff)
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+        foreach (var memberId in staff)
+            db.TeamSiteStaff.Add(NewSiteStaff(access.Id, memberId, grant.TeamManagesStaff));
 
-            var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(token);
-            TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
-            await db.SaveChangesAsync(token);
-            return new TeamAccessApproval(access.Id, null);
-        }, ct: ct);
+        var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
+        TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
+        await db.SaveChangesAsync(ct);
+        return (new TeamAccessApproval(access.Id, null), await TeamReasonChanges.SyncAsync(
+            unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct));
     }
+
+    private static Task<List<Guid>> StaffSubjectsAsync(NocturneDbContext db, Guid teamId, CancellationToken ct) =>
+        db.TeamMembers.AsNoTracking()
+            .Where(m => m.TeamId == teamId && m.Kind == TeamMemberKind.Staff)
+            .Select(m => m.SubjectId)
+            .ToListAsync(ct);
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(

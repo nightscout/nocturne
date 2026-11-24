@@ -34,8 +34,18 @@ public class TeamAccessServiceTests
 
     private TeamAccessService Service() => new(
         _teams.Object, _members.Object, _roles.Object, new FakeTimeProvider(new DateTimeOffset(Now)),
-        Mock.Of<INocturneDbContextFactory>(),
+        new Mock<INocturneDbContextFactory>(MockBehavior.Strict).Object,
         new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+
+    /// <summary>
+    /// Whether the approval passes every check made before the write: the write opens a unit on the
+    /// strict context factory, which no test sets up.
+    /// </summary>
+    private async Task PassesTheChecksAsync(TeamAccessApproverCredential caller, TeamAccessGrant grant)
+    {
+        var approve = () => Service().ApproveAsync(Token, caller, grant, default);
+        await approve.Should().ThrowAsync<MockException>();
+    }
 
     private static TeamAccessApproverCredential Session(bool limited = false) =>
         new(Caller, AuthType.SessionCookie, new HashSet<string>(), limited);
@@ -100,7 +110,6 @@ public class TeamAccessServiceTests
             Membership(Guid.CreateVersion7()));
 
         (await Service().ApproveAsync(Token, Session(), Grant(), default)).Refusal.Should().Be(TeamAccessRefusal.NotOwner);
-        _teams.Verify(t => t.ApproveAccessAsync(It.IsAny<string>(), It.IsAny<TeamAccessApproverCredential>(), It.IsAny<TeamAccessGrant>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -119,13 +128,11 @@ public class TeamAccessServiceTests
         Link();
         Memberships(Membership(SiteId, end: end));
         GrantValid();
-        _teams.Setup(t => t.ApproveAccessAsync(Token, It.Is<TeamAccessApproverCredential>(c => c.SubjectId == Caller), It.Is<TeamAccessGrant>(g => g.AccessEndsAt == end), Now, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TeamAccessApproval(Guid.CreateVersion7(), null));
 
         (await Service().ApproveAsync(Token, Session(), Grant(), default)).Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover);
         (await Service().ApproveAsync(Token, Session(), Grant(end: end.AddMinutes(1)), default)).Refusal
             .Should().Be(TeamAccessRefusal.EndOutlastsApprover);
-        (await Service().ApproveAsync(Token, Session(), Grant(end: end), default)).Refusal.Should().BeNull();
+        await PassesTheChecksAsync(Session(), Grant(end: end));
     }
 
     [Fact]
@@ -134,11 +141,9 @@ public class TeamAccessServiceTests
         Link();
         Memberships(Membership(SiteId));
         GrantValid();
-        _teams.Setup(t => t.ApproveAccessAsync(Token, It.Is<TeamAccessApproverCredential>(c => c.SubjectId == Caller && c.LimitTo24Hours), It.Is<TeamAccessGrant>(g => g.LimitTo24Hours), Now, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TeamAccessApproval(Guid.CreateVersion7(), null));
 
         (await Service().ApproveAsync(Token, Session(limited: true), Grant(), default)).Refusal.Should().Be(TeamAccessRefusal.LimitRequired);
-        (await Service().ApproveAsync(Token, Session(limited: true), Grant(limit: true), default)).Refusal.Should().BeNull();
+        await PassesTheChecksAsync(Session(limited: true), Grant(limit: true));
     }
 
     [Fact]
@@ -147,10 +152,8 @@ public class TeamAccessServiceTests
         Link();
         Memberships(Membership(SiteId, limited: true));
         GrantValid();
-        _teams.Setup(t => t.ApproveAccessAsync(Token, It.Is<TeamAccessApproverCredential>(c => c.SubjectId == Caller), It.IsAny<TeamAccessGrant>(), Now, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TeamAccessApproval(Guid.CreateVersion7(), null));
 
-        (await Service().ApproveAsync(Token, Session(), Grant(), default)).Refusal.Should().BeNull();
+        await PassesTheChecksAsync(Session(), Grant());
     }
 
     [Theory]

@@ -320,12 +320,13 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             DELETE FROM tenant_member_roles WHERE tenant_member_id = '{drift}';
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours)
             VALUES ('{Guid.CreateVersion7()}', '{team}', 'team', '{teamAccess}', false);
+            {TeamReasonSql.StaffOfMember(teamAccess, team, null, false, null)}
             """, migrator);
         var rowsBefore = await RowsAsync(migrator);
         var teamReasonsBefore = await CountAsync(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         (await RowsAsync(migrator)).Where(r => !r.StartsWith(team.ToString())).Should().Equal(
             rowsBefore.Where(r => !r.StartsWith(team.ToString())), "the row wins over a direct reason and is never written");
@@ -357,7 +358,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
     {
         var (app, migrator) = await FreshDatabaseAsync("reasons_clean");
         var empty = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, empty, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), empty, Ct);
         empty.Entries.Should().BeEmpty("no table holds a row");
 
         var s = await SeedTenantAsync("clean", app);
@@ -365,7 +366,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         var reasonsBefore = await ReasonsAsync(migrator);
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         logger.Entries.Should().BeEmpty();
         (await ReasonsAsync(migrator)).Should().Equal(reasonsBefore);
@@ -479,7 +480,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await SeedBareMemberAsync(s, await NewSubjectAsync(s, "malformed-member"), """{"not":"a list"}""", s.ViewerRole, migrator);
 
         var logger = new RecordingLogger();
-        var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, logger, Ct);
+        var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(migrator, Now, TeamWrites.Apply(Now), logger, Ct);
 
         await check.Should().NotThrowAsync();
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error);

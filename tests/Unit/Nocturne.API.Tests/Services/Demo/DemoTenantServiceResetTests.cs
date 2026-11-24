@@ -65,7 +65,8 @@ public class DemoTenantServiceResetTests : IDisposable
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             _time,
-            _logger.Object, AccountLinkRoutes.Off);
+            _logger.Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
     }
 
     [Fact]

@@ -506,6 +506,7 @@ public class SubjectRepository : ISubjectRepository
         return await db.Database.CreateExecutionStrategy().ExecuteAsync<SubjectChange>(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync(ct);
+            await db.LockSubjectRowAsync(subjectId, ct);
 
             if (entity.IsActive)
             {

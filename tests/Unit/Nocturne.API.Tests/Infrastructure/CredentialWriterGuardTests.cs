@@ -63,7 +63,6 @@ public class CredentialWriterGuardTests
         "IAuthorizationService.CreateSubjectAsync",
         "ITeamRepository.CreateInviteAsync",
         "ITeamRepository.CreateAccessLinkAsync",
-        "ITeamRepository.ApproveAccessAsync",
         "IMembershipRequestService.ApproveRequestAsync",
         "IAccessRequestService.ApproveAsync",
         "ITenantCreationInviteService.CreateAsync",
