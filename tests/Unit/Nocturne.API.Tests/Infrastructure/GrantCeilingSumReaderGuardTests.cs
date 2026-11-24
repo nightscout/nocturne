@@ -56,6 +56,7 @@ public class GrantCeilingSumReaderGuardTests
         ["src/API/Nocturne.API/Attributes/RequireScopeAttribute.cs"] = (Reads.AccessCheck, "gates an action on the caller's scopes"),
         ["src/API/Nocturne.API/Authorization/ActivityReadScopeGuard.cs"] = (Reads.AccessCheck, "redacts activity the caller may not read"),
         ["src/API/Nocturne.API/Authorization/LegacyStorageReadScopes.cs"] = (Reads.AccessCheck, "gates a legacy collection read"),
+        ["src/API/Nocturne.API/Authorization/RefuseHistoryClampedAttribute.cs"] = (Reads.AccessCheck, "refuses a clamped caller an action the clamp does not bound"),
         ["src/API/Nocturne.API/Controllers/Authentication/DirectGrantController.cs"] = (Reads.OwnCredential, "Create bounds the caller's own token; Keep reads the ceiling"),
         ["src/API/Nocturne.API/Controllers/Authentication/OAuthController.cs"] = (Reads.OwnCredential, "consent, device approval and an app grant's edit bound the caller's own app; a guest grant's edit is bounded by the ceiling in OAuthGrantService"),
         ["src/API/Nocturne.API/Controllers/V1/ActivityController.cs"] = (Reads.AccessCheck, "redacts activity the caller may not read"),

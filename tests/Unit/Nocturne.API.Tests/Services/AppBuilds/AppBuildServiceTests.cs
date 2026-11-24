@@ -1,0 +1,479 @@
+using System.Net;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Services.AppBuilds;
+using Nocturne.Core.Contracts.AppBuilds;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.AppBuilds;
+
+namespace Nocturne.API.Tests.Services.AppBuilds;
+
+[Trait("Category", "Unit")]
+public class AppBuildServiceTests
+{
+    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Guid Subject = Guid.NewGuid();
+    private static readonly Guid OtherOwner = Guid.NewGuid();
+
+    private readonly FakeGitHub _github = new();
+    private readonly InMemoryLinks _links = new();
+    private readonly RecordingLogger _log = new();
+    private readonly AppBuildInstallState _state;
+
+    public AppBuildServiceTests()
+    {
+        _state = new AppBuildInstallState(new EphemeralDataProtectionProvider(), new MemoryCache(new MemoryCacheOptions()), _github.Time);
+    }
+
+    private AppBuildService CreateService(GitHubBuildAppOptions? options = null)
+    {
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(a => a.TenantId).Returns(Tenant);
+        var effective = options ?? _github.Options;
+        return new AppBuildService(_links, _github.CreateClient(_log.For<GitHubBuildAppClient>(), effective), _state,
+            Options.Create(effective), accessor.Object, _log.For<AppBuildService>());
+    }
+
+    private string StateFor(Guid? tenant = null, Guid? subject = null, string target = "aaps") =>
+        _state.Protect(tenant ?? Tenant, "alice", subject ?? Subject, target);
+
+    private void Linked(string? repository = FakeGitHub.Repository, params string[] adminRepositories) =>
+        _links.Rows["aaps"] = new AppBuildLink("aaps", FakeGitHub.InstallationId, "alice", false, repository,
+            adminRepositories.Length > 0 ? adminRepositories : [FakeGitHub.Repository], Subject,
+            FakeGitHub.LinkerLogin, FakeGitHub.LinkerId, default, default);
+
+    [Fact]
+    public async Task Without_configuration_the_feature_reports_unconfigured_and_every_action_refuses()
+    {
+        var service = CreateService(new GitHubBuildAppOptions());
+        Linked();
+
+        var status = await service.StatusAsync(Subject, default);
+
+        status.Configured.Should().BeFalse();
+        status.Targets.Should().ContainSingle(t => t.Id == "aaps");
+        status.Links.Should().BeEmpty();
+
+        var refusals = new Func<Task>[]
+        {
+            () => Task.FromResult(service.BeginLink("aaps", Subject, null)),
+            () => service.CompleteLinkAsync("code", FakeGitHub.InstallationId, StateFor(), Subject, default),
+            () => service.ListRepositoriesAsync("aaps", default),
+            () => service.ChooseRepositoryAsync("aaps", FakeGitHub.Repository, Subject, default),
+            () => service.GetSecretKeyAsync("aaps", default),
+            () => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default),
+            () => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default),
+            () => service.ListRunsAsync("aaps", default),
+            () => service.UnlinkAsync("aaps", default),
+        };
+        foreach (var refusal in refusals)
+            await refusal.Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.NotConfigured);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_private_key_that_does_not_parse_leaves_the_feature_unconfigured_and_logs_why_without_the_key()
+    {
+        var malformed = new GitHubBuildAppOptions
+        {
+            Slug = "nocturne-builds",
+            ClientId = "Iv23client",
+            ClientSecret = "client-secret",
+            PrivateKey = "-----BEGIN RSA PRIVATE KEY-----\nTOPSECRETKEYMATERIAL\n-----END RSA PRIVATE KEY-----",
+        };
+        var service = CreateService(malformed);
+        Linked();
+
+        (await service.StatusAsync(Subject, default)).Configured.Should().BeFalse();
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.NotConfigured);
+
+        _log.Messages.Should().ContainSingle(m => m.Contains("GitHub:BuildApp:PrivateKey"));
+        _log.Messages.Should().NotContain(m => m.Contains("TOPSECRETKEYMATERIAL"));
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Begin_link_returns_the_install_url_with_the_state_and_a_private_template_url()
+    {
+        var start = CreateService().BeginLink("aaps", Subject, "alice");
+
+        start.InstallUrl.Should().StartWith("https://github.com/apps/nocturne-builds/installations/new?state=");
+        var state = Uri.UnescapeDataString(start.InstallUrl[(start.InstallUrl.IndexOf("state=", StringComparison.Ordinal) + 6)..]);
+        _state.TryRead(state)!.Subject.Should().Be(Subject);
+        start.CreateRepositoryUrl.Should().Be(
+            "https://github.com/new?template_owner=nightscout&template_name=aaps-builder&owner=%40me&name=my-aaps&visibility=private");
+    }
+
+    [Fact]
+    public async Task A_callback_links_the_installation_and_the_one_repository_the_user_administers()
+    {
+        _github.OnUserFlow(FakeGitHub.InstallationId).OnUserRepositories((FakeGitHub.Repository, true), ("bob/shared", false));
+
+        var target = await CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, StateFor(), Subject, default);
+
+        target.Should().Be("aaps");
+        var link = _links.Rows["aaps"];
+        link.InstallationId.Should().Be(FakeGitHub.InstallationId);
+        link.AccountLogin.Should().Be("alice");
+        link.RepositoryFullName.Should().Be(FakeGitHub.Repository);
+        link.AdminRepositories.Should().Equal(FakeGitHub.Repository);
+        link.LinkedBySubjectId.Should().Be(Subject);
+        link.LinkerGitHubLogin.Should().Be(FakeGitHub.LinkerLogin);
+        link.LinkerGitHubId.Should().Be(FakeGitHub.LinkerId);
+        _log.Messages.Should().NotContain(m => m.Contains("ghu_") || m.Contains("ghs_") || m.Contains("client-secret"));
+        _github.Requests.Single(r => r.Path.StartsWith($"/user/installations/{FakeGitHub.InstallationId}/repositories", StringComparison.Ordinal))
+            .Authorization.Should().Be("Bearer ghu_user", "admin rights are the authorizing user's, read with their own token");
+        _github.Requests.Should().Contain(r => r.Method == HttpMethod.Delete && r.Path == "/applications/Iv23client/token",
+            "the user token is revoked once the installation is confirmed");
+    }
+
+    [Fact]
+    public async Task A_user_who_sees_the_installation_but_administers_none_of_its_repositories_is_refused()
+    {
+        _github.OnUserFlow(FakeGitHub.InstallationId).OnUserRepositories((FakeGitHub.Repository, false));
+
+        await FluentActions.Awaiting(() => CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, StateFor(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.NoAdminRepository);
+        _links.Rows.Should().BeEmpty();
+        _github.Requests.Should().Contain(r => r.Method == HttpMethod.Delete);
+    }
+
+    [Fact]
+    public async Task A_callback_for_an_installation_the_user_cannot_reach_is_refused()
+    {
+        _github.OnUserFlow(9999);
+
+        await FluentActions.Awaiting(() => CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, StateFor(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InstallationNotYours);
+        _links.Rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_callback_with_several_administered_repositories_leaves_the_choice_to_the_linker()
+    {
+        _github.OnUserFlow(FakeGitHub.InstallationId).OnUserRepositories((FakeGitHub.Repository, true), ("alice/other", true));
+
+        await CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, StateFor(), Subject, default);
+
+        _links.Rows["aaps"].RepositoryFullName.Should().BeNull();
+        _links.Rows["aaps"].AdminRepositories.Should().Equal(FakeGitHub.Repository, "alice/other");
+        (await CreateService().StatusAsync(Subject, default)).Links.Single().State.Should().Be(AppBuildLinkState.RepositoryNotChosen);
+    }
+
+    [Theory]
+    [InlineData("other-tenant")]
+    [InlineData("other-subject")]
+    [InlineData("unknown-target")]
+    [InlineData("garbage")]
+    public async Task A_callback_whose_state_does_not_bind_this_tenant_and_subject_is_refused_before_GitHub(string variant)
+    {
+        var state = variant switch
+        {
+            "other-tenant" => StateFor(tenant: Guid.NewGuid()),
+            "other-subject" => StateFor(subject: Guid.NewGuid()),
+            "unknown-target" => StateFor(target: "trio"),
+            _ => "garbage",
+        };
+
+        await FluentActions.Awaiting(() => CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, state, Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InvalidState);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_replayed_state_is_refused()
+    {
+        _github.OnUserFlow(FakeGitHub.InstallationId);
+        var state = StateFor();
+        await CreateService().CompleteLinkAsync("code", FakeGitHub.InstallationId, state, Subject, default);
+
+        await FluentActions.Awaiting(() => CreateService().CompleteLinkAsync("code-2", FakeGitHub.InstallationId, state, Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InvalidState);
+    }
+
+    [Fact]
+    public async Task A_ready_repository_reports_the_allowed_secrets_it_holds_and_who_linked_it()
+    {
+        Linked();
+        _github.OnRepository().OnSecrets("KEYSTORE_SET", "UNRELATED");
+        var service = CreateService();
+
+        var link = (await service.StatusAsync(Subject, default)).Links.Single();
+
+        link.State.Should().Be(AppBuildLinkState.Ready);
+        link.LinkedByCaller.Should().BeTrue();
+        link.Validation!.LinkerIsAdmin.Should().BeTrue();
+        link.Validation!.SecretsSet.Should().Equal("KEYSTORE_SET");
+        link.Validation.MissingRequiredSecrets.Should().BeEmpty();
+        (await service.StatusAsync(OtherOwner, default)).Links.Single().LinkedByCaller.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_repository_without_the_required_secret_reports_it_missing()
+    {
+        Linked();
+        _github.OnRepository().OnSecrets();
+
+        var link = (await CreateService().StatusAsync(Subject, default)).Links.Single();
+
+        link.State.Should().Be(AppBuildLinkState.SecretsMissing);
+        link.Validation!.MissingRequiredSecrets.Should().Equal("KEYSTORE_SET");
+    }
+
+    [Fact]
+    public async Task A_stored_repository_name_that_is_not_an_owner_and_name_never_reaches_a_GitHub_path()
+    {
+        Linked(repository: "alice/../../app/installations", adminRepositories: ["alice/../../app/installations"]);
+
+        var link = (await CreateService().StatusAsync(Subject, default)).Links.Single();
+
+        link.State.Should().Be(AppBuildLinkState.Unreachable);
+        link.Error.Should().Be(AppBuildException.RepositoryNotFound);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    public static TheoryData<bool, bool, string?, AppBuildRepositoryProblem> InvalidRepositories => new()
+    {
+        { false, false, "nightscout/aaps-builder", AppBuildRepositoryProblem.NotPrivate },
+        { true, true, "nightscout/aaps-builder", AppBuildRepositoryProblem.IsTemplate },
+        { true, false, "someone/aaps-builder", AppBuildRepositoryProblem.WrongTemplate },
+        { true, false, null, AppBuildRepositoryProblem.WrongTemplate },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidRepositories))]
+    public async Task An_invalid_repository_gets_no_secret_and_no_dispatch(
+        bool isPrivate, bool isTemplate, string? template, AppBuildRepositoryProblem problem)
+    {
+        Linked();
+        _github.OnRepository(isPrivate, isTemplate, template).OnSecrets();
+        var service = CreateService();
+
+        (await service.StatusAsync(Subject, default)).Links.Single().Validation!.Problems.Should().Contain(problem);
+        await FluentActions.Awaiting(() => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryInvalid);
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryInvalid);
+        await FluentActions.Awaiting(() => service.GetSecretKeyAsync("aaps", default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryInvalid);
+
+        _github.Requests.Should().NotContain(r => r.Method == HttpMethod.Put || r.Path.EndsWith("/dispatches", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_secret_outside_the_targets_allow_list_is_refused_before_GitHub()
+    {
+        Linked();
+
+        await FluentActions.Awaiting(() => CreateService().PutSecretAsync("aaps", "GDRIVE_OAUTH2", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.SecretNotAllowed);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_sealed_secret_is_relayed_unchanged()
+    {
+        Linked();
+        _github.OnRepository().On(HttpMethod.Put, $"/repos/{FakeGitHub.Repository}/actions/secrets/KEYSTORE_SET",
+            _ => new HttpResponseMessage(HttpStatusCode.Created));
+
+        await CreateService().PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default);
+
+        var body = JsonDocument.Parse(_github.Requests.Single(r => r.Method == HttpMethod.Put).Body!).RootElement;
+        body.GetProperty("encrypted_value").GetString().Should().Be(Sealed().EncryptedValue);
+        body.GetProperty("key_id").GetString().Should().Be("568250167242549743");
+    }
+
+    [Fact]
+    public async Task An_encrypted_value_that_is_not_base64_is_refused()
+    {
+        Linked();
+
+        await FluentActions.Awaiting(() => CreateService().PutSecretAsync("aaps", "KEYSTORE_SET",
+                new SealedAppBuildSecret { EncryptedValue = "plain text keystore", KeyId = "1" }, Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InputInvalid);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Only_the_person_who_linked_may_choose_the_repository_write_a_secret_or_start_a_build()
+    {
+        Linked();
+        _github.OnRepository().OnInstallationRepositories(FakeGitHub.Repository).OnSecrets();
+        var service = CreateService();
+
+        var refusals = new Func<Task>[]
+        {
+            () => service.ChooseRepositoryAsync("aaps", FakeGitHub.Repository, OtherOwner, default),
+            () => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), OtherOwner, default),
+            () => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), OtherOwner, default),
+        };
+        foreach (var refusal in refusals)
+            await refusal.Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.NotLinker);
+        _github.Requests.Should().BeEmpty();
+
+        (await service.StatusAsync(OtherOwner, default)).Links.Should().ContainSingle();
+        (await service.UnlinkAsync("aaps", default)).UninstallUrl.Should().NotBeEmpty();
+        _links.Rows.Should().BeEmpty("unlinking only forgets the link, so any owner may do it");
+    }
+
+    [Theory]
+    [InlineData("write", FakeGitHub.LinkerId)]
+    [InlineData("admin", 4242)]
+    public async Task A_linker_who_no_longer_administers_the_repository_gets_no_secret_and_no_dispatch(string permission, long userId)
+    {
+        Linked();
+        _github.OnRepository().OnSecrets("KEYSTORE_SET").OnLinkerPermission(permission, userId);
+        var service = CreateService();
+
+        var link = (await service.StatusAsync(Subject, default)).Links.Single();
+        link.State.Should().Be(AppBuildLinkState.LinkerNotAdmin);
+        link.Validation!.LinkerIsAdmin.Should().BeFalse();
+
+        await FluentActions.Awaiting(() => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.LinkerNotAdmin);
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.LinkerNotAdmin);
+        _github.Requests.Should().NotContain(r => r.Method == HttpMethod.Put || r.Path.EndsWith("/dispatches", StringComparison.Ordinal));
+        _github.Requests.Where(r => r.Path.EndsWith("/permission", StringComparison.Ordinal))
+            .Should().OnlyContain(r => r.Authorization == "Bearer ghs_installation", "the role is read with the installation token");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway, AppBuildException.GitHubUnavailable)]
+    [InlineData(HttpStatusCode.TooManyRequests, AppBuildException.GitHubRateLimited)]
+    public async Task A_role_check_GitHub_cannot_answer_refuses_the_secret_write_and_the_dispatch(HttpStatusCode status, string expected)
+    {
+        Linked();
+        _github.OnRepository().On(HttpMethod.Get,
+            $"/repos/{FakeGitHub.Repository}/collaborators/{FakeGitHub.LinkerLogin}/permission", _ => new HttpResponseMessage(status));
+        var service = CreateService();
+
+        await FluentActions.Awaiting(() => service.PutSecretAsync("aaps", "KEYSTORE_SET", Sealed(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(expected);
+        await FluentActions.Awaiting(() => service.DispatchAsync("aaps", new DispatchAppBuildRequest(), Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(expected);
+        _github.Requests.Should().NotContain(r => r.Method == HttpMethod.Put || r.Path.EndsWith("/dispatches", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("variant", "fullRelease; rm -rf /")]
+    [InlineData("variant", "someVariant")]
+    [InlineData("version", "../../etc")]
+    [InlineData("version", "")]
+    [InlineData("branch", "main")]
+    public async Task A_dispatch_input_the_target_does_not_allow_is_refused_before_GitHub(string name, string value)
+    {
+        Linked();
+
+        await FluentActions.Awaiting(() => CreateService().DispatchAsync("aaps",
+                new DispatchAppBuildRequest { Inputs = new() { [name] = value } }, Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.InputInvalid);
+        _github.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_dispatch_fills_defaults_and_targets_the_default_branch()
+    {
+        Linked();
+        _github.OnRepository().On(HttpMethod.Post, $"/repos/{FakeGitHub.Repository}/actions/workflows/build.yml/dispatches",
+            _ => new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var result = await CreateService().DispatchAsync("aaps",
+            new DispatchAppBuildRequest { Inputs = new() { ["version"] = "3.3.2.1" } }, Subject, default);
+
+        result.RunsUrl.Should().Be("https://github.com/alice/my-aaps/actions/workflows/build.yml");
+        var body = JsonDocument.Parse(_github.Requests.Single(r => r.Path.EndsWith("/dispatches", StringComparison.Ordinal)).Body!).RootElement;
+        body.GetProperty("ref").GetString().Should().Be("main");
+        body.GetProperty("inputs").GetProperty("version").GetString().Should().Be("3.3.2.1");
+        body.GetProperty("inputs").GetProperty("variant").GetString().Should().Be("fullRelease");
+    }
+
+    [Fact]
+    public async Task Choosing_a_repository_outside_the_linkers_administered_set_is_refused()
+    {
+        Linked(repository: null, adminRepositories: [FakeGitHub.Repository]);
+        _github.OnInstallationRepositories(FakeGitHub.Repository, "alice/other");
+        var service = CreateService();
+
+        (await service.ListRepositoriesAsync("aaps", default)).Select(r => r.FullName).Should().Equal(FakeGitHub.Repository);
+        await FluentActions.Awaiting(() => service.ChooseRepositoryAsync("aaps", "alice/other", Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryNotInInstallation);
+        await FluentActions.Awaiting(() => service.ChooseRepositoryAsync("aaps", "mallory/other", Subject, default))
+            .Should().ThrowAsync<AppBuildException>().WithMessage(AppBuildException.RepositoryNotInInstallation);
+
+        await service.ChooseRepositoryAsync("aaps", FakeGitHub.Repository, Subject, default);
+        _links.Rows["aaps"].RepositoryFullName.Should().Be(FakeGitHub.Repository);
+    }
+
+    [Theory]
+    [InlineData("completed", "success", AppBuildRunState.Succeeded)]
+    [InlineData("completed", "failure", AppBuildRunState.Failed)]
+    [InlineData("completed", "timed_out", AppBuildRunState.Failed)]
+    [InlineData("completed", "cancelled", AppBuildRunState.Cancelled)]
+    [InlineData("in_progress", null, AppBuildRunState.Running)]
+    [InlineData("queued", null, AppBuildRunState.Queued)]
+    [InlineData("waiting", null, AppBuildRunState.Queued)]
+    public void A_run_state_is_derived_from_GitHubs_status_and_conclusion(string status, string? conclusion, AppBuildRunState expected) =>
+        AppBuildService.RunState(status, conclusion).Should().Be(expected);
+
+    [Fact]
+    public async Task Unlinking_forgets_the_link_and_points_at_the_uninstall_page()
+    {
+        Linked();
+
+        var result = await CreateService().UnlinkAsync("aaps", default);
+
+        result.UninstallUrl.Should().Be($"https://github.com/settings/installations/{FakeGitHub.InstallationId}");
+        _links.Rows.Should().BeEmpty();
+        _github.Requests.Should().BeEmpty();
+    }
+
+    private static SealedAppBuildSecret Sealed() => new() { EncryptedValue = "c2VhbGVkLWJveA==", KeyId = "568250167242549743" };
+
+    private sealed class InMemoryLinks : IAppBuildLinkRepository
+    {
+        public Dictionary<string, AppBuildLink> Rows { get; } = [];
+
+        public Task<IReadOnlyList<AppBuildLink>> GetAllAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<AppBuildLink>>(Rows.Values.ToList());
+
+        public Task<AppBuildLink?> GetAsync(string targetId, CancellationToken ct) =>
+            Task.FromResult(Rows.GetValueOrDefault(targetId));
+
+        public Task SaveAsync(AppBuildLink link, CancellationToken ct)
+        {
+            Rows[link.TargetId] = link;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> SetRepositoryAsync(string targetId, string repositoryFullName, CancellationToken ct)
+        {
+            if (!Rows.TryGetValue(targetId, out var link)) return Task.FromResult(false);
+            Rows[targetId] = link with { RepositoryFullName = repositoryFullName };
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> DeleteAsync(string targetId, CancellationToken ct) => Task.FromResult(Rows.Remove(targetId));
+    }
+
+    private sealed class RecordingLogger
+    {
+        public List<string> Messages { get; } = [];
+
+        public ILogger<T> For<T>() => new Logger<T>(Messages);
+
+        private sealed class Logger<T>(List<string> messages) : ILogger<T>
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter) => messages.Add(formatter(state, exception));
+        }
+    }
+}

@@ -1,0 +1,128 @@
+---
+title: GitHub App for app builds
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# GitHub App for app builds
+
+With app builds, a site owner can set up, start and monitor their own AAPS build from
+Nocturne. The build runs in the owner's private GitHub repository. The owner's workflow signs
+the APK with the owner's own key. Nocturne connects to that repository through a GitHub App. Each
+instance registers its own GitHub App. This page tells you how to do that.
+
+If you do not register an App, app builds stay off. Nothing else in Nocturne changes.
+
+## What the App can do
+
+The App gets three repository permissions and no more:
+
+| Permission | Access | Use |
+|------------|--------|-----|
+| **Secrets** | Read and write | Nocturne writes the signing-key secret. It sends only a value that the browser encrypted with the repository's public key. Nocturne cannot decrypt it. |
+| **Actions** | Read and write | Nocturne starts the build workflow and reads the status of each build. |
+| **Metadata** | Read-only | Nocturne makes sure that the person who connected the repository is still an administrator of it. GitHub gives this permission to every App. |
+
+The App does not get **Contents** or **Administration**. Thus Nocturne cannot change the
+workflow file, read the code, or create a repository. The owner creates the repository from
+the AAPS Builder template. Then the owner installs the App on that one repository.
+
+## 1. Register the App
+
+1. On GitHub, go to **Settings > Developer settings > GitHub Apps**. For an organization,
+   go to the organization's **Settings > Developer settings > GitHub Apps**.
+2. Click **New GitHub App**.
+3. Fill in the fields:
+
+| Field | Value |
+|-------|-------|
+| **GitHub App name** | A name that is unique on GitHub, for example `Nocturne builds (example.com)`. |
+| **Homepage URL** | `https://example.com` |
+| **Callback URL** | `https://example.com/api/v4/app-builds/github/callback` |
+| **Request user authorization (OAuth) during installation** | On |
+| **Expire user authorization tokens** | On |
+| **Setup URL** | Leave empty. GitHub disables it when it requests user authorization during installation. It then sends the user to the callback URL. |
+| **Webhook** | Off. Clear **Active**. |
+| **Repository permissions** | **Secrets**: Read and write. **Actions**: Read and write. **Metadata**: Read-only. |
+| **Account permissions** | None. |
+| **Where can this GitHub App be installed?** | **Any account**. |
+
+Replace `example.com` with the domain in `BASE_DOMAIN`. Use the apex domain, not a site
+subdomain. Nocturne sends each callback to the site that started it.
+
+4. Click **Create GitHub App**.
+
+<Callout type="warning" title="Do not add permissions">
+
+  Nocturne needs only the three permissions above. Do not give the App more. Each owner sees
+  these permissions when they install the App.
+
+</Callout>
+
+## 2. Get the keys
+
+On the page of the new App:
+
+1. Copy the **Client ID**.
+2. Click **Generate a new client secret**. Copy the secret. GitHub shows it only one time.
+3. Under **Private keys**, click **Generate a private key**. GitHub downloads a `.pem` file.
+4. Copy the App name from the App's public page URL, `https://github.com/apps/<name>`.
+
+## 3. Configure Nocturne
+
+Add these variables to the environment of the `nocturne-api` service:
+
+| Variable | Value |
+|----------|-------|
+| `GitHub__BuildApp__Slug` | The App name from the public page URL. |
+| `GitHub__BuildApp__ClientId` | The Client ID. |
+| `GitHub__BuildApp__ClientSecret` | The client secret. |
+| `GitHub__BuildApp__PrivateKey` | The `.pem` file. See below. |
+
+The private key file has many lines. Many environment files accept only one line for each
+value, for example a Docker Compose `.env` file. For those, give the key as one line of base64:
+
+```bash
+openssl base64 -A -in your-app.private-key.pem
+```
+
+Nocturne accepts the base64 text or the full `.pem` text with its `BEGIN` and `END` lines.
+
+Restart the API. App builds stay off until you set all four variables. If Nocturne cannot read the
+private key, app builds also stay off. The API log then shows a warning that names
+`GitHub:BuildApp:PrivateKey`. The warning does not show the key.
+
+<Callout type="warning" title="Keep the keys secret">
+
+  The private key and the client secret let a person act as your App. Keep them out of anything
+  you share. If you lose one, delete it on the App page and make a new one.
+
+</Callout>
+
+## What Nocturne keeps
+
+For each site, Nocturne keeps the installation number, the GitHub account name, the
+repository name and who connected it. It also keeps the names of the repositories in the
+installation that this person administers. Nocturne does not keep a GitHub token. It gets a
+short-lived installation token from GitHub when it needs one. Nocturne does not keep the
+token that GitHub gives during installation. It uses that token to find the installation and
+the repositories that the user administers, then revokes it.
+
+The built APK stays in the owner's repository. The owner downloads it from the build page on
+GitHub. Nocturne does not get or keep the APK.
+
+Only a site owner, or a member who manages site settings, can use app builds. The person who
+connects the repository does so with their own GitHub account. Only that person can choose the
+repository, save the signing key and start a build. That person must be an administrator of the
+repository on GitHub. Before each save of the key and each build, Nocturne asks GitHub again. If
+that person is no longer an administrator, Nocturne stops and asks for a new connection. Other
+site owners can see the status and the builds, and they can disconnect. To take over, another
+owner connects again with their own GitHub account.
+
+## Remove the App
+
+When an owner disconnects app builds, Nocturne forgets the connection and shows a link to the
+installation on GitHub. The owner removes the App there. To stop app builds for all sites,
+remove the four variables and restart the API.

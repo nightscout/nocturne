@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Controllers.V4.AppBuilds;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.Core.Models.Authorization;
@@ -99,6 +100,18 @@ public class RequireInteractiveSessionTests
         // Giving a team access to a site is the owner's own decision, made in their own session.
         { typeof(TeamsController), nameof(TeamsController.GetAccessLinkInfo) },
         { typeof(TeamsController), nameof(TeamsController.ApproveAccessLink) },
+
+        // A build writes a signing-key secret to, and starts a run in, the person's own GitHub account.
+        { typeof(AppBuildsController), nameof(AppBuildsController.GetAppBuildsStatus) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.BeginAppBuildLink) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.CompleteAppBuildLink) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.GetAppBuildRepositories) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.ChooseAppBuildRepository) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.GetAppBuildSecretKey) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.PutAppBuildSecret) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.DispatchAppBuild) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.GetAppBuildRuns) },
+        { typeof(AppBuildsController), nameof(AppBuildsController.UnlinkAppBuild) },
     };
 
     [Theory]
