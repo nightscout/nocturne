@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Fido2NetLib;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -245,11 +244,11 @@ public partial class SetupController : ControllerBase
         {
             return RegistrationFailed(ex);
         }
-        catch (Fido2VerificationException ex)
+        catch (JsonException ex)
         {
             return RegistrationFailed(ex);
         }
-        catch (JsonException ex)
+        catch (PasskeyRegistrationRefusedException ex)
         {
             return RegistrationFailed(ex);
         }
@@ -263,7 +262,7 @@ public partial class SetupController : ControllerBase
         var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 
         var outcome = await SignInOwnerAsync(
-            credResult.SubjectId, tenant!, SignInMethod.SetupPasskey, "Setup Passkey");
+            credResult.SubjectId, tenant!, SignInMethod.Passkey, "Setup Passkey");
 
         switch (outcome)
         {
@@ -400,7 +399,7 @@ public partial class SetupController : ControllerBase
         await GrantFirstOwnerPlatformAdminAsync(ownerSubjectId);
 
         var outcome = await SignInOwnerAsync(
-            ownerSubjectId, tenant!, SignInMethod.SetupOidc, "Setup OIDC", result.OidcSessionId, result.ProviderId);
+            ownerSubjectId, tenant!, SignInMethod.Oidc, "Setup OIDC", result.OidcSessionId, result.ProviderId);
 
         return outcome switch
         {
@@ -598,7 +597,8 @@ public partial class SetupController : ControllerBase
                 DeviceDescription: deviceDescription,
                 IpAddress: HttpContext.GetClientAddress(),
                 UserAgent: Request.Headers.UserAgent.ToString()),
-            providerId));
+            providerId,
+            Enrolment: SignInEnrolment.Setup));
 
         await HttpContext.ApplySignInAsync(outcome, _oidcOptions);
 
@@ -610,6 +610,10 @@ public partial class SetupController : ControllerBase
         return outcome;
     }
 
+    /// <summary>
+    /// The answer to a refused setup registration. The refusal types are the ones
+    /// <see cref="IPasskeyService.CompleteRegistrationAsync"/> names.
+    /// </summary>
     private ObjectResult RegistrationFailed(Exception ex)
     {
         _logger.LogWarning(ex, "Setup owner passkey registration failed");

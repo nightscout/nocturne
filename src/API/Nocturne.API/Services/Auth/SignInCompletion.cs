@@ -28,8 +28,11 @@ public sealed class SignInCompletion(
 {
     public async Task<SignInOutcome> CompleteAsync(SignInAttempt attempt, CancellationToken ct = default)
     {
+        // Built before any step so a method or enrolment with no row name throws before any write.
+        var details = MethodDetails(attempt);
+
         if (!await IsAdmittedAsync(attempt.Admission, attempt.SubjectId, ct))
-            return await RefuseAsync(attempt, SignInRefusal.NotAMember);
+            return await RefuseAsync(attempt, SignInRefusal.NotAMember, details);
 
         var gate = attempt.SecondFactor switch
         {
@@ -41,9 +44,8 @@ public sealed class SignInCompletion(
 
         if (gate == SecondFactorRequirement.CodeRequired)
         {
-            var pending = MethodDetails(attempt.Method);
-            pending["secondFactorPending"] = true;
-            await WriteAuditAsync(AuthAuditEventType.Login, attempt, success: false, pending);
+            details["secondFactorPending"] = true;
+            await WriteAuditAsync(AuthAuditEventType.Login, attempt, success: false, details);
             var (tenantId, admittedByInvite) = StepUpBinding(attempt.Admission);
             var stepUpToken = await totp.CreateStepUpTokenAsync(attempt.SubjectId, tenantId, admittedByInvite);
             return new SignInOutcome.SecondFactorRequired(
@@ -55,10 +57,9 @@ public sealed class SignInCompletion(
         await subjects.UpdateLastLoginAsync(attempt.SubjectId);
 
         var trustedDevice = gate == SecondFactorRequirement.SatisfiedByTrustedDevice;
-        var signedIn = MethodDetails(attempt.Method);
         if (trustedDevice)
-            signedIn["secondFactor"] = "trusted_device";
-        await WriteAuditAsync(AuthAuditEventType.Login, attempt, success: true, signedIn);
+            details["secondFactor"] = "trusted_device";
+        await WriteAuditAsync(AuthAuditEventType.Login, attempt, success: true, details);
 
         return new SignInOutcome.SignedIn(session, trustedDevice, attempt.Method, attempt.ProviderId);
     }
@@ -79,14 +80,13 @@ public sealed class SignInCompletion(
             _ => (null, false),
         };
 
-    private async Task<SignInOutcome> RefuseAsync(SignInAttempt attempt, SignInRefusal reason)
+    private async Task<SignInOutcome> RefuseAsync(SignInAttempt attempt, SignInRefusal reason, JsonObject details)
     {
         if (attempt.RefusalAudit is RefusalAudit.MethodRow)
             return new SignInOutcome.Refused(reason);
 
         var added = attempt.RefusalAudit as RefusalAudit.ModuleRow;
         var reasonName = ReasonName(reason);
-        var details = MethodDetails(attempt.Method);
         details["reason"] = reasonName;
         foreach (var (name, value) in added?.Details ?? [])
             details.Add(name, JsonSerializer.SerializeToNode(value));
@@ -109,26 +109,28 @@ public sealed class SignInCompletion(
     /// The method, and the enrolment it completes when it is one, that every row of the sign-in
     /// starts with.
     /// </summary>
-    private static JsonObject MethodDetails(SignInMethod method)
+    private static JsonObject MethodDetails(SignInAttempt attempt)
     {
-        var details = new JsonObject { ["method"] = MethodName(method) };
-        if (EnrolmentName(method) is { } enrolment)
-            details["enrolment"] = enrolment;
+        var details = new JsonObject { ["method"] = MethodName(attempt.Method) };
+        if (attempt.Enrolment is { } enrolment)
+            details["enrolment"] = EnrolmentName(enrolment);
         return details;
     }
 
     private static string MethodName(SignInMethod method) => method switch
     {
-        SignInMethod.Passkey or SignInMethod.SetupPasskey => "passkey",
-        SignInMethod.Oidc or SignInMethod.SetupOidc => "oidc",
+        SignInMethod.Passkey => "passkey",
+        SignInMethod.Oidc => "oidc",
         SignInMethod.Totp => "totp",
         _ => throw new ArgumentOutOfRangeException(nameof(method), method, null),
     };
 
-    private static string? EnrolmentName(SignInMethod method) => method switch
+    private static string EnrolmentName(SignInEnrolment enrolment) => enrolment switch
     {
-        SignInMethod.SetupPasskey or SignInMethod.SetupOidc => "setup",
-        _ => null,
+        SignInEnrolment.Setup => "setup",
+        SignInEnrolment.Invite => "invite",
+        SignInEnrolment.TenantInvite => "tenant_invite",
+        _ => throw new ArgumentOutOfRangeException(nameof(enrolment), enrolment, null),
     };
 
     private Task WriteAuditAsync(string eventType, SignInAttempt attempt, bool success, JsonObject details) =>
@@ -146,12 +148,20 @@ public enum SignInMethod
 
     /// <summary>The authenticator code that finishes a sign-in a primary factor started.</summary>
     Totp,
+}
 
-    /// <summary>First-run setup: the owner's first passkey, registered by the setup step.</summary>
-    SetupPasskey,
+/// <summary>The enrolment a sign-in completes: the first session of a subject its proof has just
+/// given a credential.</summary>
+public enum SignInEnrolment
+{
+    /// <summary>First-run setup: the owner's first passkey or provider identity.</summary>
+    Setup,
 
-    /// <summary>First-run setup: the owner's provider identity, linked by the setup callback.</summary>
-    SetupOidc,
+    /// <summary>A member invite: the invitee's first passkey, on the inviting tenant.</summary>
+    Invite,
+
+    /// <summary>A tenant creation link: the new owner's first passkey.</summary>
+    TenantInvite,
 }
 
 /// <summary>What admits the proved subject to the host the sign-in runs on.</summary>
@@ -197,10 +207,11 @@ public abstract record SecondFactorProof
 /// <param name="SecondFactor">What the method proved towards the second factor.</param>
 /// <param name="Session">The session's device description and the request's address and agent,
 /// which the audit rows record too.</param>
-/// <param name="ProviderId">The identity provider, for a provider method (<see cref="SignInMethod.Oidc"/>,
-/// <see cref="SignInMethod.SetupOidc"/>).</param>
+/// <param name="ProviderId">The identity provider, for <see cref="SignInMethod.Oidc"/>.</param>
 /// <param name="RefusalAudit">How a refusal is recorded; null records the module's row with
 /// nothing added.</param>
+/// <param name="Enrolment">The enrolment the sign-in completes, which every row names; null for a
+/// sign-in with a credential the subject already held.</param>
 public sealed record SignInAttempt(
     Guid SubjectId,
     SignInMethod Method,
@@ -208,7 +219,8 @@ public sealed record SignInAttempt(
     SecondFactorProof SecondFactor,
     SessionContext Session,
     Guid? ProviderId = null,
-    RefusalAudit? RefusalAudit = null);
+    RefusalAudit? RefusalAudit = null,
+    SignInEnrolment? Enrolment = null);
 
 /// <summary>How the <see cref="AuthAuditEventType.FailedAuth"/> row of a refused sign-in is recorded.</summary>
 public abstract record RefusalAudit
@@ -245,8 +257,7 @@ public abstract record SignInOutcome
     /// <param name="Session">The session issued.</param>
     /// <param name="TrustedDevice">Whether a trusted device stood in for the code.</param>
     /// <param name="Method">The method that proved the subject, which names the sign-in hint.</param>
-    /// <param name="ProviderId">The identity provider, for a provider method
-    /// (<see cref="SignInMethod.Oidc"/>, <see cref="SignInMethod.SetupOidc"/>).</param>
+    /// <param name="ProviderId">The identity provider, for <see cref="SignInMethod.Oidc"/>.</param>
     public sealed record SignedIn(SessionTokenPair Session, bool TrustedDevice, SignInMethod Method, Guid? ProviderId)
         : SignInOutcome;
 
