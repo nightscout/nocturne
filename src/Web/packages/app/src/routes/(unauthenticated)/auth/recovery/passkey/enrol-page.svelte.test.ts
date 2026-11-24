@@ -191,6 +191,34 @@ describe("Recovery enrolment page", () => {
     expect(state.goToReturnUrl.mock.calls[0][0]).toBe(`${SETTINGS}&credentialId=cred-1`);
   });
 
+  it("shows the first recovery codes the sign-in issued and moves on only once they are saved", async () => {
+    state.loginComplete.mockImplementation(async () => ({
+      success: true,
+      accessToken: "t",
+      recoveryCodes: ["AAAAA-BBBBB", "CCCCC-DDDDD"],
+    }));
+    render(EnrolPage);
+
+    await page.getByRole("button", { name: "Create a passkey" }).click();
+
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeInTheDocument();
+    await expect.element(page.getByText("CCCCC-DDDDD")).toBeInTheDocument();
+    expect(state.loginComplete).toHaveBeenCalledWith(expect.objectContaining({ showsRecoveryCodes: true }));
+    await expect
+      .element(page.getByText("You are signed in. Your account had no recovery codes, so we made them now."))
+      .toBeVisible();
+    await expect.element(page.getByText(/recovery code is now used up/)).not.toBeInTheDocument();
+    const next = page.getByRole("button", { name: "Continue" });
+    await expect.element(next).toBeDisabled();
+    expect(state.goToReturnUrl).not.toHaveBeenCalled();
+
+    await page.getByRole("checkbox").click();
+    await next.click();
+
+    await vi.waitFor(() => expect(state.goToReturnUrl).toHaveBeenCalled());
+    expect(state.goToReturnUrl.mock.calls[0][0]).toBe(`${SETTINGS}&credentialId=cred-1`);
+  });
+
   it("takes an account with an authenticator app to the second-factor step", async () => {
     state.loginComplete.mockImplementation(async () => ({
       success: true,

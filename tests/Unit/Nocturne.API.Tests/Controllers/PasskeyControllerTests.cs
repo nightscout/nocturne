@@ -940,9 +940,13 @@ public class PasskeyControllerTests : IDisposable
         var inviteeId = await SeedEnrollingSubjectAsync("invitee");
         var inviteService = StubValidInvite();
         StubRegistrationChallengeMintedFor(inviteeId, PasskeyRegistrationFlow.MemberInvite);
-        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(inviteeId)).ReturnsAsync(["code-1"]);
+        var steps = new List<string>();
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(inviteeId))
+            .Callback(() => steps.Add("recovery-codes"))
+            .ReturnsAsync(["code-1"]);
         _sessionService
             .Setup(s => s.IssueSessionAsync(inviteeId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Add("session"))
             .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, inviteeId));
 
         var result = await _controller.InviteComplete(
@@ -956,7 +960,10 @@ public class PasskeyControllerTests : IDisposable
             inviteService.Object);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
+        var response = Assert.IsType<PasskeyRegistrationResponse>(ok.Value);
+        response.Success.Should().BeTrue();
+        response.RecoveryCodes.Should().Equal("code-1");
+        steps.Should().Equal("session", "recovery-codes");
         inviteService.Verify(s => s.AcceptInviteAsync("invite-token", inviteeId, _tenantId), Times.Once);
         _subjectService.Verify(s => s.UpdateLastLoginAsync(inviteeId), Times.Once);
     }
@@ -990,41 +997,6 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task TenantInviteComplete_RecordsTheSignInTime()
-    {
-        var newOwnerId = await SeedEnrollingSubjectAsync("founder");
-        StubRegistrationChallengeMintedFor(newOwnerId, PasskeyRegistrationFlow.CreationLink);
-        var inviteId = Guid.CreateVersion7();
-        _tenantService.Setup(s => s.ValidateSlugAsync("founder-site", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SlugValidationResult(true));
-        var tenantInvites = new Mock<ITenantCreationInviteService>();
-        tenantInvites.Setup(s => s.ClaimAsync("tenant-invite-token", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(TenantInviteOutcome<Guid>.Ok(inviteId));
-        tenantInvites
-            .Setup(s => s.CreateTenantAsync(
-                inviteId, "founder-site", "Founder", newOwnerId, "founder", It.IsAny<CancellationToken>()))
-            .Returns(() => TenantCreatedForAsync(newOwnerId));
-        _sessionService
-            .Setup(s => s.IssueSessionAsync(newOwnerId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, newOwnerId));
-
-        var result = await _controller.TenantInviteComplete(
-            new TenantInviteCompleteRequest
-            {
-                Token = "tenant-invite-token",
-                Slug = "founder-site",
-                SiteName = "Founder",
-                Username = "founder",
-                AttestationResponseJson = "{}",
-                ChallengeToken = EnrolmentChallenge,
-            },
-            tenantInvites.Object);
-
-        result.Should().BeOfType<OkObjectResult>();
-        _subjectService.Verify(s => s.UpdateLastLoginAsync(newOwnerId), Times.Once);
-    }
-
-    [Fact]
     public async Task InviteComplete_WhenTheSignInTimeCannotBeRecorded_LeavesAnUndeliveredSessionAndSetsNoCookie()
     {
         var inviteeId = await SeedEnrollingSubjectAsync("invitee");
@@ -1048,6 +1020,7 @@ public class PasskeyControllerTests : IDisposable
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
@@ -1085,6 +1058,7 @@ public class PasskeyControllerTests : IDisposable
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _controller.HttpContext.Response.Headers.SetCookie.Should().BeEmpty();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
@@ -2146,11 +2120,12 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", _tenantId))
             .ReturnsAsync(new PasskeyAssertionResult(subjectId, username, username));
 
-    private Task<ActionResult<PasskeyLoginCompleteResponse>> LoginCompleteAsync() =>
+    private Task<ActionResult<PasskeyLoginCompleteResponse>> LoginCompleteAsync(bool showsRecoveryCodes = false) =>
         _controller.LoginComplete(new PasskeyLoginCompleteRequest
         {
             AssertionResponseJson = "{}",
             ChallengeToken = "assertion-token",
+            ShowsRecoveryCodes = showsRecoveryCodes,
         });
 
     [Fact]
@@ -2266,6 +2241,107 @@ public class PasskeyControllerTests : IDisposable
         _subjectService.Verify(
             s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never,
             "the sign-in completes at the code step, which records the time itself");
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenItIssuesTheSession_ThenAnswersWithTheFirstRecoveryCodes()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        var steps = new List<string>();
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .Callback(() => steps.Add("session"))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+        _recoveryCodeService.Setup(s => s.GenerateFirstCodesAsync(subjectId))
+            .Callback(() => steps.Add("first-codes"))
+            .ReturnsAsync(["code-1", "code-2"]);
+
+        var result = await LoginCompleteAsync(showsRecoveryCodes: true);
+
+        var response = Assert.IsType<PasskeyLoginCompleteResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        response.RecoveryCodes.Should().Equal("code-1", "code-2");
+        steps.Should().Equal("session", "first-codes");
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginComplete_ForAMemberWhoHasHeldRecoveryCodes_AnswersWithNone()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+        _recoveryCodeService.Setup(s => s.GenerateFirstCodesAsync(subjectId)).ReturnsAsync((List<string>?)null);
+
+        var result = await LoginCompleteAsync(showsRecoveryCodes: true);
+
+        Assert.IsType<PasskeyLoginCompleteResponse>(Assert.IsType<OkObjectResult>(result.Result).Value)
+            .RecoveryCodes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginComplete_ForACallerThatDoesNotShowRecoveryCodes_MakesNone()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, subjectId));
+        _recoveryCodeService.Setup(s => s.GenerateFirstCodesAsync(subjectId)).ReturnsAsync(["code-1"]);
+
+        var result = await LoginCompleteAsync(showsRecoveryCodes: false);
+
+        var response = Assert.IsType<PasskeyLoginCompleteResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        response.AccessToken.Should().Be("access");
+        response.RecoveryCodes.Should().BeNull();
+        _recoveryCodeService.Verify(s => s.GenerateFirstCodesAsync(It.IsAny<Guid>()), Times.Never);
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenACodeIsStillRequired_MakesNoRecoveryCodes()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _totpService
+            .Setup(s => s.GetSecondFactorRequirementAsync(subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId, _tenantId, false)).ReturnsAsync("step-up-token");
+
+        await LoginCompleteAsync(showsRecoveryCodes: true);
+
+        _recoveryCodeService.Verify(s => s.GenerateFirstCodesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginComplete_ForAPasskeyHolderWhoIsNotAMember_MakesNoRecoveryCodes()
+    {
+        var subjectId = Guid.CreateVersion7();
+        StubSuccessfulAssertion(subjectId, "outsider");
+
+        var result = await LoginCompleteAsync(showsRecoveryCodes: true);
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _recoveryCodeService.Verify(s => s.GenerateFirstCodesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenTheSessionCannotBeIssued_MakesNoRecoveryCodes()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("the session was not stored"));
+
+        var act = () => LoginCompleteAsync(showsRecoveryCodes: true);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        _recoveryCodeService.Verify(s => s.GenerateFirstCodesAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
@@ -2409,7 +2485,7 @@ public class PasskeyControllerTests : IDisposable
             {
                 Success = true, RecoveryCodes = ["code-1"], AccessToken = "access", RefreshToken = "refresh", ExpiresIn = 900,
             });
-        steps.Should().Equal("accept", "codes", "session", "last-login", $"audit:{AuthAuditEventType.Login}");
+        steps.Should().Equal("accept", "session", "last-login", $"audit:{AuthAuditEventType.Login}", "codes");
         _totpService.Verify(s => s.GetSecondFactorRequirementAsync(inviteeId, null), Times.Once);
         var invitePasskey = new SessionContext(DeviceDescription: "Invite Passkey", IpAddress: ClientIp, UserAgent: ClientAgent);
         _sessionService.Verify(s => s.IssueSessionAsync(inviteeId, invitePasskey, It.IsAny<CancellationToken>()));
@@ -2444,7 +2520,7 @@ public class PasskeyControllerTests : IDisposable
         response.RecoveryCodes.Should().Equal("code-1");
         response.Tenant!.TenantId.Should().Be(tenantId);
         response.TenantRefusal.Should().BeNull();
-        steps.Should().Equal("create", "codes", "session", "last-login", $"audit:{AuthAuditEventType.Login}");
+        steps.Should().Equal("create", "session", "last-login", $"audit:{AuthAuditEventType.Login}", "codes");
         _totpService.Verify(s => s.GetSecondFactorRequirementAsync(ownerId, null), Times.Once);
         var invitePasskey = new SessionContext(DeviceDescription: "Invite Passkey", IpAddress: ClientIp, UserAgent: ClientAgent);
         _sessionService.Verify(s => s.IssueSessionAsync(ownerId, invitePasskey, It.IsAny<CancellationToken>()));
@@ -2759,7 +2835,7 @@ public class PasskeyControllerTests : IDisposable
             handedOff ? Times.Once() : Times.Never());
     }
 
-    private static readonly string[] InviteSteps = ["accept", "codes", "session", "last-login", "login row"];
+    private static readonly string[] InviteSteps = ["accept", "session", "last-login", "login row", "codes"];
 
     public static TheoryData<string> InviteFailurePoints() => new(InviteSteps);
 
@@ -2806,18 +2882,18 @@ public class PasskeyControllerTests : IDisposable
 
         await complete.Should().ThrowAsync<DbUpdateException>();
         SetCookies().Should().BeEmpty();
-        rows.Should().BeEmpty("no sign-in finished");
+        var reached = Array.IndexOf(InviteSteps, failing);
+        rows.Should().HaveCount(reached >= 4 ? 1 : 0, "only a failure after the sign-in leaves its login row");
         (await HoldsPasskeyAsync(inviteeId)).Should().BeTrue();
         (await IsMemberAsync(inviteeId, _tenantId)).Should().Be(failing != "accept");
-        var reached = Array.IndexOf(InviteSteps, failing);
-        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(inviteeId), reached >= 1 ? Times.Once() : Times.Never());
         _sessionService.Verify(
             s => s.IssueSessionAsync(inviteeId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
-            reached >= 2 ? Times.Once() : Times.Never());
-        _subjectService.Verify(s => s.UpdateLastLoginAsync(inviteeId), reached >= 3 ? Times.Once() : Times.Never());
+            reached >= 1 ? Times.Once() : Times.Never());
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(inviteeId), reached >= 2 ? Times.Once() : Times.Never());
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(inviteeId), reached >= 4 ? Times.Once() : Times.Never());
     }
 
-    private static readonly string[] CreationLinkSteps = ["codes", "session", "last-login", "login row"];
+    private static readonly string[] CreationLinkSteps = ["session", "last-login", "login row", "codes"];
 
     public static TheoryData<string> CreationLinkFailurePoints() => new(CreationLinkSteps);
 
@@ -2861,14 +2937,15 @@ public class PasskeyControllerTests : IDisposable
 
         await complete.Should().ThrowAsync<DbUpdateException>();
         SetCookies().Should().BeEmpty();
-        rows.Should().BeEmpty("no sign-in finished");
+        var reached = Array.IndexOf(CreationLinkSteps, failing);
+        rows.Should().HaveCount(reached >= 3 ? 1 : 0, "only a failure after the sign-in leaves its login row");
         (await HoldsPasskeyAsync(ownerId) && await IsMemberAsync(ownerId, tenantId)).Should().BeTrue();
         invites.Verify(s => s.ReleaseAsync(It.IsAny<Guid>()), Times.Never, "the tenant was made, so the link stays used");
-        var reached = Array.IndexOf(CreationLinkSteps, failing);
         _sessionService.Verify(
             s => s.IssueSessionAsync(ownerId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
-            reached >= 1 ? Times.Once() : Times.Never());
-        _subjectService.Verify(s => s.UpdateLastLoginAsync(ownerId), reached >= 2 ? Times.Once() : Times.Never());
+            Times.Once());
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(ownerId), reached >= 1 ? Times.Once() : Times.Never());
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(ownerId), reached >= 3 ? Times.Once() : Times.Never());
     }
 
     #endregion

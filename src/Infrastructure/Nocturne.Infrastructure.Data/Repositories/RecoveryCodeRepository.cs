@@ -93,6 +93,13 @@ public class RecoveryCodeRepository : IRecoveryCodeRepository
         return await db.RecoveryCodes.AnyAsync(r => r.SubjectId == subjectId && r.InvalidatedAt != null, ct);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<bool> AnyAsync(Guid subjectId, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RecoveryCodes.AnyAsync(r => r.SubjectId == subjectId, ct);
+    }
+
     private static IQueryable<RecoveryCodeEntity> Live(NocturneDbContext db, Guid subjectId) =>
         db.RecoveryCodes.Where(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null);
 }

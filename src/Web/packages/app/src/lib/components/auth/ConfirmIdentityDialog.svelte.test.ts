@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
-import { page as browserPage } from "vitest/browser";
+import { page as browserPage, userEvent } from "vitest/browser";
 import { page } from "$app/state";
 
 vi.mock("./LoginForm.svelte", async () => ({
@@ -50,6 +50,28 @@ describe("the confirm-it-is-you prompt", () => {
 
     await expect(asked).resolves.toBe(true);
     await expect.element(browserPage.getByText("Confirm it is you")).not.toBeInTheDocument();
+  });
+
+  it("cannot be closed while the sign-in shows first recovery codes, which are shown nowhere else", async () => {
+    render(ConfirmIdentityDialog);
+    const asked = confirmIdentity.request();
+    const settled = vi.fn();
+    void asked.then(settled);
+    await expect.element(browserPage.getByRole("button", { name: "Close" })).toBeVisible();
+
+    await browserPage.getByRole("button", { name: "Show recovery codes" }).click();
+
+    await expect.element(browserPage.getByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]')!, {
+      position: { x: 5, y: 5 },
+    });
+    await expect.element(browserPage.getByText("Confirm it is you")).toBeVisible();
+    expect(settled).not.toHaveBeenCalled();
+
+    await browserPage.getByRole("button", { name: "Finish sign-in" }).click();
+
+    await expect(asked).resolves.toBe(true);
   });
 
   it("tells the caller nothing changed when the person closes it", async () => {
