@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -9,7 +10,9 @@ namespace Nocturne.API.Services.Identity;
 /// <summary>
 /// A person giving a team access to a site through the team's link: what the link offers them, site
 /// by site, and the approval. Only an owner of the site may approve, and never wider than the link,
-/// than the roles they could grant, or than their own access.
+/// than the roles they could grant, or than their own access. Also what ends that access, with the
+/// team reasons that stand on it (<see cref="TeamAccessEnd"/>): a site stopping it, the team being
+/// deleted, and a staff member being removed or leaving.
 /// </summary>
 /// <remarks>
 /// The approver is read from their membership of the chosen site, never from the request's tenant:
@@ -18,7 +21,12 @@ namespace Nocturne.API.Services.Identity;
 /// approver's membership and the roles can change meanwhile.
 /// </remarks>
 public sealed class TeamAccessService(
-    ITeamRepository teams, ITenantMembershipRepository members, ITenantRoleService roles, TimeProvider time)
+    ITeamRepository teams,
+    ITenantMembershipRepository members,
+    ITenantRoleService roles,
+    TimeProvider time,
+    INocturneDbContextFactory contexts,
+    GrantRevocationService grantRevocation)
 {
     /// <summary>
     /// The link's team and suggestion, and the caller's sites they may use it for. Null when there is
@@ -96,6 +104,18 @@ public sealed class TeamAccessService(
 
         return await teams.ApproveAccessAsync(tokenHash, caller, grant, now, ct);
     }
+
+    /// <inheritdoc cref="TeamAccessEnd.StopAsync"/>
+    public Task<bool> StopAsync(Guid tenantId, Guid teamId, CancellationToken ct) =>
+        TeamAccessEnd.StopAsync(contexts, grantRevocation, tenantId, teamId, Now, ct);
+
+    /// <inheritdoc cref="TeamAccessEnd.DeleteTeamAsync"/>
+    public Task<TeamDeletion> DeleteTeamAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct) =>
+        TeamAccessEnd.DeleteTeamAsync(contexts, grantRevocation, teamId, callerSubjectId, Now, ct);
+
+    /// <inheritdoc cref="TeamAccessEnd.RemoveStaffAsync"/>
+    public Task<bool> RemoveStaffAsync(Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
+        TeamAccessEnd.RemoveStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, Now, ct);
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
 

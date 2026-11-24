@@ -6,10 +6,12 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
@@ -17,6 +19,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -162,7 +165,6 @@ public class TeamsControllerTests
             .ReturnsAsync((Guid?)null);
         _teams.Setup(t => t.RevokeInviteAsync(TeamId, Caller, It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
-        _teams.Setup(t => t.DeleteAsync(TeamId, Caller, It.IsAny<CancellationToken>())).ReturnsAsync(TeamDeletion.NotFound);
         _teams.Setup(t => t.CreateAccessLinkAsync(TeamId, Caller, It.IsAny<NewTeamAccessLink>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
         _teams.Setup(t => t.RevokeAccessLinkAsync(TeamId, Caller, It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -173,7 +175,6 @@ public class TeamsControllerTests
             .ReturnsAsync(false);
         _teams.Setup(t => t.UpdateStaffAsync(TeamId, Caller, It.IsAny<Guid>(), It.IsAny<TeamStaffNarrowing>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(TeamStaffChange.NotFound);
-        _teams.Setup(t => t.RemoveStaffAsync(TeamId, Caller, It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
         var controller = Controller(Session());
 
         IActionResult[] results =
@@ -183,13 +184,11 @@ public class TeamsControllerTests
             await controller.RemoveManager(TeamId, Guid.CreateVersion7(), default),
             await controller.CreateManagerInvite(TeamId, new CreateTeamInviteRequest(null), default),
             await controller.RevokeManagerInvite(TeamId, Guid.CreateVersion7(), default),
-            await controller.DeleteTeam(TeamId, default),
             await controller.CreateAccessLink(TeamId, new CreateTeamAccessLinkRequest(null, RoleSeeds.Caretaker, false, null), default),
             await controller.RevokeAccessLink(TeamId, Guid.CreateVersion7(), default),
             await controller.CreateStaffInvite(TeamId, new CreateTeamStaffInviteRequest(null, null, false, null), default),
             await controller.RevokeStaffInvite(TeamId, Guid.CreateVersion7(), default),
             await controller.UpdateStaff(TeamId, Guid.CreateVersion7(), new UpdateTeamStaffRequest(null, false, null), default),
-            await controller.RemoveStaff(TeamId, Guid.CreateVersion7(), default),
         ];
 
         results.Should().AllBeOfType<NotFoundResult>("a 403 would tell a stranger the team exists");
@@ -469,14 +468,6 @@ public class TeamsControllerTests
         passed.Should().Be(new TeamStaffNarrowing(null, true, end.UtcDateTime));
     }
 
-    [Fact]
-    public async Task Removing_staff_passes_the_callers_own_id_so_that_leaving_is_the_same_call()
-    {
-        _teams.Setup(t => t.RemoveStaffAsync(TeamId, Caller, Caller, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-
-        (await Controller(Session()).RemoveStaff(TeamId, Caller, default)).Should().BeOfType<NoContentResult>();
-    }
-
     [Theory]
     [InlineData(null, true)]
     [InlineData(true, true)]
@@ -501,18 +492,6 @@ public class TeamsControllerTests
             "token", new ApproveTeamAccessRequest(site, [Guid.CreateVersion7()], false, null, requested), Access(), default);
 
         grant!.TeamManagesStaff.Should().Be(stored);
-    }
-
-    [Fact]
-    public async Task A_refused_delete_carries_its_code()
-    {
-        _teams.Setup(t => t.DeleteAsync(TeamId, Caller, It.IsAny<CancellationToken>())).ReturnsAsync(TeamDeletion.Refused);
-
-        var result = await Controller(Session()).DeleteTeam(TeamId, default);
-
-        var problem = result.Should().BeOfType<ObjectResult>().Subject;
-        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
-        CodeOf(problem).Should().Be(TeamProblemCodes.DeleteRefused);
     }
 
     [Fact]
@@ -714,7 +693,9 @@ public class TeamsControllerTests
         _teams.Object, _members.Object, Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider(),
         TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
 
-    private TeamAccessService Access() => new(_teams.Object, _members.Object, _roles.Object, TimeProvider.System);
+    private TeamAccessService Access() => new(
+        _teams.Object, _members.Object, _roles.Object, TimeProvider.System, Mock.Of<INocturneDbContextFactory>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
     private static object? CodeOf(ObjectResult problem) =>
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Extensions["code"];

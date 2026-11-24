@@ -81,13 +81,6 @@ public interface ITeamRepository
     Task<TeamStaffChange> UpdateStaffAsync(
         Guid teamId, Guid callerSubjectId, Guid staffSubjectId, TeamStaffNarrowing narrowing, DateTime now, CancellationToken ct);
 
-    /// <summary>
-    /// Removes the staff member from the team and every site's record of them; the caller's own id means
-    /// leave. False when the subject is not staff of the team, or the caller is neither a manager of it
-    /// nor that staff member. Never refused for the last-manager rule.
-    /// </summary>
-    Task<bool> RemoveStaffAsync(Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct);
-
     /// <summary>The team an invite is for, as <paramref name="subjectId"/> holding its token sees it.</summary>
     Task<TeamInviteInfo?> GetInviteInfoAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
 
@@ -97,13 +90,6 @@ public interface ITeamRepository
     /// <see cref="TeamInviteRefusal.NoLongerValid"/> once the invite's maker no longer manages the team.
     /// </summary>
     Task<TeamInviteAcceptance> AcceptInviteAsync(string tokenHash, Guid subjectId, DateTime now, CancellationToken ct);
-
-    /// <summary>
-    /// Deletes the team with its members, invites and access to sites, recording each site's access
-    /// as stopped. <see cref="TeamDeletion.NotFound"/> when the
-    /// caller is not a member, <see cref="TeamDeletion.Refused"/> when the team may not be deleted now.
-    /// </summary>
-    Task<TeamDeletion> DeleteAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct);
 
     /// <summary>
     /// Stores a "give this team access" link and returns its id; null when the caller is not a manager.
@@ -136,9 +122,6 @@ public interface ITeamRepository
 
     /// <summary>The teams with access to <paramref name="tenantId"/>, by name.</summary>
     Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(Guid tenantId, DateTime now, CancellationToken ct);
-
-    /// <summary>Stops the team's access to <paramref name="tenantId"/>. False when it has none.</summary>
-    Task<bool> StopAccessAsync(Guid tenantId, Guid teamId, CancellationToken ct);
 
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>
     Task<IReadOnlySet<Guid>> ListRolesHeldByTeamsAsync(Guid tenantId, CancellationToken ct);

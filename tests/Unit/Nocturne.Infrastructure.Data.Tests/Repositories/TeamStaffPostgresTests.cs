@@ -520,7 +520,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var leaving = await JoinStaffAsync(team, manager);
         var staying = await JoinStaffAsync(team, manager);
 
-        (await Teams(leaving).RemoveStaffAsync(team, leaving, leaving, default)).Should().BeTrue();
+        (await TeamEnds.RemoveStaffAsync(Contexts(leaving), team, leaving, leaving)).Should().BeTrue();
 
         (await SiteStaffAsync(team)).Should().Equal((site.Id, staying, TeamSiteStaffStatus.Approved));
         (await Teams().GetTeamsOfAsync(leaving, default)).Should().BeEmpty();
@@ -533,7 +533,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await FollowAsync(team, manager);
         var staff = await JoinStaffAsync(team, manager);
 
-        (await Teams(manager).RemoveStaffAsync(team, manager, staff, default)).Should().BeTrue();
+        (await TeamEnds.RemoveStaffAsync(Contexts(manager), team, manager, staff)).Should().BeTrue();
 
         (await SiteStaffAsync(team)).Should().BeEmpty();
         (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().BeEmpty();
@@ -547,7 +547,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var (kept, _) = await FollowAsync(team, manager);
         var staff = await JoinStaffAsync(team, manager);
 
-        (await Teams().StopAccessAsync(stopped.Id, team, default)).Should().BeTrue();
+        (await TeamEnds.StopAccessAsync(Contexts(), stopped.Id, team)).Should().BeTrue();
 
         (await SiteStaffAsync(team)).Should().Equal((kept.Id, staff, TeamSiteStaffStatus.Approved));
     }
@@ -562,7 +562,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var accesses = await AccessIdsAsync(team);
         (await SiteStaffRowsOfAsync(accesses)).Should().Be(2);
 
-        (await Teams(manager).DeleteAsync(team, manager, default)).Should().Be(TeamDeletion.Deleted);
+        (await TeamEnds.DeleteAsync(Contexts(manager), team, manager)).Should().Be(TeamDeletion.Deleted);
 
         (await SiteStaffRowsOfAsync(accesses)).Should().Be(0);
     }
@@ -894,8 +894,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         (await teams.CreateStaffInviteAsync(team, stranger, new NewTeamStaffInvite("x", null, Now.AddDays(1), null, Everything), default)).Should().BeNull();
         (await teams.RevokeStaffInviteAsync(team, stranger, invite, Now, default)).Should().BeFalse();
         (await teams.UpdateStaffAsync(team, stranger, staff, new TeamStaffNarrowing(RoleSeeds.Viewer, true, null), Now, default)).Should().Be(TeamStaffChange.NotFound);
-        (await teams.RemoveStaffAsync(team, stranger, staff, default)).Should().BeFalse();
-        (await teams.RemoveStaffAsync(team, stranger, stranger, default)).Should().BeFalse();
+        (await TeamEnds.RemoveStaffAsync(Contexts(stranger), team, stranger, staff)).Should().BeFalse();
+        (await TeamEnds.RemoveStaffAsync(Contexts(stranger), team, stranger, stranger)).Should().BeFalse();
 
         (await MemberAsync(team, staff)).RoleCeilingSlug.Should().BeNull();
         (await StoredInviteAsync(invite)).RevokedAt.Should().BeNull();
@@ -913,7 +913,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var teams = Teams(staff);
 
         (await teams.RenameAsync(team, staff, "Mine", default)).Should().BeNull();
-        (await teams.DeleteAsync(team, staff, default)).Should().Be(TeamDeletion.Refused);
+        (await TeamEnds.DeleteAsync(Contexts(staff), team, staff)).Should().Be(TeamDeletion.Refused);
         (await teams.CreateInviteAsync(team, staff, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team, staff, managerInvite!.Value, Now, default)).Should().BeFalse();
         (await teams.CreateStaffInviteAsync(team, staff, new NewTeamStaffInvite("y", null, Now.AddDays(1), null, Everything), default)).Should().BeNull();
@@ -924,11 +924,11 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         (await teams.RemoveManagerAsync(team, staff, manager, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
         (await teams.UpdateStaffAsync(team, staff, peer, new TeamStaffNarrowing(RoleSeeds.Viewer, true, null), Now, default)).Should().Be(TeamStaffChange.NotFound);
         (await teams.UpdateStaffAsync(team, staff, staff, new TeamStaffNarrowing(null, false, null), Now, default)).Should().Be(TeamStaffChange.NotFound);
-        (await teams.RemoveStaffAsync(team, staff, peer, default)).Should().BeFalse();
+        (await TeamEnds.RemoveStaffAsync(Contexts(staff), team, staff, peer)).Should().BeFalse();
 
         (await Teams().GetAsync(team, manager, Now, default))!.Name.Should().Be("Camp");
         (await MemberAsync(team, peer)).Kind.Should().Be(TeamMemberKind.Staff);
-        (await teams.RemoveStaffAsync(team, staff, staff, default)).Should().BeTrue();
+        (await TeamEnds.RemoveStaffAsync(Contexts(staff), team, staff, staff)).Should().BeTrue();
         (await Teams().GetTeamsOfAsync(staff, default)).Should().BeEmpty();
     }
 
@@ -942,7 +942,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
                 $"INSERT INTO team_members (id, team_id, subject_id, kind) VALUES ({Guid.CreateVersion7()}, {team}, {second}, 'manager')");
         var staff = await JoinStaffAsync(team, manager);
 
-        (await Teams(manager).RemoveStaffAsync(team, manager, second, default)).Should().BeFalse();
+        (await TeamEnds.RemoveStaffAsync(Contexts(manager), team, manager, second)).Should().BeFalse();
         (await Teams(manager).RemoveManagerAsync(team, manager, staff, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
         (await Teams(manager).UpdateStaffAsync(team, manager, second, new TeamStaffNarrowing(RoleSeeds.Viewer, true, null), Now, default)).Should().Be(TeamStaffChange.NotFound);
 
@@ -957,8 +957,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var removed = await JoinStaffAsync(team, manager);
         var left = await JoinStaffAsync(team, manager);
 
-        await Teams(manager).RemoveStaffAsync(team, manager, removed, default);
-        await Teams(left).RemoveStaffAsync(team, left, left, default);
+        await TeamEnds.RemoveStaffAsync(Contexts(manager), team, manager, removed);
+        await TeamEnds.RemoveStaffAsync(Contexts(left), team, left, left);
 
         var rows = await AuditOfAsync(team, AuthAuditEventType.TeamStaffRemoved);
         rows.Select(r => (r.ActorSubjectId, r.TargetSubjectId, How: Details(r).GetProperty("how").GetString(), Kind: Details(r).GetProperty("kind").GetString()))
@@ -983,7 +983,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var (team, manager) = await TeamAsync();
         var staff = await JoinStaffAsync(team, manager);
 
-        (await Teams(manager).RemoveStaffAsync(team, manager, staff, default)).Should().BeTrue();
+        (await TeamEnds.RemoveStaffAsync(Contexts(manager), team, manager, staff)).Should().BeTrue();
 
         (await Teams().GetAsync(team, manager, Now, default))!.IsLastManager.Should().BeTrue();
     }

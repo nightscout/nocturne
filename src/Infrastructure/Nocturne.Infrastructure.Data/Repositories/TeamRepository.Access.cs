@@ -223,29 +223,6 @@ public partial class TeamRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<bool> StopAccessAsync(Guid tenantId, Guid teamId, CancellationToken ct)
-    {
-        await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
-        return await db.ExecuteInTransactionAsync(async token =>
-        {
-            await db.LockTeamAccessAsync(tenantId, token);
-
-            var access = await db.TeamTenantAccess
-                .Include(a => a.AccessRoles).ThenInclude(r => r.TenantRole)
-                .Include(a => a.Team)
-                .FirstOrDefaultAsync(a => a.TenantId == tenantId && a.TeamId == teamId, token);
-            if (access is null)
-                return false;
-
-            TeamAudit.StageAccessStopped(
-                db, access, access.Team!.Name, access.AccessRoles.Select(r => r.TenantRole!.Slug), TeamAudit.StoppedHow);
-            db.TeamTenantAccess.Remove(access);
-            await db.SaveChangesAsync(token);
-            return true;
-        }, ct: ct);
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<IReadOnlySet<Guid>> ListRolesHeldByTeamsAsync(Guid tenantId, CancellationToken ct)
     {
         await using var db = await contexts.CreateForTenantAsync(tenantId, ct);
@@ -340,18 +317,11 @@ public partial class TeamRepository
     {
         await LockAccessOfTeamsAsync(db, [teamId], ct);
 
-        var pinned = db.TenantId != Guid.Empty && db.Database.IsNpgsql();
-        if (pinned)
-            await SetTenantForTransactionAsync(db, string.Empty, ct);
-
-        var rows = await db.TeamTenantAccess.AsNoTracking()
+        var rows = await db.InTenantForTransactionAsync(Guid.Empty, token => db.TeamTenantAccess.AsNoTracking()
             .Where(a => a.TeamId == teamId)
             .OrderBy(a => a.TenantId)
             .Select(a => new { Access = a, Slugs = a.AccessRoles.Select(r => r.TenantRole!.Slug).ToList() })
-            .ToListAsync(ct);
-
-        if (pinned)
-            await SetTenantForTransactionAsync(db, db.TenantId.ToString(), ct);
+            .ToListAsync(token), ct);
 
         return rows.Select(r => (r.Access, (IReadOnlyList<string>)r.Slugs)).ToList();
     }
@@ -360,29 +330,19 @@ public partial class TeamRepository
     /// Takes the team access lock (<see cref="TeamAccessLock"/>) of every site any of
     /// <paramref name="teamIds"/> has access to, in ascending tenant id, inside the caller's
     /// transaction. The caller holds the teams' manager locks, so no approval can add a site meanwhile.
-    /// A context pinned to a tenant sees only that tenant's rows, so the pin is lifted for the read and
-    /// restored after it, both local to the transaction.
+    /// A context pinned to a tenant sees only that tenant's rows, so the read lifts the pin
+    /// (<see cref="RlsPinningExtensions.InTenantForTransactionAsync{T}"/>).
     /// </summary>
     internal static async Task LockAccessOfTeamsAsync(NocturneDbContext db, IReadOnlyCollection<Guid> teamIds, CancellationToken ct)
     {
-        var pinned = db.TenantId != Guid.Empty && db.Database.IsNpgsql();
-        if (pinned)
-            await SetTenantForTransactionAsync(db, string.Empty, ct);
-
-        var sites = await db.TeamTenantAccess.AsNoTracking()
+        var sites = await db.InTenantForTransactionAsync(Guid.Empty, token => db.TeamTenantAccess.AsNoTracking()
             .Where(a => teamIds.Contains(a.TeamId))
             .Select(a => a.TenantId)
             .Distinct()
             .OrderBy(tenantId => tenantId)
-            .ToListAsync(ct);
-
-        if (pinned)
-            await SetTenantForTransactionAsync(db, db.TenantId.ToString(), ct);
+            .ToListAsync(token), ct);
 
         foreach (var site in sites)
             await db.LockTeamAccessAsync(site, ct);
     }
-
-    private static Task SetTenantForTransactionAsync(NocturneDbContext db, string tenantId, CancellationToken ct) =>
-        db.Database.ExecuteSqlRawAsync("SELECT set_config('app.current_tenant_id', {0}, true)", [tenantId], ct);
 }

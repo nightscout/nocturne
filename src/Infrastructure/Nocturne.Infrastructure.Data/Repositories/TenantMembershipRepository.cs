@@ -518,6 +518,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
     {
         var leftWithoutOwner = await db.LockTenantsOfSubjectAsync(subjectId, linkRoute, ct);
+        await db.LockTeamManagersOfSubjectAsync(subjectId, ct);
         var memberships = await db.TenantMembers
             .Include(m => m.MemberRoles)
             .Where(m => m.SubjectId == subjectId)

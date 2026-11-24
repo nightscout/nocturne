@@ -530,7 +530,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         (await Members().DeleteRoleAsync(site.Id, role, Now, default)).Should().Be(RoleChangeOutcome.HeldByTeam);
         (await Members().GetRoleAsync(site.Id, role, default)).Should().NotBeNull();
 
-        (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
+        (await TeamEnds.StopAccessAsync(Contexts(owner), site.Id, team)).Should().BeTrue();
 
         (await Members().DeleteRoleAsync(site.Id, role, Now, default)).Should().Be(RoleChangeOutcome.Changed);
     }
@@ -753,7 +753,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         await stop.LockTeamAccessAsync(a.Id, default);
         await stop.Database.ExecuteSqlAsync($"DELETE FROM team_tenant_access WHERE team_id = {team} AND tenant_id = {a.Id}");
 
-        var deletion = Teams(manager).DeleteAsync(team, manager, default);
+        var deletion = TeamEnds.DeleteAsync(Contexts(manager), team, manager);
         await PostgresLockWaits.UntilBlockedAsync(database.AppConnectionString, deletion);
         await held.CommitAsync();
 
@@ -806,9 +806,9 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (token, linkId) = await LinkAsync(team, manager);
         (await ApproveAsync(token, owner, Grant(site, site.Roles[RoleSeeds.Caretaker]))).Refusal.Should().BeNull();
 
-        (await Teams(owner).StopAccessAsync(other.Id, team, default)).Should().BeFalse();
-        (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
-        (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeFalse();
+        (await TeamEnds.StopAccessAsync(Contexts(owner), other.Id, team)).Should().BeFalse();
+        (await TeamEnds.StopAccessAsync(Contexts(owner), site.Id, team)).Should().BeTrue();
+        (await TeamEnds.StopAccessAsync(Contexts(owner), site.Id, team)).Should().BeFalse();
 
         (await AccessCountAsync(team)).Should().Be(0);
         await using (var db = Context())
@@ -836,7 +836,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         (await ApproveAsync(token, owner, Grant(a, a.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
         (await ApproveAsync(token, owner, Grant(b, b.Roles[RoleSeeds.Caretaker]))).Refusal.Should().BeNull();
 
-        (await Teams(manager).DeleteAsync(team, manager, default)).Should().Be(TeamDeletion.Deleted);
+        (await TeamEnds.DeleteAsync(Contexts(manager), team, manager)).Should().Be(TeamDeletion.Deleted);
 
         (await AccessCountAsync(team)).Should().Be(0);
         var stopped = (await AuditOfAsync(team)).Where(r => r.EventType == AuthAuditEventType.TeamAccessStopped).ToList();
@@ -875,7 +875,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(
             token, owner, new TeamAccessGrant(site.Id, [site.Roles[RoleSeeds.Caretaker]], true, end, true))).Refusal.Should().BeNull();
-        (await Teams(owner).StopAccessAsync(site.Id, team, default)).Should().BeTrue();
+        (await TeamEnds.StopAccessAsync(Contexts(owner), site.Id, team)).Should().BeTrue();
         await Teams(manager).RenameAsync(team, manager, "New name", default);
         var reader = new MemberHistoryReader(Contexts());
 
@@ -894,7 +894,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         });
         (await reader.GetAsync(site.Id, owner, 25, 0, Now, default)).Data.Should().NotContain(e => e.Team != null);
 
-        (await Teams(manager).DeleteAsync(team, manager, default)).Should().Be(TeamDeletion.Deleted);
+        (await TeamEnds.DeleteAsync(Contexts(manager), team, manager)).Should().Be(TeamDeletion.Deleted);
         (await reader.GetAsync(site.Id, null, 25, 0, Now, default)).Data.Where(e => e.Team is not null).Last().Team
             .Should().Be(new MemberHistoryTeam(team, "Old name"));
         (await reader.GetAsync(Guid.NewGuid(), null, 25, 0, Now, default)).Data.Should().BeEmpty();

@@ -242,32 +242,12 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         }, ct: ct);
     }
 
-    /// <inheritdoc/>
-    public virtual async Task<TeamDeletion> DeleteAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct)
-    {
-        await using var db = await contexts.CreatePlatformAsync(ct);
-        return await db.ExecuteInTransactionAsync(async token =>
-        {
-            await db.LockTeamManagersAsync(teamId, token);
-
-            var team = await db.Teams.FirstOrDefaultAsync(
-                t => t.Id == teamId && t.Members.Any(m => m.SubjectId == callerSubjectId), token);
-            if (team is null)
-                return TeamDeletion.NotFound;
-
-            if (!await CanDeleteAsync(db, teamId, callerSubjectId, token))
-                return TeamDeletion.Refused;
-
-            await RemoveAsync(db, team, token);
-            await db.SaveChangesAsync(token);
-            return TeamDeletion.Deleted;
-        }, ct: ct);
-    }
-
     /// <summary>
     /// Removes the team, whose members, invites, access links and access to sites go with it by
     /// cascade, and stages its audit row and a stopped row for each site it had access to. The caller
-    /// holds the team's manager lock and an open transaction.
+    /// holds the team's manager lock and an open transaction, and has removed every team reason that
+    /// stands on the team's access: a deletion (<see cref="LockTeamDeletionAsync"/>) removes them, and
+    /// account deletion removes only teams with no member but the subject, whose memberships it removed.
     /// </summary>
     internal static async Task RemoveAsync(NocturneDbContext db, TeamEntity team, CancellationToken ct)
     {
