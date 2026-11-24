@@ -18,7 +18,7 @@
     groupMeta,
     type CommandPaletteItem,
     type CommandPaletteGroup,
-  } from "./command-palette-items";
+  } from "./command-palette-items.svelte.js";
   import {
     pinnedItemIds,
     recentItemIds,
@@ -92,8 +92,9 @@
       if (!groups.includes(item.group)) groups.push(item.group);
     }
 
+    const meta = groupMeta();
     return groups
-      .sort((a, b) => groupMeta[a].order - groupMeta[b].order)
+      .sort((a, b) => meta[a].order - meta[b].order)
       .map((group): [CommandPaletteGroup, CommandPaletteItem[]] => [
         group,
         mainGroupItems.filter((item) => item.group === group),
@@ -162,11 +163,11 @@
 
     if (item.href) {
       open = false;
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.ts
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.svelte.ts
       goto(item.href);
     } else if (item.linkedHref) {
       open = false;
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.ts
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.svelte.ts
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
@@ -297,7 +298,7 @@
     {/if}
 
     {#each groupedItems as [group, groupItems] (group)}
-      <Command.Group heading={groupMeta[group].label}>
+      <Command.Group heading={groupMeta()[group].label}>
         {#each groupItems as item (item.id)}
           {@render commandItem(item, false)}
         {/each}
