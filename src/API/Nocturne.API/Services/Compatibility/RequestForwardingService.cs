@@ -108,7 +108,6 @@ public class RequestForwardingService : IRequestForwardingService
             }
 
             using var httpClient = _httpClientFactory.CreateClient("NightscoutClient");
-            httpClient.Timeout = TimeSpan.FromSeconds(_configuration.Value.TimeoutSeconds);
 
             if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
             {

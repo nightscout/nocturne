@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.API.Configuration;
@@ -78,7 +80,7 @@ public static class CompatibilityProxyServiceExtensions
                     );
                 }
             )
-            .AddStandardResilienceHandler();
+            .AddForwardingResilience(TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds));
 
         services.AddHttpClient(
             ManualTestHttpClientName,
@@ -107,10 +109,27 @@ public static class CompatibilityProxyServiceExtensions
                     );
                 }
             )
-            .AddStandardResilienceHandler();
+            .AddForwardingResilience(TimeSpan.FromSeconds(forwardingConfig.TimeoutSeconds));
 
         return services;
     }
+
+    /// <summary>
+    /// The standard resilience handler with an attempt timeout of <paramref name="timeout"/>, the
+    /// same bound <c>HttpClient.Timeout</c> puts on the whole call, and a retry only for a
+    /// <see cref="RepeatableRequest"/>: a forwarded write is never marked, so it goes out once.
+    /// </summary>
+    private static IHttpStandardResiliencePipelineBuilder AddForwardingResilience(
+        this IHttpClientBuilder builder,
+        TimeSpan timeout
+    ) =>
+        builder.AddStandardResilienceHandler(options =>
+        {
+            options.Retry.ShouldHandle = RepeatableRequest.ShouldRetry;
+            options.AttemptTimeout.Timeout = timeout;
+            options.TotalRequestTimeout.Timeout = timeout;
+            options.CircuitBreaker.SamplingDuration = timeout * 2;
+        });
 }
 
 /// <summary>
