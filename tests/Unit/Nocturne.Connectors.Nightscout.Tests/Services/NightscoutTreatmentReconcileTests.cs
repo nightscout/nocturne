@@ -548,6 +548,10 @@ public class NightscoutTreatmentReconcileTests
                 .Callback<string, DateTime, DateTime, CancellationToken>((source, _, _, _) => StoredAskedOf.Add(source))
                 .ReturnsAsync(() => Stored.ToDictionary(id => id, _ => StoredAt));
             treatments
+                .Setup(p => p.GetOpenSpanTreatmentsAsync(
+                    It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            treatments
                 .Setup(p => p.DeleteTreatmentsAsync(
                     It.IsAny<string>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
                 .Callback<string, IReadOnlySet<string>, CancellationToken>((source, ids, _) =>

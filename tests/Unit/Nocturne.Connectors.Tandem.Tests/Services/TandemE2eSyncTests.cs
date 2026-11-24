@@ -1220,6 +1220,9 @@ public class TandemE2eSyncTests
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
 
+        public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<StoredTreatmentKey>>([]);
+
         public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
 

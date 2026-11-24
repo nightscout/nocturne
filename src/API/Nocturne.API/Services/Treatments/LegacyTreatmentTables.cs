@@ -861,6 +861,25 @@ internal static class LegacyTreatmentTables
     internal static IQueryable<StateSpanEntity> ServedStateSpansFromSource(NocturneDbContext context, string source) =>
         TrackedSpans(context, table => table.Rows(context).Where(s => s.Source == source));
 
+    /// <summary>
+    /// The spans <see cref="ServedStateSpansFromSource"/> returns that are still open, or that were
+    /// uploaded indefinite and given no duration since, whatever end a later override closed them at.
+    /// An indefinite upload keeps a duration of zero.
+    /// </summary>
+    internal static IQueryable<StateSpanEntity> OpenStateSpansFromSource(NocturneDbContext context, string source) =>
+        ServedStateSpansFromSource(context, source).Where(s =>
+            (s.EndTimestamp == null && s.State != CancelledTemporaryTarget)
+            || (EF.Functions.JsonContains(s.MetadataJson!, IndefiniteOverrideJson)
+                && (!EF.Functions.JsonExists(s.MetadataJson!, StateSpanMetadataExtensions.UploadedDurationKey)
+                    || EF.Functions.JsonContains(s.MetadataJson!, NoUploadedDurationJson))));
+
+    private const string CancelledTemporaryTarget = nameof(TemporaryTargetState.Cancelled);
+
+    private const string IndefiniteOverrideJson = """{"durationType":"indefinite"}""";
+
+    private const string NoUploadedDurationJson =
+        $$"""{"{{StateSpanMetadataExtensions.UploadedDurationKey}}":0}""";
+
     private static IQueryable<StateSpanEntity> TrackedSpans(
         NocturneDbContext context, Func<LegacyStateSpanTable, IQueryable<StateSpanEntity>> rows)
     {

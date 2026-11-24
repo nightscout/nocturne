@@ -204,6 +204,11 @@ internal class TreatmentService : ITreatmentService
         _decomposer.GetLegacyIdsFromSourceAsync(source, from, to, cancellationToken);
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpansFromSourceAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default) =>
+        _decomposer.GetOpenSpansFromSourceAsync(source, after, limit, cancellationToken);
+
+    /// <inheritdoc />
     public Task<int> DeleteFromSourceAsync(
         string source, IReadOnlySet<string> legacyIds, CancellationToken cancellationToken = default) =>
         _decomposer.DeleteFromSourceAsync(source, legacyIds, cancellationToken);
