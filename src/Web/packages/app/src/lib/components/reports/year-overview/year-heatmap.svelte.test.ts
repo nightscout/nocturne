@@ -5,6 +5,7 @@ import { timeDay } from "d3-time";
 import type { DailySummaryDay } from "@nocturne/api-client";
 import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 import { regionFormat, type RegionFormat } from "#lib/stores/appearance-store.svelte.js";
+import { afterScroll } from "#lib/test-stubs/after-scroll.js";
 import Harness from "./YearHeatmap.test-harness.svelte";
 
 const START_OF_2024 = new Date(2024, 0, 1);
@@ -279,16 +280,17 @@ describe("YearHeatmap month scrolling", () => {
     ).map((label) => Math.round(Number(label.getAttribute("x"))));
     expect(monthStops).toHaveLength(12);
     const before = el.scrollLeft;
-    await previous.click();
-    await vi.waitFor(() => expect(el.scrollLeft).toBeLessThan(before));
-    await vi.waitFor(() => expect(monthStops).toContain(Math.round(el.scrollLeft)));
+    await afterScroll(() => previous.click(), el);
+    expect(el.scrollLeft).toBeLessThan(before);
+    expect(monthStops).toContain(Math.round(el.scrollLeft));
     const stepped = el.scrollLeft;
     expect(before - stepped).toBeLessThanOrEqual(6 * 24);
     await expect.element(next).toBeEnabled();
 
-    await next.click();
-    await vi.waitFor(() => expect(el.scrollLeft).toBeGreaterThan(stepped));
-    await vi.waitFor(() => expect(el.scrollLeft).toBeCloseTo(max, 0));
+    expect(stepped).toBeLessThan(max);
+    await afterScroll(() => next.click(), el);
+    expect(el.scrollLeft).toBeGreaterThan(stepped);
+    expect(el.scrollLeft).toBeCloseTo(max, 0);
     await expect.element(next).toBeDisabled();
   });
 
