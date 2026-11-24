@@ -203,25 +203,6 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Waits for a condition with timeout
-    /// </summary>
-    protected async Task<bool> WaitForEventAsync(Func<bool> condition, TimeSpan? timeout = null)
-    {
-        timeout ??= TimeSpan.FromSeconds(5);
-        var start = DateTime.UtcNow;
-
-        while (DateTime.UtcNow - start < timeout)
-        {
-            if (condition())
-                return true;
-
-            await Task.Delay(100);
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Gets the connection string for the PostgreSQL database
     /// </summary>
     protected async Task<string?> GetPostgresConnectionStringAsync()

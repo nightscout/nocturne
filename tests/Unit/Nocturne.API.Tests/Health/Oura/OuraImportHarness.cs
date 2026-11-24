@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.Oura;
@@ -75,15 +76,9 @@ internal sealed class OuraImportHarness
 
     public static byte[] Export() => OuraImportServiceTests.Export().ToArray();
 
-    public static async Task<OuraImportStatus> EndOf(OuraImportJobService jobs)
-    {
-        for (var waited = 0; waited < 10_000; waited += 20)
-        {
-            if (jobs.GetLatest(Tenant.TenantId) is { State: not OuraImportState.Running } ended)
-                return ended;
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException("The import did not end.");
-    }
+    public static Task<OuraImportStatus> EndOf(OuraImportJobService jobs) =>
+        Eventually.ValueAsync(
+            "the import to end",
+            () => Task.FromResult(jobs.GetLatest(Tenant.TenantId) is { State: not OuraImportState.Running } ended ? ended : null),
+            step: TimeSpan.FromMilliseconds(20));
 }

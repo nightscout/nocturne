@@ -11,6 +11,7 @@ using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
@@ -151,9 +152,9 @@ public class GoogleHealthWorkerTests
             scheduled = null;
             if (cancel)
             {
-                IAsyncDisposable? released;
-                while ((released = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
-                    await Task.Delay(10, timeout.Token);
+                var released = await Eventually.ValueAsync(
+                    "the coordinator to release the worker claim",
+                    () => coordinator.ClaimWorkerAsync(tenant, CancellationToken.None));
                 await using (released)
                 {
                     Assert.Null(await coordinator.ProgressAsync(tenant, timeout.Token));
@@ -220,9 +221,9 @@ public class GoogleHealthWorkerTests
         try
         {
             await failed.Task.WaitAsync(timeout.Token);
-            IAsyncDisposable? recovered;
-            while ((recovered = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
-                await Task.Delay(10, timeout.Token);
+            var recovered = await Eventually.ValueAsync(
+                "the coordinator to release the worker claim",
+                () => coordinator.ClaimWorkerAsync(tenant, CancellationToken.None));
             await using (recovered)
             {
                 Assert.True((await coordinator.ProgressAsync(tenant, timeout.Token))!.WorkerOwned);

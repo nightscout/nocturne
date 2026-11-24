@@ -732,14 +732,6 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         Warnings(tenant).Should().Be(0, "a tenant with no record has lost nothing it can name");
     }
 
-    private static async Task WaitForPassAsync(Tenant tenant, SensorGlucose reading)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (tenant.PassesOf(reading) == 0)
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The write's pass never began.");
-            await Task.Delay(10);
-        }
-    }
+    private static Task WaitForPassAsync(Tenant tenant, SensorGlucose reading) =>
+        Eventually.UntilAsync("the write's pass to begin", () => tenant.PassesOf(reading) > 0);
 }

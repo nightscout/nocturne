@@ -6,6 +6,7 @@ using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -75,15 +76,12 @@ public class ClientAddressRecordingIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
 
-        string? lastUsed = null;
-        for (var attempt = 0; attempt < 50 && lastUsed is null; attempt++)
-        {
-            lastUsed = await ScalarAsync(conn,
+        var lastUsed = await Eventually.ValueAsync(
+            "the grant's last used address to be recorded",
+            () => ScalarAsync(conn,
                 "SELECT last_used_ip FROM oauth_grants WHERE subject_id = @subject AND last_used_ip IS NOT NULL",
-                ("subject", Fixture.OwnerSubjectId));
-            if (lastUsed is null)
-                await Task.Delay(100);
-        }
+                ("subject", Fixture.OwnerSubjectId)),
+            step: TimeSpan.FromMilliseconds(100));
 
         var mutation = await ScalarAsync(conn,
             "SELECT ip_address FROM mutation_audit_log WHERE action = 'create' AND actor_subject_id = @subject ORDER BY created_at DESC LIMIT 1",

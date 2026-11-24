@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -436,24 +437,27 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             validated.TryGetProperty("result", out _).Should().BeFalse("nothing is read");
             invalid.GetProperty("errors")[0].GetProperty("path").GetString().Should().Be("panels[0].tracks");
 
-            var endpoints = new List<string>();
-            for (var attempt = 0; attempt < 40 && endpoints.Count == 0; attempt++)
-            {
-                await Task.Delay(250);
-                await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-                await conn.OpenAsync();
-                await using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                    SELECT set_config('app.current_tenant_id', @t, false);
-                    SELECT endpoint FROM read_access_log WHERE endpoint LIKE '%/reports/custom%' AND created_at >= @since;
-                    """;
-                cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
-                cmd.Parameters.AddWithValue("since", since);
-                await using var reader = await cmd.ExecuteReaderAsync();
-                await reader.NextResultAsync();
-                while (await reader.ReadAsync())
-                    endpoints.Add(reader.GetString(0));
-            }
+            var endpoints = await Eventually.ValueAsync(
+                "the run's read audit row",
+                async () =>
+                {
+                    var found = new List<string>();
+                    await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+                    await conn.OpenAsync();
+                    await using var cmd = conn.CreateCommand();
+                    cmd.CommandText = """
+                        SELECT set_config('app.current_tenant_id', @t, false);
+                        SELECT endpoint FROM read_access_log WHERE endpoint LIKE '%/reports/custom%' AND created_at >= @since;
+                        """;
+                    cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
+                    cmd.Parameters.AddWithValue("since", since);
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    await reader.NextResultAsync();
+                    while (await reader.ReadAsync())
+                        found.Add(reader.GetString(0));
+                    return found.Count > 0 ? found : null;
+                },
+                step: TimeSpan.FromMilliseconds(250));
             endpoints.Should().Equal(["POST /api/v4/reports/custom/run (preview)"], "the run writes its row; validate writes none");
         }
         finally

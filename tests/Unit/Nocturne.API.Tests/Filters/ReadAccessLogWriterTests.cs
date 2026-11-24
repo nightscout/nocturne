@@ -154,9 +154,9 @@ public class ReadAccessLogWriterTests
         var drain = writer.DrainAsync();
 
         writer.Enqueue(Entry(TenantA));
-        await WaitForAsync(() => harness.Logger.Warnings.Any());
+        await Eventually.UntilAsync("the drain to log a warning", () => harness.Logger.Warnings.Any());
         writer.Enqueue(Entry(TenantB));
-        await WaitForAsync(() => harness.Saves.Batches.Any(b => b.PinnedTenant == TenantB));
+        await Eventually.UntilAsync("the drain to save tenant B's batch", () => harness.Saves.Batches.Any(b => b.PinnedTenant == TenantB));
 
         writer.Complete();
         await drain;
@@ -242,9 +242,9 @@ public class ReadAccessLogWriterTests
         var drain = writer.DrainAsync();
 
         writer.Enqueue(Entry(TenantA, "bad"));
-        await WaitForAsync(() => harness.Logger.Warnings.Any());
+        await Eventually.UntilAsync("the drain to log a warning", () => harness.Logger.Warnings.Any());
         writer.Enqueue(Entry(TenantB));
-        await WaitForAsync(() => harness.Saves.Batches.Any(b => b.PinnedTenant == TenantB));
+        await Eventually.UntilAsync("the drain to save tenant B's batch", () => harness.Saves.Batches.Any(b => b.PinnedTenant == TenantB));
 
         writer.Complete();
         await drain;
@@ -291,16 +291,6 @@ public class ReadAccessLogWriterTests
         await stop.Should().NotThrowAsync();
         harness.Logger.Warnings.Should().ContainSingle().Which.Should().Contain($"Discarded {queued} ");
         gate.SetResult();
-    }
-
-    private static async Task WaitForAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!condition())
-        {
-            DateTime.UtcNow.Should().BeBefore(deadline, "the drain should have reached this state");
-            await Task.Delay(10);
-        }
     }
 
     private static DbUpdateException Refusal(string sqlState) =>

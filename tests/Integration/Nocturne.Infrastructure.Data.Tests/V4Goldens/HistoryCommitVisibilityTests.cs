@@ -269,13 +269,11 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
         var written = await CreateAsync(scope, T0, "xdrip");
 
         var first = await ProductionHistoryAsync(options, tenant);
-        var deadline = DateTime.UtcNow.AddSeconds(30);
         var delivered = first;
-        while (!delivered.Contains(written.Id) && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(100);
-            delivered = await ProductionHistoryAsync(options, tenant);
-        }
+        await Eventually.UntilAsync(
+            "the write to reach history",
+            async () => (delivered = await ProductionHistoryAsync(options, tenant)).Contains(written.Id),
+            step: TimeSpan.FromMilliseconds(100));
 
         first.Should().NotContain(written.Id, "the read came within the margin of the write");
         delivered.Should().Contain(written.Id);

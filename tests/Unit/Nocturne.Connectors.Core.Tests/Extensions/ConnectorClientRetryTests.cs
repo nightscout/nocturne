@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Extensions;
@@ -47,11 +48,11 @@ public class ConnectorClientRetryTests
         using (request)
         {
             var work = client.SendAsync(request);
-            while (!work.IsCompleted)
-            {
-                time.Advance(TimeSpan.FromSeconds(5));
-                await Task.Delay(1);
-            }
+            await Eventually.UntilAsync(
+                "the request to complete",
+                () => work.IsCompleted,
+                step: TimeSpan.FromMilliseconds(1),
+                eachStep: () => time.Advance(TimeSpan.FromSeconds(5)));
 
             using var response = await work;
             response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);

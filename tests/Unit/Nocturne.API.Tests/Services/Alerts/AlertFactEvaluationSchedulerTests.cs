@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -26,8 +27,6 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
 {
     private static readonly TenantContext TenantA = new(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"), "a", "A", true, false);
     private static readonly TenantContext TenantB = new(Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002"), "b", "B", true, false);
-
-    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(10);
 
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 22, 8, 0, 0, TimeSpan.Zero));
     private readonly RecordingEvaluator _evaluator = new();
@@ -84,7 +83,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
             }
         }
 
-        public async Task<Evaluation> NextAsync() => await _started.Reader.ReadAsync().AsTask().WaitAsync(Guard);
+        public async Task<Evaluation> NextAsync() => await _started.Reader.ReadAsync().AsTask().WaitAsync(Eventually.DefaultPatience);
 
         public int Count
         {
@@ -186,7 +185,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         stopping.IsCompleted.Should().BeFalse("the host waits for the running evaluation");
 
         _evaluator.Hold.SetResult();
-        await stopping.WaitAsync(Guard);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
         _evaluator.Finished.Should().Be(1);
     }
 
@@ -201,7 +200,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         stopping.IsCompleted.Should().BeFalse();
 
         _evaluator.Hold.SetResult();
-        await stopping.WaitAsync(Guard);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
         _evaluator.Finished.Should().Be(1);
         _evaluator.Cancelled.Should().Be(0, "stopping alone cancels nothing");
     }
@@ -217,16 +216,9 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         var stopping = _scheduler.StoppedAsync(timeout.Token);
         timeout.Cancel();
 
-        await stopping.WaitAsync(Guard);
-        await WaitUntilAsync(() => Volatile.Read(ref _evaluator.Cancelled) == 1);
+        await stopping.WaitAsync(Eventually.DefaultPatience);
+        await Eventually.UntilAsync("the running evaluation to be cancelled", () => Volatile.Read(ref _evaluator.Cancelled) == 1);
         _evaluator.Finished.Should().Be(0);
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using var guard = new CancellationTokenSource(Guard);
-        while (!condition())
-            await Task.Delay(TimeSpan.FromMilliseconds(5), guard.Token);
     }
 
     [Fact]
@@ -393,7 +385,7 @@ public sealed class AlertFactEvaluationSchedulerTests : IDisposable
         var saved = _time.GetUtcNow();
         _scheduler.Moved(TenantA, MovedFacts.Saved([rule]));
 
-        await _scheduler.StoppedAsync(CancellationToken.None).WaitAsync(Guard);
+        await _scheduler.StoppedAsync(CancellationToken.None).WaitAsync(Eventually.DefaultPatience);
 
         var evaluation = await _evaluator.NextAsync();
         evaluation.At.Should().Be(saved, "a stopping host waits for no debounce");

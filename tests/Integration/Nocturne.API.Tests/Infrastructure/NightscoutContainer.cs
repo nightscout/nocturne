@@ -7,6 +7,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Networks;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
@@ -149,23 +150,23 @@ public class NightscoutContainer(string image = NightscoutContainer.PinnedImage)
     /// </summary>
     private async Task WaitUntilLoadedAsync(CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow.AddMinutes(2);
         string? state = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            using var response = await _httpClient!.GetAsync("/api/v1/status.json", cancellationToken);
-            if (response.IsSuccessStatusCode)
+        await Eventually.UntilAsync(
+            "Nightscout to reach runtimeState 'loaded'",
+            async () =>
             {
+                using var response = await _httpClient!.GetAsync("/api/v1/status.json", cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    return false;
+
                 using var status = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
                 state = status.RootElement.TryGetProperty("runtimeState", out var s) ? s.GetString() : null;
-                if (state == "loaded")
-                    return;
-            }
-
-            await Task.Delay(250, cancellationToken);
-        }
-
-        throw new TimeoutException($"Nightscout did not reach runtimeState 'loaded' (last seen: {state ?? "none"}).");
+                return state == "loaded";
+            },
+            patience: TimeSpan.FromMinutes(2),
+            step: TimeSpan.FromMilliseconds(250),
+            lastSeen: () => state ?? "none",
+            cancellationToken: cancellationToken);
     }
 
     private async Task FetchJwtTokenAsync(CancellationToken cancellationToken)
