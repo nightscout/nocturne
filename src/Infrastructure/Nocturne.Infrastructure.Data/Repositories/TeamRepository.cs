@@ -218,6 +218,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             if (teamId is not { } id)
                 return new TeamInviteAcceptance(null, TeamInviteRefusal.NotFound);
 
+            await db.LockSubjectRowSharedAsync(subjectId, token);
             await db.LockTeamManagersAsync(id, token);
 
             var invite = await db.TeamInvites.FirstOrDefaultAsync(i => i.TokenHash == tokenHash, token);
@@ -272,7 +273,9 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
     /// <summary>
     /// Runs <paramref name="write"/> under the team's manager lock, in one transaction with the check
     /// that the caller manages the team, so a manager removed meanwhile cannot write once the removal
-    /// commits. <paramref name="notManager"/> is the answer when the caller does not manage it.
+    /// commits. <paramref name="notManager"/> is the answer when the caller does not manage it. The
+    /// caller's subject row is locked first, since a write may name the caller as its maker
+    /// (<see cref="MembershipLock"/>).
     /// </summary>
     private async Task<T> AsManagerAsync<T>(
         Guid teamId, Guid callerSubjectId, T notManager,
@@ -281,6 +284,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         await using var db = await contexts.CreatePlatformAsync(ct);
         return await db.ExecuteInTransactionAsync(async token =>
         {
+            await db.LockSubjectRowSharedAsync(callerSubjectId, token);
             await db.LockTeamManagersAsync(teamId, token);
             return await IsManagerAsync(db, teamId, callerSubjectId, token)
                 ? await write(db, token)

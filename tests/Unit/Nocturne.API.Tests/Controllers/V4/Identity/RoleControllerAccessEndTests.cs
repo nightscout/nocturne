@@ -134,7 +134,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
         return new RoleController(
             new TenantRoleService(
                 new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new FakeTimeProvider(Now), _invites.Object,
-                new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
+                new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             tenantAccessor.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

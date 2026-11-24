@@ -18,8 +18,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
 /// A membership holding a team's reason beside its direct one, or only a team's, on PostgreSQL under the
-/// runtime role. The team reasons are written straight to the tables and projected by the startup
-/// check, since no product path gives one yet. The direct reason's writers change only it and refuse a
+/// runtime role. The team reasons are written straight to the tables, with the staff rows they stand on,
+/// and projected by the startup check. The direct reason's writers change only it and refuse a
 /// member who holds none; the team entry points name the team and never read as the member leaving.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -99,10 +99,25 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
 
     /// <summary>
     /// Writes a reason from <paramref name="access"/> giving <paramref name="role"/> to the subject's membership,
-    /// adding the row when they hold none, and projects it as the startup check does.
+    /// adding the row when they hold none, with the staff rows it stands on, and projects it as the startup
+    /// check does.
     /// </summary>
     private async Task<Guid> TeamReasonAsync(
         Site site, Guid subject, Guid access, Guid role, bool limitTo24Hours = false, DateTime? endsAt = null)
+    {
+        var memberId = await WriteTeamReasonAsync(
+            site, subject, access, role, limitTo24Hours, endsAt, TeamReasonSql.Staff(access, subject, role, limitTo24Hours, endsAt));
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            database.MigratorConnectionString, Now, TeamWrites.Apply(Now), NullLogger.Instance, Ct);
+        return memberId;
+    }
+
+    /// <summary>
+    /// Writes the reason alone, after <paramref name="staffSql"/>, leaving the row as it was: no check runs
+    /// to remove a reason that no staff row stands on.
+    /// </summary>
+    private async Task<Guid> WriteTeamReasonAsync(
+        Site site, Guid subject, Guid access, Guid role, bool limitTo24Hours, DateTime? endsAt, string staffSql)
     {
         var member = (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))?.Id;
         var memberId = member ?? Guid.CreateVersion7();
@@ -119,9 +134,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
             VALUES ('{reason}', '{memberId}', 'team', '{access}', {limit}, {ends});
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
+            {staffSql}
             """);
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now, NullLogger.Instance, Ct);
         return memberId;
     }
 
@@ -394,7 +408,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var foreignSubject = await NewSubjectAsync(site.Factory, "list-foreign");
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, foreignSubject, [site.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct))
             .Should().BeTrue();
-        var foreign = await TeamReasonAsync(site, foreignSubject, foreignAccess, site.CaretakerRole);
+        var foreign = await WriteTeamReasonAsync(site, foreignSubject, foreignAccess, site.CaretakerRole, false, null, string.Empty);
 
         var listed = await site.Members.ListMembersAsync(site.Tenant, Ct);
 
@@ -438,6 +452,24 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
 
         await add.Should().ThrowAsync<InvalidOperationException>();
         (await site.Members.FindMemberAsync(site.Tenant, subject, Ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_writer_refuses_to_set_a_team_reason_to_the_owner_role()
+    {
+        var site = await SiteAsync("owner-set-refused");
+        var subject = await NewSubjectAsync(site.Factory, "owner-set-refused-staff");
+        var (_, access) = await TeamAccessAsync(site.Tenant, "Owners");
+        await InTransactionAsync(site, db => TenantMembershipRepository.StageAddTeamReasonAsync(
+            db, site.Tenant, subject, access, new MembershipGrant([site.CaretakerRole], null, false, null),
+            MemberAccessSource.System, Now, Ct));
+
+        var set = () => InUnitAsync(site, unit => TenantMembershipRepository.StageSetTeamReasonAsync(
+            unit, site.Tenant, subject, access, new MembershipGrant([site.OwnerRole], null, false, null),
+            MemberAccessSource.System, Now, Ct));
+
+        await set.Should().ThrowAsync<InvalidOperationException>();
+        (await site.Members.FindMemberAsync(site.Tenant, subject, Ct))!.Roles.Select(r => r.RoleId).Should().Equal(site.CaretakerRole);
     }
 
     [Fact]

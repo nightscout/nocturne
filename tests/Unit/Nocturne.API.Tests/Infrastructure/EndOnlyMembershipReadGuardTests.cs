@@ -60,6 +60,8 @@ public class EndOnlyMembershipReadGuardTests
             "a team's access to a site, not a membership",
         [$"{Repositories}/TeamRepository.Access.cs: TeamRepository.SitesOfAsync"] =
             "a team's access to a site, not a membership",
+        [$"{Repositories}/TeamReasonChanges.cs: TeamReasonChanges.SyncAsync"] =
+            "whether one team reason has lapsed, which is left in place, or would be added already ended, not whether the row is a member",
         ["src/Core/Nocturne.Core.Models/Identity/MembershipSum.cs: MembershipSum.InForceAt"] =
             "a reason's own end: the rule that decides which reasons are in force",
         ["src/Infrastructure/Nocturne.Infrastructure.Data/Services/TeamAccessRules.cs: TeamAccessRules.Refusal"] =

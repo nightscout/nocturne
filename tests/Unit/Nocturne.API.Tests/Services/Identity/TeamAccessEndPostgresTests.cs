@@ -30,11 +30,11 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// <summary>
 /// A site stopping a team's access, the team being deleted, and a staff member being removed or leaving,
 /// through <see cref="TeamAccessService"/> on PostgreSQL under the runtime role, for staff who hold a team
-/// reason on the access that goes. The teams, their access and their staff are real; the team reasons are
-/// written straight to the tables and projected by the startup check, since no product path gives one yet.
+/// reason on the access that goes. The teams, their access, their staff and the team reasons that joining
+/// and approval give them are real.
 /// </summary>
 [Trait("Category", "Integration")]
-public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database database)
+public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database database)
     : IClassFixture<TeamAccessEndPostgresTests.Database>
 {
     private static readonly DateTime Now = WholeMicroseconds(DateTime.UtcNow);
@@ -164,53 +164,61 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     }
 
     /// <summary>Gives the team access to the site, approved by its owner, the team deciding its staff; returns the access.</summary>
-    private async Task<Guid> FollowAsync(Team team, Site site)
+    private Task<Guid> FollowAsync(Team team, Site site) =>
+        FollowAsync(team, site, new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, TeamManagesStaff: true));
+
+    /// <summary>Gives the team the access <paramref name="grant"/> describes, approved by the site's owner; returns the access.</summary>
+    private async Task<Guid> FollowAsync(Team team, Site site, TeamAccessGrant grant)
     {
-        var token = Guid.NewGuid().ToString("N");
-        (await Teams(team.Manager).CreateAccessLinkAsync(team.Id, team.Manager, new NewTeamAccessLink(
-            token, null, Now.AddDays(1), null, new TeamAccessSuggestion(RoleSeeds.Caretaker, false, null)), Ct)).Should().NotBeNull();
-        var approval = await Teams(site.Owner).ApproveAccessAsync(
-            token,
-            new TeamAccessApproverCredential(site.Owner, AuthType.SessionCookie, new HashSet<string>(), false),
-            new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, TeamManagesStaff: true),
-            Now,
-            Ct);
+        var approval = await ApproveAsync(site, await AccessLinkAsync(team), grant);
         approval.Refusal.Should().BeNull();
         return approval.AccessId!.Value;
     }
 
+    private async Task<string> AccessLinkAsync(Team team)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        (await Teams(team.Manager).CreateAccessLinkAsync(team.Id, team.Manager, new NewTeamAccessLink(
+            token, null, Now.AddDays(1), null, new TeamAccessSuggestion(RoleSeeds.Caretaker, false, null)), Ct)).Should().NotBeNull();
+        return token;
+    }
+
+    private Task<TeamAccessApproval> ApproveAsync(Site site, string token, TeamAccessGrant grant) =>
+        TeamReasonWrites.ApproveAccessAsync(
+            Contexts(Guid.Empty, site.Owner),
+            new GrantRevocationService(NewSessions()),
+            token,
+            new TeamAccessApproverCredential(site.Owner, AuthType.SessionCookie, new HashSet<string>(), false),
+            grant,
+            Now,
+            Ct);
+
     private async Task<Guid> JoinStaffAsync(Team team, Guid? subject = null)
     {
         var staff = subject ?? await NewSubjectAsync("staff");
-        var token = Guid.NewGuid().ToString("N");
-        (await Teams(team.Manager).CreateStaffInviteAsync(team.Id, team.Manager, new NewTeamStaffInvite(
-            token, null, Now.AddDays(1), null, new TeamStaffNarrowing(null, false, null)), Ct)).Should().NotBeNull();
-        (await Teams(staff).AcceptStaffInviteAsync(token, staff, Now, Ct)).Refusal.Should().BeNull();
+        (await JoinAsync(team, staff, new TeamStaffNarrowing(null, false, null))).Refusal.Should().BeNull();
         return staff;
     }
 
-    /// <summary>
-    /// Gives <paramref name="subject"/> the reason <paramref name="access"/> gives, with the caretaker role,
-    /// adding the row when they hold none, and projects it as the startup check does.
-    /// </summary>
-    private async Task TeamReasonAsync(Site site, Guid subject, Guid access)
+    private async Task<TeamInviteAcceptance> JoinAsync(Team team, Guid staff, TeamStaffNarrowing narrowing)
     {
-        var existing = (await Members(site.Tenant).FindMemberAsync(site.Tenant, subject, Ct))?.Id;
-        var member = existing ?? Guid.CreateVersion7();
-        var reason = Guid.CreateVersion7();
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
-            {(existing is null ? $"""
-                INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
-                VALUES ('{member}', '{site.Tenant}', '{subject}', false, now(), now());
-                """ : "")}
-            INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
-            VALUES ('{reason}', '{member}', 'team', '{access}', false, NULL);
-            INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
-            VALUES ('{Guid.CreateVersion7()}', '{reason}', '{site.CaretakerRole}');
-            """);
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now, NullLogger.Instance, Ct);
+        var token = await StaffInviteAsync(team, narrowing);
+        return await Service(Guid.Empty, staff).JoinStaffAsync(token, staff, Ct);
+    }
+
+    private async Task<string> StaffInviteAsync(Team team, TeamStaffNarrowing narrowing)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        (await Teams(team.Manager).CreateStaffInviteAsync(
+            team.Id, team.Manager, new NewTeamStaffInvite(token, null, Now.AddDays(1), null, narrowing), Ct)).Should().NotBeNull();
+        return token;
+    }
+
+    /// <summary>The subject holds the reason <paramref name="access"/> gives, and their row is the sum of their reasons.</summary>
+    private async Task HoldsTeamReasonAsync(Site site, Guid subject, Guid access)
+    {
+        (await KindsAsync(site, subject)).Should().Contain($"{MembershipReasonKind.Team}:{access}");
+        await RowIsTheSumAsync(site, subject);
     }
 
     private async Task DirectMemberAsync(Site site, Guid subject, DateTime? endsAt) =>
@@ -344,13 +352,21 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
         }
     }
 
-    /// <summary>A site, a team following it, and a staff member of the team holding its reason there.</summary>
-    private async Task<(Site Site, Team Team, Guid Access, Guid Staff)> StaffWithReasonAsync(string slug)
+    /// <summary>A site, a team following it, and a subject who has not joined the team yet.</summary>
+    private async Task<(Site Site, Team Team, Guid Access, Guid Staff)> SiteAndTeamAsync(string slug)
     {
         var site = await SiteAsync(slug);
         var team = await TeamAsync($"Clinic {slug}");
         var access = await FollowAsync(team, site);
-        var staff = await JoinStaffAsync(team);
+        return (site, team, access, await NewSubjectAsync("staff"));
+    }
+
+    /// <summary>A site, a team following it, and a staff member of the team holding its reason there.</summary>
+    private async Task<(Site Site, Team Team, Guid Access, Guid Staff)> StaffWithReasonAsync(string slug)
+    {
+        var (site, team, access, staff) = await SiteAndTeamAsync(slug);
+        await JoinStaffAsync(team, staff);
+        await HoldsTeamReasonAsync(site, staff, access);
         return (site, team, access, staff);
     }
 
@@ -361,7 +377,6 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     public async Task Ending_a_members_only_reason_removes_the_membership_and_stops_what_they_made_at_the_site(Path path)
     {
         var (site, team, access, staff) = await StaffWithReasonAsync($"only-{path}");
-        await TeamReasonAsync(site, staff, access);
         var made = await MadeByAsync(site, staff);
         var sessions = SessionsOf(site, made.Link, made.Credential);
 
@@ -392,10 +407,11 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     [InlineData(Path.RemoveStaff)]
     public async Task A_member_let_in_directly_keeps_the_membership_and_what_they_made_is_capped_at_the_direct_end(Path path)
     {
-        var (site, team, access, staff) = await StaffWithReasonAsync($"direct-ends-{path}");
+        var (site, team, access, staff) = await SiteAndTeamAsync($"direct-ends-{path}");
         var directEnds = Now.AddDays(10);
         await DirectMemberAsync(site, staff, directEnds);
-        await TeamReasonAsync(site, staff, access);
+        await JoinStaffAsync(team, staff);
+        await HoldsTeamReasonAsync(site, staff, access);
         var made = await MadeByAsync(site, staff);
         (await Members(site.Tenant).FindMemberAsync(site.Tenant, staff, Ct))!.AccessEndsAt.Should().BeNull();
 
@@ -416,9 +432,10 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     [InlineData(Path.RemoveStaff)]
     public async Task A_member_let_in_directly_with_no_end_keeps_everything_they_made(Path path)
     {
-        var (site, team, access, staff) = await StaffWithReasonAsync($"direct-{path}");
+        var (site, team, access, staff) = await SiteAndTeamAsync($"direct-{path}");
         await DirectMemberAsync(site, staff, endsAt: null);
-        await TeamReasonAsync(site, staff, access);
+        await JoinStaffAsync(team, staff);
+        await HoldsTeamReasonAsync(site, staff, access);
         var made = await MadeByAsync(site, staff);
 
         await EndAsync(path, site, team, staff);
@@ -438,8 +455,8 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
         var other = await TeamAsync("Ward");
         var otherAccess = await FollowAsync(other, site);
         await JoinStaffAsync(other, staff);
-        await TeamReasonAsync(site, staff, access);
-        await TeamReasonAsync(site, staff, otherAccess);
+        await HoldsTeamReasonAsync(site, staff, access);
+        await HoldsTeamReasonAsync(site, staff, otherAccess);
         var made = await MadeByAsync(site, staff);
 
         await EndAsync(path, site, team, staff);
@@ -453,9 +470,10 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     [Fact]
     public async Task A_staff_member_who_leaves_is_recorded_at_the_site_as_ended_by_the_team_not_as_leaving()
     {
-        var (site, team, access, staff) = await StaffWithReasonAsync("leave");
+        var (site, team, access, staff) = await SiteAndTeamAsync("leave");
         await DirectMemberAsync(site, staff, endsAt: null);
-        await TeamReasonAsync(site, staff, access);
+        await JoinStaffAsync(team, staff);
+        await HoldsTeamReasonAsync(site, staff, access);
 
         (await Service(Guid.Empty, staff).RemoveStaffAsync(team.Id, staff, staff, Ct)).Should().BeTrue();
 
@@ -473,8 +491,8 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
         var firstAccess = await FollowAsync(team, first);
         var secondAccess = await FollowAsync(team, second);
         var staff = await JoinStaffAsync(team);
-        await TeamReasonAsync(first, staff, firstAccess);
-        await TeamReasonAsync(second, staff, secondAccess);
+        await HoldsTeamReasonAsync(first, staff, firstAccess);
+        await HoldsTeamReasonAsync(second, staff, secondAccess);
         var madeFirst = await MadeByAsync(first, staff);
         var madeSecond = await MadeByAsync(second, staff);
 
@@ -495,7 +513,6 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     public async Task A_stop_and_a_staff_removal_on_the_same_site_at_once_both_finish_and_end_the_membership_once()
     {
         var (site, team, access, staff) = await StaffWithReasonAsync("race-stop-remove");
-        await TeamReasonAsync(site, staff, access);
         var made = await MadeByAsync(site, staff);
 
         await RaceAsync(site, staff,
@@ -513,7 +530,6 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     public async Task A_team_deletion_and_a_staff_removal_at_once_both_finish_and_end_the_membership_once()
     {
         var (site, team, access, staff) = await StaffWithReasonAsync("race-delete-remove");
-        await TeamReasonAsync(site, staff, access);
 
         await RaceAsync(site, staff,
             () => Service(Guid.Empty, team.Manager).DeleteTeamAsync(team.Id, team.Manager, Ct),
@@ -530,7 +546,6 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     public async Task A_stop_and_the_staff_members_account_deletion_at_once_both_finish(bool evenLastOwner)
     {
         var (site, team, access, staff) = await StaffWithReasonAsync($"race-stop-delete-{evenLastOwner}");
-        await TeamReasonAsync(site, staff, access);
 
         await RaceAsync(site, staff,
             () => Service(site.Tenant, site.Owner).StopAsync(site.Tenant, team.Id, Ct),
@@ -542,15 +557,22 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
     }
 
     /// <summary>
-    /// Holds the staff member's membership lock on the site, starts <paramref name="first"/> and waits for
-    /// it to queue, starts <paramref name="second"/> and waits for it to queue, then lets both run, so the
-    /// first is ahead of the second at the membership. Each must finish without an exception.
+    /// <see cref="RaceAsync(Site, Func{NocturneDbContext, Task}, Func{Task}, Func{Task})"/> holding the staff
+    /// member's membership lock on the site, so the first is ahead of the second at the membership.
     /// </summary>
-    private async Task RaceAsync(Site site, Guid staff, Func<Task> first, Func<Task> second)
+    private Task RaceAsync(Site site, Guid staff, Func<Task> first, Func<Task> second) =>
+        RaceAsync(site, holder => holder.LockMembershipAsync(site.Tenant, staff, Ct), first, second);
+
+    /// <summary>
+    /// Holds what <paramref name="hold"/> locks, starts <paramref name="first"/> and waits for it to queue,
+    /// starts <paramref name="second"/> and waits for it to queue, then lets both run. Each must finish
+    /// without an exception.
+    /// </summary>
+    private async Task RaceAsync(Site site, Func<NocturneDbContext, Task> hold, Func<Task> first, Func<Task> second)
     {
         await using var holder = Context(site.Tenant, null);
         await using var held = await holder.Database.BeginTransactionAsync(Ct);
-        await holder.LockMembershipAsync(site.Tenant, staff, Ct);
+        await hold(holder);
 
         var ahead = first();
         await PostgresLockWaits.UntilWaitingAsync(database.AppConnectionString, 1, ahead);

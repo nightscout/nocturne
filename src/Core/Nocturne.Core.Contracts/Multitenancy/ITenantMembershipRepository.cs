@@ -306,22 +306,9 @@ public interface ITenantMembershipRepository
     Task<TenantRoleRecord> CreateRoleAsync(NewTenantRole role, CancellationToken ct);
 
     /// <summary>
-    /// Applies <paramref name="edit"/> to the role and stamps it updated at <paramref name="now"/>.
-    /// While a team's access gives the role, an edit that is not data only
-    /// (<see cref="Scope.IsDataOnly"/>) is refused with <see cref="RoleChangeOutcome.HeldByTeam"/>,
-    /// and one that adds a permission the role does not hold is refused with
-    /// <see cref="RoleChangeOutcome.HeldByTeamOwnerOnly"/> unless <paramref name="editorSubjectId"/>
-    /// is an owner of the site in force: only an owner may give a team more. Checked under the site's
-    /// owners lock and team access lock, so an approval or an owner change racing it is either seen or
-    /// waits. A null <paramref name="editorSubjectId"/> is the system, which is no owner.
-    /// </summary>
-    Task<TenantRoleUpdate> UpdateRoleAsync(
-        Guid tenantId, Guid roleId, TenantRoleEdit edit, Guid? editorSubjectId, DateTime now, CancellationToken ct);
-
-    /// <summary>
     /// Deletes the role together with every member's assignment of it, in one save. Refused with
-    /// <see cref="RoleChangeOutcome.HeldByTeam"/> while a team's access gives the role, checked as
-    /// <see cref="UpdateRoleAsync"/> checks. Each holder's row is projected from its reasons in force
+    /// <see cref="RoleChangeOutcome.HeldByTeam"/> while a team's access gives the role, checked under the
+    /// site's owners lock and team access lock. Each holder's row is projected from its reasons in force
     /// at <paramref name="now"/>.
     /// </summary>
     Task<RoleChangeOutcome> DeleteRoleAsync(Guid tenantId, Guid roleId, DateTime now, CancellationToken ct);

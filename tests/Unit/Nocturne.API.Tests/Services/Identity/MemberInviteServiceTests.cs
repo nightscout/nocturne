@@ -60,7 +60,7 @@ public class MemberInviteServiceTests : IDisposable
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _jwtService.Object,
-            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory())),
+            new TenantRoleService(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), _time, Moq.Mock.Of<Nocturne.Core.Contracts.Identity.IMemberInviteRepository>(), new Nocturne.Infrastructure.Data.Repositories.TeamRepository(_dbContext.AsFactory()), _dbContext.AsFactory(), new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())))),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
             logger.Object, AccountLinkRoutes.Off,

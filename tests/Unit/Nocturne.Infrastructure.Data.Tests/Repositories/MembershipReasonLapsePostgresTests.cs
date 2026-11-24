@@ -110,6 +110,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, {ends});
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
+            {TeamReasonSql.StaffOfMember(teamAccess, member, role, false, endsAt)}
             """);
     }
 
@@ -358,7 +359,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var lapsing = await LapsingAsync(site, "startup-member");
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, After, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, After, TeamWrites.Apply(After), logger, Ct);
 
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Information && e.Message.Contains("Recomputed 1 memberships"));
         logger.Entries.Should().HaveCount(1);
@@ -378,7 +379,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         await AddReasonAsync(site, member, site.CaretakerRole, endsAt: null);
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, TeamWrites.Apply(T0), logger, Ct);
 
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains(member.ToString()));
         (await RolesAsync(site, member)).Should().BeEquivalentTo([site.ViewerRole, site.CaretakerRole]);
@@ -459,7 +460,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         (await LapseAsync(site, written)).Should().BeNull();
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, TeamWrites.Apply(T0), logger, Ct);
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains(started.ToString()));
         (await LapseAsync(site, started)).Should().BeNull();
 

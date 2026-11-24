@@ -10,8 +10,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <summary>
 /// The team writes that remove what a team reason stands on: a site stopping the team's access, the team
 /// being deleted, and a staff member being removed or leaving. Each takes its locks and reads the team
-/// reasons it ends on the caller's unit, which owns the transaction, and returns them as a
-/// <see cref="TeamReasonEnding"/>; nothing is saved here.
+/// reasons it ends on the caller's unit, which owns the transaction, and returns them as
+/// <see cref="TeamReasonChanges"/>; nothing is saved here.
 /// </summary>
 /// <remarks>
 /// <see cref="MembershipLock"/> gives the order of their locks and why it cannot cycle. A team reason
@@ -23,7 +23,7 @@ public partial class TeamRepository
     /// Locks and reads what stopping the team's access to <paramref name="tenantId"/> ends, on
     /// <paramref name="unit"/>, which must be pinned to the tenant. Null when the team has no access to it.
     /// </summary>
-    public static async Task<TeamReasonEnding?> LockAccessStopAsync(
+    public static async Task<TeamReasonChanges?> LockAccessStopAsync(
         DbUnitOfWork unit, Guid tenantId, Guid teamId, CancellationToken ct)
     {
         var db = unit.Context;
@@ -37,7 +37,7 @@ public partial class TeamRepository
         if (access is null)
             return null;
 
-        return await TeamReasonEnding.ReadAsync(unit, [access.Id], subjectId: null, (context, _) =>
+        return await TeamReasonChanges.ReadAsync(unit, [access.Id], subjectId: null, (context, _) =>
         {
             TeamAudit.StageAccessStopped(
                 context, access, access.Team!.Name, access.AccessRoles.Select(r => r.TenantRole!.Slug), TeamAudit.StoppedHow);
@@ -51,7 +51,7 @@ public partial class TeamRepository
     /// to a tenant. <see cref="TeamDeletion.NotFound"/> when the caller is not a member of it and
     /// <see cref="TeamDeletion.Refused"/> when it may not be deleted now, both with no ending.
     /// </summary>
-    public static async Task<(TeamDeletion Outcome, TeamReasonEnding? Ending)> LockTeamDeletionAsync(
+    public static async Task<(TeamDeletion Outcome, TeamReasonChanges? Ending)> LockTeamDeletionAsync(
         DbUnitOfWork unit, Guid teamId, Guid callerSubjectId, CancellationToken ct)
     {
         var db = unit.Context;
@@ -65,7 +65,7 @@ public partial class TeamRepository
             return (TeamDeletion.Refused, null);
 
         var accesses = await AccessOfTeamAcrossSitesAsync(db, teamId, ct);
-        return (TeamDeletion.Deleted, await TeamReasonEnding.ReadAsync(
+        return (TeamDeletion.Deleted, await TeamReasonChanges.ReadAsync(
             unit, accesses.Select(a => a.Access.Id).ToList(), subjectId: null,
             (context, token) => RemoveAsync(context, team, token), ct));
     }
@@ -76,7 +76,7 @@ public partial class TeamRepository
     /// Null when the subject is not staff of the team, or the caller is neither a manager of it nor that
     /// staff member. Never refused for the last-manager rule.
     /// </summary>
-    public static async Task<TeamReasonEnding?> LockStaffRemovalAsync(
+    public static async Task<TeamReasonChanges?> LockStaffRemovalAsync(
         DbUnitOfWork unit, Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct)
     {
         var db = unit.Context;
@@ -90,101 +90,11 @@ public partial class TeamRepository
             return null;
 
         var accesses = await AccessOfTeamAcrossSitesAsync(db, teamId, ct);
-        return await TeamReasonEnding.ReadAsync(unit, accesses.Select(a => a.Access.Id).ToList(), staffSubjectId, (context, _) =>
+        return await TeamReasonChanges.ReadAsync(unit, accesses.Select(a => a.Access.Id).ToList(), staffSubjectId, (context, _) =>
         {
             context.TeamMembers.Remove(member);
             TeamAudit.StageStaffRemoved(context, teamId, staffSubjectId);
             return Task.CompletedTask;
         }, ct);
     }
-}
-
-/// <summary>
-/// The team reasons a team write ends, read under its locks (<see cref="TeamRepository.LockAccessStopAsync"/>
-/// and its siblings), and the write itself. For each site in <see cref="Sites"/>, with the unit pinned to
-/// it, the caller stops what each member in <see cref="EndingAt"/> made there, then calls
-/// <see cref="RemoveReasonsAtAsync"/>, then saves. Last it calls <see cref="StageAsync"/> and saves.
-/// </summary>
-/// <remarks>
-/// A reason's source cannot be deleted while the reason names it, so every reason goes, and is saved,
-/// before the write that removes what it stands on.
-/// </remarks>
-public sealed class TeamReasonEnding
-{
-    private readonly DbUnitOfWork _unit;
-    private readonly IReadOnlyList<Holder> _holders;
-    private readonly Func<NocturneDbContext, CancellationToken, Task> _write;
-
-    private sealed record Holder(Guid TenantId, Guid SubjectId, Guid AccessId, bool Last);
-
-    private TeamReasonEnding(DbUnitOfWork unit, IReadOnlyList<Holder> holders, Func<NocturneDbContext, CancellationToken, Task> write)
-    {
-        _unit = unit;
-        _holders = holders;
-        _write = write;
-    }
-
-    /// <summary>The sites where a team reason ends, in ascending tenant id.</summary>
-    public IReadOnlyList<Guid> Sites => _holders.Select(h => h.TenantId).Distinct().ToList();
-
-    /// <summary>The subjects whose membership of <paramref name="tenantId"/> ends with it, the team reason being their last.</summary>
-    public IReadOnlyList<Guid> EndingAt(Guid tenantId) =>
-        _holders.Where(h => h.TenantId == tenantId && h.Last).Select(h => h.SubjectId).ToList();
-
-    /// <summary>
-    /// Stages the removal of every team reason ending at <paramref name="tenantId"/>, attributed to the
-    /// system, through <see cref="TenantMembershipRepository.StageRemoveTeamReasonAsync"/>, which caps
-    /// what a member who keeps their membership made at the end the rest gives. The unit must be pinned
-    /// to the tenant.
-    /// </summary>
-    /// <returns>The grants the caps lowered, for the caller to evict their sessions once the unit commits.</returns>
-    public async Task<IReadOnlyList<OAuthGrantRecord>> RemoveReasonsAtAsync(Guid tenantId, DateTime now, CancellationToken ct)
-    {
-        var capped = new List<OAuthGrantRecord>();
-        foreach (var holder in _holders.Where(h => h.TenantId == tenantId))
-        {
-            capped.AddRange(await TenantMembershipRepository.StageRemoveTeamReasonAsync(
-                _unit, holder.TenantId, holder.SubjectId, holder.AccessId, MemberAccessSource.System, now, ct) ?? []);
-        }
-
-        return capped;
-    }
-
-    /// <summary>Stages the write the reasons stood on. Saves nothing.</summary>
-    public Task StageAsync(CancellationToken ct) => _write(_unit.Context, ct);
-
-    /// <summary>
-    /// Reads the team reasons that stand on <paramref name="accessIds"/>, only <paramref name="subjectId"/>'s
-    /// when it is set, takes their memberships' locks, and reads them again under the locks, which only
-    /// a removal can have changed: the caller holds the access locks every reason's writer takes.
-    /// </summary>
-    internal static async Task<TeamReasonEnding> ReadAsync(
-        DbUnitOfWork unit, IReadOnlyCollection<Guid> accessIds, Guid? subjectId,
-        Func<NocturneDbContext, CancellationToken, Task> write, CancellationToken ct)
-    {
-        var db = unit.Context;
-        var standing = await StandingOn(db, accessIds, subjectId)
-            .Select(r => new { r.TenantMember.TenantId, r.TenantMember.SubjectId })
-            .ToListAsync(ct);
-        await db.LockMembershipsAsync(standing.Select(m => (m.TenantId, m.SubjectId)), ct);
-
-        var holders = await StandingOn(db, accessIds, subjectId)
-            .OrderBy(r => r.TenantMember.TenantId)
-            .ThenBy(r => r.TenantMember.SubjectId)
-            .Select(r => new Holder(
-                r.TenantMember.TenantId,
-                r.TenantMember.SubjectId,
-                r.SourceId!.Value,
-                !r.TenantMember.Reasons.Any(other => other.Id != r.Id)))
-            .ToListAsync(ct);
-        return new TeamReasonEnding(unit, holders, write);
-    }
-
-    private static IQueryable<TenantMemberReasonEntity> StandingOn(
-        NocturneDbContext db, IReadOnlyCollection<Guid> accessIds, Guid? subjectId) =>
-        db.TenantMemberReasons.AsNoTracking()
-            .Where(r => r.Kind == MembershipReasonKind.Team
-                && r.SourceId != null
-                && accessIds.Contains(r.SourceId.Value)
-                && (subjectId == null || r.TenantMember.SubjectId == subjectId));
 }
