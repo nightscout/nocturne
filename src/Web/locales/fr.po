@@ -48950,3 +48950,23 @@ msgstr ""
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Nocturne can copy the history from a Nightscout site, or start with no data."
 msgstr ""
+
+#: src/lib/test-stubs/LoginForm.test-stub.svelte
+msgid "Show recovery codes"
+msgstr ""
+
+#: src/lib/components/auth/FirstRecoveryCodes.svelte
+msgid "You are signed in. Your account had no recovery codes, so we made them now."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
+msgid "Your passkey is saved, but setup did not finish. Sign in with the passkey you made to continue."
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
+msgid "Go to sign in"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
+msgid "Your passkey is ready."
+msgstr ""
