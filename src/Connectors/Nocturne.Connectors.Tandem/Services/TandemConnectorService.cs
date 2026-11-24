@@ -157,21 +157,18 @@ public class TandemConnectorService
     }
 
     /// <summary>Keeps the zone the run reads the pump's clock in where the connection list finds it.</summary>
-    private async Task RememberTimeZoneAsync(ConnectorTimeZone zone, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (await VendorStateAsync<ConnectorTimeZone>(ConnectorTimeZone.VendorStateKey, cancellationToken) is { } known
-                && known.Id == zone.Id && known.Source == zone.Source)
-                return;
+    private Task RememberTimeZoneAsync(ConnectorTimeZone zone, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            "record the time zone in use",
+            async () =>
+            {
+                if (await VendorStateAsync<ConnectorTimeZone>(ConnectorTimeZone.VendorStateKey, cancellationToken) is { } known
+                    && known.Id == zone.Id && known.Source == zone.Source)
+                    return;
 
-            await SetVendorStateAsync(ConnectorTimeZone.VendorStateKey, zone, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "[{Source}] Could not record the time zone in use", ConnectorSource);
-        }
-    }
+                await SetVendorStateAsync(ConnectorTimeZone.VendorStateKey, zone, cancellationToken);
+            },
+            cancellationToken);
 
     private async Task SyncProfilesAsync(
         TandemBffPump device, HashSet<SyncDataType> activeTypes, SyncResult result,
@@ -207,31 +204,18 @@ public class TandemConnectorService
     /// </remarks>
     private static string PublishedProfileKey(TandemBffPump device) => $"profile:{device.AssignmentId}";
 
-    private async Task<string?> PublishedProfileFingerprintAsync(string key, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await VendorStateAsync<string>(key, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "[{Source}] Could not read the published profile; publishing", ConnectorSource);
-            return null;
-        }
-    }
+    private Task<string?> PublishedProfileFingerprintAsync(string key, CancellationToken cancellationToken) =>
+        ReadStateBestEffortAsync(
+            "read the published profile; publishing",
+            null,
+            () => VendorStateAsync<string>(key, cancellationToken),
+            cancellationToken);
 
-    private async Task RememberPublishedProfileAsync(
-        string key, string fingerprint, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await SetVendorStateAsync(key, fingerprint, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "[{Source}] Could not record the published profile", ConnectorSource);
-        }
-    }
+    private Task RememberPublishedProfileAsync(string key, string fingerprint, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            "record the published profile",
+            () => SetVendorStateAsync(key, fingerprint, cancellationToken),
+            cancellationToken);
 
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> SyncEventsAsync(

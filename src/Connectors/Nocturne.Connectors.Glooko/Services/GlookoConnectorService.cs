@@ -505,48 +505,37 @@ public class GlookoConnectorService
     ///     <see cref="GlookoConstants.LookbackReadInterval"/>. A store that cannot be read walks, so a
     ///     transient fault costs one extra walk rather than a missed one.
     /// </summary>
-    private async Task<WindowTier> ResolveWindowTierAsync(DateTime now, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var completed = await ResumeStampAsync(GlookoConstants.FullWalkStamp, cancellationToken);
-            if (FullWalkSchedule.IsDue(completed, GlookoConstants.FullWalkInterval, now))
+    private Task<WindowTier> ResolveWindowTierAsync(DateTime now, CancellationToken cancellationToken) =>
+        ReadStateBestEffortAsync(
+            "read the sync schedule; walking",
+            WindowTier.FullWalk,
+            async () =>
             {
-                var attempted = await ResumeStampAsync(GlookoConstants.FullWalkAttemptStamp, cancellationToken);
-                if (FullWalkSchedule.IsDue(attempted, GlookoConstants.FullWalkRetryInterval, now))
-                    return WindowTier.FullWalk;
-            }
+                var completed = await ResumeStampAsync(GlookoConstants.FullWalkStamp, cancellationToken);
+                if (FullWalkSchedule.IsDue(completed, GlookoConstants.FullWalkInterval, now))
+                {
+                    var attempted = await ResumeStampAsync(GlookoConstants.FullWalkAttemptStamp, cancellationToken);
+                    if (FullWalkSchedule.IsDue(attempted, GlookoConstants.FullWalkRetryInterval, now))
+                        return WindowTier.FullWalk;
+                }
 
-            var lookback = await ResumeStampAsync(GlookoConstants.LookbackReadStamp, cancellationToken);
-            return FullWalkSchedule.IsDue(lookback, GlookoConstants.LookbackReadInterval, now)
-                ? WindowTier.Lookback
-                : WindowTier.Short;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not read the sync schedule; walking", ConnectorSource);
-            return WindowTier.FullWalk;
-        }
-    }
+                var lookback = await ResumeStampAsync(GlookoConstants.LookbackReadStamp, cancellationToken);
+                return FullWalkSchedule.IsDue(lookback, GlookoConstants.LookbackReadInterval, now)
+                    ? WindowTier.Lookback
+                    : WindowTier.Short;
+            },
+            cancellationToken);
 
     /// <summary>
     ///     Stamps <paramref name="stamp"/> with <paramref name="at"/>. A store that cannot be
     ///     written does not fail the sync; while it stays unwritable the schedule cannot remember the
     ///     read it stamps and every scheduled run repeats it, which is what the warning is for.
     /// </summary>
-    private async Task RecordStampAsync(string stamp, DateTime at, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await SetResumeStampAsync(stamp, at, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not record the sync stamp ({Stamp})", ConnectorSource, stamp);
-        }
-    }
+    private Task RecordStampAsync(string stamp, DateTime at, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            $"record the sync stamp ({stamp})",
+            () => SetResumeStampAsync(stamp, at, cancellationToken),
+            cancellationToken);
 
     /// <summary>
     ///     Runs one full sync pass: every date chunk followed by the profile/device-settings fetch,
