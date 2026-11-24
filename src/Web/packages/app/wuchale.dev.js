@@ -9,6 +9,14 @@ export const DEV_LOCALES_DIR_ENV = 'NOCTURNE_WUCHALE_LOCALES_DIR'
 const wuchaleRoot = dirname(fileURLToPath(import.meta.url))
 const sharedLocalesDir = resolve(wuchaleRoot, '../../locales')
 
+/**
+ * The config path for `wuchale({ configPath })`, absolute on purpose: wuchale resolves a relative
+ * one, and the root it derives from it, against `process.cwd()` at each use. svelte-check changes
+ * the cwd while it loads another package's config, so a relative path made one process create
+ * the catalogue directory in one package's tree and write into another's.
+ */
+export const WUCHALE_CONFIG_PATH = join(wuchaleRoot, 'wuchale.config.js')
+
 const slashes = (/** @type {string} */ p) => p.replaceAll('\\', '/')
 
 /**
