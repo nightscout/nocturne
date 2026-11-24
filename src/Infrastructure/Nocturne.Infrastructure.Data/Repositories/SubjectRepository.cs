@@ -131,7 +131,7 @@ public class SubjectRepository : ISubjectRepository
 
         if (subject.RoleNames is { Count: > 0 } names)
         {
-            var wanted = names.Select(n => n.Trim()).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var wanted = names.Select(n => n.Trim()).Where(n => n.Length > 0).Distinct(StringComparer.Ordinal).ToList();
             var roles = await db.Roles.Where(r => wanted.Contains(r.Name)).ToListAsync(ct);
             foreach (var role in roles.DistinctBy(r => r.Id))
             {

@@ -864,6 +864,24 @@ public class StatusServiceTests
         result.ApiPermissions.Should().BeEquivalentTo(new Dictionary<string, string> { ["entries"] = "r" });
     }
 
+    [Fact]
+    public async Task GetV3SystemStatusAsync_ReportsRolesThatDifferOnlyByCaseAsTwoRoles()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            Roles = ["Admin", "admin", "admin"],
+        });
+        httpContext.SetGrantedScopes(Scope.Normalize([Scope.GlucoseRead]));
+        var service = CreateStatusService(
+            _configuration, httpContextAccessor: new HttpContextAccessor { HttpContext = httpContext });
+
+        var result = await service.GetV3SystemStatusAsync();
+
+        result.Extended!.Authorization!.Roles.Should().Equal("Admin", "admin");
+    }
+
     private static IHttpContextAccessor Caller(bool authenticated, params string[] scopes)
     {
         var httpContext = new DefaultHttpContext();
