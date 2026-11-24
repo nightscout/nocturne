@@ -207,6 +207,11 @@ public class DirectGrantController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Keep(Guid id)
     {
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
+
         if (!HttpContext.MayKeepDeviceCredentials())
         {
             return HttpContext.CallerAccessEndsAt() is null

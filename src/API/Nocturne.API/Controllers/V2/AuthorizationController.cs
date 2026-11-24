@@ -372,6 +372,11 @@ public class AuthorizationController : ControllerBase
     [ErrorEnvelope]
     public async Task<ActionResult<Role>> UpdateRole([FromBody] Role role)
     {
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
+
         _logger.LogDebug("Update role requested: {Id}", role.Id);
 
         if (ReservedRoleName(role) is { } refused)

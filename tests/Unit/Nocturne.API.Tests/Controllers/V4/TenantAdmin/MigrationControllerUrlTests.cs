@@ -1,10 +1,13 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.TenantAdmin;
 using Nocturne.API.Helpers;
+using Nocturne.API.Middleware;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -32,8 +35,37 @@ public class MigrationControllerUrlTests
             .ReturnsAsync(new Dictionary<string, string>());
     }
 
-    private MigrationController Controller() =>
-        new(_migrations.Object, _connectors.Object, Mock.Of<ITenantAccessor>(), TimeProvider.System, NullLogger<MigrationController>.Instance);
+    private MigrationController Controller(HttpContext? http = null) =>
+        new(_migrations.Object, _connectors.Object, Mock.Of<ITenantAccessor>(), TimeProvider.System, NullLogger<MigrationController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = http ?? new DefaultHttpContext() },
+        };
+
+    private static HttpContext InactiveCaller()
+    {
+        var subjectId = Guid.CreateVersion7();
+        var tenantId = Guid.CreateVersion7();
+        var http = new DefaultHttpContext();
+        http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId, TenantId = tenantId };
+        new RequestMembership(subjectId, tenantId, null) { SubjectIsInactive = true }.StoreOn(http);
+        return http;
+    }
+
+    [Fact]
+    public async Task An_inactive_caller_cannot_start_a_migration_and_no_job_starts()
+    {
+        var controller = Controller(InactiveCaller());
+
+        var started = await controller.StartMigration(
+            new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = "https://ns.example" }, CancellationToken.None);
+        var fromConnector = await controller.StartFromConnector("nightscout", CancellationToken.None);
+
+        started.Result.Should().BeOfType<ChallengeResult>();
+        fromConnector.Result.Should().BeOfType<ChallengeResult>();
+        _migrations.Verify(
+            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 
     private void ConnectorUrl(string url) =>
         _connectors

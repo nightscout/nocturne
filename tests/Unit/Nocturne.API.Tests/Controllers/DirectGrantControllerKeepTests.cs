@@ -61,6 +61,24 @@ public class DirectGrantControllerKeepTests
     }
 
     [Fact]
+    public async Task AnInactiveCallerIsRefusedAndNothingIsKept()
+    {
+        var strict = new Mock<IDirectGrantService>(MockBehavior.Strict);
+        var controller = Controller(null, Scope.MembersManage);
+        new RequestMembership(Caller, Tenant, null) { SubjectIsInactive = true }
+            .StoreOn(controller.ControllerContext.HttpContext);
+        controller = new DirectGrantController(Mock.Of<ISubjectRepository>(), strict.Object)
+        {
+            ControllerContext = controller.ControllerContext,
+        };
+
+        var result = await controller.Keep(Guid.CreateVersion7());
+
+        result.Should().BeOfType<ChallengeResult>();
+        strict.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ACallerWhoseAccessEndsIsRefusedAndNothingIsKept()
     {
         var result = await Controller(new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc), Scope.MembersManage)

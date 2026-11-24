@@ -391,6 +391,9 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -519,6 +522,9 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -619,6 +625,9 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -685,6 +694,9 @@ public class MemberInviteController : ControllerBase
         [FromServices] TimeProvider time,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 

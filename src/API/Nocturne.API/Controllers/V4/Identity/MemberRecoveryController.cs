@@ -123,6 +123,9 @@ public class MemberRecoveryController : ControllerBase
         // [RequireScope] answers 401 to a request with no auth context, as members.manage is not a read scope.
         var auth = HttpContext.GetAuthContext()!;
 
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         await using var db = await _contexts.CreateAsync(ct);
 

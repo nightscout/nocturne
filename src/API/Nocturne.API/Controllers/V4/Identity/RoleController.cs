@@ -120,6 +120,9 @@ public class RoleController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var holders = await _roleService.GetRoleHoldersAsync(
             _tenantAccessor.TenantId, HttpContext.CallerAccessEndsAt(), ct);
         if (RoleHeldPastCallerRefusal(holders, id) is { } heldPast)
