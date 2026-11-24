@@ -9,6 +9,7 @@
   import { exceedsDaySpan, outsideDaySpan } from "#lib/utils/date-range.js";
   import { getV4ApiLimits } from "#lib/api/generated/metadatas.generated.remote.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
@@ -201,18 +202,24 @@
   </Popover.Root>
 
   {#if showDaysPresets}
-    <!-- Quick Day Selection (right) -->
-    <div class="flex flex-wrap gap-2">
+    <ToggleGroup.Root
+      type="single"
+      variant="segmented"
+      size="sm"
+      aria-label="Range"
+      value={selectedDays?.toString() ?? ""}
+      onValueChange={(days: string) => {
+        if (days) setDayRange(Number(days));
+      }}
+    >
       {#each [1, 3, 7, 14, 30, 90] as daysOption (daysOption)}
-        <Button
-          variant={selectedDays === daysOption ? "default" : "outline"}
-          size="sm"
-          onclick={() => setDayRange(daysOption)}
-          class="text-xs"
+        <ToggleGroup.Item
+          value={daysOption.toString()}
+          aria-label={daysOption === 1 ? "Today" : `Last ${daysOption} days`}
         >
-          {daysOption === 1 ? "Today" : `${daysOption} days`}
-        </Button>
+          {daysOption}d
+        </ToggleGroup.Item>
       {/each}
-    </div>
+    </ToggleGroup.Root>
   {/if}
 </div>

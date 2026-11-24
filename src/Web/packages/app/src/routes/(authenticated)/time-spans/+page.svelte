@@ -9,6 +9,7 @@
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import DateRangePicker from "#lib/components/ui/date-range-picker.svelte";
   import VersionRibbon from "#lib/components/therapy-timeline/VersionRibbon.svelte";
@@ -135,9 +136,7 @@
     </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">Therapy timeline</h1>
-      <p class="text-muted-foreground">
-        The profile in time, with the glucose and the pump, activity, and device data beside it.
-      </p>
+      <p class="text-muted-foreground">See when your profile changed.</p>
     </div>
   </div>
 
@@ -195,19 +194,25 @@
 
           {#if mode === "timeline"}
             <div class="flex flex-wrap items-center gap-2">
-              <div class="flex items-center gap-1" role="group" aria-label="Window length">
+              <ToggleGroup.Root
+                type="single"
+                variant="segmented"
+                size="sm"
+                aria-label="Window length"
+                value={Math.round(windowLength / DAY_MS).toString()}
+                onValueChange={(days: string) => {
+                  if (days) view.wd = Number(days);
+                }}
+              >
                 {#each WINDOW_DAYS.filter((d) => d === 1 || d <= Math.ceil(rangeDays)) as days (days)}
-                  <Toggle
-                    variant="outline"
-                    size="sm"
-                    pressed={Math.round(windowLength / DAY_MS) === days}
-                    onPressedChange={() => (view.wd = days)}
+                  <ToggleGroup.Item
+                    value={days.toString()}
                     aria-label="{days} {days === 1 ? 'day' : 'days'}"
                   >
-                    {days} d
-                  </Toggle>
+                    {days}d
+                  </ToggleGroup.Item>
                 {/each}
-              </div>
+              </ToggleGroup.Root>
               <div class="flex items-center gap-1">
                 <Button
                   variant="outline"
