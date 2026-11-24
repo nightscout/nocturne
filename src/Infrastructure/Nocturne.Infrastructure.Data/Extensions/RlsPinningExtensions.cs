@@ -38,4 +38,44 @@ public static class RlsPinningExtensions
             [tenantId.ToString(), HistoryHorizon.SessionTag(tenantId)],
             ct);
     }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> with <paramref name="context"/> pinned to <paramref name="tenantId"/>,
+    /// its query filter and its <c>app.current_tenant_id</c> GUC both, the GUC local to the open
+    /// transaction, then puts back the tenant it had. <see cref="Guid.Empty"/> lifts the pin, which every
+    /// policy reads as unset. For one transaction that reads or writes the rows of several tenants, each
+    /// under its own; what <paramref name="work"/> stages on a table whose policy holds it to one tenant
+    /// is saved inside it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public static async Task<T> InTenantForTransactionAsync<T>(
+        this NocturneDbContext context, Guid tenantId, Func<CancellationToken, Task<T>> work, CancellationToken ct)
+    {
+        var before = context.TenantId;
+        try
+        {
+            await SetTenantForTransactionAsync(context, tenantId, ct);
+            var result = await work(ct);
+            await SetTenantForTransactionAsync(context, before, ct);
+            return result;
+        }
+        finally
+        {
+            context.TenantId = before;
+        }
+    }
+
+    private static async Task SetTenantForTransactionAsync(NocturneDbContext context, Guid tenantId, CancellationToken ct)
+    {
+        context.TenantId = tenantId;
+        if (!context.Database.IsNpgsql())
+            return;
+        if (context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A tenant is pinned for a transaction inside one");
+
+        await context.Database.ExecuteSqlRawAsync(
+            "SELECT set_config('app.current_tenant_id', {0}, true)",
+            [tenantId == Guid.Empty ? string.Empty : tenantId.ToString()],
+            ct);
+    }
 }

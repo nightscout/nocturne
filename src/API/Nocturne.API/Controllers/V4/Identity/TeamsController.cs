@@ -377,12 +377,13 @@ public class TeamsController(
     [RemoteCommand(Invalidates = ["GetMyTeams", "GetTeam"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveStaff(Guid teamId, Guid subjectId, CancellationToken ct)
+    public async Task<IActionResult> RemoveStaff(
+        Guid teamId, Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } callerId)
             return Unauthorized();
 
-        return await teams.RemoveStaffAsync(teamId, callerId, subjectId, ct) ? NoContent() : NotFound();
+        return await access.RemoveStaffAsync(teamId, callerId, subjectId, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -505,12 +506,12 @@ public class TeamsController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteTeam(Guid teamId, CancellationToken ct)
+    public async Task<IActionResult> DeleteTeam(Guid teamId, [FromServices] TeamAccessService access, CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
-        return await teams.DeleteAsync(teamId, subjectId, ct) switch
+        return await access.DeleteTeamAsync(teamId, subjectId, ct) switch
         {
             TeamDeletion.Deleted => NoContent(),
             TeamDeletion.Refused => this.ProblemWithCode(

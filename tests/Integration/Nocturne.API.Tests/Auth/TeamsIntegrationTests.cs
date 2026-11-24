@@ -111,7 +111,9 @@ public class TeamsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutpu
         (await staffClient.DeleteAsync($"/api/v4/me/teams/{teamId}/staff-invites/{inviteId}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await staffClient.PutAsJsonAsync($"/api/v4/me/teams/{teamId}/staff/{staff}", new { limitTo24Hours = false })).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await staffClient.DeleteAsync($"/api/v4/me/teams/{teamId}/managers/{manager}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await staffClient.DeleteAsync($"/api/v4/me/teams/{teamId}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var refused = await staffClient.DeleteAsync($"/api/v4/me/teams/{teamId}");
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_delete_refused");
 
         (await managerClient.PutAsJsonAsync($"/api/v4/me/teams/{teamId}/staff/{staff}", new { limitTo24Hours = false }))
             .StatusCode.Should().Be(HttpStatusCode.NoContent);

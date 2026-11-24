@@ -345,8 +345,8 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> StopTeamAccess(
-        Guid teamId, [FromServices] ITeamRepository teams, CancellationToken ct) =>
-        await teams.StopAccessAsync(_tenantAccessor.TenantId, teamId, ct) ? NoContent() : NotFound();
+        Guid teamId, [FromServices] TeamAccessService access, CancellationToken ct) =>
+        await access.StopAsync(_tenantAccessor.TenantId, teamId, ct) ? NoContent() : NotFound();
 
     /// <summary>
     /// A page of the changes to what the current tenant's members can read, newest first: members

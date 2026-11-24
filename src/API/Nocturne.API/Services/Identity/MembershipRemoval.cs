@@ -64,18 +64,39 @@ internal static class MembershipRemoval
             return (removal.Outcome, []);
         }
 
-        var chatLinks = await context.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId && d.NocturneUserId == member.SubjectId)
-            .ToListAsync(ct);
-        var owned = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(member.SubjectId, ct);
-
         var capAt = removal.MembershipKept
             ? removal.KeptAccessEndsAt
             : member.DirectReason?.AccessEndsAt is not null ? now : null;
-        context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        var revoked = await made.FinishAsync(grantRevocation, owned, capAt, ct);
+        var revoked = await StageLossAsync(unit, made, grantRevocation, tenantId, member.SubjectId, capAt, ct);
         await context.SaveChangesAsync(ct);
         return (removal.Outcome, revoked);
+    }
+
+    /// <summary>
+    /// Stages on <paramref name="unit"/>, without saving, what <paramref name="subjectId"/> loses with
+    /// access on <paramref name="tenantId"/> beside its roles: their chat links to the tenant, every live
+    /// grant of theirs on it, and the rest of <paramref name="made"/>, capped at <paramref name="capAt"/>
+    /// (<see cref="MadeByStop.FinishAsync"/>). The unit must be pinned to the tenant.
+    /// </summary>
+    /// <returns>
+    /// The grants it revoked or capped, for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
+    /// </returns>
+    public static async Task<IReadOnlyList<OAuthGrantRecord>> StageLossAsync(
+        DbUnitOfWork unit,
+        MadeByStop made,
+        GrantRevocationService grantRevocation,
+        Guid tenantId,
+        Guid subjectId,
+        DateTime? capAt,
+        CancellationToken ct)
+    {
+        var context = unit.Context;
+        var chatLinks = await context.ChatIdentityDirectory
+            .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
+            .ToListAsync(ct);
+        var owned = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, ct);
+        context.ChatIdentityDirectory.RemoveRange(chatLinks);
+        return await made.FinishAsync(grantRevocation, owned, capAt, ct);
     }
 
     /// <summary>

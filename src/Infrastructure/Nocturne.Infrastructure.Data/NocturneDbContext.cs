@@ -93,8 +93,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The tenant whose rows this context reaches: a pin when one is set, otherwise the scope's
     /// resolved tenant, read live. The tenant query filter and the <c>app.current_tenant_id</c> GUC
-    /// both read it. Only <see cref="INocturneDbContextFactory"/> and
-    /// <see cref="Extensions.RlsPinningExtensions.PinTenantAsync"/> pin it.
+    /// both read it. Only <see cref="INocturneDbContextFactory"/>,
+    /// <see cref="Extensions.RlsPinningExtensions.PinTenantAsync"/> and
+    /// <see cref="Extensions.RlsPinningExtensions.InTenantForTransactionAsync{T}"/> pin it; the last
+    /// leaves the context pinned to the tenant it read before the call.
     /// </summary>
     public Guid TenantId
     {

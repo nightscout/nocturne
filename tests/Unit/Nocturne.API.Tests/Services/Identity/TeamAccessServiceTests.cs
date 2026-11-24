@@ -1,6 +1,8 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -30,7 +32,10 @@ public class TeamAccessServiceTests
     private readonly Mock<ITenantMembershipRepository> _members = new();
     private readonly Mock<ITenantRoleService> _roles = new();
 
-    private TeamAccessService Service() => new(_teams.Object, _members.Object, _roles.Object, new FakeTimeProvider(new DateTimeOffset(Now)));
+    private TeamAccessService Service() => new(
+        _teams.Object, _members.Object, _roles.Object, new FakeTimeProvider(new DateTimeOffset(Now)),
+        Mock.Of<INocturneDbContextFactory>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
     private static TeamAccessApproverCredential Session(bool limited = false) =>
         new(Caller, AuthType.SessionCookie, new HashSet<string>(), limited);

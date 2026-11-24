@@ -9,17 +9,16 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <summary>
 /// A team's staff: the invites a manager makes, the narrowing a manager sets, and the
 /// <c>team_site_staff</c> row each staff member has for each site the team follows. Writes the
-/// team's own rows only: no membership of any site and no reason for one.
+/// team's own rows only: no membership of any site and no reason for one. Removing a staff member
+/// removes the reasons it ends (<see cref="LockStaffRemovalAsync"/>).
 /// </summary>
 /// <remarks>
 /// Every write here holds the team's manager lock, which an approval of the team's access holds too, so
 /// a join and an approval each see the other's rows. A join also takes the access locks of every site
-/// the team follows (<see cref="LockAccessOfTeamsAsync"/>), manager lock first and sites in ascending
-/// tenant id, the order a team deletion takes them in. A stop of a site's access takes only that site's
-/// lock and never waits on a manager lock, so no two of them each hold what the other waits for, and a
-/// join either reads the access before a stop commits and has its row removed by the stop's cascade, or
-/// waits and reads it gone. An edit takes the same locks, so the rows it loads cannot be removed by a stop
-/// before it saves.
+/// the team follows (<see cref="LockAccessOfTeamsAsync"/>), in the order <see cref="MembershipLock"/>
+/// gives every write that takes them. So a join either reads the access before a stop commits and has its
+/// row removed by the stop's cascade, or waits and reads it gone. An edit takes the same locks, so the
+/// rows it loads cannot be removed by a stop before it saves.
 /// </remarks>
 public partial class TeamRepository
 {
@@ -167,29 +166,6 @@ public partial class TeamRepository
             await db.SaveChangesAsync(token);
             return TeamStaffChange.Changed;
         }, ct);
-
-    /// <inheritdoc/>
-    public virtual async Task<bool> RemoveStaffAsync(
-        Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct)
-    {
-        await using var db = await contexts.CreatePlatformAsync(ct);
-        return await db.ExecuteInTransactionAsync(async token =>
-        {
-            await db.LockTeamManagersAsync(teamId, token);
-
-            if (callerSubjectId != staffSubjectId && !await IsManagerAsync(db, teamId, callerSubjectId, token))
-                return false;
-
-            var member = await StaffMemberAsync(db, teamId, staffSubjectId, token);
-            if (member is null)
-                return false;
-
-            db.TeamMembers.Remove(member);
-            TeamAudit.StageStaffRemoved(db, teamId, staffSubjectId);
-            await db.SaveChangesAsync(token);
-            return true;
-        }, ct: ct);
-    }
 
     private static Task<TeamMemberEntity?> StaffMemberAsync(
         NocturneDbContext db, Guid teamId, Guid subjectId, CancellationToken ct) =>
