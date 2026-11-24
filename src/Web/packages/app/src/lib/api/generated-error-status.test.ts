@@ -14,7 +14,11 @@ import {
 import { missingItemError, rateLimitedError } from "../forms/submit-messages.svelte";
 import { remoteErrorMessage } from "./remote-error";
 import { parseCode, parseErrorBody, parseIssues } from "./error-body";
-import { TotpSetupFailure, type ReferencingRulesResponse } from "@nocturne/api-client";
+import {
+  EmailConfirmationClient,
+  TotpSetupFailure,
+  type ReferencingRulesResponse,
+} from "@nocturne/api-client";
 import {
   describeTotpSetupError,
   describeTotpSetupStartError,
@@ -63,9 +67,11 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
 
 /**
  * The two messages the generated client puts on an `ApiException`: the first
- * for a status the operation declares no response type for — the rate limiter's
- * 429 among them — and the second for one it declares but whose body came back
- * empty or unparsed, as a bare `NotFound()` does.
+ * for a status the operation declares no response type for, and the second for
+ * one it declares but whose body came back empty or unparsed, as a bare
+ * `NotFound()` does. The rate limiter's 429 reads the first on an operation that
+ * declares none, and is thrown as the parsed problem document on one that
+ * declares `ProblemDetails`.
  */
 const UNDECLARED_STATUS_MESSAGE = "An unexpected server error occurred.";
 const DECLARED_STATUS_MESSAGE = "A server side error occurred.";
@@ -113,10 +119,16 @@ function refusal(status: number, message: string): unknown {
   }
 }
 
-const RATE_LIMIT_BODY = JSON.stringify({
+const RATE_LIMIT_PROBLEM = {
+  type: "https://tools.ietf.org/html/rfc6585#section-4",
+  title: "Too Many Requests",
+  status: 429,
+  detail: "Too many requests. Please try again later.",
+  code: "rate_limit_exceeded",
   error: "rate_limit_exceeded",
   error_description: "Too many requests. Please try again later.",
-});
+};
+const RATE_LIMIT_BODY = JSON.stringify(RATE_LIMIT_PROBLEM);
 
 describe("the status a generated remote function lets through", () => {
   it("forwards a 429 rather than flattening it to a 500", async () => {
@@ -124,6 +136,32 @@ describe("the status a generated remote function lets through", () => {
 
     expect(isHttpError(crossed)).toBe(true);
     expect(errorStatus(crossed)).toBe(429);
+  });
+
+  it("reads the status off the limiter's body from an operation that declares a ProblemDetails 429", async () => {
+    const http = {
+      fetch: async () =>
+        new Response(RATE_LIMIT_BODY, {
+          status: 429,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    };
+    const thrown = await new EmailConfirmationClient("http://api.test", http)
+      .send()
+      .then(
+        () => {
+          throw new Error("send resolved for a 429");
+        },
+        (err: unknown) => err
+      );
+
+    expect(errorStatus(thrown)).toBe(429);
+
+    const crossed = await crossTheBoundary(thrown);
+
+    expect(isHttpError(crossed)).toBe(true);
+    expect(errorStatus(crossed)).toBe(429);
+    expect(errorCode(crossed)).toBe("rate_limit_exceeded");
   });
 
   it("keeps NSwag's boilerplate out of the message it carries", async () => {

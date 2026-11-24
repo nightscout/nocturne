@@ -54,10 +54,8 @@ public class DelegatedConnectorSyncLimiterTests : IDisposable
 
         refused.Should().NotBeNull("the allowance is keyed on the registered connector id, not the spelling");
         var http = await ExecuteAsync(refused!);
-        http.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         int.Parse(http.Response.Headers.RetryAfter.ToString()).Should().BeInRange(1, 3600);
-        http.Response.Body.Position = 0;
-        (await new StreamReader(http.Response.Body).ReadToEndAsync()).Should().Contain("rate_limit_exceeded");
+        await http.Response.ShouldBeTheRateLimitProblemAsync();
     }
 
     [Fact]
