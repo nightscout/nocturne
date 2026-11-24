@@ -707,6 +707,57 @@ public class OidcAuthServiceLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForARefusalWithNoTenantResolved_LogsNoTenantProperty()
+    {
+        SetupFirstTimeIdentity();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: ""), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        var refusal = _logger.WarningEvents.Should().ContainSingle(e => e.Message.Contains("is not admitted")).Which;
+        refusal.Message.Should().EndWith("(no tenant resolved)");
+        refusal.Properties.Should().NotContainKey("TenantId");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForARefusalOnATenant_LogsTheTenant()
+    {
+        SetupFirstTimeIdentity();
+        var tenantId = Guid.NewGuid();
+
+        await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        var refusal = _logger.WarningEvents.Should().ContainSingle(e => e.Message.Contains("is not admitted")).Which;
+        refusal.Message.Should().EndWith($"to tenant {tenantId}");
+        refusal.Properties.Should().Contain("TenantId", tenantId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_ForARefusalAtCompletion_LogsTheTenantItWasRefusedFrom()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .SetupSequence(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
+            .ReturnsAsync(false);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.RefusalAudited.Should().BeTrue();
+        var refusal = _logger.WarningEvents.Should().ContainSingle(e => e.Message.Contains("refused at completion")).Which;
+        refusal.Message.Should().EndWith($"to tenant {tenantId}");
+        refusal.Properties.Should().Contain("TenantId", tenantId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ExternalIdentityDigest_IsStablePerIssuerAndSub_AndDoesNotHoldTheSub()
     {
         var digest = OidcAuthService.ExternalIdentityDigest("https://idp.example.com", "alice@example.com");

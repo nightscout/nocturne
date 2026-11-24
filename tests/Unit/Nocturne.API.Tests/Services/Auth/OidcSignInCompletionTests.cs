@@ -212,7 +212,7 @@ public class OidcSignInCompletionTests
 
         var result = await CallbackAsync();
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login?reason=not_a_member&returnUrl=%2Freports");
         var refused = await _callback.Object.HandleCallbackAsync("code", "state", "state");
         refused.IsAccessDenied.Should().BeTrue();
         refused.RefusalAudited.Should().BeTrue();
@@ -236,7 +236,7 @@ public class OidcSignInCompletionTests
 
         var result = await CallbackAsync();
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login?reason=not_a_member&returnUrl=%2Freports");
         var refused = await _callback.Object.HandleCallbackAsync("code", "state", "state");
         refused.RefusalAudited.Should().BeFalse();
         _audit.Verify(a => a.LogAsync(

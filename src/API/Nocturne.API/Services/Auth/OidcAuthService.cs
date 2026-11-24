@@ -392,13 +392,16 @@ public class OidcAuthService : IOidcAuthService
             var digest = existing is null
                 ? ExternalIdentityDigest(provider.IssuerUrl, idTokenClaims.Sub)
                 : null;
-            _logger.LogWarning(
-                "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
-                    + "identity digest {IdentityDigest}) is not admitted to tenant {TenantId}",
-                provider.Id,
-                existing?.Id,
-                digest,
-                currentTenantId);
+            if (currentTenantId is { } deniedTenant)
+                _logger.LogWarning(
+                    "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
+                        + "identity digest {IdentityDigest}) is not admitted to tenant {TenantId}",
+                    provider.Id, existing?.Id, digest, deniedTenant);
+            else
+                _logger.LogWarning(
+                    "OIDC login denied: provider {ProviderId} identity (subject {SubjectId}, "
+                        + "identity digest {IdentityDigest}) is not admitted (no tenant resolved)",
+                    provider.Id, existing?.Id, digest);
             return OidcCallbackResult.NotAMember(
                 existing?.Id, provider.Id, digest, stateData.ReturnUrl);
         }
@@ -444,9 +447,7 @@ public class OidcAuthService : IOidcAuthService
                 _logger.LogWarning(
                     "OIDC login refused at completion: subject {SubjectId} via provider {ProviderId} "
                         + "is not admitted to tenant {TenantId}",
-                    subject.Id,
-                    provider.Id,
-                    currentTenantId);
+                    subject.Id, provider.Id, currentTenantId);
                 var refused = OidcCallbackResult.NotAMember(
                     subject.Id, provider.Id, externalIdentityDigest: null, stateData.ReturnUrl);
                 refused.RefusalAudited = true;
@@ -552,7 +553,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="path">The page the link opens.</param>
     /// <param name="parameter">The query parameter carrying the token.</param>
     /// <returns>The token, or null.</returns>
-    private static string? TokenFromReturnUrl(string? returnUrl, string path, string parameter)
+    internal static string? TokenFromReturnUrl(string? returnUrl, string path, string parameter)
     {
         if (string.IsNullOrEmpty(returnUrl))
             return null;
