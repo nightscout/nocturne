@@ -3,6 +3,7 @@
     ConnectionDirection,
     ConnectionKind,
     ConnectionStatus,
+    ConnectorTimeZoneSource,
     OAuthClientIdentity,
     type Connection,
     type ConnectionCredential,
@@ -78,6 +79,23 @@
   } = $props();
 
   const WILDCARD_SCOPE = "*";
+
+  const timeZoneNote = $derived.by(() => {
+    switch (connection?.timeZone?.source) {
+      case ConnectorTimeZoneSource.ConnectorZone:
+        return "set on this connection";
+      case ConnectorTimeZoneSource.ConnectorOffset:
+        return "offset set on this connection";
+      case ConnectorTimeZoneSource.TenantZone:
+        return "from your Timezone setting";
+      case ConnectorTimeZoneSource.TenantTimeline:
+        return "from your Timezone history";
+      case ConnectorTimeZoneSource.Utc:
+        return "no time zone is set";
+      default:
+        return undefined;
+    }
+  });
 
   let revokingId = $state<string | null>(null);
   let revokeError = $state<string | null>(null);
@@ -254,6 +272,13 @@
               at={connection.lastSyncAt}
               fallback="Never"
             />
+          {/if}
+          {#if connection.timeZone}
+            <span>
+              Time zone
+              <span class="text-foreground">{connection.timeZone.id}</span>
+              {#if timeZoneNote}({timeZoneNote}){/if}
+            </span>
           {/if}
         </div>
         {#if connection.direction === ConnectionDirection.Sends && connection.status === ConnectionStatus.Stopped}

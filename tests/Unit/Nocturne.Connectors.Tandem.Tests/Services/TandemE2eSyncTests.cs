@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -12,8 +14,12 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -198,6 +204,200 @@ public class TandemE2eSyncTests
         // Active but empty: an explicit zero says "checked, found nothing" where a missing key
         // would read as "never checked".
         result.ItemsSynced[SyncDataType.StateSpans].Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_connector_with_no_zone_and_no_offset_stamps_records_in_the_tenants_zone()
+    {
+        var tenant = TenantZone("America/New_York");
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: tenant.Object);
+
+        var result = await fixture.RunAsync();
+
+        result.Success.Should().BeTrue();
+        var basal = fixture.Publisher.TempBasals[0];
+        basal.StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        basal.UtcOffset.Should().Be(-240);
+    }
+
+    [Fact]
+    public async Task The_connector_reports_the_tenants_zone_it_read_the_pump_in()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+
+        await fixture.RunAsync();
+
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/New_York", Source = ConnectorTimeZoneSource.TenantZone,
+            });
+    }
+
+    [Fact]
+    public async Task An_offset_that_is_set_is_read_without_asking_for_the_tenants_zone()
+    {
+        var tenant = TenantZone("Asia/Tokyo");
+        var fixture = new Fixture(therapySettings: tenant.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        tenant.Verify(
+            t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "UTC-04:00", Source = ConnectorTimeZoneSource.ConnectorOffset,
+            });
+    }
+
+    [Fact]
+    public async Task A_connector_with_nothing_to_go_by_reads_the_pump_as_utc_and_warns_once()
+    {
+        var logger = new Mock<ILogger<TandemConnectorService>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone(null).Object, logger: logger.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 0, 1, 0));
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone { Id = "UTC", Source = ConnectorTimeZoneSource.Utc });
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => $"{state}".Contains("reading them as UTC")),
+                null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    private static Mock<ITimezoneTimelineService> Timeline(params (DateTime From, string Zone)[] entries)
+    {
+        var timeline = new Mock<ITimezoneTimelineService>();
+        timeline
+            .Setup(t => t.GetResolverAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimezoneTimeline(
+                entries.Select(e => new TimezoneTimelineEntry { EffectiveFrom = e.From, Timezone = e.Zone })));
+        return timeline;
+    }
+
+    [Fact]
+    public async Task A_move_in_the_tenants_zone_history_stamps_records_before_and_after_it_at_their_own_offsets()
+    {
+        var timeline = Timeline(
+            (DateTime.MinValue, "America/New_York"),
+            (new DateTime(2026, 5, 15, 12, 0, 0), "America/Los_Angeles"));
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone("Asia/Tokyo").Object,
+            timezoneTimeline: timeline.Object);
+
+        var result = await fixture.RunAsync();
+
+        result.Success.Should().BeTrue();
+        var pub = fixture.Publisher;
+        pub.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        pub.TempBasals[0].UtcOffset.Should().Be(-240);
+        pub.Boluses.Single().Timestamp.Should().Be(Utc(2026, 5, 14, 15, 4, 18));
+        pub.DeviceEvents.Single(e => e.EventType == DeviceEventType.CannulaChange)
+            .Timestamp.Should().Be(Utc(2026, 5, 16, 7, 14, 9));
+        pub.TempBasals[1].EndTimestamp.Should().Be(Utc(2026, 5, 18, 17, 19, 55));
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/Los_Angeles", Source = ConnectorTimeZoneSource.TenantTimeline,
+            });
+    }
+
+    [Fact]
+    public async Task A_zone_history_that_covers_every_time_needs_no_tenant_zone_and_does_not_warn()
+    {
+        var logger = new Mock<ILogger<TandemConnectorService>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone(null).Object,
+            timezoneTimeline: Timeline((DateTime.MinValue, "America/New_York")).Object,
+            logger: logger.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+                null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task An_empty_zone_history_falls_back_to_the_tenants_zone_setting()
+    {
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone("America/New_York").Object,
+            timezoneTimeline: Timeline().Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()!.Source.Should().Be(ConnectorTimeZoneSource.TenantZone);
+    }
+
+    [Fact]
+    public async Task A_setting_on_the_connector_is_read_without_asking_for_the_zone_history()
+    {
+        var timeline = Timeline((DateTime.MinValue, "Asia/Tokyo"));
+        var fixture = new Fixture(timezoneTimeline: timeline.Object);
+
+        await fixture.RunAsync();
+
+        timeline.Verify(t => t.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+    }
+
+    [Fact]
+    public async Task The_zone_is_written_only_when_it_differs_from_the_one_stored()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+
+        await fixture.RunAsync();
+        await fixture.RunAsync();
+
+        fixture.Cursors.JsonWrites.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_changed_zone_is_written_again()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+        await fixture.RunAsync();
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)] =
+            JsonSerializer.SerializeToNode(new ConnectorTimeZone
+            {
+                Id = "America/Chicago", Source = ConnectorTimeZoneSource.TenantZone,
+            })!;
+
+        await fixture.RunAsync();
+
+        fixture.Cursors.JsonWrites.Should().Be(2);
+        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+            .Deserialize<ConnectorTimeZone>()!.Id.Should().Be("America/New_York");
+    }
+
+    private static Mock<ITherapySettingsResolver> TenantZone(string? zoneId)
+    {
+        var tenant = new Mock<ITherapySettingsResolver>();
+        tenant
+            .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(zoneId);
+        return tenant;
     }
 
     [Fact]
@@ -872,6 +1072,8 @@ public class TandemE2eSyncTests
     private sealed class InMemoryCursorStore(Action<CancellationToken>? onGet = null) : IConnectorSyncCursorStore
     {
         private readonly Dictionary<(string, string), ConnectorSyncCursor> _cursors = [];
+        public Dictionary<(string, string), JsonNode> Json { get; } = [];
+        public int JsonWrites { get; private set; }
 
         public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default)
         {
@@ -886,10 +1088,14 @@ public class TandemE2eSyncTests
         }
 
         public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            Task.FromResult(Json.GetValueOrDefault((connectorName, resource)));
 
-        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default)
+        {
+            Json[(connectorName, resource)] = value;
+            JsonWrites++;
+            return Task.CompletedTask;
+        }
 
         public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -1042,6 +1248,8 @@ public class TandemE2eSyncTests
         private readonly Dictionary<string, string> _responses;
         private readonly CancellationTokenSource? _cancellation;
 
+        public InMemoryCursorStore Cursors { get; }
+
         public Fixture(
             string pumperJson = PumperJson,
             string pumpLogsJson = PumpLogsJson,
@@ -1054,7 +1262,12 @@ public class TandemE2eSyncTests
             Action<CancellationToken>? cursorStoreOnGet = null,
             bool watermarksFollowPublishes = false,
             bool glucoseWatermarkFails = false,
-            IConnectorPublisher? publisher = null)
+            IConnectorPublisher? publisher = null,
+            double timezoneOffset = TimezoneOffsetHours,
+            string? timeZoneId = null,
+            ITherapySettingsResolver? therapySettings = null,
+            ILogger<TandemConnectorService>? logger = null,
+            ITimezoneTimelineService? timezoneTimeline = null)
         {
             _cancellation = cancellation;
             // Default watermarks put the catch-up start just before the pump's available range so
@@ -1068,7 +1281,8 @@ public class TandemE2eSyncTests
                 Password = "password",
                 Region = "US",
                 PumpSerialNumber = "11111111", // tconnectsync's "no serial chosen" sentinel
-                TimezoneOffset = TimezoneOffsetHours,
+                TimezoneOffset = timezoneOffset,
+                TimeZoneId = timeZoneId,
             };
 
             Publisher = new RecordingPublisher(latestEntry, latestTreatment)
@@ -1086,12 +1300,14 @@ public class TandemE2eSyncTests
             _service = new TandemConnectorService(
                 new HttpClient(handler),
                 new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
-                NullLogger<TandemConnectorService>.Instance,
+                logger ?? NullLogger<TandemConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
                 publisher ?? Publisher,
-                new InMemoryCursorStore(cursorStoreOnGet),
-                clock);
+                Cursors = new InMemoryCursorStore(cursorStoreOnGet),
+                clock,
+                therapySettings,
+                timezoneTimeline);
         }
 
         public void ServePumper(string pumperJson) => _responses["/api/reports/bff/pumper/"] = pumperJson;
