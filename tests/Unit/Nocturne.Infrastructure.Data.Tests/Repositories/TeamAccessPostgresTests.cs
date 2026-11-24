@@ -40,12 +40,6 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create());
-    }
-
     private sealed record Site(Guid Id, string Name, IReadOnlyDictionary<string, Guid> Roles);
 
     /// <summary>
@@ -67,7 +61,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant ?? Guid.Empty }.ActingAs(actor);
 
-    private Factory Contexts(Guid? actor = null, Guid? tenant = null) =>
+    private SuppliedContextFactory Contexts(Guid? actor = null, Guid? tenant = null) =>
         new(() => Context(actor is { } id ? new TestAuditActor { SubjectId = id } : null, tenant));
 
     private TeamRepository Teams(Guid? actor = null) => new(Contexts(actor));
@@ -856,7 +850,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
         var (token, _) = await LinkAsync(team, manager);
         (await ApproveAsync(token, owner, Grant(a, a.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
         (await ApproveAsync(token, owner, Grant(b, b.Roles[RoleSeeds.Viewer]))).Refusal.Should().BeNull();
-        var onSiteA = new SubjectRepository(new Factory(() => Context(tenant: a.Id)), AccountLinkRoutes.Off);
+        var onSiteA = new SubjectRepository(new SuppliedContextFactory(() => Context(tenant: a.Id)), AccountLinkRoutes.Off);
 
         (await onSiteA.DeleteAsync(manager, default)).Should().BeOfType<SubjectChange.Changed>();
 
@@ -919,7 +913,7 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var once = new Factory(() => Context(retry: false));
+        var once = new SuppliedContextFactory(() => Context(retry: false));
         await using var holder = Context(retry: false);
         await using var held = await holder.Database.BeginTransactionAsync();
         await holder.LockTeamAccessAsync(site.Id, default);

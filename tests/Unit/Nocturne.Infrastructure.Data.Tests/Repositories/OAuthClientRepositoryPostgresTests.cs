@@ -4,7 +4,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -38,12 +37,6 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create(scope));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
@@ -70,7 +63,7 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var clients = new OAuthClientRepository(new Factory(Context, tenant));
+        var clients = new OAuthClientRepository(new SuppliedContextFactory(() => Context(tenant)));
         var referenced = await clients.CreateAsync(Client($"{slug}-referenced-{tenant:N}"), CancellationToken.None);
         var unreferenced = await clients.CreateAsync(Client($"{slug}-unreferenced-{tenant:N}"), CancellationToken.None);
 
@@ -83,7 +76,7 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
             await db.OAuthClients.ExecuteUpdateAsync(u => u.SetProperty(c => c.CreatedAt, Old));
         }
 
-        await new OAuthGrantRepository(new Factory(Context, tenant)).CreateAsync(
+        await new OAuthGrantRepository(new SuppliedContextFactory(() => Context(tenant))).CreateAsync(
             new NewOAuthGrant(referenced.Id, subject, OAuthGrantTypes.App, [Scope.GlucoseRead], null, null, null, null, false),
             CancellationToken.None);
         return new Seeded(tenant, referenced.ClientId, unreferenced.ClientId);
@@ -103,8 +96,8 @@ public class OAuthClientRepositoryPostgresTests(OAuthClientRepositoryPostgresTes
     {
         var a = await SeedTenantAsync("a");
         var b = await SeedTenantAsync("b");
-        var readingAsNoOne = new OAuthClientRepository(new Factory(Context, Guid.Empty));
-        var readingAsB = new OAuthClientRepository(new Factory(Context, b.Tenant));
+        var readingAsNoOne = new OAuthClientRepository(new SuppliedContextFactory(() => Context(Guid.Empty)));
+        var readingAsB = new OAuthClientRepository(new SuppliedContextFactory(() => Context(b.Tenant)));
 
         (await readingAsNoOne.FindByClientIdAsync(a.Unreferenced, CancellationToken.None))
             .Should().BeNull("an unpinned reader sees no tenant's clients");

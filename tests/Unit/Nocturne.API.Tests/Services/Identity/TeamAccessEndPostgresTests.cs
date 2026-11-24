@@ -62,26 +62,6 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Site(Guid Tenant, Guid Owner, Guid ViewerRole, Guid CaretakerRole);
 
     private sealed record Team(Guid Id, string Name, Guid Manager);
@@ -123,7 +103,7 @@ public class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Database data
         return context;
     }
 
-    private Factory Contexts(Guid tenant, Guid? actor = null) => new(t => Context(t, actor), tenant);
+    private SuppliedContextFactory Contexts(Guid tenant, Guid? actor = null) => new(() => Context(tenant, actor));
 
     private TeamRepository Teams(Guid? actor = null) => new(Contexts(Guid.Empty, actor));
 

@@ -15,7 +15,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -48,26 +47,6 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Site(Guid Tenant, Guid Owner, Guid CaretakerRole);
 
     private sealed record Made(Guid GuestLink, Guid DeviceCredential, Guid Invite, Guid Rule);
@@ -80,7 +59,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private Factory Contexts(Guid tenant) => new(Context, tenant);
+    private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 
     private static DateTime UtcNow => DateTime.UtcNow;
 

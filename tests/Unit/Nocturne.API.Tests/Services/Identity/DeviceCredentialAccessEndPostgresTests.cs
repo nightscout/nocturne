@@ -70,33 +70,13 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private sealed record Seeded(Guid Tenant, Guid Maker, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Maker, SuppliedContextFactory Contexts);
 
     /// <summary>A tenant with its seed roles and a caretaker, the maker, whose membership ends at <paramref name="accessEndsAt"/>.</summary>
     private async Task<Seeded> SeedAsync(string slug, DateTime? accessEndsAt)
@@ -115,7 +95,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -451,7 +431,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var token = (await MintTokenAsync(seeded, MakerOf(seeded, null))).Id;
 
         await FluentActions.Awaiting(() => SetEndAsync(
-                seeded, Now.UtcDateTime.AddDays(1), new Factory(ContextRefusingGrantSaves, seeded.Tenant)))
+                seeded, Now.UtcDateTime.AddDays(1), new SuppliedContextFactory(() => ContextRefusingGrantSaves(seeded.Tenant))))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("grant save refused");
 
         (await GrantAsync(seeded, token)).ExpiresAt.Should().BeNull();

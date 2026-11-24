@@ -6,7 +6,6 @@ using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -38,30 +37,13 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    /// <summary>A scope that reads as <paramref name="scope"/>; a tenant pin reads as the tenant it names.</summary>
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private ConnectorConfigurationRepository Configurations(Guid scope) => new(new Factory(Context, scope));
+    private ConnectorConfigurationRepository Configurations(Guid scope) => new(new SuppliedContextFactory(() => Context(scope)));
 
     private async Task<Guid> SeedTenantAsync()
     {
@@ -216,7 +198,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var a = await SeedTenantAsync();
         var b = await SeedTenantAsync();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 1, 8, 0, 0, TimeSpan.Zero));
-        var configurations = new ConnectorConfigurationRepository(new Factory(Context, a), time);
+        var configurations = new ConnectorConfigurationRepository(new SuppliedContextFactory(() => Context(a)), time);
         await configurations.SaveConfigurationAsync(
             "glooko", """{"Enabled":true,"region":"eu","retries":3}""", "owner", CancellationToken.None);
         await configurations.SaveSecretsAsync("glooko", """{"password":"x"}""", "owner", CancellationToken.None);
@@ -406,7 +388,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
     public async Task AResetJobIsStoredAndReadOnAPlatformContext()
     {
         var tenant = await SeedTenantAsync();
-        var jobs = new ConnectorResetJobRepository(new Factory(Context, tenant));
+        var jobs = new ConnectorResetJobRepository(new SuppliedContextFactory(() => Context(tenant)));
         var job = new ConnectorResetJobRecord(
             Guid.NewGuid(), tenant, "home", "Running", DateTime.UtcNow.Date, null, null, null, 1, 0, "[]");
 

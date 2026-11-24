@@ -8,7 +8,6 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -42,25 +41,6 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    /// <summary>Contexts as the setup request's scope opens them: no tenant, with the runtime retry strategy.</summary>
-    private sealed class Factory(string connectionString, bool retrying) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, Guid.Empty, retrying));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, tenantId, retrying));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, Guid.Empty, retrying));
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, Guid.Empty, retrying));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(Context(connectionString, tenantId, retrying));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant, bool retrying = false) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(connectionString, o =>
@@ -71,9 +51,13 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
+    /// <summary>Contexts as the setup request's scope opens them: no tenant, with the runtime retry strategy.</summary>
+    private SuppliedContextFactory Contexts(bool retrying) =>
+        new(() => Context(database.AppConnectionString, Guid.Empty, retrying));
+
     private static string Issuer(Guid provider) => $"https://{provider:N}.issuer.example";
 
-    private sealed record Site(Guid Tenant, string Slug, Guid Owner, Guid Provider, Factory Seeding, Factory Runtime);
+    private sealed record Site(Guid Tenant, string Slug, Guid Owner, Guid Provider, SuppliedContextFactory Seeding, SuppliedContextFactory Runtime);
 
     private async Task<Site> SiteAsync(string name)
     {
@@ -83,7 +67,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}', 'setup-claim', true, now(), now());
             """);
-        var seeding = new Factory(database.AppConnectionString, retrying: false);
+        var seeding = Contexts(retrying: false);
         var owner = await new SubjectRepository(seeding, AccountLinkRoutes.Off)
             .CreateSetupOwnerAsync(tenant, new NewSubject("Owner", Username: $"owner-{tenant:N}"), Ct);
         var provider = Guid.NewGuid();
@@ -95,7 +79,7 @@ public class SetupOwnerClaimPostgresTests(SetupOwnerClaimPostgresTests.Database 
             });
             await db.SaveChangesAsync();
         }
-        return new Site(tenant, slug, owner, provider, seeding, new Factory(database.AppConnectionString, retrying: true));
+        return new Site(tenant, slug, owner, provider, seeding, Contexts(retrying: true));
     }
 
     private static Task<Guid?> StoreAsync(Site site, string store) => store switch

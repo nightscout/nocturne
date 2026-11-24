@@ -32,12 +32,6 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create());
-    }
-
     private static readonly DateTime Now = DateTime.UtcNow;
 
     private NocturneDbContext Context(IAuditContext? actor = null, bool retry = true) =>
@@ -50,12 +44,12 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = Guid.Empty }.ActingAs(actor);
 
-    private Factory Contexts(Guid? caller = null) =>
+    private SuppliedContextFactory Contexts(Guid? caller = null) =>
         new(() => Context(caller is { } id ? new TestAuditActor { SubjectId = id } : null));
 
     private TeamRepository Teams(Guid? caller = null) => new(Contexts(caller));
 
-    private SubjectRepository Subjects() => new(new Factory(() => Context()), AccountLinkRoutes.Off);
+    private SubjectRepository Subjects() => new(new SuppliedContextFactory(() => Context()), AccountLinkRoutes.Off);
 
     private Task<Guid> NewSubjectAsync(string name = "person") =>
         Subjects().CreateAsync(new NewSubject($"{name}-{Guid.NewGuid():N}"), CancellationToken.None);

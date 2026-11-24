@@ -45,28 +45,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Site(
-        Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
+        Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
         Guid CaretakerRole);
 
     private sealed record Row(string EventType, string? Details, Guid? Team, Guid? Actor)
@@ -93,7 +73,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'team-reason', true, now(), now());
             """);
-        var factory = new Factory(Context, tenant);
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
         var ownerRole = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Owner, Ct))!.Value;
@@ -105,7 +85,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         return new Site(tenant, factory, members, owner, ownerRole, viewerRole, caretakerRole);
     }
 
-    private static Task<Guid> NewSubjectAsync(Factory factory, string name) =>
+    private static Task<Guid> NewSubjectAsync(SuppliedContextFactory factory, string name) =>
         new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), Ct);
 
     /// <summary>A team named <paramref name="name"/> with access to <paramref name="tenant"/>; returns the access.</summary>

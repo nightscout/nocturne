@@ -62,26 +62,6 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
@@ -91,7 +71,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private sealed record Seeded(Guid Tenant, Guid Guest, Guid CaretakerRole, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid Guest, Guid CaretakerRole, SuppliedContextFactory Contexts);
 
     /// <summary>A tenant with its seed roles and a caretaker whose membership ends at <paramref name="accessEndsAt"/>.</summary>
     private async Task<Seeded> SeedAsync(string slug, DateTime? accessEndsAt)
@@ -110,7 +90,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -183,7 +163,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var clock = new FakeTimeProvider(Now);
         var seeded = await SeedAsync("chat", Now.UtcDateTime.AddMinutes(1));
         var other = await SeedAsync("chat-other", accessEndsAt: null);
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         var directory = new ChatIdentityDirectoryService(platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), clock, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         var platformUser = $"discord-{Guid.NewGuid():N}";
         await directory.CreateLinkAsync("discord", platformUser, seeded.Tenant, seeded.Guest, "ending", "Ending", CancellationToken.None);
@@ -218,7 +198,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var grant = await new OAuthGrantRepository(seeded.Contexts).CreateAsync(
             new NewOAuthGrant(null, seeded.Guest, OAuthGrantTypes.Direct, [Scope.GlucoseRead], "uploader", Guid.NewGuid().ToString("N"), null, null, false),
             CancellationToken.None);
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         var link = await new ChatIdentityDirectoryService(
                 platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), new FakeTimeProvider(Now),
                 Mock.Of<ILogger<ChatIdentityDirectoryService>>())
@@ -590,7 +570,7 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         var expiresAt = Now.UtcDateTime.AddHours(48);
         var link = await GuestLinkAsync(seeded, seeded.Guest, owner, expiresAt, sessions);
         var memberId = (await MembershipRowsAsync(seeded)).Single().Id;
-        var failing = new Factory(ContextRefusingGrantSaves, seeded.Tenant);
+        var failing = new SuppliedContextFactory(() => ContextRefusingGrantSaves(seeded.Tenant));
 
         await FluentActions.Awaiting(() => Service(failing, sessions).SetMemberAccessEndAsync(
                 seeded.Tenant, memberId, Now.UtcDateTime.AddHours(1), Now.UtcDateTime))

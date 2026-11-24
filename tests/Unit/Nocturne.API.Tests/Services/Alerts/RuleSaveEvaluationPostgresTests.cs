@@ -71,11 +71,6 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     /// <summary>Records the rules each pass evaluated, then decides them.</summary>
     private sealed class RecordingOrchestrator(AlertOrchestrator inner, List<IReadOnlyList<Guid>> passes) : IAlertOrchestrator
     {
@@ -111,7 +106,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
         public Tenant(Guid id, Func<NocturneDbContext> context)
         {
             Id = id;
-            Contexts = new Factory(context);
+            Contexts = new SuppliedContextFactory(context);
             var canonical = new Mock<ICanonicalGlucoseService>();
             var low = new SensorGlucose { Id = Guid.CreateVersion7(), Timestamp = Stored, CreatedAt = Stored, Mgdl = 55 };
             canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(low);
@@ -166,7 +161,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
 
         public Guid Id { get; }
 
-        public Factory Contexts { get; }
+        public SuppliedContextFactory Contexts { get; }
 
         public FakeTimeProvider Time { get; } = new(Stored.AddMinutes(1));
 

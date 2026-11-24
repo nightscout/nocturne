@@ -24,7 +24,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -57,18 +56,13 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private Factory Contexts(Guid tenant) => new(() => Context(tenant));
+    private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 
     private async Task<Guid> InsertTenantAsync()
     {
