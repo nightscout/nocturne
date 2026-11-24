@@ -87,6 +87,12 @@ public interface IDataSourceService
     Task<DataSourceDeleteResult> DeleteDemoDataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether any record table holds a row the demo service wrote, so <see cref="DeleteDemoDataAsync"/>
+    /// has something to delete.
+    /// </summary>
+    Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete all data from a specific connector.
     /// This is a destructive operation that cannot be undone.
     /// </summary>
