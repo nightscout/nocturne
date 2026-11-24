@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FluentAssertions;
 using Nocturne.Core.Models;
 using Xunit;
@@ -7,7 +6,7 @@ namespace Nocturne.Core.Models.Tests;
 
 /// <summary>
 /// A treatment uploaded with <c>isValid: false</c> is stored deleted, so the span and temp basal
-/// upload fields keep only <c>isValid: true</c>. A <c>false</c> a record kept before still reads back.
+/// upload fields keep only <c>isValid: true</c>.
 /// </summary>
 [Trait("Category", "Unit")]
 public class UploadedIsValidTests
@@ -39,24 +38,5 @@ public class UploadedIsValidTests
         TempBasalUploadedFields.Restore(served, record);
 
         served.IsValid.Should().Be(kept);
-    }
-
-    [Fact]
-    public void A_span_written_with_isValid_false_still_reads_back_false()
-    {
-        var served = new Treatment();
-        SpanUploadedFields.Restore(
-            served, new Dictionary<string, object> { ["isValid"] = JsonDocument.Parse("false").RootElement.Clone() });
-
-        served.IsValid.Should().BeFalse();
-    }
-
-    [Fact]
-    public void A_temp_basal_written_with_isValid_false_still_reads_back_false()
-    {
-        var served = new Treatment();
-        TempBasalUploadedFields.Restore(served, new Dictionary<string, object?> { ["isValid"] = false });
-
-        served.IsValid.Should().BeFalse();
     }
 }

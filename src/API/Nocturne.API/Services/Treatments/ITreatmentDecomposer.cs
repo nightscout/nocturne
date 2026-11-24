@@ -46,12 +46,12 @@ internal interface ITreatmentDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
-    /// Deletes the treatment stored under <paramref name="legacyId"/> as its client's edit to
-    /// <c>isValid: false</c> deletes it: as the system's delete, which a later upload of the id brings
+    /// Deletes the treatments stored under <paramref name="legacyIds"/> as their client's edit to
+    /// <c>isValid: false</c> deletes them: as the system's delete, which a later upload of the id brings
     /// back, and leaving another source's copy of the same dose live.
     /// </summary>
     /// <returns>Total number of v4 records deleted across all tables.</returns>
-    Task<int> InvalidateAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
+    Task<int> InvalidateAsync(IReadOnlyCollection<string> legacyIds, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// The subset of <paramref name="legacyIds"/> held only by records the user deleted, which a

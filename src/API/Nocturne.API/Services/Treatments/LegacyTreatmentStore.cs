@@ -540,7 +540,7 @@ internal sealed class LegacyTreatmentStore(
     /// </summary>
     private async Task<Treatment> InvalidateAsync(string upsertKey, Treatment served, CancellationToken ct)
     {
-        await _decomposer.InvalidateAsync(upsertKey, WriteOrigin.Live, ct);
+        await _decomposer.InvalidateAsync([upsertKey], WriteOrigin.Live, ct);
         served.IsValid = false;
         return served;
     }
