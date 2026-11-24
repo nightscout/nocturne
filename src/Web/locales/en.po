@@ -4291,7 +4291,6 @@ msgid "Notification"
 msgstr "Notification"
 
 #: src/lib/components/connectors/AddConnectionDialog.svelte
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Loading..."
 msgstr "Loading..."
 
@@ -9136,7 +9135,6 @@ msgid "Instance"
 msgstr "Instance"
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Create your account"
 msgstr "Create your account"
 
@@ -13195,9 +13193,8 @@ msgstr "Enter guest code"
 #~ msgid "<0/> Access Data"
 #~ msgstr "<0/> Access Data"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Failed to create account."
-msgstr "Failed to create account."
+#~ msgid "Failed to create account."
+#~ msgstr "Failed to create account."
 
 #~ msgid "Create Account - Setup - Nocturne"
 #~ msgstr "Create Account - Setup - Nocturne"
@@ -35816,25 +35813,20 @@ msgstr "<0/> Configure data sources"
 msgid "Profile settings"
 msgstr "Profile settings"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Create account - Setup - Nocturne"
-msgstr "Create account - Setup - Nocturne"
+#~ msgid "Create account - Setup - Nocturne"
+#~ msgstr "Create account - Setup - Nocturne"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Account created"
-msgstr "Account created"
+#~ msgid "Account created"
+#~ msgstr "Account created"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Your admin account was created. Save your recovery codes before continuing."
-msgstr "Your admin account was created. Save your recovery codes before continuing."
+#~ msgid "Your admin account was created. Save your recovery codes before continuing."
+#~ msgstr "Your admin account was created. Save your recovery codes before continuing."
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Continue setup"
-msgstr "Continue setup"
+#~ msgid "Continue setup"
+#~ msgstr "Continue setup"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Configure the admin account for your Nocturne instance."
-msgstr "Configure the admin account for your Nocturne instance."
+#~ msgid "Configure the admin account for your Nocturne instance."
+#~ msgstr "Configure the admin account for your Nocturne instance."
 
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Nocturne now has a copy of your Nightscout history. Nothing changed on your Nightscout site, and your uploaders keep sending to it until you choose to move them."
@@ -48967,3 +48959,11 @@ msgstr "Go to sign in"
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your passkey is ready."
 msgstr "Your passkey is ready."
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Nocturne has no account for that sign-in. To get an account, use an invite link."
+msgstr "Nocturne has no account for that sign-in. To get an account, use an invite link."
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "You are not a member of this site. Ask the site owner for access."
+msgstr "You are not a member of this site. Ask the site owner for access."

@@ -4291,7 +4291,6 @@ msgid "Notification"
 msgstr "Oznámení"
 
 #: src/lib/components/connectors/AddConnectionDialog.svelte
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Loading..."
 msgstr "Načítání..."
 
@@ -9136,7 +9135,6 @@ msgid "Instance"
 msgstr "Instance"
 
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
 msgid "Create your account"
 msgstr "Vytvořte si účet"
 
@@ -13195,9 +13193,8 @@ msgstr "Zadejte kód pro hosta"
 #~ msgid "<0/> Access Data"
 #~ msgstr "<0/> Zobrazit data"
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Failed to create account."
-msgstr "Účet se nepodařilo vytvořit."
+#~ msgid "Failed to create account."
+#~ msgstr "Účet se nepodařilo vytvořit."
 
 #~ msgid "Create Account - Setup - Nocturne"
 #~ msgstr "Vytvoření účtu – Nastavení – Nocturne"
@@ -35816,25 +35813,20 @@ msgstr ""
 msgid "Profile settings"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Create account - Setup - Nocturne"
-msgstr ""
+#~ msgid "Create account - Setup - Nocturne"
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Account created"
-msgstr ""
+#~ msgid "Account created"
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Your admin account was created. Save your recovery codes before continuing."
-msgstr ""
+#~ msgid "Your admin account was created. Save your recovery codes before continuing."
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Continue setup"
-msgstr ""
+#~ msgid "Continue setup"
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/setup/account/+page.svelte
-msgid "Configure the admin account for your Nocturne instance."
-msgstr ""
+#~ msgid "Configure the admin account for your Nocturne instance."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Nocturne now has a copy of your Nightscout history. Nothing changed on your Nightscout site, and your uploaders keep sending to it until you choose to move them."
@@ -48966,4 +48958,12 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "Your passkey is ready."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "Nocturne has no account for that sign-in. To get an account, use an invite link."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/login/+page.svelte
+msgid "You are not a member of this site. Ask the site owner for access."
 msgstr ""
