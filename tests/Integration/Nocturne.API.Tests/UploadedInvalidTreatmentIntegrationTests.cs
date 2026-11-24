@@ -5,8 +5,8 @@ using Castle.DynamicProxy;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Treatments;
-using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.API.Tests.Services.V4;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
@@ -514,7 +514,7 @@ public class UploadedInvalidTreatmentIntegrationTests : ApiIntegrationTestBase
         {
             var notes = new ProxyGenerator().CreateInterfaceProxyWithTarget(
                 scope.ServiceProvider.GetRequiredService<INoteRepository>(), new FailsWritingNotes(storeTimesOut));
-            var decomposer = ActivatorUtilities.CreateInstance<TreatmentDecomposer>(scope.ServiceProvider, notes);
+            var decomposer = TreatmentDecomposerDoubles.Resolved(scope.ServiceProvider, notes);
             var store = ActivatorUtilities.CreateInstance<TreatmentReadService>(scope.ServiceProvider, decomposer);
             var service = ActivatorUtilities.CreateInstance<TreatmentService>(
                 scope.ServiceProvider, store, decomposer, (IDataEventSink<TreatmentModel>)events);
