@@ -6,6 +6,7 @@ import {
   ConnectionDirection,
   ConnectionKind,
   ConnectionStatus,
+  ConnectorTimeZoneSource,
   type Connection,
 } from "@nocturne/api-client";
 
@@ -215,6 +216,42 @@ describe("ConnectionDetailDialog", () => {
     await expect.element(page.getByText("Dexcom").first()).toBeVisible();
     expect(page.getByRole("link", { name: "Configure" }).elements()).toHaveLength(0);
     expect(page.getByRole("button", { name: "Sync now" }).elements()).toHaveLength(0);
+  });
+
+  it("names the time zone a connector read its source in, and where it came from", async () => {
+    renderDialog(
+      { ...dexcom, timeZone: { id: "America/Denver", source: ConnectorTimeZoneSource.TenantZone } },
+      SETTINGS
+    );
+
+    await expect.element(page.getByText("America/Denver")).toBeVisible();
+    await expect.element(page.getByText("(from your Timezone setting)")).toBeVisible();
+  });
+
+  it("says when the time zone came from the time zone history", async () => {
+    renderDialog(
+      { ...dexcom, timeZone: { id: "America/Los_Angeles", source: ConnectorTimeZoneSource.TenantTimeline } },
+      SETTINGS
+    );
+
+    await expect.element(page.getByText("America/Los_Angeles")).toBeVisible();
+    await expect.element(page.getByText("(from your Timezone history)")).toBeVisible();
+  });
+
+  it("says when a connector had no time zone to read its source in", async () => {
+    renderDialog(
+      { ...dexcom, timeZone: { id: "UTC", source: ConnectorTimeZoneSource.Utc } },
+      SETTINGS
+    );
+
+    await expect.element(page.getByText("(no time zone is set)")).toBeVisible();
+  });
+
+  it("shows no time zone for a connector that records none", async () => {
+    renderDialog(dexcom, SETTINGS);
+
+    await expect.element(page.getByText("Dexcom").first()).toBeVisible();
+    expect(page.getByText("Time zone").elements()).toHaveLength(0);
   });
 
   it("tells a caretaker why the data delete is not theirs", async () => {

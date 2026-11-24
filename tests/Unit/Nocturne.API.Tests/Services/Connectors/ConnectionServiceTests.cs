@@ -4,7 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Models;
+using System.Text.Json.Nodes;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Oura.Configurations;
 using Nocturne.Core.Contracts.Auth;
@@ -34,6 +36,7 @@ public class ConnectionServiceTests
     private readonly Mock<IDataSourceService> _dataSources = new();
     private readonly Mock<ITenantMembershipRepository> _members = new();
     private readonly Mock<ISubjectRepository> _subjects = new();
+    private readonly Mock<IConnectorSyncCursorStore> _cursors = new();
     private bool _viewerMayKeep;
     private readonly List<WriterBucket> _buckets = [];
     private readonly Dictionary<string, Dictionary<string, long>> _importCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -73,7 +76,7 @@ public class ConnectionServiceTests
 
         return new ConnectionService(
                 _sourceData.Object, _grants.Object, health ?? _health.Object, devices.Object, _dataSources.Object,
-                _members.Object, _subjects.Object, Tenant(), new FakeTimeProvider(Now))
+                _members.Object, _subjects.Object, Tenant(), _cursors.Object, new FakeTimeProvider(Now))
             .GetConnectionsAsync(Viewer, _viewerMayKeep);
     }
 
@@ -565,6 +568,43 @@ public class ConnectionServiceTests
     }
 
     [Fact]
+    public async Task AConnectorShowsTheZoneItLastReadItsSourceIn()
+    {
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "tandem", Name = "tandem", Status = "Running", State = "Running", IsEnabled = true,
+            HasDatabaseConfig = true, LastSuccessfulSync = Now.UtcDateTime.AddMinutes(-1),
+        });
+        _cursors
+            .Setup(c => c.GetJsonAsync("tandem", ConnectorTimeZone.CursorResource, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(JsonNode.Parse("""{"id":"America/Denver","source":"tenantZone"}"""));
+
+        var overview = await ListAsync();
+
+        var zone = overview.Connections.Should().ContainSingle().Which.TimeZone;
+        zone.Should().NotBeNull();
+        zone!.Id.Should().Be("America/Denver");
+        zone.Source.Should().Be(ConnectorTimeZoneSource.TenantZone);
+    }
+
+    [Fact]
+    public async Task AConnectorThatRecordedNoZoneShowsNone()
+    {
+        _statuses.Add(new ConnectorStatusDto
+        {
+            Id = "tandem", Name = "tandem", Status = "Running", State = "Running", IsEnabled = true,
+            HasDatabaseConfig = true, LastSuccessfulSync = Now.UtcDateTime.AddMinutes(-1),
+        });
+        _cursors
+            .Setup(c => c.GetJsonAsync("tandem", ConnectorTimeZone.CursorResource, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(JsonNode.Parse("""{"source":"nowhere"}"""));
+
+        var overview = await ListAsync();
+
+        overview.Connections.Should().ContainSingle().Which.TimeZone.Should().BeNull();
+    }
+
+    [Fact]
     public async Task AConnectorErrorCarriesItsReason()
     {
         _statuses.Add(new ConnectorStatusDto
@@ -582,7 +622,7 @@ public class ConnectionServiceTests
 
     private ConnectionService Service() =>
         new(_sourceData.Object, _grants.Object, _health.Object, Mock.Of<IClientDeviceService>(), _dataSources.Object,
-            _members.Object, _subjects.Object, Tenant(), new FakeTimeProvider(Now));
+            _members.Object, _subjects.Object, Tenant(), _cursors.Object, new FakeTimeProvider(Now));
 
     private static ITenantAccessor Tenant() => Mock.Of<ITenantAccessor>(t => t.TenantId == TenantId);
 

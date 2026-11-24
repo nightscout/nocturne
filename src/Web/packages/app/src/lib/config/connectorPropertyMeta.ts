@@ -352,7 +352,7 @@ export const connectorPropertyMeta = {
   TimeZoneId: {
     label: 'Pump time zone',
     description:
-      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies.',
+      'The IANA time zone of the pump clock, for example America/Los_Angeles. Daylight saving time changes apply automatically. If you leave this empty, the timezone offset applies. If that is 0 too, your Timezone history applies. If you have no history, your Timezone setting applies.',
     category: 'General',
   },
   // OAuth and Webhooks
