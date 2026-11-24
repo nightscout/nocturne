@@ -174,6 +174,20 @@ The NSwag client, OpenAPI document and Zod schemas land in `src/Web/packages/api
 
 Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) is the source of truth; `Entry.Date` and `Entry.DateString` are computed properties.
 
+### Sign-in and sessions
+
+Every sign-in a person makes (passkey, OIDC, TOTP code, invite, creation link, first-run setup)
+completes through `SignInCompletion` (`Services/Auth/SignInCompletion.cs`): admission, the
+second-factor gate, the session, last-login and the `Login` audit row, in that order.
+`ApplySignInAsync` turns its outcome into cookies. `SessionIssueAllowlistTests` pins who else
+may call `IssueSessionAsync` (login handoff, the demo member, the dev-only controllers), who names
+the `Login` code the handoff redeems, who holds the `refresh_tokens` store or writes a row, and who
+mints an access token. `SignInCompletionAllowlistTests` pins who writes last-login, the `Login` row,
+a step-up token or the session cookies, and who builds the attempt, the admissions and the
+second-factor proof the module takes on trust. When one fires, send the new path through
+`SignInCompletion` and allowlist it with its reason: the proof it holds, or why it is not a
+person's sign-in.
+
 ## Database
 
 - **PostgreSQL** via Entity Framework Core: a squashed baseline plus every migration since the last release (see [Migration baseline](#migration-baseline))
