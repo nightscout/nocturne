@@ -1,0 +1,234 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using FluentAssertions;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Nocturne.API.Hubs;
+using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Authorization;
+using Npgsql;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace Nocturne.API.Tests.Integration.Auth;
+
+/// <summary>
+/// A team's staff member who is no member of the site otherwise, over HTTP and the hubs: they read
+/// nothing until the site approves the team's access, then read what it gives, limited to the last
+/// 24 hours when the access is; the site cannot change their access, only the team's; and when the site
+/// stops the access their next request is refused and their hub connection closes on revalidation.
+/// </summary>
+[Collection(ApiIntegrationShards.Three)]
+[Trait("Category", "Integration")]
+public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
+    : ApiIntegrationTestBase(fixture, output)
+{
+    private readonly DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+    [Fact]
+    public async Task A_staff_member_reads_the_site_once_it_approves_the_team_and_loses_it_at_once_when_it_stops()
+    {
+        var (manager, _) = await SeedSubjectAsync("Clinic Manager");
+        var (owner, ownerToken) = await SeedSubjectAsync("Site Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Clinic Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);
+        var staffSession = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, staffSession);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: null);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var hub = new HubConnectionBuilder()
+            .WithUrl(new Uri(ApiClient.BaseAddress!, "hubs/alerts"), options =>
+            {
+                options.Headers["X-Forwarded-Host"] = Fixture.TenantHost;
+                options.AccessTokenProvider = () => Task.FromResult<string?>(staffSession);
+            })
+            .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning))
+            .Build();
+        HubConnections.Add(hub);
+        await hub.StartAsync();
+        await hub.InvokeAsync("Subscribe");
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        var staffMember = (await MembersAsync(ownerOnSite)).Single(m => m.GetProperty("subjectId").GetGuid() == staff);
+        staffMember.GetProperty("hasDirect").GetBoolean().Should().BeFalse();
+        var changed = await ownerOnSite.PutAsJsonAsync(
+            $"/api/v4/member-invites/members/{staffMember.GetProperty("id").GetGuid()}/limit-to-24-hours", new { limitTo24Hours = true });
+        changed.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await changed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("member_access_from_team");
+
+        (await ownerOnSite.DeleteAsync($"/api/v4/member-invites/team-access/{teamId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await MembersAsync(ownerOnSite)).Should().NotContain(m => m.GetProperty("subjectId").GetGuid() == staff);
+        await Fixture.Services.GetRequiredService<HubConnectionRevalidator>().RevalidateAsync(CancellationToken.None);
+        (await Task.WhenAny(closed.Task, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(closed.Task, "the staff member's access ended");
+    }
+
+    [Fact]
+    public async Task A_staff_member_on_an_access_limited_to_24_hours_reads_only_the_last_day()
+    {
+        var (manager, _) = await SeedSubjectAsync("Clamped Manager");
+        var (owner, _) = await SeedSubjectAsync("Clamped Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Clamped Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff));
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        var entries = new[] { _now.AddHours(-30), _now.AddHours(-1) }
+            .Select(at => new { type = "sgv", sgv = 120, date = at.ToUnixTimeMilliseconds(), dateString = at.ToString("O") })
+            .ToArray();
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", entries)).EnsureSuccessStatusCode();
+        (await DatesAsync(AuthenticatedClient)).Should().HaveCount(2, "the clamp below is only meaningful if the older entry is served at all");
+
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Viewer, limitTo24Hours: true, teamManagesStaff: null);
+
+        (await DatesAsync(staffOnSite)).Should().ContainSingle()
+            .Which.Should().BeGreaterThan(_now.AddHours(-24).ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    public async Task A_staff_member_reads_nothing_after_an_approval_where_the_site_decides_its_staff()
+    {
+        var (manager, _) = await SeedSubjectAsync("Waiting Manager");
+        var (owner, _) = await SeedSubjectAsync("Waiting Owner", owner: true);
+        var staff = await SeedBareSubjectAsync("Waiting Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var ownerClient = await SessionAtApexAsync(owner);
+        using var staffOnSite = AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, staff));
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+
+        await ApproveAsync(managerClient, ownerClient, teamId, RoleSeeds.Caretaker, limitTo24Hours: false, teamManagesStaff: false);
+
+        (await staffOnSite.GetAsync("/api/v4/alerts/active")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_manager_narrows_a_staff_member_and_is_refused_an_end_that_has_passed()
+    {
+        var (manager, _) = await SeedSubjectAsync("Narrowing Manager");
+        var staff = await SeedBareSubjectAsync("Narrowed Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        var end = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        (await managerClient.PutAsJsonAsync(
+                $"/api/v4/me/teams/{teamId}/staff/{staff}", new { roleCeilingSlug = RoleSeeds.Viewer, limitTo24Hours = true, endsAt = end }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var passed = await managerClient.PutAsJsonAsync(
+            $"/api/v4/me/teams/{teamId}/staff/{staff}", new { roleCeilingSlug = RoleSeeds.Viewer, limitTo24Hours = true, endsAt = _now.AddDays(-1) });
+        passed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await passed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("team_staff_end_invalid");
+
+        var listed = (await managerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/{teamId}"))
+            .GetProperty("staff").EnumerateArray().Should().ContainSingle().Subject;
+        listed.GetRawText().Should().Contain(RoleSeeds.Viewer);
+    }
+
+    /// <summary>A new team run by the manager, with <paramref name="staff"/> joined through a staff invite; returns the team.</summary>
+    private async Task<Guid> TeamWithStaffAsync(HttpClient managerClient, Guid staff)
+    {
+        var teamId = (await (await managerClient.PostAsJsonAsync("/api/v4/me/teams", new { name = $"Clinic {Guid.NewGuid():N}" }))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var invite = await managerClient.PostAsJsonAsync(
+            $"/api/v4/me/teams/{teamId}/staff-invites", new { roleCeilingSlug = (string?)null, limitTo24Hours = false });
+        invite.StatusCode.Should().Be(HttpStatusCode.Created);
+        var token = (await invite.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString();
+
+        using var staffAtApex = await SessionAtApexAsync(staff);
+        (await staffAtApex.PostAsync($"/api/v4/me/teams/staff-invites/{token}/accept", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return teamId;
+    }
+
+    /// <summary>
+    /// The site's owner approves the team's access link giving <paramref name="roleSlug"/>; a null
+    /// <paramref name="teamManagesStaff"/> sends no choice, which leaves the team deciding its staff.
+    /// </summary>
+    private async Task ApproveAsync(
+        HttpClient managerClient, HttpClient ownerClient, Guid teamId, string roleSlug, bool limitTo24Hours, bool? teamManagesStaff)
+    {
+        var link = await managerClient.PostAsJsonAsync(
+            $"/api/v4/me/teams/{teamId}/access-links", new { roleSlug, limitTo24Hours });
+        link.StatusCode.Should().Be(HttpStatusCode.Created);
+        var token = (await link.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString();
+        var site = (await ownerClient.GetFromJsonAsync<JsonElement>($"/api/v4/me/teams/access-links/{token}"))
+            .GetProperty("sites").EnumerateArray().Single();
+        var role = site.GetProperty("roles").EnumerateArray().Single(r => r.GetProperty("slug").GetString() == roleSlug).GetProperty("id").GetGuid();
+
+        var approved = await ownerClient.PostAsJsonAsync(
+            $"/api/v4/me/teams/access-links/{token}/approve",
+            new { tenantId = site.GetProperty("tenantId").GetGuid(), roleIds = new[] { role }, limitTo24Hours, accessEndsAt = (DateTimeOffset?)null, teamManagesStaff });
+        approved.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private static async Task<List<long>> DatesAsync(HttpClient client) =>
+        [.. (await client.GetFromJsonAsync<JsonElement>("/api/v1/entries.json?count=10")).EnumerateArray().Select(e => e.GetProperty("date").GetInt64())];
+
+    private static async Task<List<JsonElement>> MembersAsync(HttpClient client) =>
+        [.. (await client.GetFromJsonAsync<JsonElement>("/api/v4/member-invites/members")).EnumerateArray()];
+
+    private async Task<HttpClient> SessionAtApexAsync(Guid subject)
+    {
+        var client = Fixture.CreateApexClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject));
+        return client;
+    }
+
+    /// <summary>A subject with no membership of any site and no credential of their own.</summary>
+    private async Task<Guid> SeedBareSubjectAsync(string name)
+    {
+        var subject = Guid.CreateVersion7();
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
+            VALUES (@id, @name, true, false, now(), now(), 'Approved');
+            """;
+        cmd.Parameters.AddWithValue("id", subject);
+        cmd.Parameters.AddWithValue("name", name);
+        await cmd.ExecuteNonQueryAsync();
+        return subject;
+    }
+
+    private async Task<(Guid Subject, string AccessToken)> SeedSubjectAsync(string name, bool owner = false)
+    {
+        using (var provisioning = CreateAuthenticatedClient())
+            (await provisioning.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
+        var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, [Scope.GlucoseRead]);
+        if (owner)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
+                SELECT gen_random_uuid(), id, @roleId FROM tenant_members
+                 WHERE tenant_id = @tenantId AND subject_id = @subjectId;
+                """;
+            cmd.Parameters.AddWithValue("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner));
+            cmd.Parameters.AddWithValue("tenantId", tenantId);
+            cmd.Parameters.AddWithValue("subjectId", seeded.SubjectId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return seeded;
+    }
+}

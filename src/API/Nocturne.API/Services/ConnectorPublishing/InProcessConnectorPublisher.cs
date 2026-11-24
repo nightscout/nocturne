@@ -47,7 +47,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
     /// <param name="treatments">The treatment publisher for bolus, basal, and carb data.</param>
     /// <param name="device">The device publisher for device status and metadata.</param>
     /// <param name="metadata">The metadata publisher for connector-level metadata.</param>
-    /// <param name="state">The state the publishing connector keeps between runs.</param>
+    /// <param name="state">The state the publishing connector keeps between runs; the connector holds it as <see cref="ConnectorStateFailures"/>.</param>
     /// <param name="skips">The scope's tally the four publishers add to.</param>
     public InProcessConnectorPublisher(
         IGlucosePublisher glucose,
@@ -62,6 +62,6 @@ public class InProcessConnectorPublisher : IConnectorPublisher
         Treatments = treatments;
         Device = device;
         Metadata = metadata;
-        State = state;
+        State = new ConnectorStateFailures(state);
     }
 }

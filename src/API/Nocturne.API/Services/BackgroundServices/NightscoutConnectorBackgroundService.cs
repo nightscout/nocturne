@@ -1,5 +1,6 @@
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Jobs;
@@ -154,7 +155,7 @@ public class NightscoutConnectorBackgroundService
             return;
 
         var address = NightscoutAddress.Resolve(resolvedUrl);
-        var client = NewClient(address);
+        var client = NewClient(address, _serviceProvider.GetRequiredService<IHttpClientFactory>());
 
         foreach (var evt in new[] { "dataUpdate", "create", "update" })
             client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
@@ -203,8 +204,12 @@ public class NightscoutConnectorBackgroundService
     /// A client for the Socket.IO endpoint of <paramref name="address"/>. The client reads a URL's
     /// path as a Socket.IO namespace, so a site under a sub-path is reached by its origin and the
     /// endpoint path instead. The URL's query goes with the handshake, as it goes with every read.
+    /// Its polling transport sends through the
+    /// <see cref="NightscoutConnectorInstaller.RealtimeHttpClientName"/> connector client, which keeps
+    /// the site's path out of telemetry, in place of the <see cref="HttpClient"/> the library would
+    /// build itself. The WebSocket it upgrades to opens its own connection, outside that client.
     /// </summary>
-    internal static SocketIO NewClient(NightscoutAddress address)
+    internal static SocketIO NewClient(NightscoutAddress address, IHttpClientFactory clients)
     {
         var options = new SocketIOOptions
         {
@@ -216,7 +221,10 @@ public class NightscoutConnectorBackgroundService
         if (address.Query is { } query)
             options.Query = HandshakeQuery(query);
 
-        return new SocketIO(new Uri(address.Origin), options);
+        return new SocketIO(
+            new Uri(address.Origin),
+            options,
+            services => services.AddSingleton(_ => clients.CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName)));
     }
 
     /// <summary>

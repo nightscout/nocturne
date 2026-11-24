@@ -378,4 +378,108 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
             LastUsedAt: null);
 
     #endregion
+
+    #region Session liveness: a credential is minted only for a caller whose session is live
+
+    private Task<bool> IsLiveAsync(string sessionId, Guid? subjectId = null) =>
+        _repository.HasLiveSessionAsync(subjectId ?? _subjectId, sessionId, DateTime.UtcNow);
+
+    [Fact]
+    public async Task A_session_ended_from_the_sessions_list_is_not_live()
+    {
+        AddToken(_subjectId, "ended");
+        AddToken(_subjectId, "ended");
+
+        await _repository.RevokeSessionForSubjectAsync(_subjectId, "ended", "Revoked by user");
+
+        (await IsLiveAsync("ended")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_session_whose_chain_reuse_detection_revoked_is_not_live()
+    {
+        AddToken(_subjectId, "reused", revokedAt: DateTime.UtcNow.AddMinutes(-5));
+        AddToken(_subjectId, "reused");
+
+        await _repository.RevokeByOidcSessionAsync("reused", "Token reuse detected");
+
+        (await IsLiveAsync("reused")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task No_session_of_a_subject_whose_every_token_was_revoked_is_live()
+    {
+        AddToken(_subjectId, "first");
+        AddToken(_subjectId, "second");
+
+        await _repository.RevokeAllForSubjectAsync(_subjectId, "Token reuse detected");
+
+        (await IsLiveAsync("first")).Should().BeFalse();
+        (await IsLiveAsync("second")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_session_signed_out_of_is_not_live()
+    {
+        var current = AddToken(_subjectId, "signed-out");
+
+        await _repository.RevokeAsync(current.Id, "User logout");
+
+        (await IsLiveAsync("signed-out")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Ending_every_other_session_leaves_the_current_one_live()
+    {
+        AddToken(_subjectId, "current");
+        AddToken(_subjectId, "other");
+
+        await _repository.RevokeOtherSessionsForSubjectAsync(_subjectId, "current", "Revoked by user (logout everywhere else)");
+
+        (await IsLiveAsync("current")).Should().BeTrue();
+        (await IsLiveAsync("other")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_session_whose_token_expired_is_not_live()
+    {
+        AddToken(_subjectId, "expired", expiresAt: DateTime.UtcNow.AddMinutes(-1));
+
+        (await IsLiveAsync("expired")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_rotated_session_is_live_through_its_successor()
+    {
+        AddToken(_subjectId, "rotated", revokedAt: DateTime.UtcNow);
+        AddToken(_subjectId, "rotated");
+
+        (await IsLiveAsync("rotated")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_legacy_chain_is_named_by_its_first_token_and_stays_live_once_rotated()
+    {
+        var legacy = AddToken(_subjectId, oidcSessionId: null);
+        var sessionId = legacy.Id.ToString();
+
+        (await IsLiveAsync(sessionId)).Should().BeTrue();
+
+        legacy.RevokedAt = DateTime.UtcNow;
+        _context.SaveChanges();
+        AddToken(_subjectId, sessionId);
+
+        (await IsLiveAsync(sessionId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Another_subjects_session_of_the_same_name_does_not_count()
+    {
+        AddToken(_otherSubjectId, "shared");
+
+        (await IsLiveAsync("shared")).Should().BeFalse();
+        (await IsLiveAsync("shared", _otherSubjectId)).Should().BeTrue();
+    }
+
+    #endregion
 }

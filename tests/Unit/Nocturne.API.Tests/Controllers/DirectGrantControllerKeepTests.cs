@@ -29,13 +29,17 @@ public class DirectGrantControllerKeepTests
 
     private DirectGrantController Controller(DateTime? callerAccessEndsAt, params string[] scopes)
     {
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = TestRequestServices.Build(clamped: false),
+        };
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
             AuthType = _authType,
             SubjectId = Caller,
             TenantId = Tenant,
+            SessionId = LiveSession.Id,
         };
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)scopes.ToHashSet();
         new RequestMembership(

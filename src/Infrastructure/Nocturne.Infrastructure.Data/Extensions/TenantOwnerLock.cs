@@ -20,7 +20,13 @@ internal static class TenantOwnerLock
     internal static Task LockTenantOwnersAsync(this NocturneDbContext db, Guid tenantId, CancellationToken ct) =>
         db.LockForTransactionAsync(Class, tenantId, ct);
 
-    private static async Task LockSubjectRowAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    /// <summary>
+    /// Holds the subject's row <c>FOR UPDATE</c> to the commit, against every write that inserts a row
+    /// naming the subject (<see cref="LockSubjectRowSharedAsync"/>): what account deletion takes before
+    /// any other lock (<see cref="MembershipLock"/>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         if (!db.Database.IsNpgsql())
             return;
@@ -46,6 +52,18 @@ internal static class TenantOwnerLock
             throw new InvalidOperationException("A row lock is taken inside a transaction");
 
         await db.Database.ExecuteSqlAsync($"SELECT 1 FROM subjects WHERE id = {subjectId} FOR KEY SHARE", ct);
+    }
+
+    /// <summary>
+    /// <see cref="LockSubjectRowSharedAsync"/> for each of <paramref name="subjectIds"/>, in ascending id, so
+    /// two writes that each lock several cannot each hold a row the other waits for.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowsSharedAsync(
+        this NocturneDbContext db, IEnumerable<Guid> subjectIds, CancellationToken ct)
+    {
+        foreach (var subjectId in subjectIds.Distinct().Order())
+            await db.LockSubjectRowSharedAsync(subjectId, ct);
     }
 
     /// <summary>

@@ -59,6 +59,7 @@ using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
@@ -590,6 +591,7 @@ public static class ServiceRegistrationExtensions
         services.AddOperatorWebhookClient(OperatorWebhook.SlugValidationClient);
         services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<CallerSessionLiveness>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<ISubjectService, SubjectService>();
         services.AddScoped<ISubjectDeletion, SubjectDeletion>();
@@ -1207,7 +1209,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectionService, ConnectionService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
-        services.AddScoped<IConnectorSyncCursorStore, ConnectorSyncCursorStore>();
         services.AddScoped<IConnectorStateStore, ConnectorStateStore>();
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
@@ -1309,10 +1310,11 @@ public static class ServiceRegistrationExtensions
 
         // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a
         // connector base URL, so it takes the connector client. That also puts redirects under the
-        // guard, which drops the tenant's api-secret when a hop crosses origin — .NET's own redirect
+        // guard, which drops the tenant's api-secret when a hop crosses origin. .NET's own redirect
         // handling strips Authorization but not api-secret.
         services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
-            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");
+            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0")
+            .KeepNightscoutPathOutOfTelemetry();
 
         return services;
     }

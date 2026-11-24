@@ -43,7 +43,7 @@ public class PlatformAdminBootstrapPostgresTests(PlatformAdminBootstrapPostgresT
                 .AddInterceptors(new TenantConnectionInterceptor())
                 .Options) { TenantId = tenant };
 
-        private GlobalRoleMemberHistoryPostgresTests.Factory Contexts(Guid tenant) => new(Context, tenant);
+        private SuppliedContextFactory Contexts(Guid tenant) => new(() => Context(tenant));
 
         public IAccountLinkRoute Route => AccountLinkRoutes.Of(linkRoute);
 

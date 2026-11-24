@@ -16,7 +16,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Npgsql;
@@ -86,11 +85,6 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 : ValueTask.FromResult(result);
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private NocturneDbContext Context(Guid tenant, Failure failure) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
@@ -151,11 +145,11 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
                 It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         var controller = new AlertRulesController(
-            new Factory(() => Context(tenant, failure)),
-            new TenantMembershipRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
-            new SubjectRepository(new Factory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
-            new AlertRepository(new Factory(() => Context(tenant, failure))),
-            new AlertRuleRepository(new Factory(() => Context(tenant, failure))),
+            new SuppliedContextFactory(() => Context(tenant, failure)),
+            new TenantMembershipRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
+            new SubjectRepository(new SuppliedContextFactory(() => Context(tenant, failure)), AccountLinkRoutes.Off),
+            new AlertRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
+            new AlertRuleRepository(new SuppliedContextFactory(() => Context(tenant, failure))),
             MockTenantAccessor.Create(tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

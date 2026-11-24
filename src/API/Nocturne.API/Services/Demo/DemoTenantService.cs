@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -62,6 +63,7 @@ public sealed class DemoTenantService
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
+    private readonly GrantRevocationService _grantRevocation;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
@@ -74,6 +76,8 @@ public sealed class DemoTenantService
     /// <param name="cache">The tenant cache a reset clears of the demo tenant's entries.</param>
     /// <param name="time">The clock that stamps onboarding, the reset and membership changes.</param>
     /// <param name="logger">Logs each reset and what provisioning or retiring the demo member found amiss.</param>
+    /// <param name="linkRoute">Where an account-link sign-in is routed, for the repositories a provision opens.</param>
+    /// <param name="grantRevocation">Evicts the sessions a rewrite of the demo role caps.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,
@@ -86,7 +90,8 @@ public sealed class DemoTenantService
         ITenantCache cache,
         TimeProvider time,
         ILogger<DemoTenantService> logger,
-        IAccountLinkRoute linkRoute)
+        IAccountLinkRoute linkRoute,
+        GrantRevocationService grantRevocation)
     {
         _factory = factory;
         _tenants = tenants;
@@ -100,6 +105,7 @@ public sealed class DemoTenantService
         _time = time;
         _logger = logger;
         _linkRoute = linkRoute;
+        _grantRevocation = grantRevocation;
     }
 
     /// <summary>
@@ -141,7 +147,14 @@ public sealed class DemoTenantService
         if (tenant is null)
             return;
 
-        // One unit, pinned to the tenant: the role, the Public grant and the demo member, with its
+        if (await _members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct) is { } existingRoleId)
+        {
+            await TeamReasonWrites.EditRoleAsync(
+                _factory, _grantRevocation, tenantId, existingRoleId, DemoRoleEdit, editorSubjectId: null,
+                _time.GetUtcNow().UtcDateTime, ct);
+        }
+
+        // One unit, pinned to the tenant: a new role, the Public grant and the demo member, with its
         // subject, land together.
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var tenants = new TenantRepository(unit);
@@ -343,31 +356,30 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Ensures the demo tenant's own role exists, carrying
-    /// <see cref="Scope.DemoVisitorPermissions"/>, and rewrites its permissions
-    /// to that list on every call so the role cannot drift.
+    /// The demo tenant's own role as it always reads, carrying <see cref="Scope.DemoVisitorPermissions"/>:
+    /// <see cref="ConfigureAccessAsync"/> rewrites an existing role to it on every call so the role cannot
+    /// drift, through the role edit every team reason follows (<see cref="TeamReasonWrites.EditRoleAsync"/>).
     /// </summary>
+    private static TenantRoleEdit DemoRoleEdit => new("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]);
+
+    /// <summary>Ensures the demo tenant's own role exists (<see cref="DemoRoleEdit"/>).</summary>
     /// <remarks>
     /// Deliberately not the seed <c>admin</c> role: that includes <c>members.manage</c> and
     /// <c>roles.manage</c>, and role and direct permissions are unioned into a member's
     /// effective set, so holding either is the ability to grant oneself <c>*</c>. Anyone can
     /// get a session for the demo member, so it must not hold an escalation primitive.
     /// </remarks>
-    private async Task<Guid> EnsureDemoRoleAsync(
+    private static async Task<Guid> EnsureDemoRoleAsync(
         ITenantMembershipRepository members, Guid tenantId, CancellationToken ct)
     {
         var roleId = await members.FindRoleIdBySlugAsync(tenantId, DemoRoleSlug, ct);
         if (roleId is null)
         {
             var created = await members.CreateRoleAsync(
-                new NewTenantRole(tenantId, "Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions], IsSystem: true), ct);
+                new NewTenantRole(tenantId, DemoRoleEdit.Name, DemoRoleSlug, null, [.. DemoRoleEdit.Permissions], IsSystem: true), ct);
             return created.Id;
         }
 
-        await members.UpdateRoleAsync(
-            tenantId, roleId.Value,
-            new TenantRoleEdit("Demo Visitor", DemoRoleSlug, null, [.. Scope.DemoVisitorPermissions]),
-            null, _time.GetUtcNow().UtcDateTime, ct);
         return roleId.Value;
     }
 

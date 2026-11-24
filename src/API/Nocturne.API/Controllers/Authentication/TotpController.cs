@@ -123,6 +123,9 @@ public class TotpController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
 
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
+
         var subject = await _subjectService.GetSubjectByIdAsync(auth.SubjectId.Value);
         if (subject == null)
             return Refused(TotpSetupFailure.SubjectNotFound);
@@ -164,6 +167,9 @@ public class TotpController : ControllerBase
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || auth.SubjectId == null)
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
+
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
 
         try
         {
@@ -268,7 +274,7 @@ public class TotpController : ControllerBase
     /// <response code="403">Both factors passed, but this host does not admit the subject;
     /// <c>detail</c> is <see cref="NotAMember"/>.</response>
     /// <response code="429">Too many attempts from this client address, or the account has no wrong codes left until
-    /// its window ends. The body is the rate limiter's, not a problem document, and <c>Retry-After</c> says when to try again.</response>
+    /// its window ends. <c>Retry-After</c> says when to try again.</response>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("totp-login")]

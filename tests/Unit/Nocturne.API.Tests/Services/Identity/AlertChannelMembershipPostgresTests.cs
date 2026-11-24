@@ -24,7 +24,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -59,26 +58,6 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     /// <summary>Records every dispatch the chat provider makes to the bot service.</summary>
     private sealed class BotService : HttpMessageHandler
     {
@@ -97,12 +76,12 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private sealed class Site(Guid tenant, string slug, Guid guest, Factory contexts, FakeTimeProvider clock, BotService bot)
+    private sealed class Site(Guid tenant, string slug, Guid guest, SuppliedContextFactory contexts, FakeTimeProvider clock, BotService bot)
     {
         public Guid Tenant => tenant;
         public string Slug => slug;
         public Guid Guest => guest;
-        public Factory Contexts => contexts;
+        public SuppliedContextFactory Contexts => contexts;
         public FakeTimeProvider Clock => clock;
         public BotService Bot => bot;
         public TenantMembershipRepository Members => new(contexts, AccountLinkRoutes.Off);
@@ -127,7 +106,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -143,7 +122,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
     private async Task<string> LinkDiscordAsync(Site site, string? platformUser = null)
     {
         platformUser ??= Snowflake();
-        var platform = new Factory(Context, Guid.Empty);
+        var platform = new SuppliedContextFactory(() => Context(Guid.Empty));
         await new ChatIdentityDirectoryService(
                 platform, new TenantMembershipRepository(platform, AccountLinkRoutes.Off), site.Clock,
                 Mock.Of<ILogger<ChatIdentityDirectoryService>>())

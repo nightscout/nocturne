@@ -59,7 +59,7 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)

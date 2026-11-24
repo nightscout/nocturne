@@ -396,12 +396,5 @@ public class AlertRepositoryTenantScopingTests
 
     /// <summary>A repository whose scope is resolved to <paramref name="scopeTenant"/>.</summary>
     private static AlertRepository Repository(DbContextOptions<NocturneDbContext> options, Guid scopeTenant) =>
-        new(new ScopeFactory(options, scopeTenant));
-
-    private sealed class ScopeFactory(DbContextOptions<NocturneDbContext> options, Guid scopeTenant)
-        : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(options) { TenantId = scopeTenant });
-    }
+        new(new SuppliedContextFactory(() => new NocturneDbContext(options) { TenantId = scopeTenant }));
 }

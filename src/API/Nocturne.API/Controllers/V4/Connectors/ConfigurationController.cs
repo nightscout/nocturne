@@ -509,7 +509,7 @@ public class ConfigurationController : ControllerBase
         // Saving a Nightscout API secret adopts it as a working credential (see
         // RequireInteractiveSessionAttribute); other connector credentials hand out nothing.
         var adopts = ConnectorConfigurationService.AdoptedSecret(connectorName, secrets) is not null;
-        if (adopts && HttpContext.IsCallerInactive())
+        if (adopts && await HttpContext.IsCallerInactiveAsync(ct))
         {
             return Challenge();
         }

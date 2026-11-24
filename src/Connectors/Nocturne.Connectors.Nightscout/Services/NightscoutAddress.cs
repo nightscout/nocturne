@@ -7,16 +7,24 @@ namespace Nocturne.Connectors.Nightscout.Services;
 ///     Where a tenant's Nightscout answers, read from the URL they gave. A site may be served under a
 ///     sub-path behind a reverse proxy, and that path can itself be the credential (a proxy that
 ///     admits only requests under a secret prefix). The URL's query can be one too: a Nightscout
-///     <c>?token=</c>, or a key the proxy checks. Every request repeats both. The connector and the
-///     import read a site through this one model.
+///     <c>?token=</c>, or a key the proxy checks. Every request repeats both. Every request to a site
+///     is built through this one model.
 /// </summary>
 /// <remarks>
-///     User info and fragment are dropped. Only <see cref="Origin"/> is free of credentials and may
-///     be logged. <see cref="Base"/>, <see cref="SocketIoPath"/>, <see cref="Query"/>,
-///     <see cref="Token"/> and <see cref="BaseUri"/> may each carry one: the path, the query, or both.
+///     User info and fragment are dropped. Only <see cref="Origin"/> and <see cref="Masked"/> are free
+///     of credentials and may be logged, stored or shown. <see cref="Base"/>,
+///     <see cref="SocketIoPath"/>, <see cref="Query"/>, <see cref="Token"/> and <see cref="BaseUri"/>
+///     may each carry one: the path, the query, or both.
 /// </remarks>
 public sealed class NightscoutAddress
 {
+    public const string InvalidUrlMessage = "The Nightscout URL must be an http or https address.";
+
+    public const string OutsideBaseMessage = "The path must stay under the Nightscout URL.";
+
+    /// <summary>A path segment at least this long is taken to be a credential.</summary>
+    private const int LongSegment = 16;
+
     private NightscoutAddress(Uri uri)
     {
         var path = uri.AbsolutePath.TrimEnd('/');
@@ -79,14 +87,72 @@ public sealed class NightscoutAddress
     ///     <paramref name="pathAndQuery"/> under <see cref="Base"/>, whether or not it starts with a
     ///     slash, with the URL's own query after any it carries.
     /// </summary>
-    public string For(string pathAndQuery)
-    {
-        var url = $"{Base}/{pathAndQuery.TrimStart('/')}";
-        if (Query is null)
-            return url;
+    public string For(string pathAndQuery) => WithQuery($"{Base}/{pathAndQuery.TrimStart('/')}");
 
-        return url + (url.Contains('?') ? '&' : '?') + Query;
+    /// <summary>
+    ///     <see cref="For"/> for a path a caller supplied. False when <paramref name="pathAndQuery"/>
+    ///     resolves anywhere but under <see cref="Base"/>: an absolute URL, or one climbing out with
+    ///     <c>..</c>.
+    /// </summary>
+    public bool TryFor(string pathAndQuery, [NotNullWhen(true)] out Uri? resolved)
+    {
+        var site = new Uri(Base + "/");
+        if (Uri.TryCreate(site, pathAndQuery.TrimStart('/'), out var candidate) && site.IsBaseOf(candidate))
+        {
+            resolved = new Uri(WithQuery(candidate.GetLeftPart(UriPartial.Query)));
+            return true;
+        }
+
+        resolved = null;
+        return false;
     }
+
+    /// <summary>
+    ///     The base of <paramref name="nightscoutUrl"/> with no trailing slash, query, fragment or user
+    ///     info. A value that does not read as an address is cut at its query or fragment, and loses
+    ///     any user info before its host. It still carries the path, so it is given back only to a
+    ///     form that edits the URL; what is otherwise stored or shown is <see cref="Masked"/>.
+    /// </summary>
+    public static string Display(string nightscoutUrl)
+    {
+        if (TryResolve(nightscoutUrl, out var address))
+            return address.Base;
+
+        var end = nightscoutUrl.IndexOfAny(['?', '#']);
+        var kept = end < 0 ? nightscoutUrl : nightscoutUrl[..end];
+
+        var schemeEnd = kept.IndexOf("://", StringComparison.Ordinal);
+        var authorityStart = schemeEnd < 0 ? 0 : schemeEnd + 3;
+        var pathStart = kept.IndexOf('/', authorityStart);
+        var authorityEnd = pathStart < 0 ? kept.Length : pathStart;
+        var at = authorityEnd > authorityStart
+            ? kept.LastIndexOf('@', authorityEnd - 1, authorityEnd - authorityStart)
+            : -1;
+        return at < 0 ? kept : kept[..authorityStart] + kept[(at + 1)..];
+    }
+
+    /// <summary>
+    ///     <paramref name="nightscoutUrl"/> as it may be stored or shown: the host, port and path of
+    ///     <see cref="Display"/> with no scheme, each path segment of <see cref="LongSegment"/> or
+    ///     more characters cut to its first four followed by <c>…</c>.
+    /// </summary>
+    public static string Masked(string nightscoutUrl)
+    {
+        var display = Display(nightscoutUrl);
+        var schemeEnd = display.IndexOf("://", StringComparison.Ordinal);
+        var hostAndPath = schemeEnd < 0 ? display : display[(schemeEnd + 3)..];
+        var pathStart = hostAndPath.IndexOf('/');
+        if (pathStart < 0)
+            return hostAndPath;
+
+        var segments = hostAndPath[pathStart..]
+            .Split('/')
+            .Select(segment => segment.Length >= LongSegment ? $"{segment[..4]}…" : segment);
+        return hostAndPath[..pathStart] + string.Join('/', segments).TrimEnd('/');
+    }
+
+    private string WithQuery(string url) =>
+        Query is null ? url : url + (url.Contains('?') ? '&' : '?') + Query;
 
     private static string? ReadToken(string? query)
     {

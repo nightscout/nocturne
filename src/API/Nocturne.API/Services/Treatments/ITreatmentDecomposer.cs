@@ -66,6 +66,10 @@ internal interface ITreatmentDecomposer
     Task<IReadOnlyDictionary<string, DateTime>> GetLegacyIdsFromSourceAsync(
         string source, DateTime from, DateTime to, CancellationToken ct = default);
 
+    /// <inheritdoc cref="ITreatmentService.GetOpenSpansFromSourceAsync"/>
+    Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpansFromSourceAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default);
+
     /// <inheritdoc cref="ITreatmentService.RekeyClientIdRecordsAsync"/>
     Task<int> RekeyClientIdRecordsAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Controllers.V4.PlatformAdmin;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -21,6 +22,10 @@ public class TenantCreationInviteControllerTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<ProblemDetailsFactory>(new TestProblemDetailsFactory());
+        var subjects = new Mock<ISubjectRepository>();
+        subjects.Setup(r => r.GetSignInStateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectSignInState(IsActive: true, IsPlatformAdmin: true));
+        services.AddSingleton(subjects.Object);
         var http = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         if (subjectId is { } id)
             http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = id, SubjectName = "Sam" };

@@ -2324,6 +2324,49 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("google_health_grant_holders");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.GoogleHealthWorkEntity", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("DisconnectRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("disconnect_request_id");
+
+                    b.Property<Guid?>("DisconnectSubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("disconnect_subject_id");
+
+                    b.Property<int>("ProgressCompletedDataTypes")
+                        .HasColumnType("integer")
+                        .HasColumnName("progress_completed_data_types");
+
+                    b.Property<string>("ProgressDataType")
+                        .HasColumnType("text")
+                        .HasColumnName("progress_data_type");
+
+                    b.Property<int>("ProgressPagesRead")
+                        .HasColumnType("integer")
+                        .HasColumnName("progress_pages_read");
+
+                    b.Property<string>("ProgressPhase")
+                        .HasColumnType("text")
+                        .HasColumnName("progress_phase");
+
+                    b.Property<int>("ProgressTotalDataTypes")
+                        .HasColumnType("integer")
+                        .HasColumnName("progress_total_data_types");
+
+                    b.Property<bool>("ProgressWorkerOwned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("progress_worker_owned");
+
+                    b.HasKey("TenantId");
+
+                    b.ToTable("google_health_work");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.HeartRateEntity", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -11428,6 +11471,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.GoogleHealthGrantHolderEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.GoogleHealthWorkEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()

@@ -334,6 +334,11 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         => _treatmentService.GetStoredIdsFromSourceAsync(source, from, to, cancellationToken);
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default)
+        => _treatmentService.GetOpenSpansFromSourceAsync(source, after, limit, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken cancellationToken = default)
     {

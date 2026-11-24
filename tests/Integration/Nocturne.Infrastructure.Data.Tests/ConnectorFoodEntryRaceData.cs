@@ -12,8 +12,7 @@ using Npgsql;
 namespace Nocturne.Infrastructure.Data.Tests;
 
 /// <summary>
-/// The tenant, carb intakes and food entries the connector food entry race classes write, and the
-/// repository each racing request gets in a scope of its own.
+/// Seeds, repository and read helpers shared by the connector food entry tests that run on real Postgres.
 /// </summary>
 internal static class ConnectorFoodEntryRaceData
 {

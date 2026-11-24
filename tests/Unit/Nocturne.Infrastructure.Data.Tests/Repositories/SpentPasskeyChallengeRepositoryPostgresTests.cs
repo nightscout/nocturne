@@ -26,16 +26,13 @@ public class SpentPasskeyChallengeRepositoryPostgresTests(SpentPasskeyChallengeR
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(string connectionString) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options));
-    }
+    private NocturneDbContext Context() =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options);
 
-    private Factory Contexts() => new(database.AppConnectionString);
+    private SuppliedContextFactory Contexts() => new(Context);
 
     private SpentPasskeyChallengeRepository Challenges() => new(Contexts());
 

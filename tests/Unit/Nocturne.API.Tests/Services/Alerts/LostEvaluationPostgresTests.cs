@@ -63,11 +63,6 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     /// <summary>
     /// An engine that can fail the next evaluation, or hold every evaluation until released, as a
     /// pass still running or cut off does.
@@ -180,7 +175,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         }
 
         public async Task<EvaluatedReading?> RecordedAsync() =>
-            await new AlertEvaluatedReadingRepository(new Factory(Context)).GetAsync(CancellationToken.None);
+            await new AlertEvaluatedReadingRepository(new SuppliedContextFactory(Context)).GetAsync(CancellationToken.None);
 
         public async Task<DateTime?> HeldSinceAsync()
         {
@@ -215,7 +210,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
         public Process(Tenant tenant)
         {
             _tenant = tenant;
-            var factory = new Factory(tenant.Context);
+            var factory = new SuppliedContextFactory(tenant.Context);
             var opened = new Mock<IExcursionOpenedHandler>();
             opened
                 .Setup(h => h.HandleOpenedAsync(

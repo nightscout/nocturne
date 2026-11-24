@@ -53,11 +53,6 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
-    }
-
     private sealed record Setup(
         EntryService Service,
         EntriesController Controller,
@@ -96,7 +91,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var factory = new Factory(() => Context(tenant));
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var audit = _audit;
         var events = new Mock<IDataEventSink<Entry>>();
         var sensorGlucose = new SensorGlucoseRepository(

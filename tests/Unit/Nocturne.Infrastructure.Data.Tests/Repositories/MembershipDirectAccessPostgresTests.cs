@@ -5,7 +5,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -41,27 +40,7 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
-    private sealed record Site(Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid ViewerRole, Guid CaretakerRole);
+    private sealed record Site(Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid ViewerRole, Guid CaretakerRole);
 
     public enum Read
     {
@@ -85,7 +64,7 @@ public class MembershipDirectAccessPostgresTests(MembershipDirectAccessPostgresT
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'direct-access', true, now(), now());
             """);
-        var factory = new Factory(Context, tenant);
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(tenant, Ct);
         return new Site(

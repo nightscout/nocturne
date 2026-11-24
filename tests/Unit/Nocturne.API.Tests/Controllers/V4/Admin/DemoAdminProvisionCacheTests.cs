@@ -179,7 +179,8 @@ public class DemoAdminProvisionCacheTests : IDisposable
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
-            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off);
+            new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
 
         return new DemoAdminController(
             tenantService.Object, demoTenantService,

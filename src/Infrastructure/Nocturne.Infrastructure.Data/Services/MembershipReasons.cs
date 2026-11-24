@@ -156,9 +156,7 @@ internal static class MembershipReasons
         var access = await db.TeamTenantAccess.AsNoTracking().Include(a => a.Team)
             .FirstOrDefaultAsync(a => a.Id == teamAccessId && a.TenantId == tenantId, ct)
             ?? throw new InvalidOperationException($"Team access {teamAccessId} is not of tenant {tenantId}.");
-        var roleIds = grant.RoleIds.ToList();
-        if (await db.TenantRoles.AnyAsync(r => roleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct))
-            throw new InvalidOperationException("A team reason cannot give the owner role.");
+        await RefuseOwnerRoleAsync(db, grant, ct);
 
         await db.LockMembershipAsync(tenantId, subjectId, ct);
         var team = new MemberAccessTeam(access.TeamId, access.Team!.Name);
@@ -219,6 +217,42 @@ internal static class MembershipReasons
 
         RemoveReason(db, reason);
         return Project(db, member, now);
+    }
+
+    /// <summary>
+    /// Sets the reason a team's access (<paramref name="teamAccessId"/>) gives the member to
+    /// <paramref name="grant"/>. Takes the member's lock.
+    /// </summary>
+    /// <returns>The end the row's was lowered to (<see cref="Write"/>), or null.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The member holds no reason from the access, or <paramref name="grant"/> gives the owner role.
+    /// </exception>
+    public static async Task<DateTime?> SetTeamReasonAsync(
+        NocturneDbContext db, TenantMemberEntity member, Guid teamAccessId, MembershipGrant grant, DateTime now,
+        CancellationToken ct)
+    {
+        await RefuseOwnerRoleAsync(db, grant, ct);
+        var reason = (await AlignedAsync(db, member, now, ct)).FirstOrDefault(r => IsOfTeamAccess(r, teamAccessId))
+            ?? throw new InvalidOperationException($"Member {member.Id} has no reason from team access {teamAccessId} to set.");
+
+        var held = RolesOf(db, reason.Id);
+        db.TenantMemberReasonRoles.RemoveRange(held.Where(rr => !grant.RoleIds.Contains(rr.TenantRoleId)));
+        db.TenantMemberReasonRoles.AddRange(grant.RoleIds
+            .Distinct()
+            .Where(roleId => held.All(rr => rr.TenantRoleId != roleId))
+            .Select(roleId => NewReasonRole(reason.Id, roleId)));
+        reason.DirectPermissions = grant.DirectPermissions?.ToList();
+        reason.LimitTo24Hours = grant.LimitTo24Hours;
+        reason.AccessEndsAt = grant.AccessEndsAt;
+        return Project(db, member, now);
+    }
+
+    /// <summary>The owner role is only ever held directly, so the last-owner rule reads one kind of reason.</summary>
+    private static async Task RefuseOwnerRoleAsync(NocturneDbContext db, MembershipGrant grant, CancellationToken ct)
+    {
+        var roleIds = grant.RoleIds.ToList();
+        if (await db.TenantRoles.AnyAsync(r => roleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct))
+            throw new InvalidOperationException("A team reason cannot give the owner role.");
     }
 
     private static bool IsOfTeamAccess(TenantMemberReasonEntity reason, Guid teamAccessId) =>
@@ -500,7 +534,7 @@ internal static class MembershipReasons
     /// (<see cref="IsMembershipFailure"/>) is handed to <paramref name="logFailure"/>, and the rest still run.
     /// </summary>
     /// <returns>How many failed.</returns>
-    private static async Task<int> EachMembershipAsync<T>(
+    internal static async Task<int> EachMembershipAsync<T>(
         IEnumerable<T> memberships, Func<T, Task> work, Action<T, Exception> logFailure)
     {
         var failed = 0;

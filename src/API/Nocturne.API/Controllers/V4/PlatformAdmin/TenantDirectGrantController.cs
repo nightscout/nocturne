@@ -61,6 +61,9 @@ public class TenantDirectGrantController : ControllerBase
     public async Task<ActionResult<CreateDirectGrantResponse>> Create(
         Guid tenantId, [FromBody] AdminCreateDirectGrantRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (!await _tenantMemberService.IsMemberAsync(request.SubjectId, tenantId, ct)
             || await _subjects.GetSignInStateAsync(request.SubjectId, ct) is not { IsActive: true })
         {

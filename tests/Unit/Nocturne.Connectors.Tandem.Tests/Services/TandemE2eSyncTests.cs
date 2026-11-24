@@ -997,6 +997,32 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
+    public async Task A_state_store_that_is_down_still_lets_the_profile_publish()
+    {
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            stateOnRead: _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()));
+
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        result.Success.Should().BeTrue();
+        fixture.Publisher.Profiles.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_defect_reading_the_state_store_fails_the_sync_rather_than_publishing_without_it()
+    {
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            stateOnRead: _ => throw new InvalidCastException("defect"));
+
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        result.Success.Should().BeFalse();
+        fixture.Publisher.Profiles.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task A_state_store_read_cancelled_by_the_run_propagates()
     {
         using var cancellation = new CancellationTokenSource();
@@ -1219,6 +1245,9 @@ public class TandemE2eSyncTests
             Task.FromResult(FollowsPublishes && NewestTreatment is { } newest ? newest : latestTreatment);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
+
+        public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<StoredTreatmentKey>>([]);
 
         public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());

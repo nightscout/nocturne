@@ -9,11 +9,15 @@ describe("classifyRecoveryError", () => {
   });
 
   it("does not read the rate limiter's body as a refused code", () => {
-    // The limiter answers with its own shape; a caller matching on the body
-    // rather than the status would call a throttled attempt a wrong code.
+    // A caller matching on the body rather than the status would call a throttled
+    // attempt a wrong code.
     expect(
       classifyRecoveryError({
+        type: "https://tools.ietf.org/html/rfc6585#section-4",
+        title: "Too Many Requests",
         status: 429,
+        detail: "Too many requests. Please try again later.",
+        code: "rate_limit_exceeded",
         error: "rate_limit_exceeded",
         error_description: "Too many requests. Please try again later.",
       })

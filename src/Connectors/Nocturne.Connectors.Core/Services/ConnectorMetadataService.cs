@@ -128,6 +128,7 @@ public static class ConnectorMetadataService
                         DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes,
                         DocumentationUrl = attr.DocumentationUrl,
                         IsImport = attr.IsImport,
+                        KeptOutPurgeClears = attr.KeptOutPurgeClears,
                     };
 
                     ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -162,6 +163,9 @@ public static class ConnectorMetadataService
 
         /// <inheritdoc cref="ConnectorRegistrationAttribute.IsImport"/>
         public bool IsImport { get; init; }
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.KeptOutPurgeClears"/>
+        public ConnectorStateSlots KeptOutPurgeClears { get; init; } = ConnectorStateSlots.Resume;
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

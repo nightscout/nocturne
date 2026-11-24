@@ -160,6 +160,15 @@ public interface ITreatmentService
         string source, DateTime from, DateTime to, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Up to <paramref name="limit"/> of the overrides and temporary targets <paramref name="source"/>
+    /// stored as state spans that are still open, or that are served as indefinite, ordered by start
+    /// and then legacy id, from just after <paramref name="after"/>; from the first when it is null.
+    /// Each says whether its span has no end yet.
+    /// </summary>
+    Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpansFromSourceAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Soft-deletes <paramref name="source"/>'s records decomposed from <paramref name="legacyIds"/>,
     /// including the state spans those treatments served as and the profile rows of a Profile Switch,
     /// leaving every other source's rows under those ids alone. A deleted row that was a dedup

@@ -34,7 +34,7 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// <summary>
 /// The paths that let a person in directly, remove them and list them, on PostgreSQL under the runtime
 /// role, for a member who also holds, or only holds, a team's reason. The team reasons are written
-/// straight to the tables and projected by the startup check, since no product path gives one yet.
+/// straight to the tables, with the staff rows they stand on, and projected by the startup check.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresTests.Database database)
@@ -56,26 +56,6 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         }
 
         public Task DisposeAsync() => Task.CompletedTask;
-    }
-
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
     }
 
     private sealed record Row(string EventType, string? Details)
@@ -105,7 +85,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         return context;
     }
 
-    private Factory Contexts(Guid tenant, Guid? actor = null) => new(t => Context(t, actor), tenant);
+    private SuppliedContextFactory Contexts(Guid tenant, Guid? actor = null) => new(() => Context(tenant, actor));
 
     private async Task<Seeded> SeedAsync(string slug, bool personPending = false)
     {
@@ -135,9 +115,10 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
 
     /// <summary>
     /// Gives <paramref name="subject"/> the reason of a new team's access to <paramref name="tenant"/>
-    /// (or of a team with access to <paramref name="accessTenant"/> when another site's) giving
-    /// <paramref name="role"/> until <paramref name="endsAt"/>, adding the row when they hold none, and
-    /// projects it as the startup check does.
+    /// giving <paramref name="role"/> until <paramref name="endsAt"/>, with the staff rows it stands on,
+    /// adding the row when they hold none, and projects it as the startup check does. A reason of a team
+    /// with access to another site (<paramref name="accessTenant"/>) stands on nothing at this one, so it
+    /// is written alone and the check, which would remove it, does not run.
     /// </summary>
     private async Task<Guid> TeamReasonAsync(
         Guid tenant, Guid subject, Guid role, string teamName, bool limitTo24Hours = false, Guid? accessTenant = null,
@@ -152,11 +133,23 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         var limit = limitTo24Hours ? "true" : "false";
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
         var at = accessTenant ?? tenant;
+        var teamMember = Guid.CreateVersion7();
+        var staff = accessTenant is null
+            ? $"""
+                INSERT INTO team_tenant_access_roles (id, team_tenant_access_id, tenant_role_id)
+                VALUES ('{Guid.CreateVersion7()}', '{access}', '{role}');
+                INSERT INTO team_members (id, team_id, subject_id, kind, limit_to_24_hours, ends_at)
+                VALUES ('{teamMember}', '{team}', '{subject}', 'staff', false, {ends});
+                INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
+                VALUES ('{Guid.CreateVersion7()}', '{access}', '{teamMember}', 'approved');
+                """
+            : string.Empty;
         await ExecuteAsync($"""
             SELECT set_config('app.current_tenant_id', '{at}', false);
             INSERT INTO teams (id, name) VALUES ('{team}', '{teamName}');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours)
             VALUES ('{access}', '{team}', '{at}', {limit});
+            {staff}
             SELECT set_config('app.current_tenant_id', '{tenant}', false);
             {(existing is null ? $"""
                 INSERT INTO tenant_members (id, tenant_id, subject_id, limit_to_24_hours, sys_created_at, sys_updated_at)
@@ -167,10 +160,16 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
             """);
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now.UtcDateTime, NullLogger.Instance, Ct);
+        if (accessTenant is null)
+            await ReconcileAsync();
         return team;
     }
+
+    private Task ReconcileAsync() =>
+        DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            database.MigratorConnectionString, Now.UtcDateTime,
+            (unit, changes, ct) => TeamReasonWrites.ApplyAsync(unit, changes, Revocation(), Now.UtcDateTime, ct),
+            NullLogger.Instance, Ct);
 
     private async Task<List<string>> KindsAsync(Guid tenant, Guid subject) =>
         await ReadAsync($"""
@@ -196,7 +195,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private static MemberInviteService InviteService(Factory contexts) => new(
+    private static MemberInviteService InviteService(SuppliedContextFactory contexts) => new(
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new MemberInviteRepository(contexts),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -214,7 +213,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())
             == Task.FromResult(RoleGrantValidation.Valid));
 
-    private static MembershipRequestService RequestService(Factory contexts) => new(
+    private static MembershipRequestService RequestService(SuppliedContextFactory contexts) => new(
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -227,7 +226,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         AccountLinkRoutes.Off,
         Revocation());
 
-    private static TenantService TenantService(Factory contexts, GuestSessionCacheService? sessions = null) => new(
+    private static TenantService TenantService(SuppliedContextFactory contexts, GuestSessionCacheService? sessions = null) => new(
         contexts,
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
@@ -864,8 +863,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         var made = await MadeByPersonAsync(s);
         await ClearAccessEndAsync(s);
 
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now.UtcDateTime, NullLogger.Instance, Ct);
+        await ReconcileAsync();
 
         (await AccessEndAsync(s)).Should().Be(teamEnds);
         (await LinkStateAsync(s, link)).Should().Be(((DateTime?)teamEnds, false));
@@ -883,8 +881,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
         await ClearAccessEndAsync(first);
         await ClearAccessEndAsync(second);
 
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-            database.MigratorConnectionString, Now.UtcDateTime, NullLogger.Instance, Ct);
+        await ReconcileAsync();
 
         foreach (var (s, (link, made)) in new[] { (first, firstMade), (second, secondMade) })
         {
@@ -907,8 +904,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
 
         try
         {
-            await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
-                database.MigratorConnectionString, Now.UtcDateTime, NullLogger.Instance, Ct);
+            await ReconcileAsync();
 
             (await AccessEndAsync(first)).Should().BeNull("the failed member's transaction rolled back");
             (await AccessEndAsync(second)).Should().Be(teamEnds);

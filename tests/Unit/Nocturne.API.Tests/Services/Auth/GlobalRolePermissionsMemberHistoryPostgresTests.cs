@@ -74,9 +74,9 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
             await db.SaveChangesAsync();
         }
 
-        var admin = await new SubjectRepository(new GlobalRoleMemberHistoryPostgresTests.Factory(t => Context(t), tenant), AccountLinkRoutes.Off)
+        var admin = await new SubjectRepository(new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject($"grp-admin-{tenant:N}"), Ct);
-        var contexts = new GlobalRoleMemberHistoryPostgresTests.Factory(t => Context(t, admin), tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant, admin));
 
         (await new RoleRepository(contexts).UpdateAsync(roleId, roleName, null, ["glucose.read"], Ct)).Should().NotBeNull();
 
@@ -89,7 +89,7 @@ public class GlobalRolePermissionsMemberHistoryPostgresTests(GlobalRolePermissio
         (await history.GetAsync(tenant, null, 100, 0, Now, Ct)).Data.Should().BeEmpty();
 
         (await new SubjectRepository(
-            new GlobalRoleMemberHistoryPostgresTests.Factory(t => Context(t), tenant), AccountLinkRoutes.Off)
+            new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off)
             .DeleteAsync(admin, Ct)).Should().BeOfType<SubjectChange.Changed>();
 
         (await PermissionRowsAsync(roleId)).Should().ContainSingle().Which.DetailsJson.Should().BeNull();

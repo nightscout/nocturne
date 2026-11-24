@@ -1,5 +1,3 @@
-using System.Reflection;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -9,22 +7,27 @@ using Nocturne.API.Tests.Authorization;
 namespace Nocturne.API.Tests.Infrastructure;
 
 /// <summary>
-/// A session or access token outlives its subject's deactivation by up to its lifetime, so a
-/// controller action that mints a credential or a delegation refuses an inactive caller with
-/// <c>IsCallerInactive</c>. The actions are found through <see cref="Writers"/> and
-/// <see cref="RowWriters"/>, the methods and rows that create one, not by a list of actions: an
-/// action whose body, or a helper of its controller it calls, reaches a writer must call
-/// <c>IsCallerInactive</c> or be in <see cref="RefusedElsewhere"/> with the reason its product is
-/// refused instead. <c>IsCallerInactive</c> reads the membership a tenant-resolved request carries
-/// and is false on any other, so an action whose route is served without a tenant must call
-/// <c>IsCallerSubjectInactiveAsync</c>, which reads the subject itself.
+/// A session or access token outlives its subject's deactivation, and a session access token
+/// outlives its session, by up to its lifetime, so a controller action that mints a credential or a
+/// delegation refuses an inactive caller, and a session caller whose session has ended, with
+/// <c>IsCallerInactiveAsync</c>: a credential is minted only for an active caller whose session is
+/// live. The actions are found through <see cref="Writers"/> and <see cref="RowWriters"/>, the
+/// methods and rows that create one, not by a list of actions: an action whose body, or a helper of
+/// its controller it calls, reaches a writer must call <c>IsCallerInactiveAsync</c> or be in
+/// <see cref="RefusedElsewhere"/> with the reason the caller's state does not matter.
+/// <c>IsCallerInactiveAsync</c> reads the membership a tenant-resolved request carries and is false
+/// on any other, so an action whose route is served without a tenant must call
+/// <c>IsCallerSubjectInactiveAsync</c>, which reads the subject itself. Both judge the session the
+/// same way.
 /// </summary>
 /// <remarks>
 /// A writer creates a new credential or delegation; one that redeems or edits an existing one
 /// (accepting an invite, activating a guest code, exchanging an authorization code or a refresh
 /// token, changing a grant's scopes) is not listed, because the minting action it follows already
-/// refused. A sign-in ceremony and the enrolment of the caller's own factor mint for the subject
-/// the factor names, and the services behind them refuse an inactive subject. The match is
+/// refused. A sign-in ceremony mints for the subject it proves, and is not listed. Enrolling or
+/// replacing one of the caller's own sign-in factors (a passkey, an authenticator, recovery codes,
+/// an identity provider link, a recovery email) is a writer, since the factor outlives the session
+/// that enrolled it. The match is
 /// syntactic: a receiver's type is the one its field, property, parameter or local declares, or the
 /// type argument of the <c>GetRequiredService</c> that produced it, so a receiver reached any other
 /// way is not seen. A call is not checked to come before the write it guards.
@@ -33,7 +36,7 @@ namespace Nocturne.API.Tests.Infrastructure;
 public class CredentialWriterGuardTests
 {
     private const string ControllersDirectory = "src/API/Nocturne.API/Controllers";
-    private const string Refusal = "IsCallerInactive";
+    private const string Refusal = "IsCallerInactiveAsync";
     private const string TenantlessRefusal = "IsCallerSubjectInactiveAsync";
 
     private const string Repositories = "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/";
@@ -63,7 +66,6 @@ public class CredentialWriterGuardTests
         "IAuthorizationService.CreateSubjectAsync",
         "ITeamRepository.CreateInviteAsync",
         "ITeamRepository.CreateAccessLinkAsync",
-        "ITeamRepository.ApproveAccessAsync",
         "IMembershipRequestService.ApproveRequestAsync",
         "IAccessRequestService.ApproveAsync",
         "ITenantCreationInviteService.CreateAsync",
@@ -85,6 +87,21 @@ public class CredentialWriterGuardTests
         "IShareLinkService.SetFullHistoryAsync",
         "IMigrationJobService.StartMigrationAsync",
         "IJwtService.GenerateAccessToken",
+        "IPasskeyService.GenerateRegistrationOptionsAsync",
+        "IPasskeyService.CompleteRegistrationAsync",
+        "IRecoveryCodeService.GenerateCodesAsync",
+        "ITotpService.GenerateSetupAsync",
+        "ITotpService.CompleteSetupAsync",
+        "IOidcAuthService.GenerateLinkAuthorizationUrlAsync",
+        "IOidcAuthService.HandleLinkCallbackAsync",
+        "AccountLinkService.SendEmailConfirmationAsync",
+        "IPasskeyCredentialRepository.CreateAsync",
+        "IPasskeyCredentialRepository.CreateForSetupOwnerAsync",
+        "ITotpCredentialRepository.CreateAsync",
+        "IRecoveryCodeRepository.ReplaceAsync",
+        "ISubjectRepository.AddOidcIdentityAsync",
+        "ISubjectRepository.AddSetupOwnerOidcIdentityAsync",
+        "ISubjectRepository.TakeUnclaimedOidcIdentityAsync",
     ];
 
     /// <summary>
@@ -122,45 +139,49 @@ public class CredentialWriterGuardTests
                 Repositories + "TenantMembershipRepository.cs",
             ],
             ["TeamTenantAccessEntity"] = [Repositories + "TeamRepository.Access.cs"],
+            ["PasskeyCredentialEntity"] = [Repositories + "PasskeyCredentialRepository.cs"],
+            ["TotpCredentialEntity"] = [Repositories + "TotpCredentialRepository.cs"],
+            ["RecoveryCodeEntity"] = [Repositories + "RecoveryCodeRepository.cs"],
+            ["SubjectOidcIdentityEntity"] = [Repositories + "SubjectRepository.cs"],
         };
 
     /// <summary>
     /// Actions that reach a writer without calling the refusal, keyed <c>Controller.Action</c>, with
-    /// the reason the caller's state does not matter.
+    /// the reason neither the caller's subject nor its session matters. A gate that reads only the
+    /// subject (a role, a standing) is not such a reason: it does not see an ended session.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> RefusedElsewhere =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["OAuthController.DeviceAuthorization"] =
-                "an anonymous client's request mints a pending code that holds nothing until DeviceApprove, which refuses an inactive caller",
+                "an anonymous client's request mints a pending code that holds nothing until DeviceApprove, which calls the refusal",
             ["CareLinkConnectController.Complete"] = "saves with no saver, so it adopts no Nightscout secret",
-            ["AccessRequestController.Approve"] = PlatformAdminGate,
-            ["TenantController.IssueLoginCode"] = PlatformAdminGate,
-            ["TenantController.IssueRecoveryCode"] = PlatformAdminGate,
-            ["TenantCreationInviteAdminController.Create"] = PlatformAdminGate,
-            ["TenantDirectGrantController.Create"] = PlatformAdminGate,
-            ["TenantController.AddMember"] = PlatformAdminGate,
-            ["TenantController.Provision"] = PlatformAdminGate,
             ["DevAdminController.SeedTenant"] = DevOnlyGate,
             ["DevAdminController.EnterRecoveryMode"] = DevOnlyGate,
             ["SetupController.OwnerOptions"] = FirstRunGate,
+            ["SetupController.OwnerComplete"] = FirstRunGate,
             ["SetupController.OwnerOidc"] = FirstRunGate,
+            ["PasskeyController.AccessRequestOptions"] = RedeemedEnrolment,
+            ["PasskeyController.AccessRequestComplete"] = RedeemedEnrolment,
+            ["PasskeyController.InviteOptions"] = RedeemedEnrolment,
+            ["PasskeyController.InviteComplete"] = RedeemedEnrolment,
+            ["PasskeyController.TenantInviteOptions"] = RedeemedEnrolment,
+            ["PasskeyController.TenantInviteComplete"] = RedeemedEnrolment,
             ["MemberInviteController.StepDown"] = "it only narrows the caller's own roles to caretaker and gives nothing",
-            ["PlatformAccessController.Access"] = PlatformAdminStanding,
         };
-
-    private const string PlatformAdminGate =
-        "the platform_admin role is read on every request and needs an active subject, so an inactive one is refused at the gate";
-
-    private const string PlatformAdminStanding =
-        "it mints only for a caller whose platform_admin standing this request read, which needs an active subject, "
-        + "and PlatformAccessCookieHandler reads that standing again on every use of what it mints";
 
     private const string DevOnlyGate =
         "it lives in the .DevOnly namespace, which is dropped from controller discovery outside Development";
 
     private const string FirstRunGate =
-        "it makes the instance's first owner and refuses once the instance has one; the caller is an anonymous visitor with no earlier subject to deactivate";
+        "it makes the instance's first owner and refuses once the instance has one; the caller is an anonymous visitor with no earlier subject to deactivate and no session to end";
+
+    private const string RedeemedEnrolment =
+        "it enrols the subject the access request, invite or creation link it redeems names, and never reads the caller's credentials, so no session of the caller takes part";
+
+    /// <summary>The calls that read the request's caller, none of which a <see cref="RedeemedEnrolment"/> action makes.</summary>
+    private static readonly string[] CallerReads =
+        ["GetAuthContext", "GetSubjectId", "GetSubjectIdString", "GetLegacyAuthContext", "ResolveRegistrationSubjectAsync"];
 
     private const string OwnerExistsCheck = "TenantHasCredentialedMemberAsync";
 
@@ -174,7 +195,7 @@ public class CredentialWriterGuardTests
     private static IEnumerable<MintingAction> Required => Minting.Where(a => !RefusedElsewhere.ContainsKey(a.Key));
 
     [Fact]
-    public void EveryActionThatMintsACredentialRefusesAnInactiveCaller()
+    public void EveryActionThatMintsACredentialRefusesACallerWhoseSubjectIsInactiveOrWhoseSessionEnded()
     {
         var unguarded = Required
             .Select(a => (Action: a, Tenantless: TenantlessRequests(a).ToList()))
@@ -184,11 +205,12 @@ public class CredentialWriterGuardTests
             .ToList();
 
         unguarded.Should().BeEmpty(
-            "a deactivated subject's session still authenticates, so an action that mints from it refuses "
-            + "that caller first: with HttpContext.IsCallerInactive, which reads the membership a "
-            + "tenant-resolved request carries, or with HttpContext.IsCallerSubjectInactiveAsync where the "
-            + "route is served without a tenant and IsCallerInactive is always false. Or name it in "
-            + "RefusedElsewhere with the reason its product is refused instead. Unguarded:\n  "
+            "a deactivated subject's session, and a session access token after its session ended, still "
+            + "authenticate, so an action that mints from one refuses that caller first: with "
+            + "HttpContext.IsCallerInactiveAsync, which reads the membership a tenant-resolved request carries, "
+            + "or with HttpContext.IsCallerSubjectInactiveAsync where the route is served without a tenant and "
+            + "IsCallerInactiveAsync is always false. Or name it in RefusedElsewhere with the reason neither the "
+            + "caller's subject nor its session matters. Unguarded:\n  "
             + string.Join("\n  ", unguarded));
     }
 
@@ -201,43 +223,8 @@ public class CredentialWriterGuardTests
         {
             byKey[key].Should().NotBeEmpty("{0} (\"{1}\") no longer reaches a writer: drop the entry", key, reason);
             byKey[key].Should().OnlyContain(
-                a => a.Refusals.Count == 0, "{0} now refuses an inactive caller: drop the entry", key);
+                a => a.Refusals.Count == 0, "{0} now calls the refusal: drop the entry", key);
         }
-    }
-
-    [Fact]
-    public void EveryPlatformAdminEntryIsGatedOnThatRole()
-    {
-        var ungated = RefusedElsewhere
-            .Where(entry => entry.Value == PlatformAdminGate)
-            .Select(entry => entry.Key.Split('.'))
-            .Where(key => ControllerActionReflection.GetControllers()
-                .Where(controller => controller.Name == key[0])
-                .DefaultIfEmpty()
-                .Any(controller => controller is null || !PlatformAdminOnly(controller, key[1])))
-            .Select(key => string.Join('.', key))
-            .ToList();
-
-        ungated.Should().BeEmpty("the reason holds only where [Authorize(Roles = \"platform_admin\")] stands in front of the action");
-    }
-
-    [Fact]
-    public void EveryPlatformAdminStandingEntryReadsThatStanding()
-    {
-        var entries = RefusedElsewhere.Where(entry => entry.Value == PlatformAdminStanding).Select(entry => entry.Key).ToList();
-
-        var unread = entries
-            .Where(key => !RepoSources.Under(ControllersDirectory)
-                .SelectMany(file => file.Tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
-                .Where(type => type.Identifier.ValueText == key.Split('.')[0])
-                .SelectMany(type => type.Members.OfType<MethodDeclarationSyntax>())
-                .Where(method => method.Identifier.ValueText == key.Split('.')[1])
-                .Any(method => method.DescendantNodes().OfType<MemberAccessExpressionSyntax>()
-                    .Any(access => access.Name.Identifier.ValueText == "IsPlatformAdmin")))
-            .ToList();
-
-        entries.Should().NotBeEmpty();
-        unread.Should().BeEmpty("the reason holds only for an action that reads the caller's IsPlatformAdmin");
     }
 
     [Fact]
@@ -269,6 +256,22 @@ public class CredentialWriterGuardTests
         unpinned.Should().BeEmpty(
             "the reason holds only for a SetupController action under {0} that reaches {1}, the check that "
             + "refuses once the instance has an owner", SetupRoutePrefix, OwnerExistsCheck);
+    }
+
+    [Fact]
+    public void EveryRedeemedEnrolmentEntryNeverReadsTheCaller()
+    {
+        var entries = RefusedElsewhere.Where(entry => entry.Value == RedeemedEnrolment).Select(entry => entry.Key).ToList();
+        var minting = Minting.ToLookup(a => a.Key);
+
+        var readers = entries
+            .Where(key => !minting[key].Any() || minting[key].Any(a => a.Invoked.Intersect(CallerReads).Any()))
+            .ToList();
+
+        entries.Should().NotBeEmpty();
+        readers.Should().BeEmpty(
+            "the reason holds only for an action that reads none of {0}: one that does acts for a caller, "
+            + "whose session has to be live", string.Join(", ", CallerReads));
     }
 
     [Fact]
@@ -324,6 +327,17 @@ public class CredentialWriterGuardTests
             "MigrationController.StartMigration",
             "CareLinkConnectController.DesktopToken",
             "PlatformAccessController.Access",
+            "TenantDirectGrantController.Create",
+            "TenantController.IssueLoginCode",
+            "PasskeyController.RegisterOptions",
+            "PasskeyController.RegisterComplete",
+            "PasskeyController.RegenerateRecoveryCodes",
+            "TotpController.Setup",
+            "TotpController.VerifySetup",
+            "OidcController.Link",
+            "OidcController.LinkCallback",
+            "RecoveryEmailController.SetRecoveryEmail",
+            "EmailConfirmationController.Send",
         ]);
 
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/teams/{teamId}/invites", "POST")
@@ -361,6 +375,13 @@ public class CredentialWriterGuardTests
         "AlertInviteEntity")]
     [InlineData("class C { [HttpPost] public async Task A() { AlertInviteEntity invite = new() { Id = id }; } }",
         "AlertInviteEntity")]
+    [InlineData("class C { IPasskeyCredentialRepository _p; [HttpPost] public async Task A() { await _p.CreateAsync(c, ct); } }",
+        "IPasskeyCredentialRepository.CreateAsync")]
+    [InlineData("class C(ISubjectRepository subjects) { [HttpPost] public async Task A() { await subjects.AddOidcIdentityAsync(i, ct); } }",
+        "ISubjectRepository.AddOidcIdentityAsync")]
+    [InlineData("class C { [HttpPost] public async Task A() { var factor = new TotpCredentialEntity { Id = id }; } }",
+        "TotpCredentialEntity")]
+    [InlineData("class C { IPasskeyCredentialRepository _p; [HttpDelete] public async Task A() { await _p.RemoveAsync(id, s, ct); } }", "")]
     [InlineData("class C { IDirectGrantService _g; [HttpPost] public async Task A() { await _g.RevokeAsync(); } }", "")]
     [InlineData("class C { IContextFactory _f; [HttpPost] public async Task A() { await _f.CreateAsync(); } }", "")]
     [InlineData("class C { IJwtService _j; [HttpPost] public IActionResult A() { var v = _j.ValidateAccessToken(t); } }", "")]
@@ -375,12 +396,13 @@ public class CredentialWriterGuardTests
     }
 
     [Theory]
-    [InlineData("class C { [HttpPost] public async Task A() { if (HttpContext.IsCallerInactive()) return; } }", "IsCallerInactive")]
-    [InlineData("class C { [HttpPost] public async Task A() { if (adopts && HttpContext.IsCallerInactive()) return; } }", "IsCallerInactive")]
-    [InlineData("class C { [HttpPost] public async Task A() { if (Guard()) return; } bool Guard() => HttpContext.IsCallerInactive(); }", "IsCallerInactive")]
-    [InlineData("class C { [HttpPost] public async Task A() { if (IsCallerInactive(HttpContext)) return; } }", "IsCallerInactive")]
+    [InlineData("class C { [HttpPost] public async Task A(CancellationToken ct) { if (await HttpContext.IsCallerInactiveAsync(ct)) return; } }", "IsCallerInactiveAsync")]
+    [InlineData("class C { [HttpPost] public async Task A(CancellationToken ct) { if (adopts && await HttpContext.IsCallerInactiveAsync(ct)) return; } }", "IsCallerInactiveAsync")]
+    [InlineData("class C { [HttpPost] public async Task A() { if (await Guard()) return; } Task<bool> Guard() => HttpContext.IsCallerInactiveAsync(default); }", "IsCallerInactiveAsync")]
+    [InlineData("class C { [HttpPost] public async Task A() { if (await IsCallerInactiveAsync(HttpContext, default)) return; } }", "IsCallerInactiveAsync")]
+    [InlineData("class C { [HttpPost] public async Task A() { if (HttpContext.IsCallerInactive()) return; } }", "")]
     [InlineData("class C { [HttpPost] public async Task A(CancellationToken ct) { if (await HttpContext.IsCallerSubjectInactiveAsync(ct)) return; } }", "IsCallerSubjectInactiveAsync")]
-    [InlineData("class C { [HttpPost] public async Task A() { } bool Unused() => HttpContext.IsCallerInactive(); }", "")]
+    [InlineData("class C { [HttpPost] public async Task A() { } Task<bool> Unused() => HttpContext.IsCallerInactiveAsync(default); }", "")]
     [InlineData("class C { [HttpPost] public async Task A() { var inactive = false; } }", "")]
     public void FindsTheRefusal(string source, string expected)
     {
@@ -388,11 +410,11 @@ public class CredentialWriterGuardTests
     }
 
     [Theory]
-    [InlineData(false, "IsCallerInactive", false)]
+    [InlineData(false, "IsCallerInactiveAsync", false)]
     [InlineData(false, "IsCallerSubjectInactiveAsync", true)]
     [InlineData(false, "", true)]
     [InlineData(true, "IsCallerSubjectInactiveAsync", false)]
-    [InlineData(true, "IsCallerInactive", true)]
+    [InlineData(true, "IsCallerInactiveAsync", true)]
     [InlineData(true, "", true)]
     public void AnActionNeedsTheRefusalItsRouteCanSee(bool tenantless, string calls, bool unguarded)
     {
@@ -404,12 +426,6 @@ public class CredentialWriterGuardTests
 
     private static bool IsUnguarded(MintingAction action, bool tenantless) =>
         !action.Refusals.Contains(tenantless ? TenantlessRefusal : Refusal);
-
-    private static bool PlatformAdminOnly(Type controller, string actionName) =>
-        controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
-            .Concat(controller.GetMethods().Where(method => method.Name == actionName)
-                .SelectMany(method => method.GetCustomAttributes<AuthorizeAttribute>(inherit: true)))
-            .Any(authorize => authorize.Roles == "platform_admin");
 
     private static IEnumerable<string> TenantlessRequests(MintingAction action, bool anyRoute = false)
     {

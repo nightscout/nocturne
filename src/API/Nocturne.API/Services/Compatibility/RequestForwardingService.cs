@@ -6,6 +6,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 
 namespace Nocturne.API.Services.Compatibility;
@@ -107,9 +108,22 @@ public class RequestForwardingService : IRequestForwardingService
             }
 
             using var httpClient = _httpClientFactory.CreateClient("NightscoutClient");
-            httpClient.Timeout = TimeSpan.FromSeconds(_configuration.Value.TimeoutSeconds);
 
-            var requestUri = NightscoutBaseUri.Resolve(nightscoutUrl, request.Path);
+            if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
+            {
+                response.ErrorMessage = NightscoutAddress.InvalidUrlMessage;
+                response.StatusCode = 500;
+                return response;
+            }
+
+            var forwardedPath = CredentialPathRedactor.WithoutCredentialQuery(request.Path);
+            if (!address.TryFor(forwardedPath, out var requestUri))
+            {
+                response.ErrorMessage = NightscoutAddress.OutsideBaseMessage;
+                response.StatusCode = 500;
+                return response;
+            }
+
             using var httpRequest = new HttpRequestMessage(
                 new HttpMethod(request.Method),
                 requestUri);
@@ -144,8 +158,10 @@ public class RequestForwardingService : IRequestForwardingService
             }
 
             _logger.LogDebug(
-                "Sending request to Nightscout: {Uri} [CorrelationId: {CorrelationId}]",
-                requestUri,
+                "Sending request to Nightscout {Origin}: {Method} {Path} [CorrelationId: {CorrelationId}]",
+                address.Origin,
+                LogText.Sanitize(request.Method),
+                LogText.Sanitize(forwardedPath),
                 correlationId);
 
             using var httpResponse = await httpClient.SendAsync(httpRequest, cancellationToken);

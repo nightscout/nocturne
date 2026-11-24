@@ -42,6 +42,9 @@ public class TenantMembershipRepositoryTests : IDisposable
     private TenantMembershipRepository Members(IAccountLinkRoute linkRoute, Guid? tenant = null) =>
         new(new TestNocturneDbContextFactory(_db.CreateContext(tenant ?? _tenant)), linkRoute);
 
+    private Task<TenantRoleUpdate> EditRoleAsync(Guid tenant, Guid roleId, TenantRoleEdit edit) =>
+        TeamWrites.EditRoleAsync(new TestNocturneDbContextFactory(_db.CreateContext(tenant)), tenant, roleId, edit, editorSubjectId: null, Now);
+
     private SubjectRepository Subjects() => new(new TestNocturneDbContextFactory(_db.CreateContext(Guid.Empty)), AccountLinkRoutes.Off);
 
     private Task<Guid> SubjectAsync(string name, bool system = false, bool active = true, bool demo = false) =>
@@ -562,11 +565,11 @@ public class TenantMembershipRepositoryTests : IDisposable
         created.Should().BeEquivalentTo(new { TenantId = _tenant, Name = "Night Shift", Slug = "night-shift", Description = "d", IsSystem = false, MemberCount = 0 });
         var member = await JoinAsync(await SubjectAsync("Nurse"), created.Id);
 
-        var updated = await Members().UpdateRoleAsync(_tenant, created.Id, new TenantRoleEdit("Nights", "nights", null, ["glucose.read", "treatments.read"]), null, Now, CancellationToken.None);
+        var updated = await EditRoleAsync(_tenant, created.Id, new TenantRoleEdit("Nights", "nights", null, ["glucose.read", "treatments.read"]));
         updated.Outcome.Should().Be(RoleChangeOutcome.Changed);
         updated.Role.Should().BeEquivalentTo(new { Name = "Nights", Slug = "nights", Description = (string?)null, MemberCount = 1 });
         updated.Role!.Permissions.Should().Equal("glucose.read", "treatments.read");
-        (await Members().UpdateRoleAsync(_otherTenant, created.Id, new TenantRoleEdit("x", "x", null, []), null, Now, CancellationToken.None))
+        (await EditRoleAsync(_otherTenant, created.Id, new TenantRoleEdit("x", "x", null, [])))
             .Should().Be(new TenantRoleUpdate(RoleChangeOutcome.NotFound, null));
 
         (await Members().DeleteRoleAsync(_tenant, created.Id, Now, CancellationToken.None)).Should().Be(RoleChangeOutcome.Changed);

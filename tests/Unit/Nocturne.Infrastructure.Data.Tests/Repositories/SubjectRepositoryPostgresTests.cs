@@ -37,12 +37,6 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create(scope));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
@@ -69,12 +63,12 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var subjects = new SubjectRepository(new Factory(Context, tenant), AccountLinkRoutes.Off);
+        var subjects = new SubjectRepository(new SuppliedContextFactory(() => Context(tenant)), AccountLinkRoutes.Off);
         var credentialed = await subjects.CreateAsync(new NewSubject($"{slug}-credentialed"), CancellationToken.None);
         var orphan = await subjects.CreateAsync(new NewSubject($"{slug}-orphan"), CancellationToken.None);
         // A flag that reads true when the row is visible, so a hidden row is told from a false one.
         await subjects.GrantPlatformAdminAsync([credentialed], CancellationToken.None);
-        await new PasskeyCredentialRepository(new Factory(Context, tenant)).CreateAsync(
+        await new PasskeyCredentialRepository(new SuppliedContextFactory(() => Context(tenant))).CreateAsync(
             new NewPasskeyCredential(credentialed, Guid.NewGuid().ToByteArray(), [1], 0, [], null, null, DateTime.UtcNow),
             CancellationToken.None);
         await using (var db = Context(tenant))
@@ -92,8 +86,8 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
     {
         var a = await SeedTenantAsync("a");
         var b = await SeedTenantAsync("b");
-        var readingAsB = new SubjectRepository(new Factory(Context, b.Tenant), AccountLinkRoutes.Off);
-        var readingAsNoOne = new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off);
+        var readingAsB = new SubjectRepository(new SuppliedContextFactory(() => Context(b.Tenant)), AccountLinkRoutes.Off);
+        var readingAsNoOne = new SubjectRepository(new SuppliedContextFactory(() => Context(Guid.Empty)), AccountLinkRoutes.Off);
 
         (await readingAsB.TenantHasCredentialedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
         (await readingAsNoOne.TenantHasCredentialedMemberAsync(a.Tenant, CancellationToken.None)).Should().BeTrue();
@@ -142,7 +136,7 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
 
         // Read as the scope, the credentialed subject's row is hidden by subject_pin; the repository
         // reaches it only by pinning the read to that subject.
-        (await new SubjectRepository(new Factory(Context, Guid.Empty), AccountLinkRoutes.Off).IsPlatformAdminAsync(a.Credentialed, CancellationToken.None))
+        (await new SubjectRepository(new SuppliedContextFactory(() => Context(Guid.Empty)), AccountLinkRoutes.Off).IsPlatformAdminAsync(a.Credentialed, CancellationToken.None))
             .Should().BeTrue("unpinned, the flag is there to read");
         (await subjects.IsPlatformAdminAsync(a.Credentialed, CancellationToken.None)).Should().BeFalse("the scope's reader is another subject");
         (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, true));

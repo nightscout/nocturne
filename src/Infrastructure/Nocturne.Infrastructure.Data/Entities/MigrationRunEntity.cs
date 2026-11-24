@@ -37,7 +37,7 @@ public class MigrationRunEntity
     public string Mode { get; set; } = "Api";
 
     /// <summary>
-    /// Human-readable source description shown in job history (URL or database name)
+    /// Human-readable source description shown in job history: the masked Nightscout URL, or the database name
     /// </summary>
     [Column("source_description")]
     [MaxLength(512)]

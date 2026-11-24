@@ -47,26 +47,6 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(connectionString)
@@ -74,7 +54,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             .Options) { TenantId = tenant };
 
     private sealed record Site(
-        string App, string Migrator, Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner,
+        string App, string Migrator, Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner,
         Guid ViewerRole, Guid CaretakerRole);
 
     private sealed record Lapsing(Guid Subject, Guid Member);
@@ -88,7 +68,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-lapse', true, now(), now());
             """);
 
-        var factory = new Factory(t => Context(app, t), tenant);
+        var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         var owner = await NewSubjectAsync(factory, $"{slug}-owner");
         await members.SeedRolesAsync(tenant, Ct);
@@ -100,7 +80,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         return new Site(app, migrator, tenant, factory, members, owner, viewerRole, caretakerRole);
     }
 
-    private static Task<Guid> NewSubjectAsync(Factory factory, string name) =>
+    private static Task<Guid> NewSubjectAsync(SuppliedContextFactory factory, string name) =>
         new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), Ct);
 
     /// <summary>
@@ -130,6 +110,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, {ends});
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
+            {TeamReasonSql.StaffOfMember(teamAccess, member, role, false, endsAt)}
             """);
     }
 
@@ -378,7 +359,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         var lapsing = await LapsingAsync(site, "startup-member");
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, After, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, After, TeamWrites.Apply(After), logger, Ct);
 
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Information && e.Message.Contains("Recomputed 1 memberships"));
         logger.Entries.Should().HaveCount(1);
@@ -398,7 +379,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         await AddReasonAsync(site, member, site.CaretakerRole, endsAt: null);
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, TeamWrites.Apply(T0), logger, Ct);
 
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains(member.ToString()));
         (await RolesAsync(site, member)).Should().BeEquivalentTo([site.ViewerRole, site.CaretakerRole]);
@@ -479,7 +460,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         (await LapseAsync(site, written)).Should().BeNull();
 
         var logger = new RecordingLogger();
-        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, logger, Ct);
+        await DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(site.Migrator, T0, TeamWrites.Apply(T0), logger, Ct);
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains(started.ToString()));
         (await LapseAsync(site, started)).Should().BeNull();
 

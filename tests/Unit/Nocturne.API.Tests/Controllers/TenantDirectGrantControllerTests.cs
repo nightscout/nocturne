@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
@@ -12,6 +13,7 @@ using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -96,8 +98,10 @@ public class TenantDirectGrantControllerTests : IDisposable
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(new TenantMembershipRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System);
 
-        _controller = new TenantDirectGrantController(
-            tenantMemberService, directGrantService, new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
+        var subjects = new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off);
+        httpContext.RequestServices = TestRequestServices.Build(
+            clamped: false, also: services => services.AddSingleton<ISubjectRepository>(subjects));
+        _controller = new TenantDirectGrantController(tenantMemberService, directGrantService, subjects)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
@@ -374,6 +378,7 @@ public class TenantDirectGrantControllerTests : IDisposable
             IsAuthenticated = true,
             AuthType = AuthType.SessionCookie,
             SubjectId = _adminSubjectId,
+            SessionId = LiveSession.Id,
             IsPlatformAdmin = true,
         });
 
@@ -395,6 +400,7 @@ public class TenantDirectGrantControllerTests : IDisposable
             IsAuthenticated = true,
             AuthType = AuthType.SessionCookie,
             SubjectId = _adminSubjectId,
+            SessionId = LiveSession.Id,
             IsPlatformAdmin = true,
         });
 

@@ -2454,6 +2454,26 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpansFromSourceAsync(
+        string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var open = LegacyTreatmentTables.OpenStateSpansFromSource(db, source).AsNoTracking();
+        if (after is { } last)
+            open = open.Where(s => s.StartTimestamp > last.At
+                || (s.StartTimestamp == last.At && string.Compare(s.LegacyId, last.LegacyId) > 0));
+
+        var rows = await open
+            .OrderBy(s => s.StartTimestamp)
+            .ThenBy(s => s.LegacyId)
+            .Select(s => new { Id = s.LegacyId!, At = s.StartTimestamp, Running = s.EndTimestamp == null })
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return rows.Select(r => new StoredTreatmentKey(r.Id, r.At, r.Running)).ToList();
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// A connector's rows can sit under an uploader's <c>id</c> where its <c>_id</c> belongs (see
     /// <see cref="IgnoredBasePropertyModifier"/>); read by <c>_id</c>, the same treatments would otherwise be
@@ -2489,7 +2509,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// in Nocturne therefore survives until the source itself changes the record, and then the
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
-    /// uploader restated. A treatment the user deleted stays deleted.
+    /// uploader restated. A treatment stored only as a state span (an override, a temporary target)
+    /// has no row in <see cref="DecomposedTreatmentTables"/>, so it is stamped as it stands and never
+    /// written again here. A treatment the user deleted stays deleted.
     /// <para>
     /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
     /// re-keyed is not the <c>_id</c> it came back with, so each is first planned onto the record it

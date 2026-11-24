@@ -32,12 +32,6 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create());
-    }
-
     private static readonly DateTime Now = DateTime.UtcNow;
 
     private NocturneDbContext Context(IAuditContext? actor = null, bool retry = true) =>
@@ -50,12 +44,12 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = Guid.Empty }.ActingAs(actor);
 
-    private Factory Contexts(Guid? caller = null) =>
+    private SuppliedContextFactory Contexts(Guid? caller = null) =>
         new(() => Context(caller is { } id ? new TestAuditActor { SubjectId = id } : null));
 
     private TeamRepository Teams(Guid? caller = null) => new(Contexts(caller));
 
-    private SubjectRepository Subjects() => new(new Factory(() => Context()), AccountLinkRoutes.Off);
+    private SubjectRepository Subjects() => new(new SuppliedContextFactory(() => Context()), AccountLinkRoutes.Off);
 
     private Task<Guid> NewSubjectAsync(string name = "person") =>
         Subjects().CreateAsync(new NewSubject($"{name}-{Guid.NewGuid():N}"), CancellationToken.None);
@@ -132,7 +126,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         (await teams.RemoveManagerAsync(team.Id, stranger, manager, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
         (await teams.CreateInviteAsync(team.Id, stranger, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team.Id, stranger, invite!.Value, Now, default)).Should().BeFalse();
-        (await TeamEnds.DeleteAsync(Contexts(stranger), team.Id, stranger)).Should().Be(TeamDeletion.NotFound);
+        (await TeamWrites.DeleteAsync(Contexts(stranger), team.Id, stranger)).Should().Be(TeamDeletion.NotFound);
 
         var detail = await Teams().GetAsync(team.Id, manager, Now, default);
         detail!.Name.Should().Be("Family");
@@ -277,7 +271,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         var team = await Teams(a).CreateInviteTeamAsync(a);
         var b = await AddManagerAsync(team, a, await NewSubjectAsync());
 
-        (await TeamEnds.DeleteAsync(Contexts(b), team, b)).Should().Be(TeamDeletion.Deleted);
+        (await TeamWrites.DeleteAsync(Contexts(b), team, b)).Should().Be(TeamDeletion.Deleted);
 
         (await Teams().GetTeamsOfAsync(a, default)).Should().BeEmpty();
         await using (var db = Context())
@@ -444,7 +438,7 @@ public class TeamRepositoryPostgresTests(TeamRepositoryPostgresTests.Database da
         (await teams.CreateInviteAsync(team, staff, new NewTeamInvite("x", null, Now.AddDays(1), null), default)).Should().BeNull();
         (await teams.RevokeInviteAsync(team, staff, invite!.Value, Now, default)).Should().BeFalse();
         (await teams.RemoveManagerAsync(team, staff, a, Now, default)).Should().Be(ManagerGuardedChange.NotFound);
-        (await TeamEnds.DeleteAsync(Contexts(staff), team, staff)).Should().Be(TeamDeletion.Refused);
+        (await TeamWrites.DeleteAsync(Contexts(staff), team, staff)).Should().Be(TeamDeletion.Refused);
 
         var forManager = await Teams().GetAsync(team, a, Now, default);
         forManager!.Name.Should().Be("Invite team");

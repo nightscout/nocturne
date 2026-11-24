@@ -313,6 +313,9 @@ public class OidcController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
 
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
+
         if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
 
@@ -418,9 +421,16 @@ public class OidcController : ControllerBase
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
         {
-            // Session expired mid-flow: the link-state cookie is useless without a session, so clear it.
             ClearLinkStateCookie();
             return Redirect("/auth/login?returnUrl=/settings/account");
+        }
+
+        // An ended session's access token still reads as signed in to the login page, which would
+        // send the person straight back to settings, so it is told to sign in again instead.
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+        {
+            ClearLinkStateCookie();
+            return RedirectToError("callback_failed", "Your session has ended. Sign in again.");
         }
 
         if (!string.IsNullOrEmpty(error))
@@ -664,13 +674,13 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Logout and revoke the session. Clears all session cookies and revokes the refresh token if one is present. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
+    /// Logout and end the session. Clears all session cookies and ends the session the presented refresh token belongs to and the session the caller is signed in with. When <c>providerId</c> names a provider that supports RP-initiated logout, the response includes a provider logout URL.
     /// </summary>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional).</param>
     /// <returns>A <see cref="LogoutResponse"/> indicating success and an optional provider logout URL.</returns>
     /// <remarks>
     /// Clears all session cookies (access token, refresh token, IsAuthenticated).
-    /// If a refresh token is present, revokes it via <see cref="IOidcAuthService.LogoutAsync"/>.
+    /// Ends the session through <see cref="IOidcAuthService.LogoutAsync"/>.
     /// When <paramref name="providerId"/> is supplied and the provider supports RP-initiated logout,
     /// the response includes a <c>ProviderLogoutUrl</c> for the frontend to redirect to.
     /// </remarks>
@@ -681,21 +691,19 @@ public class OidcController : ControllerBase
     public async Task<ActionResult<LogoutResponse>> Logout([FromQuery] Guid? providerId = null)
     {
         var refreshToken = GetRefreshToken();
+        var authContext = HttpContext.GetAuthContext();
+        var signedIn = authContext is { SubjectId: { } subjectId, SessionId: { Length: > 0 } sessionId }
+            && CallerSessionLiveness.IsSessionCaller(authContext)
+                ? new RefreshTokenSession(subjectId, sessionId)
+                : null;
 
-        OidcLogoutResult result;
-        if (!string.IsNullOrEmpty(refreshToken))
-        {
-            result = await _authService.LogoutAsync(refreshToken, providerId);
-        }
-        else
-        {
-            result = OidcLogoutResult.Succeeded();
-        }
+        var result = string.IsNullOrEmpty(refreshToken) && signedIn is null
+            ? OidcLogoutResult.Succeeded()
+            : await _authService.LogoutAsync(refreshToken, signedIn, providerId);
 
         // Clear session cookies
         ClearSessionCookies();
 
-        var authContext = HttpContext.GetAuthContext();
         await _auditService.LogAsync(AuthAuditEventType.Logout, authContext?.SubjectId, success: true,
             ipAddress: HttpContext.GetClientAddress(), userAgent: Request.Headers.UserAgent);
 

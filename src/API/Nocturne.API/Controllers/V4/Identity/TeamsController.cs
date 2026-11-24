@@ -327,7 +327,8 @@ public class TeamsController(
 
     /// <summary>
     /// Makes the caller staff of the invite's team. A caller already a member, of either kind, is told
-    /// so, and nothing changes. This gives the caller no access to any site.
+    /// so, and nothing changes. The caller reaches each site the team follows and has approved them, within
+    /// what narrows them.
     /// </summary>
     [HttpPost("staff-invites/{token}/accept")]
     [EnableRateLimiting("invite-lookup")]
@@ -335,12 +336,13 @@ public class TeamsController(
     [ProducesResponseType(typeof(TeamInviteAccepted), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AcceptStaffInvite([CredentialRouteValue] string token, CancellationToken ct)
+    public async Task<IActionResult> AcceptStaffInvite(
+        [CredentialRouteValue] string token, [FromServices] TeamAccessService access, CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
-        return AcceptanceResult(await teams.AcceptStaffInviteAsync(HashUtils.Sha256Hex(token), subjectId, Now, ct));
+        return AcceptanceResult(await access.JoinStaffAsync(HashUtils.Sha256Hex(token), subjectId, ct));
     }
 
     /// <summary>
@@ -353,7 +355,8 @@ public class TeamsController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateStaff(
-        Guid teamId, Guid subjectId, [FromBody] UpdateTeamStaffRequest request, CancellationToken ct)
+        Guid teamId, Guid subjectId, [FromBody] UpdateTeamStaffRequest request, [FromServices] TeamAccessService access,
+        CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } callerId)
             return Unauthorized();
@@ -361,7 +364,7 @@ public class TeamsController(
         if (NarrowingProblem(request.RoleCeilingSlug, request.LimitTo24Hours, request.EndsAt, refusePassedEnd: false, out var narrowing) is { } problem)
             return problem;
 
-        return await teams.UpdateStaffAsync(teamId, callerId, subjectId, narrowing!, Now, ct) switch
+        return await access.UpdateStaffAsync(teamId, callerId, subjectId, narrowing!, ct) switch
         {
             TeamStaffChange.Changed => NoContent(),
             TeamStaffChange.EndPassed => PassedEndProblem(),

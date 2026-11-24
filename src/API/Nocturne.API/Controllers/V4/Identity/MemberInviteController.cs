@@ -85,7 +85,7 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)
@@ -400,7 +400,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)
@@ -537,7 +537,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)
@@ -642,7 +642,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)
@@ -714,7 +714,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] TimeProvider time,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is null)

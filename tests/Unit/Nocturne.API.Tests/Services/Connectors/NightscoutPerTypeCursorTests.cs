@@ -50,6 +50,9 @@ public class NightscoutPerTypeCursorTests
             .ReturnsAsync(true);
 
         var treatments = new Mock<ITreatmentPublisher>();
+        treatments.Setup(p => p.GetOpenSpanTreatmentsAsync(
+                It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestTreatment);
         treatments.Setup(p => p.PublishTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))

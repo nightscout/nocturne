@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
@@ -10,14 +11,14 @@ namespace Nocturne.API.Services.Identity;
 /// <summary>
 /// A person giving a team access to a site through the team's link: what the link offers them, site
 /// by site, and the approval. Only an owner of the site may approve, and never wider than the link,
-/// than the roles they could grant, or than their own access. Also what ends that access, with the
-/// team reasons that stand on it (<see cref="TeamAccessEnd"/>): a site stopping it, the team being
-/// deleted, and a staff member being removed or leaving.
+/// than the roles they could grant, or than their own access. Also the other team writes that change
+/// the team reasons of its staff (<see cref="TeamReasonWrites"/>): a staff member joining, being edited,
+/// being removed or leaving, a site stopping the team's access, and the team being deleted.
 /// </summary>
 /// <remarks>
 /// The approver is read from their membership of the chosen site, never from the request's tenant:
 /// the link is opened on any host. These checks only refuse early: the approval's own transaction
-/// decides again under the locks (<see cref="ITeamRepository.ApproveAccessAsync"/>), since the
+/// decides again under the locks (<see cref="TeamRepository.LockAccessApprovalAsync"/>), since the
 /// approver's membership and the roles can change meanwhile.
 /// </remarks>
 public sealed class TeamAccessService(
@@ -102,20 +103,29 @@ public sealed class TeamAccessService(
         if (TeamAccessRules.Refusal(link.Suggestion, site.Limited, site.Membership.AccessEndsAt, grant, now) is { } narrowing)
             return new TeamAccessApproval(null, narrowing);
 
-        return await teams.ApproveAccessAsync(tokenHash, caller, grant, now, ct);
+        return await TeamReasonWrites.ApproveAccessAsync(contexts, grantRevocation, tokenHash, caller, grant, now, ct);
     }
 
-    /// <inheritdoc cref="TeamAccessEnd.StopAsync"/>
+    /// <inheritdoc cref="TeamReasonWrites.StopAsync"/>
     public Task<bool> StopAsync(Guid tenantId, Guid teamId, CancellationToken ct) =>
-        TeamAccessEnd.StopAsync(contexts, grantRevocation, tenantId, teamId, Now, ct);
+        TeamReasonWrites.StopAsync(contexts, grantRevocation, tenantId, teamId, Now, ct);
 
-    /// <inheritdoc cref="TeamAccessEnd.DeleteTeamAsync"/>
+    /// <inheritdoc cref="TeamReasonWrites.DeleteTeamAsync"/>
     public Task<TeamDeletion> DeleteTeamAsync(Guid teamId, Guid callerSubjectId, CancellationToken ct) =>
-        TeamAccessEnd.DeleteTeamAsync(contexts, grantRevocation, teamId, callerSubjectId, Now, ct);
+        TeamReasonWrites.DeleteTeamAsync(contexts, grantRevocation, teamId, callerSubjectId, Now, ct);
 
-    /// <inheritdoc cref="TeamAccessEnd.RemoveStaffAsync"/>
+    /// <inheritdoc cref="TeamReasonWrites.RemoveStaffAsync"/>
     public Task<bool> RemoveStaffAsync(Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
-        TeamAccessEnd.RemoveStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, Now, ct);
+        TeamReasonWrites.RemoveStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, Now, ct);
+
+    /// <inheritdoc cref="TeamRepository.LockStaffJoinAsync"/>
+    public Task<TeamInviteAcceptance> JoinStaffAsync(string tokenHash, Guid subjectId, CancellationToken ct) =>
+        TeamReasonWrites.JoinStaffAsync(contexts, grantRevocation, tokenHash, subjectId, Now, ct);
+
+    /// <inheritdoc cref="TeamRepository.LockStaffUpdateAsync"/>
+    public Task<TeamStaffChange> UpdateStaffAsync(
+        Guid teamId, Guid callerSubjectId, Guid staffSubjectId, TeamStaffNarrowing narrowing, CancellationToken ct) =>
+        TeamReasonWrites.UpdateStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, narrowing, Now, ct);
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
 
@@ -130,7 +140,7 @@ public sealed class TeamAccessService(
     /// Read from the row, the sum of the caller's reasons, since this subject-pinned read cannot see
     /// them. The owner role is only ever held directly, so the sum differs from the direct reason only
     /// in an end a team reason outlasts; the approval holds the approver to the direct reason
-    /// (<see cref="ITeamRepository.ApproveAccessAsync"/>).
+    /// (<see cref="TeamRepository.LockAccessApprovalAsync"/>).
     /// </remarks>
     private async Task<IReadOnlyList<OwnedSite>> OwnedSitesAsync(
         TeamAccessApproverCredential caller, DateTime now, CancellationToken ct) =>

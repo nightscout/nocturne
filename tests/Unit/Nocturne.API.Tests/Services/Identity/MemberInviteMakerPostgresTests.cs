@@ -55,26 +55,6 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private sealed record Seeded(Guid Tenant, Guid Owner, Guid Maker, Guid Joiner, Guid CaretakerRole);
 
     private sealed record AuditRow(string EventType, Guid? Target, string? Details)
@@ -102,7 +82,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         return context;
     }
 
-    private Factory Contexts(Guid tenant, Guid? actor = null) => new(t => Context(t, actor), tenant);
+    private SuppliedContextFactory Contexts(Guid tenant, Guid? actor = null) => new(() => Context(tenant, actor));
 
     private async Task<Seeded> SeedAsync(string slug, DateTime? makerAccessEndsAt = null, bool makerJoins = true)
     {
@@ -143,7 +123,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
     private static GrantRevocationService Revocation() =>
         new(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())));
 
-    private static MemberInviteService InviteService(Factory contexts, ITenantMembershipRepository? members = null) => new(
+    private static MemberInviteService InviteService(SuppliedContextFactory contexts, ITenantMembershipRepository? members = null) => new(
         members ?? new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
         new MemberInviteRepository(contexts),
         new SubjectRepository(contexts, AccountLinkRoutes.Off),
@@ -156,7 +136,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         AccountLinkRoutes.Off,
         Revocation());
 
-    private static TenantService TenantService(Factory contexts) => new(
+    private static TenantService TenantService(SuppliedContextFactory contexts) => new(
         contexts,
         new TenantRepository(contexts),
         new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),

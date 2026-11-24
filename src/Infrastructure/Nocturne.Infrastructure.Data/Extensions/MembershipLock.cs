@@ -14,23 +14,35 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// owners lock and the team access lock, and a role deletion then the locks of the members who hold it;
 /// a site's stop of a team's access, the team's deletion and a staff member's removal take the team's
 /// manager lock, then the team access lock for each site they touch, then the locks of the memberships
-/// whose team reasons they remove. Account deletion takes the owners locks of an active subject's
-/// sites, then the manager locks of its teams, then the team access locks of every site the teams it
-/// will remove have access to, then its memberships' locks; removing every membership of a subject
-/// takes the owners locks and then the manager locks, so both read the subject's memberships after a
-/// team write that removes one of their reasons commits. No path waits for a team access lock while it
-/// holds a membership lock, so no two of them can each hold what the other waits for.
+/// whose team reasons they remove. A staff member joining or being edited takes the team's manager lock,
+/// then the team access lock of every site the team follows, then the locks of the memberships whose
+/// team reasons it sets; an approval and a role edit take the locks of the memberships they set last;
+/// the startup sync takes one site's team access lock, then one membership lock. Account deletion takes
+/// the subject's row, then the owners locks of an active subject's sites, then the manager locks of its teams, then the team
+/// access locks of every site the teams it will remove have access to, then its memberships' locks;
+/// removing every membership of a subject takes the owners locks and then the manager locks, so both
+/// read the subject's memberships after a team write that removes one of their reasons commits. No path
+/// waits for a team access lock while it holds a membership lock, so no two of them can each hold what
+/// the other waits for.
 /// <para>
-/// Account deletion locks the subject's row <c>FOR UPDATE</c> before it takes membership locks
-/// (<see cref="TenantOwnerLock.LockTenantsOfSubjectAsync"/>). A write that held a membership lock and
+/// Account deletion locks the subject's row <c>FOR UPDATE</c> before any other lock, whether or not the
+/// subject is active (<see cref="TenantOwnerLock.LockSubjectRowAsync"/>). A write that held a membership lock and
 /// then inserted a row naming the subject would wait for that row <c>FOR KEY SHARE</c>, through the
 /// row's foreign key, while the deletion waited for the membership lock. A consent avoids the cycle by
 /// taking the subject row <c>FOR KEY SHARE</c> before its membership lock
 /// (<see cref="Nocturne.Core.Contracts.Auth.IOAuthGrantRepository.LockConsentAsync"/>): its own lock on
 /// the subject and client, then the subject row, then one membership lock. Nothing waits for a consent
-/// lock while it holds a membership lock. The team writes that remove team reasons insert no row
-/// naming the subject, so they take no subject row lock: one taken after their manager lock would
-/// wait on account deletion, which waits on that manager lock.
+/// lock while it holds a membership lock.
+/// </para>
+/// <para>
+/// A team write that inserts a row naming a subject takes that subject's row first, before any of these
+/// locks (<see cref="TenantOwnerLock.LockSubjectRowsSharedAsync"/>): one taken after its manager or owners
+/// lock would wait on account deletion, which waits on that lock. That covers every write that gives a
+/// team reason (<see cref="Services.TeamReasons"/>), which can insert the subject's membership, and the
+/// team writes that name a subject: a manager joining, a manager making an invite or a link, and an
+/// owner approving a team's access. A write that learns under its locks of a subject it did not lock
+/// first gives up before writing and runs again. The team writes that only remove team reasons insert
+/// no row naming the subject, so they take no subject row lock.
 /// </para>
 /// </remarks>
 internal static class MembershipLock

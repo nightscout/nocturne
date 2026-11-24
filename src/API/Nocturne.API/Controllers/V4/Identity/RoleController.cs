@@ -124,7 +124,7 @@ public class RoleController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is not { } ceiling)
