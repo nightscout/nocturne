@@ -590,6 +590,7 @@ public static class ServiceRegistrationExtensions
         services.AddOperatorWebhookClient(OperatorWebhook.SlugValidationClient);
         services.AddOperatorWebhookClient(OperatorWebhook.UsernameValidationClient);
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<CallerSessionLiveness>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<ISubjectService, SubjectService>();
         services.AddScoped<ISubjectDeletion, SubjectDeletion>();

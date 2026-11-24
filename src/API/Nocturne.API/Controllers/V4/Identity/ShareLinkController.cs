@@ -69,7 +69,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RevealShareLink(CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (HttpContext.CallerGrantCeiling() is null)
@@ -107,7 +107,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (this.PublicSharingEndDateRefusal() is { } dated)
@@ -143,7 +143,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (this.PublicSharingEndDateRefusal() is { } dated)
@@ -170,7 +170,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         if (this.PublicSharingEndDateRefusal() is { } dated)

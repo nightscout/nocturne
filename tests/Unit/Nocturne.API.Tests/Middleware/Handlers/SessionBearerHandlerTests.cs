@@ -215,6 +215,18 @@ public class SessionBearerHandlerTests
     }
 
     [Fact]
+    public async Task AuthenticateAsync_SessionToken_CarriesTheSessionItNames()
+    {
+        var token = _jwtService.GenerateAccessToken(TestSubject, permissions: [], roles: [], sessionId: "session-1");
+
+        var result = await _handler.AuthenticateAsync(CreateHttpContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(AuthType.LegacyJwt, result.AuthContext!.AuthType);
+        Assert.Equal("session-1", result.AuthContext.SessionId);
+    }
+
+    [Fact]
     public void Priority_Is200()
     {
         Assert.Equal(200, _handler.Priority);

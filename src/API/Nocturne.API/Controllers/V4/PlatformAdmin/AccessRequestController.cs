@@ -67,6 +67,9 @@ public class AccessRequestController(
         [FromBody] ApproveAccessRequestRequest request,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var result = await accessRequests.ApproveAsync(
             subjectId,
             tenantAccessor.Context?.TenantId,

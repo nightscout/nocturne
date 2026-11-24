@@ -87,9 +87,11 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     private void SignIn(AuthType authType, params string[] scopes)
     {
         var http = _controller.ControllerContext.HttpContext;
+        http.RequestServices ??= TestRequestServices.Build(clamped: false);
         http.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true, AuthType = authType, SubjectId = _adminId, TenantId = _tenantId,
+            SessionId = LiveSession.Id,
         };
         http.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
     }

@@ -110,11 +110,16 @@ public partial class SessionIssueAllowlistTests
             [Api + "Services/Demo/DemoTenantService.cs: DemoTenantService.DemoTenantService"] = DemoReset,
             [Api + "Hubs/HubCredentialVerifier.cs: HubCredentialVerifier.HasSessionAsync"] =
                 "reads only: whether a hub login's session still has a live row (HasLiveSessionAsync)",
+            [Api + "Services/Auth/CallerSessionLiveness.cs: CallerSessionLiveness._sessions"] = MintLiveness,
+            [Api + "Services/Auth/CallerSessionLiveness.cs: CallerSessionLiveness.CallerSessionLiveness"] = MintLiveness,
         },
         source => SourceMentions.Naming(source, [TokenStore]));
 
     private const string RefreshService =
         "RefreshTokenService: issues and rotates rows for SessionService, and revokes them";
+
+    private const string MintLiveness =
+        "reads only: whether a session caller's session still has a live row before an action mints (HasLiveSessionAsync)";
 
     private const string DemoReset = "deletes only: the rows of a demo member it retires (RetireDemoMemberAsync)";
 

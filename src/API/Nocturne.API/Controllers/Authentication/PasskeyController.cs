@@ -160,8 +160,7 @@ public class PasskeyController : ControllerBase
         if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
             return refusal;
 
-        var subjectId = await ResolveRegistrationSubjectAsync();
-        if (subjectId == null)
+        if (await ResolveRegistrationSubjectAsync(HttpContext.RequestAborted) is not { } registering)
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
@@ -172,7 +171,7 @@ public class PasskeyController : ControllerBase
         }
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, request.Username, PasskeyRegistrationFlow.OwnAccount);
+            registering.SubjectId, request.Username, PasskeyRegistrationFlow.OwnAccount);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -184,7 +183,10 @@ public class PasskeyController : ControllerBase
     /// <summary>
     /// Resolves which subject a registration ceremony is allowed to bind a credential to.
     /// </summary>
-    /// <returns>The subject to register against, or <see langword="null"/> when none qualifies.</returns>
+    /// <returns>
+    /// The subject to register against and whether the caller is signed in as it, or
+    /// <see langword="null"/> when none qualifies.
+    /// </returns>
     /// <remarks>
     /// <para>
     /// The request deliberately gets no say in this. The subject id is sealed into the challenge
@@ -199,15 +201,24 @@ public class PasskeyController : ControllerBase
     /// challenge minted here: each challenge is bound to the flow that minted it
     /// (<see cref="PasskeyRegistrationFlow"/>).
     /// </para>
+    /// <para>
+    /// A caller whose subject is inactive or whose session has ended is not signed in here
+    /// (<see cref="HttpContextExtensions.IsCallerSubjectInactiveAsync"/>): the request is read as
+    /// one with no session, so a recovery session it also carries still enrols.
+    /// </para>
     /// </remarks>
-    private async Task<Guid?> ResolveRegistrationSubjectAsync()
+    private async Task<RegistrationSubject?> ResolveRegistrationSubjectAsync(CancellationToken ct)
     {
-        var auth = HttpContext.GetAuthContext();
-        if (auth is { IsAuthenticated: true, SubjectId: not null })
-            return auth.SubjectId;
+        if (HttpContext.GetAuthContext() is { IsAuthenticated: true, SubjectId: { } signedIn }
+            && !await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return new RegistrationSubject(signedIn, SignedIn: true);
 
-        return await _recoverySession.ReadSubjectAsync(HttpContext, HttpContext.RequestAborted);
+        return await _recoverySession.ReadSubjectAsync(HttpContext, ct) is { } recovering
+            ? new RegistrationSubject(recovering, SignedIn: false)
+            : null;
     }
+
+    private readonly record struct RegistrationSubject(Guid SubjectId, bool SignedIn);
 
     /// <summary>
     /// Complete passkey registration with attestation response. The challenge must have been issued for the caller's own account. Under a recovery session this is the session's one enrolment: it issues no session, and the caller then signs in with the new passkey.
@@ -237,8 +248,8 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyRegisterCompleteResponse>> RegisterComplete(
         [FromBody] PasskeyRegisterCompleteRequest request)
     {
-        var subjectId = await ResolveRegistrationSubjectAsync();
-        if (subjectId == null)
+        var ct = HttpContext.RequestAborted;
+        if (await ResolveRegistrationSubjectAsync(ct) is not { } registering)
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
@@ -249,18 +260,16 @@ public class PasskeyController : ControllerBase
         }
 
         var tenantId = _tenantAccessor.TenantId;
-        var ct = HttpContext.RequestAborted;
-        var signedIn = HttpContext.GetAuthContext() is { IsAuthenticated: true, SubjectId: not null };
 
         PasskeyCredentialResult result;
         try
         {
-            if (signedIn)
+            if (registering.SignedIn)
             {
                 result = await _passkeyService.CompleteRegistrationAsync(
                     request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
-                    expectedSubjectId: subjectId.Value, request.Label);
-                await _recoverySession.EndAsync(HttpContext, subjectId.Value, ct);
+                    expectedSubjectId: registering.SubjectId, request.Label);
+                await _recoverySession.EndAsync(HttpContext, registering.SubjectId, ct);
             }
             else
             {
@@ -734,6 +743,9 @@ public class PasskeyController : ControllerBase
         {
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
+
+        if (await HttpContext.IsCallerSubjectInactiveAsync(HttpContext.RequestAborted))
+            return Challenge();
 
         var codes = await _recoveryCodeService.GenerateCodesAsync(auth.SubjectId.Value);
 

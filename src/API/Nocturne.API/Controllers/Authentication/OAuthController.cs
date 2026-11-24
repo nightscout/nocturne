@@ -180,7 +180,7 @@ public class OAuthController : ControllerBase
         // Check if user is authenticated
         // The login page counts a caller with a live session as signed in and sends it straight
         // back here, so an inactive caller is answered as a refused consent rather than sent there.
-        if (HttpContext.IsAuthenticated() && HttpContext.IsCallerInactive())
+        if (HttpContext.IsAuthenticated() && await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
         {
             return RedirectWithError(
                 redirect_uri,
@@ -252,7 +252,7 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
         {
             return Challenge();
         }
@@ -580,7 +580,7 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
         {
             return Challenge();
         }
@@ -869,7 +869,7 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(HttpContext.RequestAborted))
         {
             return Challenge();
         }

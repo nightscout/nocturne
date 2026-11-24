@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -618,6 +619,7 @@ public class TeamsControllerTests
     private static AuthContext Session(bool isPlatformAdmin = false) => new()
     {
         IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = Caller, IsPlatformAdmin = isPlatformAdmin,
+        SessionId = LiveSession.Id,
     };
 
     private TeamsController Controller(AuthContext auth)
@@ -638,6 +640,7 @@ public class TeamsControllerTests
         var services = new ServiceCollection();
         services.AddMvcCore();
         services.AddSingleton(_subjects.Object);
+        services.AddLiveSession();
         var httpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         httpContext.Items["AuthContext"] = auth;
         return httpContext;

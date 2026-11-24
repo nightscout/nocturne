@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
@@ -325,26 +326,34 @@ public static class HttpContextExtensions
             : null;
 
     /// <summary>
-    /// Whether the request's subject was read as inactive when the request authenticated. A session or
-    /// OAuth access token outlives its subject's deactivation by up to its lifetime, so an action that
-    /// mints a credential refuses that caller here, from the read the request already made, and
-    /// answers it with <see cref="ControllerBase.Challenge()"/>, as it answers an anonymous caller,
-    /// or as the action answers a refused request where it has such an answer.
+    /// Whether the caller may not mint a credential: its subject was read as inactive when the request
+    /// authenticated, or it is a session caller whose session has ended
+    /// (<see cref="CallerSessionLiveness"/>). A session or OAuth access token outlives its subject's
+    /// deactivation, and a session access token outlives its session, by up to its lifetime, so an
+    /// action that mints a credential refuses that caller here and answers it with
+    /// <see cref="ControllerBase.Challenge()"/>, as it answers an anonymous caller, or as the action
+    /// answers a refused request where it has such an answer.
     /// </summary>
-    public static bool IsCallerInactive(this HttpContext context) =>
-        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId }
-        && RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true };
+    public static async Task<bool> IsCallerInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId, TenantId: { } tenantId } auth
+        && (RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true }
+            || await HasSessionEndedAsync(context, auth, ct));
 
     /// <summary>
-    /// <see cref="IsCallerInactive"/> for a route served without a resolved tenant, where the request
-    /// carries no membership to read it from: the subject's own row is read instead
+    /// <see cref="IsCallerInactiveAsync"/> for a route served without a resolved tenant, where the
+    /// request carries no membership to read it from: the subject's own row is read instead
     /// (<see cref="ISubjectRepository.GetSignInStateAsync"/>), and the refusal is answered the same way.
     /// A subject with no row counts as inactive.
     /// </summary>
     public static async Task<bool> IsCallerSubjectInactiveAsync(this HttpContext context, CancellationToken ct) =>
-        context.GetAuthContext() is { SubjectId: { } subjectId }
-        && await context.RequestServices.GetRequiredService<ISubjectRepository>()
-            .GetSignInStateAsync(subjectId, ct) is not { IsActive: true };
+        context.GetAuthContext() is { SubjectId: { } subjectId } auth
+        && (await context.RequestServices.GetRequiredService<ISubjectRepository>()
+                .GetSignInStateAsync(subjectId, ct) is not { IsActive: true }
+            || await HasSessionEndedAsync(context, auth, ct));
+
+    private static async Task<bool> HasSessionEndedAsync(HttpContext context, AuthContext auth, CancellationToken ct) =>
+        CallerSessionLiveness.IsSessionCaller(auth)
+        && await context.RequestServices.GetRequiredService<CallerSessionLiveness>().HasEndedAsync(auth, ct);
 
     /// <summary>
     /// The maker a device credential this caller creates is stamped with, or null when no subject is
