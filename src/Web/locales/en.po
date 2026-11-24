@@ -1331,6 +1331,7 @@ msgstr "<0/> Save"
 
 #: ../portal/src/routes/faq/+page.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "General"
 msgstr "General"
 
@@ -1761,7 +1762,6 @@ msgstr "Calendar"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
-#: src/lib/components/ui/date-range-picker.svelte
 #: src/routes/(authenticated)/reports/+layout.svelte
 msgid "Today"
 msgstr "Today"
@@ -2743,6 +2743,8 @@ msgid "Manual sync"
 msgstr "Manual sync"
 
 #. 0: displayName
+#. 0: displayName
+#: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "<0/> View documentation for {0}"
 msgstr "<0/> View documentation for {0}"
@@ -5404,6 +5406,7 @@ msgstr "For healthcare providers"
 
 #: src/lib/components/reports/custom/workspace/GivenChartAdvanced.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
+#: src/lib/components/ui/date-range-picker.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Range"
@@ -6278,30 +6281,22 @@ msgstr "Self-registered"
 msgid "Revoke access"
 msgstr "Revoke access"
 
-#~ msgid "Credentials"
-#~ msgstr "Credentials"
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Credentials"
+msgstr "Credentials"
 
 #: src/lib/components/alerts/AdvancedSection.svelte
 msgid "Advanced"
 msgstr "Advanced"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Unsaved"
 msgstr "Unsaved"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Modified"
 msgstr "Modified"
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Reset to environment variable value"
 msgstr "Reset to environment variable value"
@@ -7064,8 +7059,6 @@ msgstr "Cannula"
 #: src/lib/components/dashboard/glucose-chart/chart-labels.svelte.ts
 #: src/lib/components/people/PersonStatusLine.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
-#: src/lib/components/settings/DashboardRailConfigurator.svelte
-#: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/legacy-kind-label.svelte.ts
 #: src/lib/components/trackers/wizard/templates.svelte.ts
@@ -9167,6 +9160,7 @@ msgstr "Configure & sync"
 #~ msgid "Connect your Nightscout"
 #~ msgstr "Connect your Nightscout"
 
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "Connect"
 msgstr "Connect"
@@ -9199,20 +9193,16 @@ msgstr "Step {0} of {1}"
 #~ msgid "Save & exit"
 #~ msgstr "Save & exit"
 
-#. 0: String(activeIndex + 1).padStart(2, "0"); 1: String(activeSteps.length).padStart(2, "0")
 #. 0: String(stepIndex + 1).padStart(2, "0"); 1: String(STEPS.length).padStart(2, "0")
-#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/start/+page@.svelte
 msgid "Step {0} / {1}"
 msgstr "Step {0} / {1}"
 
-#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
-msgid "<0/> Nightscout Migration"
-msgstr "<0/> Nightscout Migration"
+#~ msgid "<0/> Nightscout Migration"
+#~ msgstr "<0/> Nightscout Migration"
 
-#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
-msgid "<0/> Fresh Start"
-msgstr "<0/> Fresh Start"
+#~ msgid "<0/> Fresh Start"
+#~ msgstr "<0/> Fresh Start"
 
 #~ msgid "Connect a <0>data source</0> ."
 #~ msgstr "Connect a <0>data source</0> ."
@@ -9271,13 +9261,11 @@ msgid "<0/> Source"
 msgstr "<0/> Source"
 
 #: src/routes/(unauthenticated)/auth/login/+page.svelte
-#: src/routes/(unauthenticated)/setup/StepSidebar.svelte
 msgid "Welcome to Nocturne"
 msgstr "Welcome to Nocturne"
 
-#: src/routes/(unauthenticated)/setup/StepSidebar.svelte
-msgid "Migrating from Nightscout"
-msgstr "Migrating from Nightscout"
+#~ msgid "Migrating from Nightscout"
+#~ msgstr "Migrating from Nightscout"
 
 #~ msgid "Let's get your data <0>flowing.</0>"
 #~ msgstr "Let's get your data <0>flowing.</0>"
@@ -9557,6 +9545,7 @@ msgid "Show data types"
 msgstr "Show data types"
 
 #: src/lib/components/reports/year-overview/YearOverviewFilters.svelte
+#: src/lib/components/status-pills/StatusRail.svelte
 msgid "Show all"
 msgstr "Show all"
 
@@ -10340,7 +10329,6 @@ msgstr "Summary <0/>"
 #. 0: days
 #. 0: minutes / 1440
 #. 0: days
-#. 0: daysOption
 #. 0: days
 #. 0: days
 #. 0: dayCount
@@ -10352,7 +10340,6 @@ msgstr "Summary <0/>"
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 #: src/lib/components/trackers/age.svelte.ts
-#: src/lib/components/ui/date-range-picker.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
@@ -12470,9 +12457,8 @@ msgstr "Failed to start migration"
 #~ msgid "Active Migration <0/>"
 #~ msgstr "Active Migration <0/>"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Monitor the progress of your current migration."
-msgstr "Monitor the progress of your current migration."
+#~ msgid "Monitor the progress of your current migration."
+#~ msgstr "Monitor the progress of your current migration."
 
 #~ msgid "Current Operation"
 #~ msgstr "Current Operation"
@@ -12494,9 +12480,8 @@ msgstr "Start a new migration to see progress here"
 #~ msgid "Migration History"
 #~ msgstr "Migration History"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "View past migrations and their results."
-msgstr "View past migrations and their results."
+#~ msgid "View past migrations and their results."
+#~ msgstr "View past migrations and their results."
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "No migration history"
@@ -13307,9 +13292,8 @@ msgstr "Point us at your <0>Nightscout</0>."
 msgid "How are you <0>arriving</0>?"
 msgstr "How are you <0>arriving</0>?"
 
-#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
-msgid "Fresh start"
-msgstr "Fresh start"
+#~ msgid "Fresh start"
+#~ msgstr "Fresh start"
 
 #: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Start with a blank slate"
@@ -13325,7 +13309,6 @@ msgstr "Start with a blank slate"
 #~ msgstr "<0/> Land on a dashboard in about two minutes"
 
 #: ../portal/src/routes/features/+page.svelte
-#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
 msgid "Coming from Nightscout"
 msgstr "Coming from Nightscout"
 
@@ -13377,9 +13360,8 @@ msgstr "Bringing your <0>history</0> across."
 #~ msgid "Finding active migration..."
 #~ msgstr "Finding active migration..."
 
-#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
-msgid "Overall progress"
-msgstr "Overall progress"
+#~ msgid "Overall progress"
+#~ msgstr "Overall progress"
 
 #~ msgid "About <0/> remaining · {0} records"
 #~ msgstr "About <0/> remaining · {0} records"
@@ -17107,13 +17089,11 @@ msgstr "This only affects values where both smoothed and unsmoothed readings are
 #~ msgid "Import entries and treatments from an existing Nightscout instance."
 #~ msgstr "Import entries and treatments from an existing Nightscout instance."
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Leave empty to import all data, or specify a range to import partial data."
-msgstr "Leave empty to import all data, or specify a range to import partial data."
+#~ msgid "Leave empty to import all data, or specify a range to import partial data."
+#~ msgstr "Leave empty to import all data, or specify a range to import partial data."
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Previously used migration sources with their last sync timestamps."
-msgstr "Previously used migration sources with their last sync timestamps."
+#~ msgid "Previously used migration sources with their last sync timestamps."
+#~ msgstr "Previously used migration sources with their last sync timestamps."
 
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Nocturne will analyze your overnight data and notify you when potential compression lows are detected"
@@ -29835,9 +29815,8 @@ msgstr "You are <0>in.</0>"
 msgid "I am new to open-source diabetes data, or I prefer not to bring old data with me."
 msgstr "I am new to open-source diabetes data, or I prefer not to bring old data with me."
 
-#: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
-msgid "Enter the URL and API secret for the Nightscout instance you want to copy across. Nocturne only reads data. Your existing site is not modified."
-msgstr "Enter the URL and API secret for the Nightscout instance you want to copy across. Nocturne only reads data. Your existing site is not modified."
+#~ msgid "Enter the URL and API secret for the Nightscout instance you want to copy across. Nocturne only reads data. Your existing site is not modified."
+#~ msgstr "Enter the URL and API secret for the Nightscout instance you want to copy across. Nocturne only reads data. Your existing site is not modified."
 
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 msgid "We could not create your instance. Try again in a moment."
@@ -31427,9 +31406,8 @@ msgstr "Import entries, treatments, and profiles"
 msgid "Keep Nightscout running while you try Nocturne"
 msgstr "Keep Nightscout running while you try Nocturne"
 
-#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
-msgid "Both roads end in the same place. We just want to know whether to carry existing Nightscout data over, or give you a clean notebook to start in."
-msgstr "Both roads end in the same place. We just want to know whether to carry existing Nightscout data over, or give you a clean notebook to start in."
+#~ msgid "Both roads end in the same place. We just want to know whether to carry existing Nightscout data over, or give you a clean notebook to start in."
+#~ msgstr "Both roads end in the same place. We just want to know whether to carry existing Nightscout data over, or give you a clean notebook to start in."
 
 #: src/routes/(unauthenticated)/setup/steps/TenantIdentity.svelte
 msgid "Name your <0>instance</0>."
@@ -34105,9 +34083,6 @@ msgstr "Failed to revoke access. Try again."
 #~ msgstr "OAuth applications that you authorized to access your data"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "From env"
 msgstr "From env"
 
@@ -35437,6 +35412,7 @@ msgid "<0/> Compression low detection"
 msgstr "<0/> Compression low detection"
 
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
+#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 msgid "Safe to disconnect"
 msgstr "Safe to disconnect"
 
@@ -35458,24 +35434,20 @@ msgstr "Not ready"
 msgid "<0/> In progress"
 msgstr "<0/> In progress"
 
-#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
-msgid "<0/> Migration status"
-msgstr "<0/> Migration status"
+#~ msgid "<0/> Migration status"
+#~ msgstr "<0/> Migration status"
 
 #~ msgid "<0/> Circuit open"
 #~ msgstr "<0/> Circuit open"
 
-#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
-msgid "<0/> Write-back health (last 24 hours)"
-msgstr "<0/> Write-back health (last 24 hours)"
+#~ msgid "<0/> Write-back health (last 24 hours)"
+#~ msgstr "<0/> Write-back health (last 24 hours)"
 
-#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
-msgid "<0/> API compatibility"
-msgstr "<0/> API compatibility"
+#~ msgid "<0/> API compatibility"
+#~ msgstr "<0/> API compatibility"
 
-#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
-msgid "<0/> Safe to disconnect"
-msgstr "<0/> Safe to disconnect"
+#~ msgid "<0/> Safe to disconnect"
+#~ msgstr "<0/> Safe to disconnect"
 
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 msgid "Go to connector settings <0/>"
@@ -35487,13 +35459,11 @@ msgstr "Go to connector settings <0/>"
 #~ msgid "Data migration"
 #~ msgstr "Data migration"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Migration configuration detected"
-msgstr "Migration configuration detected"
+#~ msgid "Migration configuration detected"
+#~ msgstr "Migration configuration detected"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready."
-msgstr "Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready."
+#~ msgid "Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready."
+#~ msgstr "Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready."
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "<0/> New migration"
@@ -35511,9 +35481,8 @@ msgstr "<0/> MongoDB (advanced)"
 msgid "Migration source"
 msgstr "Migration source"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "API secret"
-msgstr "API secret"
+#~ msgid "API secret"
+#~ msgstr "API secret"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "MongoDB connection string"
@@ -35652,6 +35621,7 @@ msgstr "Privacy note"
 msgid "API endpoint"
 msgstr "API endpoint"
 
+#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "API compatibility"
 msgstr "API compatibility"
@@ -36611,9 +36581,8 @@ msgstr "Loop status"
 msgid "<0/> Status Pills"
 msgstr "<0/> Status Pills"
 
-#: src/lib/components/settings/DashboardRailConfigurator.svelte
-msgid "Select the pills that show next to the glucose value. Drag a pill to change its position."
-msgstr "Select the pills that show next to the glucose value. Drag a pill to change its position."
+#~ msgid "Select the pills that show next to the glucose value. Drag a pill to change its position."
+#~ msgstr "Select the pills that show next to the glucose value. Drag a pill to change its position."
 
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
@@ -39396,9 +39365,8 @@ msgstr "Activity and sleep"
 msgid "Therapy timeline - Nocturne"
 msgstr "Therapy timeline - Nocturne"
 
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "The profile in time, with the glucose and the pump, activity, and device data beside it."
-msgstr "The profile in time, with the glucose and the pump, activity, and device data beside it."
+#~ msgid "The profile in time, with the glucose and the pump, activity, and device data beside it."
+#~ msgstr "The profile in time, with the glucose and the pump, activity, and device data beside it."
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Profile versions"
@@ -39425,10 +39393,8 @@ msgstr "Versions"
 msgid "Window length"
 msgstr "Window length"
 
-#. 0: days
-#: src/routes/(authenticated)/time-spans/+page.svelte
-msgid "{0} d"
-msgstr "{0} d"
+#~ msgid "{0} d"
+#~ msgstr "{0} d"
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Earlier"
@@ -40437,6 +40403,7 @@ msgid "Nocturne imports the newest data from Nightscout first. You can use Noctu
 msgstr "Nocturne imports the newest data from Nightscout first. You can use Nocturne while the import continues."
 
 #: src/lib/components/migration/ImportInBackgroundNotice.svelte
+#: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Import progress"
 msgstr "Import progress"
 
@@ -48892,3 +48859,91 @@ msgstr "The end date that this invite gives has passed. Ask a manager of the tea
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Time zone <0/> <1/>"
 msgstr "Time zone <0/> <1/>"
+
+#: src/lib/components/dashboard/CurrentBGDisplay.svelte
+#: src/lib/components/dashboard/widgets/CurrentGlucoseWidget.svelte
+#: src/lib/components/layout/MobileHeader.svelte
+#: src/lib/components/layout/SidebarGlucoseWidget.svelte
+#: src/lib/components/layout/SidebarGlucoseWidget.svelte
+msgid "No glucose reading"
+msgstr "No glucose reading"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "(optional)"
+msgstr "(optional)"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Hide secret"
+msgstr "Hide secret"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Show secret"
+msgstr "Show secret"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Nocturne keeps secrets encrypted and does not show them again."
+msgstr "<0/> Nocturne keeps secrets encrypted and does not show them again."
+
+#: src/lib/components/settings/DashboardRailConfigurator.svelte
+#: src/lib/components/status-pills/ReservoirPill.svelte
+msgid "Reservoir level"
+msgstr "Reservoir level"
+
+#: src/lib/components/settings/DashboardRailConfigurator.svelte
+msgid "Select the pills that show next to the glucose value. Drag a pill to change its position. On a phone, the first four pills show. Trackers that give a warning also show. To see the other pills, select Show all."
+msgstr "Select the pills that show next to the glucose value. Drag a pill to change its position. On a phone, the first four pills show. Trackers that give a warning also show. To see the other pills, select Show all."
+
+#: src/lib/components/status-pills/StatusRail.svelte
+msgid "Show fewer"
+msgstr "Show fewer"
+
+#. 0: daysOption
+#. 0: days
+#: src/lib/components/ui/date-range-picker.svelte
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "{0}d<0/>"
+msgstr "{0}d<0/>"
+
+#: src/routes/(authenticated)/time-spans/+page.svelte
+msgid "See when your profile changed."
+msgstr "See when your profile changed."
+
+#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+msgid "<0/> Nightscout migration"
+msgstr "<0/> Nightscout migration"
+
+#: src/routes/(unauthenticated)/setup/SetupWizard.svelte
+msgid "<0/> Fresh start"
+msgstr "<0/> Fresh start"
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Migration settings found"
+msgstr "Migration settings found"
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "The server settings give a migration source, and the form shows them. Check them, then start the migration."
+msgstr "The server settings give a migration source, and the form shows them. Check them, then start the migration."
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "API secret <0>(optional)</0>"
+msgstr "API secret <0>(optional)</0>"
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Leave the dates empty to import all data."
+msgstr "Leave the dates empty to import all data."
+
+#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
+msgid "Migration status"
+msgstr "Migration status"
+
+#: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
+msgid "Write-back health (last 24 hours)"
+msgstr "Write-back health (last 24 hours)"
+
+#: src/routes/(unauthenticated)/setup/steps/NightscoutConnect.svelte
+msgid "Enter the address of your Nightscout site. If the site needs an API secret to show its data, also enter the API secret. Nocturne only reads from the site."
+msgstr "Enter the address of your Nightscout site. If the site needs an API secret to show its data, also enter the API secret. Nocturne only reads from the site."
+
+#: src/routes/(unauthenticated)/setup/steps/PathChoice.svelte
+msgid "Nocturne can copy the history from a Nightscout site, or start with no data."
+msgstr "Nocturne can copy the history from a Nightscout site, or start with no data."
