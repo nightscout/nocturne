@@ -122,6 +122,15 @@ public interface ITenantMembershipRepository
     /// <summary>The subjects of <see cref="ListOwnersAsync"/>, in the same order.</summary>
     Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsAsync(Guid tenantId, CancellationToken ct);
 
+    /// <summary>
+    /// The subjects of <see cref="GetOwnerSubjectIdsAsync"/> that can sign in, in the same order.
+    /// </summary>
+    /// <remarks>
+    /// Decided by the rule every caller shares (<c>OrphanedSubjectFilter</c>), with the instance's
+    /// recovery link route.
+    /// </remarks>
+    Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsWhoCanSignInAsync(Guid tenantId, CancellationToken ct);
+
     /// <summary>The stored display preferences of the longest-standing owner; null when the tenant has no owner or the owner saved none.</summary>
     Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct);
 
