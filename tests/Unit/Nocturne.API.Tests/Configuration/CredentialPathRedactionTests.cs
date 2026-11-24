@@ -39,6 +39,22 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
     }
 
     [Theory]
+    [InlineData("/api/v1/entries.json", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?count=1&token=caller", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?token=caller&count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?count=1&secret=caller", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?access_token=caller&count=1&find%5Btype%5D=sgv", "/api/v1/entries.json?count=1&find%5Btype%5D=sgv")]
+    [InlineData("/api/v1/entries.json?TOKEN=caller&to%6Ben=caller2&count=1", "/api/v1/entries.json?count=1")]
+    [InlineData("/api/v1/entries.json?token=caller", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?token&secret=", "/api/v1/entries.json")]
+    [InlineData("/api/v1/entries.json?tokens=kept&mytoken=kept", "/api/v1/entries.json?tokens=kept&mytoken=kept")]
+    public void Only_the_callers_credential_parameters_are_dropped(string path, string expected)
+    {
+        CredentialPathRedactor.WithoutCredentialQuery(path).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData("GET", "/api/v2/authorization/request/{0}", "/api/v2/authorization/request/{accessToken}")]
     [InlineData("GET", "/api/v4/member-invites/{0}/info", "/api/v4/member-invites/{token}/info")]
     [InlineData("POST", "/api/v4/member-invites/{0}/accept", "/api/v4/member-invites/{token}/accept")]

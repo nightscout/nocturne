@@ -8,12 +8,10 @@ namespace Nocturne.API.Helpers;
 /// behind a reverse proxy.
 /// </summary>
 /// <remarks>
-/// The address is read by <see cref="NightscoutAddress"/>, as the connector reads it. A base whose
-/// path lacks a trailing slash loses its last segment when a relative path is resolved against it,
-/// and a rooted path discards the base path entirely; either drops the sub-path. The base here
+/// The address is read by <see cref="NightscoutAddress"/>, as the connector reads it. The base here
 /// carries no query: a Nightscout <c>?token=</c> is a credential, so what is stored or shown never
-/// holds one. A client that reads the site keeps the query on every request through
-/// <see cref="NightscoutAddress.BaseUri"/> and <see cref="NightscoutAddress.For"/>.
+/// holds one. A request to the site is built through <see cref="NightscoutAddress"/>, which keeps
+/// the query on every one.
 /// </remarks>
 public static class NightscoutBaseUri
 {
@@ -29,46 +27,6 @@ public static class NightscoutBaseUri
     {
         baseUri = NightscoutAddress.TryResolve(nightscoutUrl, out var address) ? new Uri(address.Base + "/") : null;
         return baseUri is not null;
-    }
-
-    /// <inheritdoc cref="TryFor" path="/summary"/>
-    /// <exception cref="ArgumentException"><paramref name="nightscoutUrl"/> is not an http or https address.</exception>
-    public static Uri For(string nightscoutUrl) =>
-        TryFor(nightscoutUrl, out var baseUri)
-            ? baseUri
-            : throw new ArgumentException(InvalidUrlMessage, nameof(nightscoutUrl));
-
-    /// <summary>
-    /// <paramref name="pathAndQuery"/> under the base of <paramref name="nightscoutUrl"/>, whether
-    /// or not it starts with a slash. A path that resolves anywhere else, such as an absolute URL
-    /// or one climbing out with <c>..</c>, is refused.
-    /// </summary>
-    public static bool TryResolve(string? nightscoutUrl, string pathAndQuery, [NotNullWhen(true)] out Uri? resolved)
-    {
-        resolved = null;
-        return TryFor(nightscoutUrl, out var baseUri) && TryResolveUnder(baseUri, pathAndQuery, out resolved);
-    }
-
-    /// <inheritdoc cref="TryResolve" path="/summary"/>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="nightscoutUrl"/> is not an http or https address, or <paramref name="pathAndQuery"/>
-    /// does not resolve under it.
-    /// </exception>
-    public static Uri Resolve(string nightscoutUrl, string pathAndQuery) =>
-        TryResolveUnder(For(nightscoutUrl), pathAndQuery, out var resolved)
-            ? resolved
-            : throw new ArgumentException(OutsideBaseMessage, nameof(pathAndQuery));
-
-    private static bool TryResolveUnder(Uri baseUri, string pathAndQuery, [NotNullWhen(true)] out Uri? resolved)
-    {
-        if (Uri.TryCreate(baseUri, pathAndQuery.TrimStart('/'), out var candidate) && baseUri.IsBaseOf(candidate))
-        {
-            resolved = candidate;
-            return true;
-        }
-
-        resolved = null;
-        return false;
     }
 
     /// <summary>

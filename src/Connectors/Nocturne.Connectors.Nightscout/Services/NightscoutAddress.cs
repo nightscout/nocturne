@@ -7,8 +7,8 @@ namespace Nocturne.Connectors.Nightscout.Services;
 ///     Where a tenant's Nightscout answers, read from the URL they gave. A site may be served under a
 ///     sub-path behind a reverse proxy, and that path can itself be the credential (a proxy that
 ///     admits only requests under a secret prefix). The URL's query can be one too: a Nightscout
-///     <c>?token=</c>, or a key the proxy checks. Every request repeats both. The connector and the
-///     import read a site through this one model.
+///     <c>?token=</c>, or a key the proxy checks. Every request repeats both. Every request to a site
+///     is built through this one model.
 /// </summary>
 /// <remarks>
 ///     User info and fragment are dropped. Only <see cref="Origin"/> is free of credentials and may
@@ -79,14 +79,28 @@ public sealed class NightscoutAddress
     ///     <paramref name="pathAndQuery"/> under <see cref="Base"/>, whether or not it starts with a
     ///     slash, with the URL's own query after any it carries.
     /// </summary>
-    public string For(string pathAndQuery)
-    {
-        var url = $"{Base}/{pathAndQuery.TrimStart('/')}";
-        if (Query is null)
-            return url;
+    public string For(string pathAndQuery) => WithQuery($"{Base}/{pathAndQuery.TrimStart('/')}");
 
-        return url + (url.Contains('?') ? '&' : '?') + Query;
+    /// <summary>
+    ///     <see cref="For"/> for a path a caller supplied. False when <paramref name="pathAndQuery"/>
+    ///     resolves anywhere but under <see cref="Base"/>: an absolute URL, or one climbing out with
+    ///     <c>..</c>.
+    /// </summary>
+    public bool TryFor(string pathAndQuery, [NotNullWhen(true)] out Uri? resolved)
+    {
+        var site = new Uri(Base + "/");
+        if (Uri.TryCreate(site, pathAndQuery.TrimStart('/'), out var candidate) && site.IsBaseOf(candidate))
+        {
+            resolved = new Uri(WithQuery(candidate.GetLeftPart(UriPartial.Query)));
+            return true;
+        }
+
+        resolved = null;
+        return false;
     }
+
+    private string WithQuery(string url) =>
+        Query is null ? url : url + (url.Contains('?') ? '&' : '?') + Query;
 
     private static string? ReadToken(string? query)
     {

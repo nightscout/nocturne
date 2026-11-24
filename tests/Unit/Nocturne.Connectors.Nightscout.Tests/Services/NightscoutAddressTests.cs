@@ -102,4 +102,38 @@ public class NightscoutAddressTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Theory]
+    [InlineData("https://ns.example", "/api/v1/entries.json?count=10", "https://ns.example/api/v1/entries.json?count=10")]
+    [InlineData("https://ns.example/nightscout", "/api/v1/entries.json?count=10", "https://ns.example/nightscout/api/v1/entries.json?count=10")]
+    [InlineData("https://ns.example/nightscout/", "api/v1/status", "https://ns.example/nightscout/api/v1/status")]
+    [InlineData("https://ns.example/nightscout?token=abc", "/api/v1/status", "https://ns.example/nightscout/api/v1/status?token=abc")]
+    [InlineData("https://ns.example/nightscout?token=abc", "/api/v1/entries.json?count=1", "https://ns.example/nightscout/api/v1/entries.json?count=1&token=abc")]
+    [InlineData("https://ns.example/nightscout?token=abc", "", "https://ns.example/nightscout/?token=abc")]
+    [InlineData("https://ns.example/nightscout", "//other.example/api/v1/status", "https://ns.example/nightscout/other.example/api/v1/status")]
+    [InlineData("ns.example/nightscout", "/api/v1/status", "https://ns.example/nightscout/api/v1/status")]
+    [InlineData("https://ns.example/nightscout?token=abc", "api/v1/status#x", "https://ns.example/nightscout/api/v1/status?token=abc")]
+    [InlineData("https://ns.example/nightscout?token=abc", "api/v1/entries.json?count=1#x", "https://ns.example/nightscout/api/v1/entries.json?count=1&token=abc")]
+    public void A_supplied_path_resolves_under_the_site_with_its_query(
+        string url, string pathAndQuery, string expected)
+    {
+        NightscoutAddress.Resolve(url).TryFor(pathAndQuery, out var resolved).Should().BeTrue();
+
+        resolved!.AbsoluteUri.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("https://ns.example/nightscout", "/http://other.example/x")]
+    [InlineData("https://ns.example/nightscout", "https://other.example/x")]
+    [InlineData("https://ns.example/nightscout", "http:other.example/x")]
+    [InlineData("https://ns.example/nightscout", "/../x")]
+    [InlineData("https://ns.example/nightscout", "api/../../x")]
+    [InlineData("https://ns.example/nightscout?token=abc", "/../x")]
+    [InlineData("https://ns.example", "https://ns.example.other.example/x")]
+    public void A_supplied_path_that_resolves_outside_the_site_is_refused(string url, string pathAndQuery)
+    {
+        NightscoutAddress.Resolve(url).TryFor(pathAndQuery, out var resolved).Should().BeFalse();
+
+        resolved.Should().BeNull();
+    }
 }

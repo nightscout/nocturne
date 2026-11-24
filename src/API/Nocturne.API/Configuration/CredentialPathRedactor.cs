@@ -58,6 +58,35 @@ public sealed class CredentialPathRedactor : IRequestPathRedactor
         return true;
     }
 
+    /// <summary>
+    /// <paramref name="pathAndQuery"/> without the query parameters that carry the caller's own
+    /// credential, so it can be sent to a host that is not Nocturne. Other parameters keep their
+    /// order and encoding.
+    /// </summary>
+    public static string WithoutCredentialQuery(string pathAndQuery)
+    {
+        var queryStart = pathAndQuery.IndexOf('?');
+        if (queryStart < 0)
+        {
+            return pathAndQuery;
+        }
+
+        var kept = pathAndQuery[(queryStart + 1)..]
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(pair => CredentialQueryName(pair.AsSpan(0, NameLength(pair))) is null)
+            .ToArray();
+
+        return kept.Length == 0
+            ? pathAndQuery[..queryStart]
+            : string.Concat(pathAndQuery.AsSpan(0, queryStart + 1), string.Join('&', kept));
+    }
+
+    private static int NameLength(string pair)
+    {
+        var equals = pair.IndexOf('=');
+        return equals < 0 ? pair.Length : equals;
+    }
+
     private string? RedactRoute(string path)
     {
         var routes = _routes;
