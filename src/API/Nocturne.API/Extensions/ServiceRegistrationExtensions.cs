@@ -1094,7 +1094,7 @@ public static class ServiceRegistrationExtensions
         // redirects are off outright rather than followed by a guard — a target answering 307 with
         // http://169.254.169.254/ or an internal service name would otherwise be fetched from
         // inside the deployment network.
-        services.AddHttpClient(WebhookRequestSender.HttpClientName)
+        services.AddAlertDeliveryClient(WebhookRequestSender.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
@@ -1149,7 +1149,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.HomeAssistantProvider>();
         services.AddSingleton<Nocturne.API.Hubs.HomeAssistantConnections>();
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.DeviceActionProvider>();
-        services.AddHttpClient("ChatBot");
+        services.AddAlertDeliveryClient(Nocturne.API.Services.Alerts.Providers.ChatBotProvider.HttpClientName);
 
         // Chat identity
         services.AddScoped<Nocturne.API.Services.Chat.ChatIdentityService>();

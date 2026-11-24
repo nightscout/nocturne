@@ -47,6 +47,8 @@ internal sealed class ChatBotProvider(
     ITenantAccessor tenantAccessor,
     ILogger<ChatBotProvider> logger)
 {
+    public const string HttpClientName = "ChatBot";
+
     /// <summary>
     /// Matches the camelCase body the SvelteKit dispatch route parses. <c>PostAsJsonAsync</c>
     /// applies these defaults implicitly; they are explicit here because the request is
@@ -81,6 +83,10 @@ internal sealed class ChatBotProvider(
     /// Thrown when <c>WEB_URL</c>, the instance key, or the tenant slug is unavailable. See the
     /// remarks on this type for why these are thrown rather than logged and skipped.
     /// </exception>
+    /// <exception cref="TimeoutException">
+    /// Thrown when the bot does not answer within <see cref="AlertDeliveryClient.Timeout"/>. The
+    /// caller's own cancellation is not a timeout and propagates as cancellation.
+    /// </exception>
     public async Task SendAsync(Guid deliveryId, ChannelType channelType, string destination, AlertPayload payload, CancellationToken ct)
     {
         // Internal address only — see the remarks on this type for why the public
@@ -110,7 +116,7 @@ internal sealed class ChatBotProvider(
 
         try
         {
-            var client = httpClientFactory.CreateClient("ChatBot");
+            var client = httpClientFactory.CreateClient(HttpClientName);
             var dispatchUrl = $"{webUrl.TrimEnd('/')}/api/v4/bot/dispatch";
 
             using var request = new HttpRequestMessage(HttpMethod.Post, dispatchUrl)
@@ -136,7 +142,16 @@ internal sealed class ChatBotProvider(
                 "Chat bot alert dispatched for delivery {DeliveryId} via {ChannelType}",
                 deliveryId, channelType);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogError(
+                "Chat bot dispatch for delivery {DeliveryId} via {ChannelType} timed out after {Timeout} seconds",
+                deliveryId, channelType, AlertDeliveryClient.Timeout.TotalSeconds);
+            throw new TimeoutException(
+                $"The chat bot did not answer within {AlertDeliveryClient.Timeout.TotalSeconds} seconds",
+                ex);
+        }
+        catch (HttpRequestException ex)
         {
             logger.LogError(ex,
                 "Failed to dispatch chat bot alert for delivery {DeliveryId} via {ChannelType}",
