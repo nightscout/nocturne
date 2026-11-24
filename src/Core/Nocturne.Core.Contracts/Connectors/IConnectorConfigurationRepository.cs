@@ -5,13 +5,13 @@ namespace Nocturne.Core.Contracts.Connectors;
 
 /// <summary>
 /// Stores each tenant's connector configurations: the configuration and its encrypted secrets, the
-/// health a sync reports, the incremental-sync cursors and the backfill low-water marks. A connector
+/// health a sync reports, and the two slots of connector state (<see cref="ConnectorStateSlots"/>). A connector
 /// name is matched in its canonical spelling (<see cref="ConnectorNames.Canonical"/>).
 /// </summary>
 /// <remarks>
 /// <c>connector_configurations</c> is tenant-scoped, so every method reads and writes the scope's
 /// tenant, except <see cref="ListForTenantAsync"/>. Each write changes only the columns its intent
-/// names, so a health report or a cursor written by a running sync never undoes a configuration save
+/// names, so a health report or state written by a running sync never undoes a configuration save
 /// that lands meanwhile.
 /// </remarks>
 public interface IConnectorConfigurationRepository
@@ -62,41 +62,34 @@ public interface IConnectorConfigurationRepository
         string connectorName, ConnectorHealthUpdate update, CancellationToken ct);
 
     /// <summary>
-    /// The JSON stored under <paramref name="resource"/> in the connector's sync cursors, or null when
-    /// there is none. Stored cursors that are not a JSON object read as empty.
+    /// The JSON stored under <paramref name="key"/> in the connector's vendor state, or null when there
+    /// is none. Vendor state that is not a JSON object reads as empty.
     /// </summary>
-    Task<JsonNode?> GetSyncCursorAsync(string connectorName, string resource, CancellationToken ct);
+    Task<JsonNode?> GetVendorStateAsync(string connectorName, string key, CancellationToken ct);
 
     /// <summary>
-    /// Stores <paramref name="value"/> under <paramref name="resource"/>, leaving the connector's other
-    /// keys; false when the connector has no configuration.
+    /// Stores <paramref name="value"/> under <paramref name="key"/> in the vendor state, leaving the
+    /// connector's other keys; false when the connector has no configuration.
     /// </summary>
-    Task<bool> SetSyncCursorAsync(string connectorName, string resource, JsonNode value, CancellationToken ct);
+    Task<bool> SetVendorStateAsync(string connectorName, string key, JsonNode value, CancellationToken ct);
 
     /// <summary>
-    /// Removes what is stored under <paramref name="resource"/>, leaving the connector's other keys;
-    /// false when the connector has no configuration.
+    /// Removes what is stored under <paramref name="key"/> in the vendor state, leaving the connector's
+    /// other keys; false when the connector has no configuration.
     /// </summary>
-    Task<bool> RemoveSyncCursorAsync(string connectorName, string resource, CancellationToken ct);
+    Task<bool> RemoveVendorStateAsync(string connectorName, string key, CancellationToken ct);
+
+    /// <summary>The connector's resume state, a map of named UTC times; empty when none is held.</summary>
+    Task<IReadOnlyDictionary<string, DateTime>> GetResumeStateAsync(string connectorName, CancellationToken ct);
 
     /// <summary>
-    /// The backfill low-water-mark map, empty when none is held. The configuration is found by
-    /// <paramref name="source"/>, a connector data source (<c>{connector}-connector</c>) or a bare
-    /// connector name.
+    /// Applies <paramref name="changes"/> to the resume state in one statement: a key with a time is
+    /// stored, a key with null removed, and every other key kept. False when the connector has no
+    /// configuration.
     /// </summary>
-    Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken ct);
+    Task<bool> SetResumeStateAsync(
+        string connectorName, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct);
 
-    /// <summary>
-    /// Applies <paramref name="changes"/> to the map in one statement: a key with a time is stored,
-    /// a key with null removed, and every other key kept. False when the source, matched as
-    /// <see cref="GetBackfillLowWaterMarksAsync"/> says, has no configuration.
-    /// </summary>
-    Task<bool> SetBackfillLowWaterMarksAsync(
-        string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct);
-
-    /// <summary>
-    /// Removes the whole map; false when the source, matched as
-    /// <see cref="GetBackfillLowWaterMarksAsync"/> says, has no configuration.
-    /// </summary>
-    Task<bool> ClearBackfillLowWaterMarksAsync(string source, CancellationToken ct);
+    /// <summary>Empties the named slots; false when the connector has no configuration.</summary>
+    Task<bool> ClearStateAsync(string connectorName, ConnectorStateSlots slots, CancellationToken ct);
 }

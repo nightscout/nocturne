@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -903,9 +904,12 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <remarks>
-    /// The connector's crawl state goes with its data: a resume point it kept would answer the next
+    /// The connector's resume state goes with its data: a resume point it kept would answer the next
     /// sync's re-import with only what arrived since, and report that as a success. It is cleared
-    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import.
+    /// first, so a purge that fails partway costs a full crawl rather than a narrowed re-import. A
+    /// purge that allows re-import clears the vendor state too, for the same reason: a vendor cursor
+    /// or a fingerprint of what was published (Glooko's SSV2 positions, Tandem's profiles) would
+    /// answer the re-import with only what changed since.
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteConnectorSourceDataAsync(
         ConnectorMetadataService.ConnectorDisplayInfo metadata,
@@ -913,7 +917,8 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken
     )
     {
-        await _configurations.ClearBackfillLowWaterMarksAsync(metadata.DataSourceId, cancellationToken);
+        await _configurations.ClearStateAsync(
+            metadata.ConnectorName, PurgeClears(metadata.ConnectorName, allowReimport), cancellationToken);
 
         var deletedCounts = await DeleteAllAsync(RecordSelector.ForSource(metadata.DataSourceId), allowReimport, cancellationToken);
         foreach (var purge in PurgesOf(metadata))
@@ -924,6 +929,15 @@ public class DataSourceService : IDataSourceService
 
         return deletedCounts;
     }
+
+    /// <remarks>
+    /// GoogleHealth keeps its vendor state on every purge: its row's vendor state also holds its sync
+    /// coordinator's progress and disconnect keys, which a purge must not drop.
+    /// </remarks>
+    private static ConnectorStateSlots PurgeClears(string connectorName, bool allowReimport) =>
+        allowReimport && !connectorName.Equals(GoogleHealthConnectorService.ConnectorName, StringComparison.OrdinalIgnoreCase)
+            ? ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor
+            : ConnectorStateSlots.Resume;
 
     private IEnumerable<IConnectorDataPurge> PurgesOf(ConnectorMetadataService.ConnectorDisplayInfo metadata) =>
         _dataPurges.Where(p => p.ConnectorName.Equals(metadata.ConnectorName, StringComparison.OrdinalIgnoreCase));

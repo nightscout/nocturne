@@ -134,6 +134,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         TConfig config,
         CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config, cancellationToken);
 
+    /// <inheritdoc />
+    protected override bool SignsInBeforeSync => true;
+
     private static readonly SyncDataType[] TreatmentTypes =
     [
         SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
@@ -188,7 +191,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             try
             {
-                var glucoseFrom = await GlucoseFromAsync(request, "Glucose");
+                var glucoseFrom = await GlucoseFromAsync(request, "Glucose", cancellationToken);
                 var recent = openEnded && glucoseFrom is { } crawlFrom
                     ? new RecentRecords<Entry>(crawlFrom - RecentReconcileWindow, Full: false, EntryTime)
                     : null;
@@ -198,7 +201,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchGlucosePagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: EntryTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, glucoseFrom!.Value, config, cancellationToken));
@@ -220,12 +224,12 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
                 // with none stored it is this connector's own open InitialSyncFloor.
                 var treatmentFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments), cancellationToken))
                     : request.From;
 
                 var now = Clock.GetUtcNow().UtcDateTime;
                 var recent = openEnded && treatmentFrom is { } crawlFrom
-                    ? await RecentTreatmentsForAsync(crawlFrom, now)
+                    ? await RecentTreatmentsForAsync(crawlFrom, now, cancellationToken)
                     : null;
 
                 var outcome = await CrawlAndPublishAsync(
@@ -233,14 +237,15 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     (from, to) => FetchTreatmentPagesAsync(Floored(from), to, recent, cancellationToken),
                     timeOf: t => ParseCreatedAt(t.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishInBatchesAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                 {
                     var reconciled = await ReconcileRecentTreatmentsAsync(recent, treatmentFrom!.Value, config, cancellationToken);
                     outcome = outcome.Plus(reconciled);
                     if (reconciled.Success && recent.Full)
-                        await RecordFullReconcileAsync(now);
+                        await RecordFullReconcileAsync(now, cancellationToken);
                 }
 
                 foreach (var treatmentType in TreatmentTypes.Where(activeTypes.Contains))
@@ -271,7 +276,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus), cancellationToken))
                     : request.From;
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
@@ -286,7 +291,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         observe: page => recent?.Collect(page)),
                     timeOf: d => ParseCreatedAt(d.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, deviceStatusFrom!.Value, config, cancellationToken));
@@ -318,7 +324,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var activityFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity)))
+                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity), cancellationToken))
                     : request.From;
 
                 var recent = openEnded && activityFrom is { } crawlFrom
@@ -333,7 +339,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         observe: page => recent?.Collect(page)),
                     timeOf: a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime,
                     publishAsync: p => PublishByRouteAsync(p, config, cancellationToken),
-                    config.MaxCount);
+                    config.MaxCount,
+                    cancellationToken);
 
                 if (recent is not null && outcome.Success)
                     outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value, config, cancellationToken));
@@ -527,15 +534,20 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static readonly TimeSpan FullReconcileEvery = TimeSpan.FromHours(1);
 
     /// <summary>
-    ///     The connector-metadata key the last full reconcile's time is kept under. It shares the
-    ///     per-collection timestamp map with the backfill low-water marks, the only durable
-    ///     per-connector timestamp store there is, and no collection is named this.
+    ///     The resume-state key the last full reconcile's time is kept under. No crawled collection is
+    ///     named this.
     /// </summary>
     private const string FullReconcileKey = "TreatmentsFullReconcile";
 
-    private Task<DateTime?> LastFullReconcileAsync() => GetBackfillLowWaterMarkAsync(FullReconcileKey);
+    /// <remarks>The reconcile stamp schedules the treatment batch, which every treatment type shares.</remarks>
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [FullReconcileKey] = TreatmentTypes };
 
-    private Task RecordFullReconcileAsync(DateTime at) => SetBackfillLowWaterMarkAsync(FullReconcileKey, at);
+    private Task<DateTime?> LastFullReconcileAsync(CancellationToken cancellationToken) =>
+        ResumeStampAsync(FullReconcileKey, cancellationToken);
+
+    private Task RecordFullReconcileAsync(DateTime at, CancellationToken cancellationToken) =>
+        SetResumeStampAsync(FullReconcileKey, at, cancellationToken);
 
     /// <summary>
     ///     How much further back than the window the read reaches, and how far either side of a
@@ -616,9 +628,10 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     <see cref="FullReconcileEvery"/> has passed since the last full one, otherwise
     ///     <see cref="RecentReconcileWindow"/> below the crawl's resume point.
     /// </summary>
-    private async Task<RecentRecords<Treatment>> RecentTreatmentsForAsync(DateTime crawlFrom, DateTime now)
+    private async Task<RecentRecords<Treatment>> RecentTreatmentsForAsync(
+        DateTime crawlFrom, DateTime now, CancellationToken cancellationToken)
     {
-        var lastFull = await LastFullReconcileAsync();
+        var lastFull = await LastFullReconcileAsync(cancellationToken);
         return lastFull is { } last && last <= now && now - last < FullReconcileEvery
             ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime)
             : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime);

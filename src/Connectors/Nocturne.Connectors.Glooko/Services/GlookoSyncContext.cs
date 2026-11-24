@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
+using Nocturne.Connectors.Glooko.Models;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -70,7 +71,7 @@ internal sealed class GlookoSyncContext
     ///     The SSV2 resume cursors this run's scans reached, by resource, awaiting the publish of the
     ///     records fetched under them.
     /// </summary>
-    internal Dictionary<string, ConnectorSyncCursor> PendingSsv2Cursors { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, GlookoSsv2Cursor> PendingSsv2Cursors { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Meter units from the V3 profile; fetched once per run.</summary>
     internal string? MeterUnits { get; set; }

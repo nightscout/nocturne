@@ -275,6 +275,7 @@ public sealed class GoogleHealthConnectorService(
 
             await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var session = await sessions.RefreshAsync(config, force: false, cancellationToken);
+            await SignedInAsync(config, cancellationToken);
             var active = selected
                 .Where(type => session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
                 .ToArray();

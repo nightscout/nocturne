@@ -1454,10 +1454,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("BackfillLowWaterMarks")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("backfill_low_water_marks");
-
                     b.Property<string>("ConfigurationJson")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -1499,6 +1495,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("modified_by");
 
+                    b.Property<string>("ResumeStateJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("backfill_low_water_marks");
+
                     b.Property<int>("SchemaVersion")
                         .HasColumnType("integer")
                         .HasColumnName("schema_version");
@@ -1507,10 +1507,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("secrets");
-
-                    b.Property<string>("SyncCursorsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("sync_cursors");
 
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1527,6 +1523,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("VendorStateJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("sync_cursors");
 
                     b.HasKey("Id");
 

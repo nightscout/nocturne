@@ -315,11 +315,6 @@ export const connectorPropertyMeta = {
     description: 'How many days back each sync reaches',
     category: 'Sync',
   },
-  LastFullWalkAt: {
-    label: 'Last full walk',
-    description: 'When the diary was last read back to its first entry',
-    category: 'Advanced',
-  },
 
   // CareLink-specific
   CountryCode: {

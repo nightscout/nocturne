@@ -32,7 +32,7 @@ public class ConnectionService(
     ITenantMembershipRepository members,
     ISubjectRepository subjects,
     ITenantAccessor tenant,
-    IConnectorSyncCursorStore cursors,
+    IConnectorStateStore connectorState,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
@@ -308,7 +308,10 @@ public class ConnectionService(
         if (!status.HasDatabaseConfig)
             return null;
 
-        var stored = await cursors.GetJsonAsync(status.Id, ConnectorTimeZone.CursorResource, ct);
+        if (ConnectorMetadataService.GetByConnectorId(status.Id)?.DataSourceId is not { Length: > 0 } source)
+            return null;
+
+        var stored = await connectorState.VendorAsync(source, ConnectorTimeZone.VendorStateKey, ct);
         return ConnectorTimeZone.FromStored(stored);
     }
 

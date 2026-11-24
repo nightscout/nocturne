@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -51,8 +52,8 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
             ConnectorName = connectorName,
             ConfigurationJson = """{"url":"https://example.com"}""",
             SecretsJson = """{"apiSecret":"sealed"}""",
-            SyncCursorsJson = syncCursors,
-            BackfillLowWaterMarks = marks,
+            VendorStateJson = syncCursors,
+            ResumeStateJson = marks,
         });
         db.SaveChanges();
     }
@@ -271,18 +272,18 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
     {
         Seed("glooko", syncCursors: """{"health":{"LastGuid":"kept"}}""");
 
-        (await Configurations().SetSyncCursorAsync("Glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g1"}""")!, CancellationToken.None))
+        (await Configurations().SetVendorStateAsync("Glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g1"}""")!, CancellationToken.None))
             .Should().BeTrue();
 
-        (await Configurations().GetSyncCursorAsync("glooko", "cgm", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
+        (await Configurations().GetVendorStateAsync("glooko", "cgm", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
             .Should().Be("g1");
-        (await Configurations().GetSyncCursorAsync("glooko", "health", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
+        (await Configurations().GetVendorStateAsync("glooko", "health", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
             .Should().Be("kept");
 
-        (await Configurations().RemoveSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeTrue();
+        (await Configurations().RemoveVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeTrue();
 
-        (await Configurations().GetSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
-        JsonNode.Parse(Row("glooko").SyncCursorsJson!)!.AsObject().Select(p => p.Key).Should().Equal("health");
+        (await Configurations().GetVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
+        JsonNode.Parse(Row("glooko").VendorStateJson!)!.AsObject().Select(p => p.Key).Should().Equal("health");
     }
 
     [Theory]
@@ -293,10 +294,10 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
     {
         Seed("glooko", syncCursors: stored);
 
-        (await Configurations().GetSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
-        await Configurations().SetSyncCursorAsync("glooko", "cgm", JsonValue.Create(7), CancellationToken.None);
+        (await Configurations().GetVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
+        await Configurations().SetVendorStateAsync("glooko", "cgm", JsonValue.Create(7), CancellationToken.None);
 
-        Row("glooko").SyncCursorsJson.Should().Be("""{"cgm":7}""");
+        Row("glooko").VendorStateJson.Should().Be("""{"cgm":7}""");
     }
 
     [Fact]
@@ -304,59 +305,72 @@ public class ConnectorConfigurationRepositoryTests : IDisposable
     {
         Seed("glooko", _otherTenant);
 
-        (await Configurations().SetSyncCursorAsync("glooko", "cgm", JsonValue.Create(1), CancellationToken.None)).Should().BeFalse();
-        (await Configurations().RemoveSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeFalse();
-        (await Configurations().GetSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
-        Row("glooko", _otherTenant).SyncCursorsJson.Should().BeNull();
+        (await Configurations().SetVendorStateAsync("glooko", "cgm", JsonValue.Create(1), CancellationToken.None)).Should().BeFalse();
+        (await Configurations().RemoveVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeFalse();
+        (await Configurations().GetVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeNull();
+        Row("glooko", _otherTenant).VendorStateJson.Should().BeNull();
     }
 
     [Fact]
-    public async Task ALowWaterMarkIsKeptPerCollectionThroughTheConnectorSourceName()
+    public async Task ResumeStateIsKeptPerKeyUnderTheConnectorName()
     {
         Seed("nightscout");
         var glucose = new DateTime(2024, 6, 1, 12, 30, 15, DateTimeKind.Utc);
         var treatments = new DateTime(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        (await SetMarkAsync(Configurations(), "nightscout-connector", "Glucose", glucose))
+        (await SetMarkAsync(Configurations(), "nightscout", "Glucose", glucose))
             .Should().BeTrue();
         await SetMarkAsync(Configurations(), "Nightscout", "Treatments", treatments);
 
-        var read = await GetMarkAsync(Configurations(), "nightscout-connector", "Glucose");
+        var read = await GetMarkAsync(Configurations(), "nightscout", "Glucose");
         read.Should().Be(glucose);
         read!.Value.Kind.Should().Be(DateTimeKind.Utc);
         (await GetMarkAsync(Configurations(), "nightscout", "Treatments")).Should().Be(treatments);
 
-        await SetMarkAsync(Configurations(), "nightscout-connector", "Glucose", null);
-        (await GetMarkAsync(Configurations(), "nightscout-connector", "Glucose")).Should().BeNull();
-        (await GetMarkAsync(Configurations(), "nightscout-connector", "Treatments")).Should().Be(treatments);
+        await SetMarkAsync(Configurations(), "nightscout", "Glucose", null);
+        (await GetMarkAsync(Configurations(), "nightscout", "Glucose")).Should().BeNull();
+        (await GetMarkAsync(Configurations(), "nightscout", "Treatments")).Should().Be(treatments);
 
-        await SetMarkAsync(Configurations(), "nightscout-connector", "Treatments", null);
-        Row("nightscout").BackfillLowWaterMarks.Should().BeNull("the last mark removed leaves no map");
+        await SetMarkAsync(Configurations(), "nightscout", "Treatments", null);
+        Row("nightscout").ResumeStateJson.Should().BeNull("the last key removed leaves no map");
     }
 
     [Fact]
-    public async Task ALowWaterMarkReachesAConnectorWhoseSourceNameIsHyphenated()
+    public async Task ResumeStateForAConnectorWithNoConfigurationReportsIt()
     {
-        Seed("nocturneremote");
-        var mark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        (await SetMarkAsync(Configurations(), "nocturne-remote-connector", "DeviceStatus", mark))
-            .Should().BeTrue();
-        (await GetMarkAsync(Configurations(), "nocturne-remote-connector", "DeviceStatus"))
-            .Should().Be(mark);
-    }
-
-    [Fact]
-    public async Task ALowWaterMarkForASourceWithNoConfigurationReportsIt()
-    {
-        (await SetMarkAsync(Configurations(), "dexcom-connector", "Glucose", DateTime.UtcNow))
+        (await SetMarkAsync(Configurations(), "dexcom", "Glucose", DateTime.UtcNow))
             .Should().BeFalse();
-        (await GetMarkAsync(Configurations(), "dexcom-connector", "Glucose")).Should().BeNull();
+        (await GetMarkAsync(Configurations(), "dexcom", "Glucose")).Should().BeNull();
     }
 
-    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key, DateTime? mark) =>
-        configurations.SetBackfillLowWaterMarksAsync(source, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
+    [Theory]
+    [InlineData(ConnectorStateSlots.Resume, null, """{"cgm":1}""")]
+    [InlineData(ConnectorStateSlots.Vendor, """{"Glucose":"2024-06-01T00:00:00Z"}""", null)]
+    [InlineData(ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor, null, null)]
+    public async Task ClearingStateNullsOnlyTheSlotsNamed(
+        ConnectorStateSlots slots, string? resumeAfter, string? vendorAfter)
+    {
+        Seed("glooko", syncCursors: """{"cgm":1}""", marks: """{"Glucose":"2024-06-01T00:00:00Z"}""");
 
-    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key) =>
-        (await configurations.GetBackfillLowWaterMarksAsync(source, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
+        (await Configurations().ClearStateAsync("Glooko", slots, CancellationToken.None)).Should().BeTrue();
+
+        Row("glooko").ResumeStateJson.Should().Be(resumeAfter);
+        Row("glooko").VendorStateJson.Should().Be(vendorAfter);
+    }
+
+    [Fact]
+    public async Task ClearingStateForAConnectorWithNoConfigurationReportsIt()
+    {
+        Seed("glooko", _otherTenant, marks: """{"Glucose":"2024-06-01T00:00:00Z"}""");
+
+        (await Configurations().ClearStateAsync("glooko", ConnectorStateSlots.Resume, CancellationToken.None))
+            .Should().BeFalse();
+        Row("glooko", _otherTenant).ResumeStateJson.Should().NotBeNull();
+    }
+
+    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string connector, string key, DateTime? mark) =>
+        configurations.SetResumeStateAsync(connector, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
+
+    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string connector, string key) =>
+        (await configurations.GetResumeStateAsync(connector, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
 }

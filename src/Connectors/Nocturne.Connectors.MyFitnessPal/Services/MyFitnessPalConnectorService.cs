@@ -51,6 +51,10 @@ public class MyFitnessPalConnectorService
     public override string ServiceName => "MyFitnessPal";
 
     /// <inheritdoc />
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [MyFitnessPalConstants.FullWalkStamp] = [SyncDataType.Food] };
+
+    /// <inheritdoc />
     protected override bool NeedsSignIn(SyncRequest request, MyFitnessPalConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Food);
 
@@ -72,9 +76,6 @@ public class MyFitnessPalConnectorService
             return result;
         }
 
-        if (!await ApplySessionAsync(config, session, cancellationToken))
-            return AuthenticationFailedResult();
-
         // The food diary has no stored record to resume from, so a run with no lower bound, the
         // scheduled one included, reads the diary's own window. The request carries UTC instants;
         // pin the kind so the window is not reinterpreted as local.
@@ -88,7 +89,7 @@ public class MyFitnessPalConnectorService
             ? AsUtc(request.To.Value)
             : AsUtc(Clock.GetUtcNow().UtcDateTime.AddDays(1));
 
-        var walkToEnd = IsFullWalkDue(config);
+        var walkToEnd = await IsFullWalkDueAsync(cancellationToken);
         var read = await FetchDiaryAsync(config, from, walkToEnd, cancellationToken);
         if (read == null)
         {
@@ -114,10 +115,7 @@ public class MyFitnessPalConnectorService
             // Record the walk only once it has been acted on, so a run that failed before
             // reconciling is retried rather than counting against the schedule.
             if (read.WalkedEntireDiary)
-            {
-                config.LastFullWalkAt = FullWalkSchedule.Stamp(Clock.GetUtcNow());
-                await PersistSecretsIfChangedAsync(config, cancellationToken);
-            }
+                await SetResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, Clock.GetUtcNow().UtcDateTime, cancellationToken);
         }
 
         return result;
@@ -135,17 +133,19 @@ public class MyFitnessPalConnectorService
     /// </summary>
     /// <remarks>
     /// Withdrawing an entry requires proof it is gone, and only a read that reached the first entry
-    /// provides it. An unset or unparseable timestamp walks — a connector that has never completed
-    /// one has never reconciled.
+    /// provides it. A connector with no stamp walks: one that has never completed a walk has never
+    /// reconciled.
     /// </remarks>
-    public bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config) =>
+    public async Task<bool> IsFullWalkDueAsync(CancellationToken cancellationToken) =>
         FullWalkSchedule.IsDue(
-            config.LastFullWalkAt, MyFitnessPalConstants.FullWalkInterval, Clock.GetUtcNow());
+            await ResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, cancellationToken),
+            MyFitnessPalConstants.FullWalkInterval,
+            Clock.GetUtcNow());
 
     /// <summary>
-    /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.
+    /// Takes the session and the MyFitnessPal user id the GraphQL API requires.
     /// </summary>
-    private async Task<bool> ApplySessionAsync(
+    protected override async Task<bool> CompleteSignInAsync(
         MyFitnessPalConnectorConfiguration config,
         TokenSession session,
         CancellationToken cancellationToken)
@@ -568,14 +568,13 @@ public class MyFitnessPalConnectorService
     {
         try
         {
-            // The secrets document doubles as the connector's runtime state, as the derived user id
-            // already does: MergeSecretsAsync merges, whereas writing configuration back from a
-            // background sync would replace the document the user edits.
+            // The derived user id is kept in the secrets document: MergeSecretsAsync merges, whereas
+            // writing configuration back from a background sync would replace the document the user
+            // edits.
             var updates = new Dictionary<string, string?>
             {
                 ["refreshToken"] = config.RefreshToken,
                 ["userId"] = config.UserId,
-                ["lastFullWalkAt"] = config.LastFullWalkAt,
             };
 
             if (await _configService.MergeSecretsAsync("MyFitnessPal", updates, _logger, cancellationToken))

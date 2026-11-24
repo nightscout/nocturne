@@ -6,7 +6,7 @@ using Nocturne.Core.Contracts.Connectors;
 namespace Nocturne.API.Services.Connectors;
 
 /// <summary>
-///     <see cref="IConnectorSyncCursorStore"/> over the sync cursors of the scope tenant's connector
+///     <see cref="IConnectorSyncCursorStore"/> over the vendor state of the scope tenant's connector
 ///     configurations (<see cref="IConnectorConfigurationRepository"/>), keyed by resource name.
 /// </summary>
 public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
@@ -38,13 +38,13 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
     /// <inheritdoc />
     public Task<JsonNode?> GetJsonAsync(
         string connectorName, string resource, CancellationToken cancellationToken = default) =>
-        _configurations.GetSyncCursorAsync(connectorName, resource, cancellationToken);
+        _configurations.GetVendorStateAsync(connectorName, resource, cancellationToken);
 
     /// <inheritdoc />
     public async Task SetJsonAsync(
         string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default)
     {
-        if (!await _configurations.SetSyncCursorAsync(connectorName, resource, value, cancellationToken))
+        if (!await _configurations.SetVendorStateAsync(connectorName, resource, value, cancellationToken))
             LogMissing(connectorName);
     }
 
@@ -52,7 +52,7 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
     public async Task RemoveAsync(
         string connectorName, string resource, CancellationToken cancellationToken = default)
     {
-        if (!await _configurations.RemoveSyncCursorAsync(connectorName, resource, cancellationToken))
+        if (!await _configurations.RemoveVendorStateAsync(connectorName, resource, cancellationToken))
             LogMissing(connectorName);
     }
 

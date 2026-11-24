@@ -2,7 +2,6 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -16,6 +15,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -41,55 +41,13 @@ internal static class GlookoSyncHarness
         PublishKind? rejected = null,
         IConnectorPublisher? publisher = null,
         StaticGlookoTokenProvider? tokenProvider = null,
-        IConnectorSyncCursorStore? cursorStore = null,
+        IConnectorStateStore? state = null,
         TimeProvider? clock = null,
         TimeSpan? endpointPause = null,
         IMealMatchLinker? mealMatchLinker = null,
         ILogger<GlookoConnectorService>? logger = null) =>
         new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(clock), rejected, publisher,
-            cursorStore, clock, endpointPause ?? TimeSpan.Zero, mealMatchLinker, logger);
-}
-
-/// <summary>
-/// Remembers what the sync persists between runs, standing in for the tenant's stored cursors.
-/// </summary>
-internal sealed class FakeCursorStore : IConnectorSyncCursorStore
-{
-    public Dictionary<string, ConnectorSyncCursor> Saved { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>Observes each write as it happens, for tests that care when a stamp lands.</summary>
-    public Action<string>? OnSet { get; init; }
-
-    /// <summary>Runs before each read, to fault it.</summary>
-    public Action<CancellationToken>? BeforeGet { get; init; }
-
-    /// <summary>Runs before each write, to fault it.</summary>
-    public Action<CancellationToken>? BeforeSet { get; init; }
-
-    public Task<ConnectorSyncCursor?> GetAsync(
-        string connectorName, string resource, CancellationToken ct = default)
-    {
-        BeforeGet?.Invoke(ct);
-        return Task.FromResult(Saved.TryGetValue(resource, out var cursor) ? cursor : null);
-    }
-
-    public Task SetAsync(
-        string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken ct = default)
-    {
-        BeforeSet?.Invoke(ct);
-        Saved[resource] = cursor;
-        OnSet?.Invoke(resource);
-        return Task.CompletedTask;
-    }
-
-    public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
-
-    public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
-
-    public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
+            state, clock, endpointPause ?? TimeSpan.Zero, mealMatchLinker, logger);
 }
 
 /// <summary>How Glooko answers a request whose session has expired.</summary>
@@ -125,18 +83,18 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 {
     public RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, PublishKind? rejected,
-        IConnectorPublisher? publisher = null, IConnectorSyncCursorStore? cursorStore = null,
+        IConnectorPublisher? publisher = null, IConnectorStateStore? state = null,
         TimeProvider? clock = null, TimeSpan endpointPause = default,
         IMealMatchLinker? mealMatchLinker = null,
         ILogger<GlookoConnectorService>? logger = null)
-        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected), cursorStore, clock,
+        : this(httpClient, tokenProvider, new InterceptingPublisher(publisher, rejected, state), clock,
             endpointPause, mealMatchLinker, logger)
     {
     }
 
     private RecordingGlookoConnectorService(
         HttpClient httpClient, GlookoAuthTokenProvider tokenProvider, InterceptingPublisher publisher,
-        IConnectorSyncCursorStore? cursorStore, TimeProvider? clock, TimeSpan endpointPause,
+        TimeProvider? clock, TimeSpan endpointPause,
         IMealMatchLinker? mealMatchLinker, ILogger<GlookoConnectorService>? logger)
         : base(
             httpClient,
@@ -146,7 +104,6 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
             tokenProvider,
             publisher,
             mealMatchLinker: mealMatchLinker,
-            cursorStore: cursorStore,
             timeProvider: clock,
             endpointPause: endpointPause)
     {
@@ -170,8 +127,12 @@ internal sealed class MessageLogger<T> : ILogger<T>
         Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
 }
 
-/// <summary>Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.</summary>
-internal sealed class InterceptingPublisher(IConnectorPublisher? inner, PublishKind? rejected) : IConnectorPublisher
+/// <summary>
+/// Stands in for the tenant's publisher, recording the publishes <see cref="PublishKind"/> names.
+/// Its state store is the one the test supplied, else the inner publisher's, else an empty one.
+/// </summary>
+internal sealed class InterceptingPublisher(
+    IConnectorPublisher? inner, PublishKind? rejected, IConnectorStateStore? state = null) : IConnectorPublisher
 {
     private static readonly Dictionary<string, PublishKind> Kinds = new()
     {
@@ -194,6 +155,8 @@ internal sealed class InterceptingPublisher(IConnectorPublisher? inner, PublishK
     public IDevicePublisher Device => Wrap(inner?.Device);
 
     public IMetadataPublisher Metadata => Wrap(inner?.Metadata);
+
+    public IConnectorStateStore State { get; } = state ?? inner?.State ?? new InMemoryConnectorStateStore();
 
     public int SkippedDeleted => inner?.SkippedDeleted ?? 0;
 
@@ -243,7 +206,8 @@ internal sealed class InterceptingPublisher(IConnectorPublisher? inner, PublishK
 }
 
 /// <summary>
-/// Issues a fixed session cookie and patient code, standing in for a completed Glooko login.
+/// Issues a fixed session cookie and patient code, standing in for a completed Glooko login, or
+/// refuses every sign-in when built to.
 /// </summary>
 internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 {
@@ -254,8 +218,9 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
     public static string CookieFor(int login) => $"_logbook-web_session=sess{login}";
 
     private readonly TimeProvider _clock;
+    private readonly bool _refuses;
 
-    public StaticGlookoTokenProvider(TimeProvider? clock = null)
+    public StaticGlookoTokenProvider(TimeProvider? clock = null, bool refuses = false)
         : base(
             new HttpClient(),
             new ConnectorTokenCache(clock),
@@ -266,12 +231,19 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
             clock)
     {
         _clock = clock ?? TimeProvider.System;
+        _refuses = refuses;
     }
 
     protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {
         AcquireCount++;
+        if (_refuses)
+        {
+            RecordSignInRefused();
+            return Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
+                (null, _clock.GetUtcNow().UtcDateTime, null));
+        }
 
         var cookie = CookieFor(AcquireCount);
         var userData = JsonSerializer.Serialize(

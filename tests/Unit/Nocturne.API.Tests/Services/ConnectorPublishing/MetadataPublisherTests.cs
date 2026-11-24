@@ -80,7 +80,6 @@ public class MetadataPublisherTests
             _mockTenantOwnerResolver.Object,
             _mockTenantAccessor.Object,
             new ActivityDedupRepository(contexts),
-            new ConnectorConfigurationRepository(contexts),
             Mock.Of<IProfileActivationRepository>(),
             new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
