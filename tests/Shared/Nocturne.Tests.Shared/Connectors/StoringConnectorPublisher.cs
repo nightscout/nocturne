@@ -134,6 +134,7 @@ public sealed class StoringConnectorPublisher(IConnectorStateStore? state = null
     public Task<bool> PublishBasalInjectionsAsync(IEnumerable<BasalInjection> records, string source, WriteOrigin origin, CancellationToken cancellationToken = default) => Keep(records);
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
     public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken cancellationToken = default) => Task.FromResult<DateTime?>(null);
+    public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(string source, StoredTreatmentKey? after, int limit, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StoredTreatmentKey>>([]);
     public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
     public Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken cancellationToken = default)
     {

@@ -53,6 +53,9 @@ public class NightscoutConnectorPaginationTests
                 .ReturnsAsync(true);
 
             var treatmentMock = new Mock<ITreatmentPublisher>();
+            treatmentMock.Setup(p => p.GetOpenSpanTreatmentsAsync(
+                    It.IsAny<string>(), It.IsAny<StoredTreatmentKey?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
             treatmentMock.Setup(p => p.PublishTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>(

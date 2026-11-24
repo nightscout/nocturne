@@ -16,7 +16,7 @@ using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 
-public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TConfig>
+public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TConfig>
     where TConfig : NightscoutConnectorConfiguration
 {
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
@@ -247,6 +247,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     if (reconciled.Success && recent.Full)
                         await RecordFullReconcileAsync(now, cancellationToken);
                 }
+
+                if (openEnded && outcome.Success)
+                    outcome = outcome.Plus(await RecheckOpenSpansAsync(recent, config, cancellationToken));
 
                 foreach (var treatmentType in TreatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
@@ -567,12 +570,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private const int FewMissing = 3;
 
     /// <summary>
-    ///     Treatments a lookup found upstream although the read missed them, keyed by source URL and
-    ///     id. A treatment the read keeps missing is then looked up once rather than every sync.
+    ///     Treatments looked up by id, keyed by source URL and id, with when each may be looked up
+    ///     again: one a lookup found although the read missed it, an open span read again, or one no
+    ///     lookup could confirm gone. A treatment the read keeps missing then costs one lookup a period,
+    ///     not one a sync.
     /// </summary>
-    private static readonly ConcurrentDictionary<string, DateTime> ConfirmedPresent = new();
+    private static readonly ConcurrentDictionary<string, DateTime> LookedUp = new();
 
-    private static readonly TimeSpan ConfirmedPresentFor = TimeSpan.FromHours(6);
+    private static readonly TimeSpan LookUpAgainAfter = TimeSpan.FromHours(6);
 
     /// <summary>
     ///     What a catch-up's read of one collection returned from <see cref="ReadFrom"/> on, for
@@ -587,8 +592,21 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         public List<T> Records { get; } = [];
 
-        public void Collect(IEnumerable<T> page) =>
-            Records.AddRange(page.Where(r => TimeOf(r) is not { } at || at >= ReadFrom));
+        /// <summary>
+        ///     When set, the id and time of each identified record as the source served it. A publish
+        ///     can rewrite a record's id to the one it is stored under, which the source does not know.
+        /// </summary>
+        public List<(string LegacyId, DateTime At)>? Served { get; init; }
+
+        public void Collect(IEnumerable<T> page)
+        {
+            foreach (var record in page.Where(r => TimeOf(r) is not { } at || at >= ReadFrom))
+            {
+                Records.Add(record);
+                if (Served is not null && record.Id is { Length: > 0 } id && TimeOf(record) is { } at)
+                    Served.Add((id, at));
+            }
+        }
 
         /// <summary>The identified records the crawl from <paramref name="crawledFrom"/> did not publish.</summary>
         public List<T> Uncrawled(DateTime crawledFrom) =>
@@ -633,8 +651,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     {
         var lastFull = await LastFullReconcileAsync(cancellationToken);
         return lastFull is { } last && last <= now && now - last < FullReconcileEvery
-            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime)
-            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime);
+            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime) { Served = [] }
+            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime) { Served = [] };
     }
 
     private static DateTime? TreatmentTime(Treatment treatment) => ParseCreatedAt(treatment.CreatedAt)?.UtcDateTime;
@@ -704,7 +722,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var now = Clock.GetUtcNow().UtcDateTime;
         var stored = await treatments.GetStoredTreatmentIdsAsync(ConnectorSource, windowStart, now, cancellationToken);
         var candidates = stored
-            .Where(s => !read.ContainsKey(s.Key) && !IsConfirmedPresent(s.Key, now))
+            .Where(s => !read.ContainsKey(s.Key) && !LookedUpRecently(s.Key, now))
             .ToList();
 
         if (candidates.Count == 0)
@@ -737,7 +755,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 foreach (var (id, at) in kind)
                 {
                     if (await TreatmentExistsUpstreamAsync(id, at, cancellationToken))
-                        ConfirmedPresent[PresenceKey(id)] = now;
+                        LookedUp[PresenceKey(id)] = now + LookUpAgainAfter;
                     else
                         gone.Add(id);
                 }
@@ -761,15 +779,15 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     private string PresenceKey(string id) => $"{_address?.Base}\n{id}";
 
-    private bool IsConfirmedPresent(string id, DateTime now)
+    private bool LookedUpRecently(string id, DateTime now)
     {
-        foreach (var (key, at) in ConfirmedPresent)
+        foreach (var (key, until) in LookedUp)
         {
-            if (now - at > ConfirmedPresentFor)
-                ConfirmedPresent.TryRemove(key, out _);
+            if (now > until)
+                LookedUp.TryRemove(key, out _);
         }
 
-        return ConfirmedPresent.ContainsKey(PresenceKey(id));
+        return LookedUp.ContainsKey(PresenceKey(id));
     }
 
     /// <summary>
@@ -787,23 +805,40 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     created_at range the treatment can sit in: <paramref name="at"/>, give or take
     ///     <see cref="BackwardTimePager.CreatedAtOffsetEnvelope"/> and <see cref="ReconcileReadMargin"/>.
     /// </summary>
-    private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken)
+    private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        (await FindTreatmentUpstreamAsync(id, at, cancellationToken)).Length > 0;
+
+    /// <summary>
+    ///     The documents <see cref="TreatmentExistsUpstreamAsync"/> finds: those of the first field that
+    ///     names <paramref name="id"/>, or none.
+    /// </summary>
+    private async Task<Treatment[]> FindTreatmentUpstreamAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        IsObjectId(id) && await FindTreatmentByObjectIdAsync(id, at, cancellationToken) is { Length: > 0 } byId
+            ? byId
+            : await FindTreatmentByClientKeysAsync(id, at, cancellationToken);
+
+    /// <summary>The documents <c>find[_id]</c> finds for an ObjectId-shaped <paramref name="id"/>.</summary>
+    private Task<Treatment[]> FindTreatmentByObjectIdAsync(string id, DateTime at, CancellationToken cancellationToken) =>
+        LookUpTreatmentAsync(at, $"&find[_id]={Uri.EscapeDataString(id)}", cancellationToken);
+
+    /// <summary>The documents found by <c>id</c>, else by <c>identifier</c>, as <see cref="TreatmentExistsUpstreamAsync"/> looks.</summary>
+    private async Task<Treatment[]> FindTreatmentByClientKeysAsync(string id, DateTime at, CancellationToken cancellationToken)
     {
-        var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
+        if (await LookUpTreatmentAsync(at, $"&find[id]={Uri.EscapeDataString(id)}", cancellationToken) is { Length: > 0 } byClientId)
+            return byClientId;
+
         string[] identifiers = [.. new[] { id, MongoObjectId.Coerce(id)! }.Distinct(StringComparer.Ordinal)];
-        return (IsObjectId(id) && await AnyAsync($"&find[_id]={Uri.EscapeDataString(id)}"))
-            || await AnyAsync($"&find[id]={Uri.EscapeDataString(id)}")
-            || await AnyAsync(string.Concat(identifiers.Select((value, i) =>
-                $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")));
+        return await LookUpTreatmentAsync(at, string.Concat(identifiers.Select((value, i) =>
+            $"&find[identifier][$in][{i}]={Uri.EscapeDataString(value)}")), cancellationToken);
+    }
 
-        async Task<bool> AnyAsync(string find)
-        {
-            const string operation = "LookUpTreatment";
-            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
+    private async Task<Treatment[]> LookUpTreatmentAsync(DateTime at, string find, CancellationToken cancellationToken)
+    {
+        const string operation = "LookUpTreatment";
+        var reach = BackwardTimePager.CreatedAtOffsetEnvelope + ReconcileReadMargin;
+        var url = BuildCreatedAtUrl("treatments", at - reach, at + reach) + find;
 
-            var found = await FetchDataAsync<Treatment[]>(url, operation, cancellationToken) ?? throw FetchFailed(operation);
-            return found.Length > 0;
-        }
+        return await FetchDataAsync<Treatment[]>(url, operation, cancellationToken) ?? throw FetchFailed(operation);
     }
 
     private static bool IsObjectId(string id) => id.Length == 24 && id.All(char.IsAsciiHexDigit);
