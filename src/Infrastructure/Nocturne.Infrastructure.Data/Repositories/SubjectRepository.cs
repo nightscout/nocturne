@@ -232,28 +232,40 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
         var now = Now;
+        var liveCodes = LiveCodes(db.LoginCodes, now, SetupOwnerRefusedCodePurposes);
         var candidates = db.Subjects.AsNoTracking()
             .ExcludeDemo()
             .Where(s => db.Tenants.Any(t => t.Id == tenantId && t.SetupOwnerSubjectId == s.Id)
                 && !s.IsSystemSubject && s.IsActive
                 && !db.TotpCredentials.Any(t => t.SubjectId == s.Id)
                 && !db.RefreshTokens.Any(t => t.SubjectId == s.Id && t.ExpiresAt > now)
-                && !db.LoginCodes.Any(c => c.SubjectId == s.Id && c.ConsumedAt == null && c.ExpiresAt > now
-                    && SetupOwnerRefusedCodePurposes.Contains(c.Purpose)))
+                && !liveCodes.Any(c => c.SubjectId == s.Id))
             .WithoutSignInFactor(db, _linkRoute, db.SubjectOidcIdentities);
         return ToRecord(await candidates.FirstOrDefaultAsync(ct));
     }
 
+    /// <summary>The codes of <paramref name="purposes"/> neither redeemed nor expired at <paramref name="now"/>.</summary>
+    private static IQueryable<LoginCodeEntity> LiveCodes(
+        IQueryable<LoginCodeEntity> codes, DateTime now, LoginCodePurpose[] purposes) =>
+        codes.Where(c => c.ConsumedAt == null && c.ExpiresAt > now && purposes.Contains(c.Purpose));
+
     /// <summary>
-    /// The login code purposes that let their holder into the account: a recovery code an
-    /// administrator or the operator issued, an emailed recovery link, the recovery session one of
-    /// those starts, and a login code handed to another browser.
+    /// The login code purposes that bring an account with no factor back in: a recovery code an
+    /// administrator or the operator issued, an emailed recovery link, and the recovery session one
+    /// of those starts.
     /// </summary>
-    private static readonly LoginCodePurpose[] SetupOwnerRefusedCodePurposes =
+    private static readonly LoginCodePurpose[] RecoveryCodePurposes =
     [
         LoginCodePurpose.Recovery, LoginCodePurpose.OperatorRecovery,
-        LoginCodePurpose.EmailRecovery, LoginCodePurpose.RecoverySession, LoginCodePurpose.Login,
+        LoginCodePurpose.EmailRecovery, LoginCodePurpose.RecoverySession,
     ];
+
+    /// <summary>
+    /// The login code purposes that let their holder into the account: the recovery purposes, and a
+    /// login code handed to another browser.
+    /// </summary>
+    private static readonly LoginCodePurpose[] SetupOwnerRefusedCodePurposes =
+        [.. RecoveryCodePurposes, LoginCodePurpose.Login];
 
     /// <inheritdoc/>
     public virtual async Task<Guid?> FindDeviceSubjectAsync(CancellationToken ct)
@@ -628,6 +640,76 @@ public class SubjectRepository : ISubjectRepository
 
         await db.SaveChangesAsync(ct);
         return subjects.Count;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> EveryPlatformAdminIsStrandedAsync(CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreatePlatformAsync(ct);
+        return await LoadStrandedPlatformAdminsAsync(db, ct) is { Count: > 0 };
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<Guid>> ReplaceStrandedPlatformAdminsAsync(Guid successorId, CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreatePlatformAsync(ct);
+        if (await LoadStrandedPlatformAdminsAsync(db, ct) is not { Count: > 0 } stranded)
+            return [];
+
+        var successor = await db.Subjects.WhoCanSignIn(db, _linkRoute)
+            .FirstOrDefaultAsync(s => s.Id == successorId, ct);
+        if (successor is null)
+            return [];
+
+        foreach (var subject in stranded)
+            subject.IsPlatformAdmin = false;
+        successor.IsPlatformAdmin = true;
+
+        await db.SaveChangesAsync(ct);
+        return stranded.Select(s => s.Id).ToList();
+    }
+
+    /// <summary>
+    /// The platform admins, tracked, when every one of them is stranded
+    /// (<see cref="ISubjectRepository.ReplaceStrandedPlatformAdminsAsync"/>); empty when there are
+    /// none, null when any is not stranded.
+    /// </summary>
+    private async Task<List<SubjectEntity>?> LoadStrandedPlatformAdminsAsync(NocturneDbContext db, CancellationToken ct)
+    {
+        var admins = db.Subjects.Where(s => s.IsPlatformAdmin);
+        var reachable = admins.WhoCanSignIn(db, _linkRoute, db.SubjectOidcIdentities);
+        if (await reachable.AnyAsync(ct))
+            return null;
+
+        var stranded = await admins.Where(s => !reachable.Any(r => r.Id == s.Id)).ToListAsync(ct);
+        foreach (var codeHolder in stranded.Where(OrphanedSubjectFilter.IsStanding))
+        {
+            if (await HoldsPendingRecoveryAsync(codeHolder.Id, ct))
+                return null;
+        }
+
+        return stranded;
+    }
+
+    /// <summary>
+    /// Whether the subject holds an unredeemed, unexpired recovery code or recovery session on any
+    /// tenant it belongs to. Each tenant is read under its own pin, since a code is tenant-scoped.
+    /// </summary>
+    private async Task<bool> HoldsPendingRecoveryAsync(Guid subjectId, CancellationToken ct)
+    {
+        List<Guid> tenantIds;
+        await using (var memberships = await Pinnable.CreateForSubjectAsync(subjectId, ct))
+            tenantIds = await memberships.TenantMembers.AsNoTracking().TenantIdsOf(subjectId).ToListAsync(ct);
+
+        var now = Now;
+        foreach (var tenantId in tenantIds)
+        {
+            await using var db = await Pinnable.CreateForTenantAsync(tenantId, ct);
+            if (await LiveCodes(db.LoginCodes, now, RecoveryCodePurposes).AnyAsync(c => c.SubjectId == subjectId, ct))
+                return true;
+        }
+
+        return false;
     }
 
     /// <inheritdoc/>

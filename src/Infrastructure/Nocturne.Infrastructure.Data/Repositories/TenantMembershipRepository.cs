@@ -396,6 +396,19 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<Guid>> GetOwnerSubjectIdsWhoCanSignInAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var lease = await OpenForTenantAsync(tenantId, ct);
+        var db = lease.Context;
+        var capable = db.Subjects.WhoCanSignIn(db, _linkRoute);
+        return await db.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Where(m => capable.Any(s => s.Id == m.SubjectId))
+            .Select(m => m.SubjectId)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<string?> GetEarliestOwnerPreferencesAsync(Guid tenantId, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
@@ -742,10 +755,7 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     public virtual async Task<IReadOnlyList<Guid>> ListTenantIdsOfSubjectAsync(Guid subjectId, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateForSubjectAsync(subjectId, ct);
-        return await db.TenantMembers.AsNoTracking()
-            .Where(m => m.SubjectId == subjectId)
-            .Select(m => m.TenantId)
-            .ToListAsync(ct);
+        return await db.TenantMembers.AsNoTracking().TenantIdsOf(subjectId).ToListAsync(ct);
     }
 
     /// <inheritdoc/>

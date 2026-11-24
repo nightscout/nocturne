@@ -73,9 +73,8 @@ public interface ISubjectRepository
     /// recovery code from an administrator or the operator, an emailed recovery link, a recovery
     /// session or a login code handed to another browser, or a confirmed address while a recovery
     /// link can be delivered (<see cref="IAccountLinkRoute"/>). The platform-admin flag is not
-    /// refused: the startup bootstrap (<see cref="GrantPlatformAdminAsync"/>) grants it to the
-    /// oldest tenant's owner whether or not that owner holds a factor, so the recorded subject can
-    /// hold it after a restart.
+    /// refused: a subject granted it by hand, or one that lost its factors after the startup
+    /// bootstrap (<see cref="GrantPlatformAdminAsync"/>) granted it, can hold it.
     /// </para>
     /// </remarks>
     Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct);
@@ -219,6 +218,36 @@ public interface ISubjectRepository
     /// <summary>Grants platform admin to those of <paramref name="subjectIds"/> that exist and returns how many.</summary>
     /// <remarks>On a platform context, as <see cref="AnyPlatformAdminAsync"/> is.</remarks>
     Task<int> GrantPlatformAdminAsync(IReadOnlyCollection<Guid> subjectIds, CancellationToken ct);
+
+    /// <summary>
+    /// Whether platform admins exist and every one of them is stranded, as
+    /// <see cref="ReplaceStrandedPlatformAdminsAsync"/> decides it.
+    /// </summary>
+    /// <remarks>On a platform context, as <see cref="AnyPlatformAdminAsync"/> is.</remarks>
+    Task<bool> EveryPlatformAdminIsStrandedAsync(CancellationToken ct);
+
+    /// <summary>
+    /// When platform admins exist and every one of them is stranded, clears the flag from them and
+    /// grants it to <paramref name="successorId"/>, in one save. Returns the subjects it cleared;
+    /// empty when it changed nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On a platform context, as <see cref="AnyPlatformAdminAsync"/> is. Nothing changes when no
+    /// admin exists, when any admin is not stranded, or when the successor cannot sign in, so the
+    /// instance is never left without an admin who can. Only stranded admins are read for the
+    /// clear, so an admin who can sign in is never cleared, even one granted while this runs.
+    /// </para>
+    /// <para>
+    /// The flag moves on lasting state only. An admin is stranded when it cannot sign in by the
+    /// rule every caller shares (<c>OrphanedSubjectFilter</c>) with every provider identity counted,
+    /// so a provider that is off, or whose issuer changed, does not strand its admins; and when it
+    /// holds no unredeemed, unexpired recovery code or recovery session on any tenant it belongs
+    /// to. A deactivated admin is stranded. The successor must be able to sign in now, so only
+    /// working identities count for it.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<Guid>> ReplaceStrandedPlatformAdminsAsync(Guid successorId, CancellationToken ct);
 
     /// <summary>
     /// Whether the subject is active and whether it holds platform admin; null when there is no
