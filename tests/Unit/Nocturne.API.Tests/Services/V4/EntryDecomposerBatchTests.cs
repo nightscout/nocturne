@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -67,14 +68,13 @@ public class EntryDecomposerBatchTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer(IAuditContext auditContext) =>
-        new(
+        EntryDecomposerDoubles.Build(
             _sgRepoMock.Object,
             _mgRepoMock.Object,
             _calRepoMock.Object,
             _glucoseResolver,
             _stamperMock.Object,
-            auditContext,
-            NullLogger<EntryDecomposer>.Instance);
+            auditContext);
 
     public void Dispose()
     {

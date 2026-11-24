@@ -1,16 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.Services.Alerts;
-using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -19,7 +15,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -64,27 +59,12 @@ public sealed class TreatmentDecomposerSiteAgeEvaluationTests(AlertFactEvaluatio
     private static TreatmentDecomposer Decomposer(IServiceProvider scope, NocturneDbContext db)
     {
         var contexts = scope.GetRequiredService<INocturneDbContextFactory>();
-        return new TreatmentDecomposer(
-            contexts, new DecomposedTreatmentKeys(contexts, TimeProvider.System),
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<ITempBasalRepository>(),
-            Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<IBGCheckRepository>(),
-            Mock.Of<INoteRepository>(),
-            scope.GetRequiredService<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(),
-            Mock.Of<IStateSpanService>(),
-            ProfileActivationTestDeps.Repository(db),
-            ProfileActivationTestDeps.Writer(db),
-            Mock.Of<ITreatmentFoodService>(),
-            new UnresolvedDevices(),
-            Mock.Of<IPatientDeviceStamper>(),
-            new Mock<IActiveProfileResolver>().AnswersInsulinContexts(_ => null).Object,
-            Mock.Of<IPatientInsulinRepository>(),
-            TempBasalTestDeps.Unscheduled(),
-            scope.GetRequiredService<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance,
-            TimeProvider.System,
+        return TreatmentDecomposerDoubles.Build(
+            contexts,
+            deviceEvent: scope.GetRequiredService<IDeviceEventRepository>(),
+            profileActivations: ProfileActivationTestDeps.Repository(db),
+            profileActivationWriter: ProfileActivationTestDeps.Writer(db),
+            audit: scope.GetRequiredService<IAuditContext>(),
             changes: scope.GetRequiredService<IRecordChangePublisher>());
     }
 }

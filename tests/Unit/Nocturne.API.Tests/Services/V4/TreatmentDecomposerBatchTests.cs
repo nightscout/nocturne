@@ -7,7 +7,6 @@ using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
@@ -120,26 +119,21 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
     private TreatmentDecomposer CreateDecomposer(IDeviceService deviceService)
     {
-        return new TreatmentDecomposer(
+        return TreatmentDecomposerDoubles.Build(
             _context.AsFactory(), _keys,
-            _bolusRepoMock.Object,
-            _tempBasalRepoMock.Object,
-            _carbRepoMock.Object,
-            _bgCheckRepoMock.Object,
-            _noteRepoMock.Object,
-            _deviceEventRepoMock.Object,
-            _bolusCalcRepoMock.Object,
-            _stateSpanServiceMock.Object,
-            ProfileActivationTestDeps.Repository(_context),
-            ProfileActivationTestDeps.Writer(_context),
-            _treatmentFoodServiceMock.Object,
-            deviceService,
-            Mock.Of<IPatientDeviceStamper>(),
-            _activeProfileResolverMock.Object,
-            _insulinRepoMock.Object,
-            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
-            Mock.Of<IAuditContext>(),
-            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
+            bolus: _bolusRepoMock.Object,
+            tempBasal: _tempBasalRepoMock.Object,
+            carbIntake: _carbRepoMock.Object,
+            bgCheck: _bgCheckRepoMock.Object,
+            note: _noteRepoMock.Object,
+            deviceEvent: _deviceEventRepoMock.Object,
+            bolusCalculation: _bolusCalcRepoMock.Object,
+            stateSpans: _stateSpanServiceMock.Object,
+            foods: _treatmentFoodServiceMock.Object,
+            devices: deviceService,
+            activeProfiles: _activeProfileResolverMock.Object,
+            insulin: _insulinRepoMock.Object,
+            relativeTempBasalRates: TempBasalTestDeps.Rates(_basalRateResolverMock.Object));
     }
 
     public void Dispose()

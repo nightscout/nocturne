@@ -97,7 +97,7 @@ public class ApsSnapshotCurvesNormalizeTests
             Loop = new LoopStatus(),
             Override = new OverrideStatus { Active = false, Timestamp = "2026-11-16T19:49:17Z" },
         };
-        var decomposed = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(ds, null, null, null)!;
+        var decomposed = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(ds, null, null, null)!;
 
         var posted = await ThroughController(UploadOf(ds, decomposed));
 
@@ -111,7 +111,7 @@ public class ApsSnapshotCurvesNormalizeTests
         var ds = OpenApsStatusWith(
             new OpenApsSuggested { Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120) },
             new OpenApsEnacted { Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120), Rate = 0.8, Received = true });
-        var decomposed = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(ds, null, null, null)!;
+        var decomposed = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(ds, null, null, null)!;
 
         var posted = await ThroughController(UploadOf(ds, decomposed));
 
@@ -126,7 +126,7 @@ public class ApsSnapshotCurvesNormalizeTests
         var ds = OpenApsStatusWith(
             new OpenApsSuggested { Bg = 120, Timestamp = "2023-11-14T12:00:00Z", PredBGs = Curves(120) }, null);
         ds.OpenAps!.Version = "1.0.0";
-        var decomposed = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(ds, null, null, null)!;
+        var decomposed = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(ds, null, null, null)!;
 
         var posted = await ThroughController(UploadOf(ds, decomposed));
 
@@ -141,7 +141,7 @@ public class ApsSnapshotCurvesNormalizeTests
         var ds = OpenApsStatusWith(
             new OpenApsSuggested { Bg = 120, Timestamp = "2023-11-14T12:05:00Z", PredBGs = Curves(120) },
             new OpenApsEnacted { Bg = 119, Timestamp = "2023-11-14T12:00:00Z", Rate = 0.8, Received = true });
-        var decomposed = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(ds, null, null, null)!;
+        var decomposed = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(ds, null, null, null)!;
 
         var posted = await ThroughController(UploadOf(ds, decomposed));
 
@@ -161,7 +161,7 @@ public class ApsSnapshotCurvesNormalizeTests
                 Predicted = new LoopPredicted { StartDate = "2023-11-14T12:00:00Z", Values = [120, 118.5, 116] },
             },
         };
-        var decomposed = DeviceStatusDecomposerDoubles.Mapping().MapToApsSnapshot(ds, null, null, null)!;
+        var decomposed = DeviceStatusDecomposerDoubles.Build().MapToApsSnapshot(ds, null, null, null)!;
 
         var posted = await ThroughController(UploadOf(ds, decomposed));
 
