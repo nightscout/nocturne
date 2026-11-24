@@ -161,7 +161,8 @@ public class NotificationsController : ControllerBase
     /// meal-match <c>dismiss</c> moves a food entry out of Pending, a write
     /// <c>MealMatchingController.DismissMatch</c> gates on <c>food.readwrite</c>, so that handler
     /// declines the write for a caller without it. The meal-match <c>accept</c> is gated the same way, as
-    /// <see cref="Services.NotificationActionHandlers.MealMatchActionHandler"/> states. So the
+    /// <see cref="Services.NotificationActionHandlers.MealMatchActionHandler"/> states, and a refused
+    /// accept answers 403 naming its scope, leaving the notification in place. So the
     /// capability arm is confined here to <see cref="InAppProvider.NotificationType"/>: a caller holding only
     /// <c>device.notify</c> is refused any other notification type, and only a holder of
     /// <c>alerts.readwrite</c> reaches the rest of the dispatch table.
@@ -223,14 +224,19 @@ public class NotificationsController : ControllerBase
             id
         );
 
-        var success = await _notificationService.ExecuteActionAsync(
+        var result = await _notificationService.ExecuteActionAsync(
             id,
             actionId,
             userId,
             HttpContext.RequestAborted
         );
 
-        if (!success)
+        if (result.RefusedScope is { } refusedScope)
+        {
+            return this.ForbiddenForScope(refusedScope);
+        }
+
+        if (!result.Handled)
         {
             return NotFound();
         }
