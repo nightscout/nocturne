@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Auth;
 
@@ -15,6 +16,7 @@ namespace Nocturne.API.Controllers.Authentication;
 [ApiController]
 [Route("api/auth/oidc/apple")]
 [ApiExplorerSettings(IgnoreApi = true)]
+[ErrorEnvelope]
 public class AppleSignInController(
     IOidcAuthService authService,
     AppleNotificationService notifications,

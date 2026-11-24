@@ -310,7 +310,7 @@ public class SetupCompletesOnceIntegrationTests : ApiIntegrationTestBase
         var realOidc = (OidcAuthService)services.GetRequiredService<IOidcAuthService>();
         var provider = await services.GetRequiredService<IOidcProviderService>().GetProviderByIdAsync(_providerId);
         var oidc = new Mock<IOidcAuthService>(MockBehavior.Strict);
-        oidc.Setup(o => o.HandleSetupCallbackAsync(externalId, "state", "state", Fixture.TenantId))
+        oidc.Setup(o => o.HandleSetupCallbackAsync(externalId, "state", "state", Fixture.TenantId, It.IsAny<string?>()))
             .Returns(async () =>
             {
                 if (hold is not null)

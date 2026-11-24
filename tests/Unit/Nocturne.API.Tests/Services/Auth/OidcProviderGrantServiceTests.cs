@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -50,7 +51,7 @@ public class OidcProviderGrantServiceTests : IDisposable
         http.Setup(f => f.CreateClient("OidcProvider")).Returns(() => new HttpClient(_endpoint));
 
         _service = new OidcProviderGrantService(
-            _db.AsFactory(), _providers.Object, http.Object, new EphemeralDataProtectionProvider(),
+            new SubjectRepository(_db.AsFactory(), AccountLinkRoutes.Off), _providers.Object, http.Object, new EphemeralDataProtectionProvider(),
             TimeProvider.System, NullLogger<OidcProviderGrantService>.Instance);
     }
 

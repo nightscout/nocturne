@@ -159,7 +159,9 @@ Oidc__Providers__0__ClientSecret="$(cat AuthKey_F6G7H8I9J0.p8)"
 1. Open your Nocturne login page in a private window.
 2. Click **Sign in with Apple**.
 3. Sign in with your Apple Account. Apple asks if it can share your name and email.
-4. Apple sends you back to Nocturne, and you are signed in.
+4. If that Apple Account already has a Nocturne account, Apple sends you back to Nocturne and you are signed in.
+
+A sign-in with Apple does not create a Nocturne account. See [New accounts and roles](/docs/authentication/oidc#new-accounts-and-roles).
 
 ## When a user leaves
 

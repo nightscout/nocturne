@@ -12,6 +12,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Tests.Services.Auth;
 
 namespace Nocturne.API.Tests.Controllers.Admin;
 
@@ -49,6 +50,7 @@ public class TenantControllerEmailConfirmationTests : IDisposable
             new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
+            new NoProviderGrants(),
             NullLogger<SubjectService>.Instance,
             TimeProvider.System);
 

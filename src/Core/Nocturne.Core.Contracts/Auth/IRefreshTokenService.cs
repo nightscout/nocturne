@@ -79,6 +79,11 @@ public interface IRefreshTokenService
     /// <returns>Number of tokens revoked</returns>
     Task<int> RevokeOtherSessionsForSubjectAsync(Guid subjectId, string currentSessionId, string reason);
 
+    /// <summary>Revoke every session of a subject.</summary>
+    /// <param name="reason">Reason for revocation</param>
+    /// <returns>Number of tokens revoked</returns>
+    Task<int> RevokeAllSessionsForSubjectAsync(Guid subjectId, string reason, CancellationToken ct = default);
+
     /// <param name="refreshToken">Plain refresh token string</param>
     Task UpdateLastUsedAsync(string refreshToken);
 

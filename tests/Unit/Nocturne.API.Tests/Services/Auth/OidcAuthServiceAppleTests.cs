@@ -39,6 +39,8 @@ public class OidcAuthServiceAppleTests
     private readonly Mock<ISubjectService> _subjects = new();
     private readonly Mock<ISessionService> _sessions = new();
     private readonly Mock<IOidcProviderGrantService> _grants = new();
+    private readonly Mock<ITotpService> _totp = new();
+    private readonly Mock<IAuthAuditService> _audit = new();
     private readonly TokenEndpoint _tokenEndpoint = new();
     private readonly OidcAuthService _service;
 
@@ -62,16 +64,22 @@ public class OidcAuthServiceAppleTests
                 RevocationEndpoint = $"{Issuer}/auth/revoke",
             });
 
+        // An existing subject, so a login on a host that resolves no tenant is admitted.
+        var subject = new Nocturne.Core.Models.Authorization.Subject { Id = Guid.NewGuid(), Name = "Someone" };
+        _subjects.Setup(s => s.FindFromOidcAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(subject);
         _subjects
             .Setup(s => s.FindOrCreateFromOidcAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
                 It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
-            .ReturnsAsync(new Nocturne.Core.Models.Authorization.Subject { Id = Guid.NewGuid(), Name = "Someone" });
+            .ReturnsAsync(subject);
         _subjects.Setup(s => s.GetSubjectPermissionsAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         _subjects.Setup(s => s.GetSubjectRolesAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         _sessions
-            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900, Guid.Empty));
+        _totp
+            .Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.NotEnrolled);
 
         var http = new Mock<IHttpClientFactory>();
         http.Setup(f => f.CreateClient("OidcProvider")).Returns(() => new HttpClient(_tokenEndpoint));
@@ -85,7 +93,10 @@ public class OidcAuthServiceAppleTests
             http.Object,
             new Mock<ITenantMemberService>().Object,
             new Mock<IMemberInviteService>().Object,
-            new Mock<ITotpService>().Object,
+            new Mock<ITenantCreationInviteService>().Object,
+            new Mock<ITenantRepository>().Object,
+            new SignInCompletion(_totp.Object, new Mock<ITenantMemberService>().Object,
+                _sessions.Object, _subjects.Object, _audit.Object),
             _grants.Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
@@ -154,6 +165,17 @@ public class OidcAuthServiceAppleTests
 
         url.Should().StartWith("/api/auth/oidc/link/callback?");
         HttpUtility.ParseQueryString(url![url.IndexOf('?')..])["provider_user"].Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Relay_SendsARecoveryLinkToTheLinkCallback()
+    {
+        var request = await _service.GenerateRecoveryLinkAuthorizationUrlAsync(ProviderId, Guid.NewGuid());
+
+        var url = await _service.GetFormPostRelayUrlAsync(request.State, "the-code", null, null);
+
+        url.Should().StartWith("/api/auth/oidc/link/callback?");
     }
 
     [Fact]
@@ -239,6 +261,47 @@ public class OidcAuthServiceAppleTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task Callback_CompletesThroughTheSecondFactorGate_AndStillKeepsTheRefreshToken()
+    {
+        _totp
+            .Setup(t => t.GetSecondFactorRequirementAsync(It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync(SecondFactorRequirement.CodeRequired);
+        _totp
+            .Setup(t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()))
+            .ReturnsAsync("step-up");
+        var request = await _service.GenerateAuthorizationUrlAsync(ProviderId);
+        _tokenEndpoint.Respond(IdToken(request.Nonce!), refreshToken: "apple-refresh");
+
+        var result = await _service.HandleCallbackAsync("the-code", request.State, request.State);
+
+        result.StepUpToken.Should().Be("step-up");
+        _sessions.Verify(s => s.IssueSessionAsync(
+            It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        _grants.Verify(g => g.KeepAsync(
+            It.Is<OidcProvider>(p => p.Id == ProviderId), "001234.apple-user", "apple-refresh", It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RecoveryLinkCallback_KeepsTheRefreshToken()
+    {
+        var subjectId = Guid.NewGuid();
+        _subjects
+            .Setup(s => s.AttachOidcIdentityAsync(
+                subjectId, ProviderId, "001234.apple-user", Issuer, It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((OidcLinkOutcome.Created, (Guid?)Guid.NewGuid()));
+        var request = await _service.GenerateRecoveryLinkAuthorizationUrlAsync(ProviderId, subjectId);
+        _tokenEndpoint.Respond(IdToken(request.Nonce!), refreshToken: "apple-refresh");
+
+        var result = await _service.HandleRecoveryLinkCallbackAsync("the-code", request.State, request.State, subjectId);
+
+        result.Success.Should().BeTrue();
+        _grants.Verify(g => g.KeepAsync(
+            It.Is<OidcProvider>(p => p.Id == ProviderId), "001234.apple-user", "apple-refresh", It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task LoginCallback_RefusesASetupState()
     {
         // Apple has one redirect URI for every flow, so only the intent tells them apart.
@@ -260,7 +323,8 @@ public class OidcAuthServiceAppleTests
     {
         var subjectId = Guid.NewGuid();
         _subjects
-            .Setup(s => s.AttachOidcIdentityAsync(subjectId, ProviderId, "001234.apple-user", Issuer, It.IsAny<string?>()))
+            .Setup(s => s.AttachOidcIdentityAsync(
+                subjectId, ProviderId, "001234.apple-user", Issuer, It.IsAny<string?>(), It.IsAny<bool>()))
             .ReturnsAsync((OidcLinkOutcome.Created, (Guid?)Guid.NewGuid()));
         var request = await _service.GenerateLinkAuthorizationUrlAsync(ProviderId, subjectId);
         _tokenEndpoint.Respond(IdToken(request.Nonce!), refreshToken: "apple-refresh");

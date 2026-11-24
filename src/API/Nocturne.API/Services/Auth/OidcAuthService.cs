@@ -1456,7 +1456,7 @@ public class OidcAuthService : IOidcAuthService
 
         var callbackPath = stateData.Intent switch
         {
-            "link" => LinkCallbackPath,
+            LinkIntent or RecoveryIntent => LinkCallbackPath,
             "setup" => SetupCallbackPath,
             _ => LoginCallbackPath,
         };

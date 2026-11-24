@@ -118,7 +118,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
     private void LinkAnswers(OidcLinkResult result) =>
         _authService
-            .Setup(s => s.HandleRecoveryLinkCallbackAsync("code", RecoveryState, RecoveryState, It.IsAny<Guid>()))
+            .Setup(s => s.HandleRecoveryLinkCallbackAsync("code", RecoveryState, RecoveryState, It.IsAny<Guid>(), It.IsAny<string?>()))
             .ReturnsAsync(result);
 
     private Task<IActionResult> CallbackAsync() => _controller.LinkCallback("code", RecoveryState, null, null);
@@ -222,7 +222,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
         redirect.Should().StartWith($"/api/auth/oidc/login?provider={_providerId}&returnUrl=");
         Uri.UnescapeDataString(redirect[(redirect.IndexOf("returnUrl=", StringComparison.Ordinal) + 10)..])
             .Should().Be($"/settings/account?{OidcController.RecoveryLinkedIdentityParameter}={identityId}");
-        _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync("code", RecoveryState, RecoveryState, _subjectId), Times.Once);
+        _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync("code", RecoveryState, RecoveryState, _subjectId, It.IsAny<string?>()), Times.Once);
         (await IsLiveAsync(session)).Should().BeFalse();
         await using (var db = _db.CreateContext(_tenantId))
             (await _loginCodes.FindLiveAsync(db, adminCode, [LoginCodePurpose.Recovery])).Should().BeNull();
@@ -264,7 +264,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         second.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Once);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -340,10 +340,10 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
         _authService.Verify(s => s.HandleLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(),
-            It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Theory]
@@ -358,7 +358,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
 
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/error").And.EndWith("flow=recovery");
         _authService.Verify(s => s.HandleRecoveryLinkCallbackAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public class OidcControllerRecoveryLinkTests : IDisposable
         result.Should().BeOfType<RedirectResult>().Which.Url.Should().StartWith("/auth/login");
         _authService.Verify(s => s.HandleLinkCallbackAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(),
-            It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Never);
         (await IsLiveAsync(session)).Should().BeTrue();
     }
 

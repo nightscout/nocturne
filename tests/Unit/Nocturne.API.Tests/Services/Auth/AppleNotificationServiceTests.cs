@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -28,7 +29,7 @@ public class AppleNotificationServiceTests : IDisposable
 
     private readonly NocturneDbContext _db = TestDbContextFactory.CreateInMemoryContext();
     private readonly RsaSecurityKey _appleKey = new(RSA.Create(2048)) { KeyId = "apple-key" };
-    private readonly Mock<IFirstPartyTokenRepository> _sessions = new();
+    private readonly Mock<IRefreshTokenService> _sessions = new();
     private readonly Mock<IOidcProviderService> _providers = new();
     private readonly Mock<IOidcConfigurationSource> _configurations = new();
     private readonly AppleNotificationService _service;
@@ -55,10 +56,11 @@ public class AppleNotificationServiceTests : IDisposable
         _configurations.Setup(c => c.GetAsync(Issuer, It.IsAny<CancellationToken>())).ReturnsAsync(configuration);
 
         _service = new AppleNotificationService(
-            _providers.Object, _configurations.Object, _db.AsFactory(), _sessions.Object,
+            _providers.Object, _configurations.Object, new SubjectRepository(_db.AsFactory(), AccountLinkRoutes.Off), _sessions.Object,
             Mock.Of<IAuthAuditService>(), NullLogger<AppleNotificationService>.Instance);
 
         _db.Subjects.Add(new SubjectEntity { Id = _subjectId, Name = "ada", IsActive = true });
+        _db.OidcProviders.Add(new OidcProviderEntity { Id = _providerId, Name = "Apple", ProviderType = "apple", IssuerUrl = Issuer, ClientId = ServicesId });
         _db.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
         {
             Id = Guid.CreateVersion7(),
@@ -107,7 +109,7 @@ public class AppleNotificationServiceTests : IDisposable
         var identity = _db.SubjectOidcIdentities.Single();
         await _db.Entry(identity).ReloadAsync();
         identity.ProviderRefreshTokenEncrypted.Should().BeNull();
-        _sessions.Verify(s => s.RevokeAllForSubjectAsync(_subjectId, It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        _sessions.Verify(s => s.RevokeAllSessionsForSubjectAsync(_subjectId, It.IsAny<string>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
@@ -118,7 +120,7 @@ public class AppleNotificationServiceTests : IDisposable
 
         _db.ChangeTracker.Clear();
         _db.SubjectOidcIdentities.Should().BeEmpty();
-        _sessions.Verify(s => s.RevokeAllForSubjectAsync(_subjectId, It.IsAny<string>(), It.IsAny<CancellationToken>()));
+        _sessions.Verify(s => s.RevokeAllSessionsForSubjectAsync(_subjectId, It.IsAny<string>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
