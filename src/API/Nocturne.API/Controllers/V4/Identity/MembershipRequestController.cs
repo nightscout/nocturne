@@ -116,13 +116,16 @@ public class MembershipRequestController(
         if (subjectId == null)
             return Unauthorized();
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
         var accessEndsAt = HttpContext.InheritAccessEnd(AccessEndRequest.Instant(request.AccessEndsAt));
         if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, time.GetUtcNow().UtcDateTime) is (var status, var detail))
             return Problem(detail: detail, statusCode: status);
 
         var result = await membershipRequestService.ApproveRequestAsync(
-            id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(),
-            accessEndsAt, HttpContext.IsCallerHistoryClamped(), ct);
+            id, tenantId, request.RoleIds, subjectId.Value, ceiling.Scopes,
+            accessEndsAt, ceiling.HistoryClamped, ct);
 
         if (result.Code is { } code)
             return this.ProblemWithCode(code, result.Error, StatusCodes.Status403Forbidden);

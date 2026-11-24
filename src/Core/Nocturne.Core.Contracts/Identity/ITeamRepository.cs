@@ -126,8 +126,9 @@ public interface ITeamRepository
     /// Gives the link's team access to <see cref="TeamAccessGrant.TenantId"/> and takes one use of the
     /// link, as <paramref name="approver"/>. Everything is decided in its own transaction under the
     /// site's owners lock, the team's manager lock and the site's team access lock, from what those
-    /// locks hold still: the link, the approver's live membership of the site (an owner, the scopes it
-    /// resolves to on the credential, its end and its 24-hour limit), and the chosen roles. Refused,
+    /// locks hold still: the link, the approver's live membership of the site (an owner, and what its
+    /// direct reason gives: the scopes it resolves to on the credential, its end and its 24-hour limit,
+    /// never what a team reason beside it gives), and the chosen roles. Refused,
     /// taking no use and writing nothing, on any <see cref="TeamAccessRefusal"/>.
     /// </summary>
     Task<TeamAccessApproval> ApproveAccessAsync(

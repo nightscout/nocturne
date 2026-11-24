@@ -527,8 +527,9 @@ public class ConfigurationController : ControllerBase
 
         try
         {
+            var ceiling = HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing;
             var saver = adopts && await HttpContext.CredentialMakerAsync(ct) is { } maker
-                ? new ConnectorSecretSaver(maker, HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped())
+                ? new ConnectorSecretSaver(maker, ceiling.Scopes, ceiling.HistoryClamped)
                 : null;
             return Ok(await _configService.SaveSecretsAsync(connectorName, secrets, modifiedBy, saver, ct));
         }
