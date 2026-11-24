@@ -124,7 +124,7 @@
       variant: {
         default: { plot: "h-[96px]" },
         nightscout: {
-          plot: "h-[180px] @md:h-[205px] px-0 pb-0",
+          plot: "h-[var(--ns-context-height,180px)] px-0 pb-0",
           range: "bg-transparent border-x-2 border-t-2 border-b-0 border-white rounded-none",
           handle: "bg-transparent hover:bg-transparent",
           axisLabel: "fill-foreground",
