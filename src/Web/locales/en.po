@@ -534,7 +534,7 @@ msgstr "Verification code"
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/ApiTokenCreateDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
@@ -867,7 +867,7 @@ msgstr "Create"
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
@@ -3474,7 +3474,8 @@ msgstr "Error loading recent entries."
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
@@ -4293,6 +4294,7 @@ msgid "Notification"
 msgstr "Notification"
 
 #: src/lib/components/connectors/AddConnectionDialog.svelte
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 msgid "Loading..."
 msgstr "Loading..."
 
@@ -12884,6 +12886,7 @@ msgstr "Grams of carbs per unit of insulin"
 #~ msgid "Insulin Sensitivity (ISF)"
 #~ msgstr "Insulin Sensitivity (ISF)"
 
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 #: src/lib/components/schedule/ProfileSchedules.svelte
 msgid "BG drop per unit of insulin"
 msgstr "BG drop per unit of insulin"
@@ -12891,6 +12894,7 @@ msgstr "BG drop per unit of insulin"
 #~ msgid "Target Range"
 #~ msgstr "Target Range"
 
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
@@ -20161,22 +20165,23 @@ msgstr "Prefer not to say"
 msgid "Sleep sessions, stages, and overnight biometrics"
 msgstr "Sleep sessions, stages, and overnight biometrics"
 
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Every time block needs a start time."
 msgstr "Every time block needs a start time."
 
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Low and high targets must be greater than zero."
 msgstr "Low and high targets must be greater than zero."
 
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Each low target must be below its high target."
 msgstr "Each low target must be below its high target."
 
-#: src/lib/components/schedule/TargetRangeCard.svelte
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
 msgid "Time blocks must have unique start times."
 msgstr "Time blocks must have unique start times."
 
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 msgid "Failed to save target range"
 msgstr "Failed to save target range"
@@ -28042,6 +28047,8 @@ msgstr "Fasting periods, in two-hour blocks. Each figure adds the schedule, the 
 msgid "A higher basal rate means more insulin every hour."
 msgstr "A higher basal rate means more insulin every hour."
 
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 #: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/schedule/ProfileSchedules.svelte
 msgid "Insulin sensitivity (ISF)"
@@ -32190,6 +32197,8 @@ msgid "How far one unit of insulin lowers glucose."
 msgstr "How far one unit of insulin lowers glucose."
 
 #: src/lib/components/alerts/holdText.svelte.ts
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
@@ -48989,3 +48998,44 @@ msgstr "Forecast"
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Use the Nightscout dashboard layout, pills, and chart"
 msgstr "Use the Nightscout dashboard layout, pills, and chart"
+
+#. 0: item?.profileName
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+msgid "Correct the values of {0}"
+msgstr "Correct the values of {0}"
+
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+msgid "The values below are the stored values. They look like mmol/L values stored as mg/dL, about 18 times too small. Enter the correct mg/dL values. Nocturne does not change the values for you."
+msgstr "The values below are the stored values. They look like mmol/L values stored as mg/dL, about 18 times too small. Enter the correct mg/dL values. Nocturne does not change the values for you."
+
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+msgid "Failed to load the schedule"
+msgstr "Failed to load the schedule"
+
+#: src/lib/components/profile/RawMmolScheduleEditDialog.svelte
+msgid "Failed to save insulin sensitivity"
+msgstr "Failed to save insulin sensitivity"
+
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+msgid "Failed to save your answer"
+msgstr "Failed to save your answer"
+
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+msgid "These values are already mg/dL"
+msgstr "These values are already mg/dL"
+
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+msgid "<0/> Edit values"
+msgstr "<0/> Edit values"
+
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+msgid "These values look like mmol/L values stored as mg/dL. Nocturne uses them as mg/dL, so they change insulin and alert calculations. Check each schedule and correct its values."
+msgstr "These values look like mmol/L values stored as mg/dL. Nocturne uses them as mg/dL, so they change insulin and alert calculations. Check each schedule and correct its values."
+
+#: src/lib/components/profile/RawMmolSchedulesAlert.svelte
+msgid "Some profile values look like mmol/L"
+msgstr "Some profile values look like mmol/L"
+
+#: src/lib/components/schedule/GlucoseScheduleEditor.svelte
+msgid "Each value must be greater than zero."
+msgstr "Each value must be greater than zero."
