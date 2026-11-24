@@ -51,7 +51,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
         var link = await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct);
-        link.CallerAccessEndsAt = HttpContext.CallerAccessEndsAt();
+        link.CallerAccessEndsAt = HttpContext.CallerGrantCeiling()?.AccessEndsAt;
         return Ok(link);
     }
 
@@ -71,6 +71,9 @@ public class ShareLinkController : ControllerBase
     {
         if (HttpContext.IsCallerInactive())
             return Challenge();
+
+        if (HttpContext.CallerGrantCeiling() is null)
+            return this.CallerAccessFromTeamProblem();
 
         if (await WouldHandOutFullHistoryAsync(ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
@@ -146,7 +149,7 @@ public class ShareLinkController : ControllerBase
         if (this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
 
-        if (request.FullHistory && HttpContext.IsCallerHistoryClamped())
+        if (request.FullHistory && HttpContext.CallerGrantCeiling() is not { HistoryClamped: false })
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         return Ok(await _shareLinkService.SetFullHistoryAsync(_tenantAccessor.TenantId, request.FullHistory, ct));
@@ -173,8 +176,10 @@ public class ShareLinkController : ControllerBase
         if (this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
 
-        // A member may publish only what they can read themselves.
-        if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
+        // The refusal above answers a caller who may give nothing. A member may publish only what
+        // their own access reads, not what a team gives them.
+        var ceiling = HttpContext.CallerGrantCeiling()!;
+        if (Scope.ValidateDelegation(request.Scopes, ceiling.Scopes) is { } violation)
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
 
         try
@@ -192,10 +197,10 @@ public class ShareLinkController : ControllerBase
     /// <summary>
     /// True when a clamped caller would come away holding a live link to a full-history share:
     /// revealing it, or rotating it, which returns the new token. See
-    /// <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
+    /// <see cref="HttpContextExtensions.CallerGrantCeiling"/>.
     /// </summary>
     private async Task<bool> WouldHandOutFullHistoryAsync(CancellationToken ct) =>
-        HttpContext.IsCallerHistoryClamped()
+        HttpContext.CallerGrantCeiling() is not { HistoryClamped: false }
         && (await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct)).FullHistory;
 
 }

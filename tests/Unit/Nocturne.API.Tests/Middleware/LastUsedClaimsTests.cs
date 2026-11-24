@@ -175,7 +175,7 @@ public class LastUsedClaimsTests
         context.Items["PermissionTrie"] = new PermissionTrie();
         new RequestMembership(
             _subjectId, _tenantId,
-            new MembershipFacts(membershipId, new TenantMemberAccess(new HashSet<string> { Scope.GlucoseRead }, LimitTo24Hours: false, null), LastUsedAt: null))
+            new MembershipFacts(membershipId, new TenantMemberAccess(new HashSet<string> { Scope.GlucoseRead }, LimitTo24Hours: false, null), new TenantMemberAccess(new HashSet<string> { Scope.GlucoseRead }, LimitTo24Hours: false, null), LastUsedAt: null))
             .StoreOn(context);
         return context;
     }

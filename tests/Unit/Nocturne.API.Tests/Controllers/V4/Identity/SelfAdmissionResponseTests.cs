@@ -72,7 +72,7 @@ public sealed class SelfAdmissionResponseTests
         new RequestMembership(
                 _subjectId,
                 _tenantId,
-                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, null), null))
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, null), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, null), null))
             .StoreOn(http);
         var controller = new MembershipRequestController(requests.Object, Accessor())
         {

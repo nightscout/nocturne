@@ -222,5 +222,6 @@ public sealed record AuthenticatedDirectGrant(DirectGrantCredential Grant, Direc
 /// <summary>A membership as read beside the grant it bounds.</summary>
 /// <param name="Id">The membership row.</param>
 /// <param name="Access">What the membership grants on its tenant.</param>
+/// <param name="Direct">What its direct reason grants (<see cref="TenantMembershipFacts.Direct"/>).</param>
 /// <param name="LastUsedAt">When the membership was last stamped as used.</param>
-public sealed record DirectGrantMembership(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt);
+public sealed record DirectGrantMembership(Guid Id, TenantMemberAccess Access, TenantMemberAccess? Direct, DateTime? LastUsedAt);

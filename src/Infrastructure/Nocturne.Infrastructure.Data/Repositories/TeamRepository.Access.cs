@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
@@ -113,9 +114,18 @@ public partial class TeamRepository
                     m.LimitTo24Hours,
                     m.DirectPermissions,
                     Roles = m.MemberRoles.Select(r => new { r.TenantRole!.Slug, r.TenantRole.Permissions }).ToList(),
+                    Reasons = m.Reasons.AsQueryable().Select(MembershipReasonColumns.Of).ToList(),
                 })
                 .FirstOrDefaultAsync(token);
             if (membership is null || !membership.Roles.Any(r => r.Slug == RoleSeeds.Owner))
+                return Refused(TeamAccessRefusal.NotOwner);
+
+            var row = new TenantMemberAccess(
+                MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions).ToHashSet(),
+                membership.LimitTo24Hours,
+                membership.AccessEndsAt);
+            // The owner role is held only directly, so an owner with no direct reason in force owns nothing.
+            if (MembershipReasonColumns.DirectAccess(membership.Reasons, row, now) is not { } direct)
                 return Refused(TeamAccessRefusal.NotOwner);
 
             if (await db.TeamTenantAccess.AnyAsync(a => a.TeamId == id && a.TenantId == grant.TenantId, token))
@@ -137,13 +147,10 @@ public partial class TeamRepository
             if (roles.Any(r => Scope.ValidateGrant(r.Permissions, suggested) is not null))
                 return Refused(TeamAccessRefusal.RoleWiderThanLink);
 
-            var (scopes, limited) = TeamAccessRules.Approver(
-                MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions),
-                membership.LimitTo24Hours,
-                approver);
+            var (scopes, limited) = TeamAccessRules.Approver(direct.EffectivePermissions, direct.LimitTo24Hours, approver);
             if (roles.Any(r => Scope.ValidateGrant(r.Permissions, scopes) is not null))
                 return Refused(TeamAccessRefusal.RoleWiderThanApprover);
-            if (TeamAccessRules.Refusal(SuggestionOf(link), limited, membership.AccessEndsAt, grant, now) is { } narrowing)
+            if (TeamAccessRules.Refusal(SuggestionOf(link), limited, direct.AccessEndsAt, grant, now) is { } narrowing)
                 return Refused(narrowing);
 
             link.UseCount++;

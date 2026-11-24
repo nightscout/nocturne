@@ -657,6 +657,66 @@ public class TeamAccessPostgresTests(TeamAccessPostgresTests.Database database)
             .Refusal.Should().BeNull();
     }
 
+    private async Task AsMigratorAsync(Guid tenant, string sql)
+    {
+        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand($"SELECT set_config('app.current_tenant_id', '{tenant}', false); {sql}", conn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_approval_judges_a_direct_only_approver_by_the_row_as_it_always_has(bool keepsTheDirectReason)
+    {
+        var (team, manager) = await TeamAsync();
+        var owner = await NewSubjectAsync();
+        var site = await NewSiteAsync();
+        var (token, _) = await LinkAsync(team, manager, maxUses: 5);
+        await OwnerOfAsync(site.Id, owner);
+        var rowEnd = Now.AddDays(3);
+        await AsMigratorAsync(site.Id, $"""
+            UPDATE tenant_members SET access_ends_at = '{rowEnd:O}' WHERE tenant_id = '{site.Id}' AND subject_id = '{owner}';
+            {(keepsTheDirectReason ? "" : $"DELETE FROM tenant_member_reasons r USING tenant_members m WHERE r.tenant_member_id = m.id AND m.tenant_id = '{site.Id}' AND m.subject_id = '{owner}';")}
+            """);
+        var viewer = site.Roles[RoleSeeds.Viewer];
+
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now, default))
+            .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover, "the row's end holds the approver, whatever its direct reason says");
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, rowEnd, true), Now, default))
+            .Refusal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_approval_holds_an_owner_to_their_direct_reason_and_ignores_a_team_reason_beside_it()
+    {
+        var (team, manager) = await TeamAsync();
+        var owner = await NewSubjectAsync();
+        var site = await NewSiteAsync();
+        var (token, _) = await LinkAsync(team, manager, maxUses: 5);
+        await OwnerOfAsync(site.Id, owner);
+        var directEnd = Now.AddDays(3);
+        var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(site.Id, "Clinic");
+        var reason = Guid.CreateVersion7();
+        await AsMigratorAsync(site.Id, $"""
+            UPDATE tenant_member_reasons r SET access_ends_at = '{directEnd:O}'
+              FROM tenant_members m WHERE r.tenant_member_id = m.id AND m.tenant_id = '{site.Id}' AND m.subject_id = '{owner}';
+            {teamAccessSql}
+            INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
+            SELECT '{reason}', m.id, 'team', '{teamAccess}', false, NULL
+              FROM tenant_members m WHERE m.tenant_id = '{site.Id}' AND m.subject_id = '{owner}';
+            INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
+            VALUES ('{Guid.CreateVersion7()}', '{reason}', '{site.Roles[RoleSeeds.Caretaker]}');
+            """);
+        var viewer = site.Roles[RoleSeeds.Viewer];
+
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, null, true), Now, default))
+            .Refusal.Should().Be(TeamAccessRefusal.EndOutlastsApprover, "the row has no end, but the owner's direct reason ends");
+        (await Teams(owner).ApproveAccessAsync(token, Credential(owner), new TeamAccessGrant(site.Id, [viewer], false, directEnd, true), Now, default))
+            .Refusal.Should().BeNull();
+    }
+
     [Fact]
     public async Task A_link_whose_suggested_end_has_passed_or_whose_role_is_gone_cannot_be_used()
     {

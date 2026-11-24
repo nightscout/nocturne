@@ -778,6 +778,7 @@ public class AlertRulesControllerChannelDestinationTests
                     new Nocturne.API.Middleware.MembershipFacts(
                         Guid.CreateVersion7(),
                         new Nocturne.Core.Contracts.Multitenancy.TenantMemberAccess(new HashSet<string> { "*" }, false, accessEndsAt),
+                        new Nocturne.Core.Contracts.Multitenancy.TenantMemberAccess(new HashSet<string> { "*" }, false, accessEndsAt),
                         null))
                 .StoreOn(http);
     }

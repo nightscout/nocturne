@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Connectors;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
@@ -75,6 +76,23 @@ public class ConfigurationControllerSaveSecretsTests
             new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Caretaker]), AuthType.SessionCookie, new HashSet<string>());
 
         var result = await Controller(AuthType.SessionCookie, [.. caretaker]).SaveSecrets(
+            "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        _configService.Verify(s => s.SaveSecretsAsync(
+            "Nightscout", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
+            It.Is<ConnectorSecretSaver?>(saver => saver != null && saver.Maker.SubjectId == _subjectId && !saver.MayAdopt),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task NightscoutApiSecret_FromAMixedMemberWhoseDirectReasonLacksTenantSettings_IsSavedByASaverWhoMayNotAdopt()
+    {
+        var controller = Controller(AuthType.SessionCookie);
+        controller.HttpContext.SetGrantCeiling(
+            new GrantCeiling(new HashSet<string> { Scope.GlucoseRead, Scope.ConnectorsReadWrite }, DateTime.UtcNow.AddDays(7), false));
+
+        var result = await controller.SaveSecrets(
             "Nightscout", new Dictionary<string, string> { ["ApiSecret"] = "s" }, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);

@@ -211,7 +211,8 @@ public class OAuthControllerSubjectGuardTests
         result.Result.Should().BeOfType<ChallengeResult>();
         _grantService.Verify(
             s => s.UpdateGrantAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>(),
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<GrantScopeBounds>(), It.IsAny<string?>(),
+                It.IsAny<IEnumerable<string>?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }

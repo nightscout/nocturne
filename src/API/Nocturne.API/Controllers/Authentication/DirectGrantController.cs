@@ -85,7 +85,7 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: violation.Description, statusCode: 403, title: violation.Code);
         }
 
-        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+        var limitTo24Hours = HttpContext.InheritOwnCredentialHistoryClamp(request.LimitTo24Hours);
 
         var result = await _directGrantService.CreateAsync(
             pinnedTenantId: null, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
@@ -212,9 +212,14 @@ public class DirectGrantController : ControllerBase
             return Challenge();
         }
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+        {
+            return this.CallerAccessFromTeamProblem();
+        }
+
         if (!HttpContext.MayKeepDeviceCredentials())
         {
-            return HttpContext.CallerAccessEndsAt() is null
+            return ceiling.AccessEndsAt is null
                 ? Forbid()
                 : Problem(detail: HttpContextExtensions.KeepDeviceCredentialEndDateDetail, statusCode: 403, title: "Forbidden");
         }

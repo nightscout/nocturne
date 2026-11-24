@@ -772,6 +772,17 @@ public static class Scope
     /// <param name="approverScopes">The approving caller's resolved scopes.</param>
     public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
         requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// What both <paramref name="first"/> and <paramref name="second"/> grant: every atom of either
+    /// that the other satisfies, so the result is never wider than either set.
+    /// </summary>
+    public static HashSet<string> Common(IReadOnlySet<string> first, IReadOnlySet<string> second)
+    {
+        var common = CapAt(first, second);
+        common.UnionWith(CapAt(second, first));
+        return common;
+    }
 }
 
 /// <summary>The deletion a scope set allows, from <see cref="Scope.DeletionAccess"/>.</summary>
