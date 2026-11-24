@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
@@ -19,6 +20,46 @@ public sealed class DecomposedTreatmentKeys(INocturneDbContextFactory contexts) 
     {
         await using var db = await contexts.CreateAsync(ct);
         return await HeldAsync(db, [.. legacyIds], ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        HashSet<string> ids = [.. legacyIds];
+        var deleted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var table in DecomposedTreatmentTables.All)
+            deleted.UnionWith(await table.DeletedAsync(db, ids, ct));
+
+        deleted.UnionWith(await db.StateSpans.IncludingDeleted().AsNoTracking()
+            .WhereCategoryIsCurrent()
+            .Where(s => s.DeletedAt != null && s.LegacyId != null && ids.Contains(s.LegacyId))
+            .Select(s => s.LegacyId!)
+            .ToListAsync(ct));
+        return deleted;
+    }
+
+    /// <inheritdoc />
+    public async Task StoreDeletedAsync(
+        IReadOnlyCollection<Core.Models.V4.IV4Record> records, IReadOnlyCollection<StateSpan> spans,
+        CancellationToken ct = default)
+    {
+        if (records.Count == 0 && spans.Count == 0)
+            return;
+
+        await using var db = await contexts.CreateAsync(ct);
+        var deletedAt = DateTime.UtcNow;
+        foreach (var record in records)
+            DecomposedTreatmentTables.Of(record).AddDeleted(db, record, deletedAt);
+        foreach (var span in spans)
+        {
+            var row = StateSpanMapper.ToEntity(span);
+            row.DeletedAt = deletedAt;
+            db.StateSpans.Add(row);
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />

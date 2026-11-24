@@ -4,6 +4,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -22,15 +23,28 @@ public static class DecomposedTreatmentTables
 {
     public static IReadOnlyList<DecomposedTreatmentTable> All { get; } =
     [
-        new DecomposedTreatmentTable<BolusEntity>(typeof(Bolus), db => db.Boluses, InWindow),
-        new DecomposedTreatmentTable<TempBasalEntity>(typeof(TempBasal), db => db.TempBasals, InWindow),
-        new DecomposedTreatmentTable<CarbIntakeEntity>(typeof(CarbIntake), db => db.CarbIntakes, InWindow),
-        new DecomposedTreatmentTable<BGCheckEntity>(typeof(BGCheck), db => db.BGChecks, InWindow),
-        new DecomposedTreatmentTable<NoteEntity>(typeof(Note), db => db.Notes, InWindow),
-        new DecomposedTreatmentTable<DeviceEventEntity>(typeof(DeviceEvent), db => db.DeviceEvents, InWindow),
-        new DecomposedTreatmentTable<BolusCalculationEntity>(typeof(BolusCalculation), db => db.BolusCalculations, InWindow),
-        new DecomposedTreatmentTable<ProfileActivationEntity>(typeof(ProfileActivation), db => db.ProfileActivations, ServedInWindow),
+        Table<Bolus, BolusEntity>(db => db.Boluses, InWindow, BolusMapper.ToEntity),
+        Table<TempBasal, TempBasalEntity>(db => db.TempBasals, InWindow, TempBasalMapper.ToEntity),
+        Table<CarbIntake, CarbIntakeEntity>(db => db.CarbIntakes, InWindow, CarbIntakeMapper.ToEntity),
+        Table<BGCheck, BGCheckEntity>(db => db.BGChecks, InWindow, BGCheckMapper.ToEntity),
+        Table<Note, NoteEntity>(db => db.Notes, InWindow, NoteMapper.ToEntity),
+        Table<DeviceEvent, DeviceEventEntity>(db => db.DeviceEvents, InWindow, DeviceEventMapper.ToEntity),
+        Table<BolusCalculation, BolusCalculationEntity>(db => db.BolusCalculations, InWindow, BolusCalculationMapper.ToEntity),
+        Table<ProfileActivation, ProfileActivationEntity>(db => db.ProfileActivations, ServedInWindow, ProfileActivationMapper.ToEntity),
     ];
+
+    private static DecomposedTreatmentTable<TEntity> Table<TModel, TEntity>(
+        Func<NocturneDbContext, DbSet<TEntity>> rowsOf,
+        Func<IQueryable<TEntity>, DateTime?, DateTime?, IQueryable<TEntity>> inWindow,
+        Func<TModel, TEntity> toEntity)
+        where TModel : IV4Record
+        where TEntity : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted
+        => new(typeof(TModel), rowsOf, inWindow, record => toEntity((TModel)record));
+
+    /// <summary>The table whose rows <paramref name="record"/> is stored as.</summary>
+    internal static DecomposedTreatmentTable Of(IV4Record record) =>
+        All.FirstOrDefault(t => t.Model.IsInstanceOfType(record))
+        ?? throw new ArgumentException($"{record.GetType().Name} is not a decomposed treatment record", nameof(record));
 
     /// <summary>The rows of <paramref name="rows"/> whose event time is inside the window, bounds inclusive.</summary>
     public static IQueryable<T> InWindow<T>(IQueryable<T> rows, DateTime? from, DateTime? to)
@@ -90,6 +104,13 @@ public abstract class DecomposedTreatmentTable(Type model)
     internal abstract Task<IEnumerable<(string Key, bool Live)>> BlockingAsync(
         NocturneDbContext db, HashSet<string> legacyIds, CancellationToken ct);
 
+    /// <summary>Stages <paramref name="record"/> as a row already soft-deleted at <paramref name="deletedAt"/>.</summary>
+    internal abstract void AddDeleted(NocturneDbContext db, IV4Record record, DateTime deletedAt);
+
+    /// <summary>The ids of <paramref name="legacyIds"/> a soft-deleted row is stored under, whoever deleted it.</summary>
+    internal abstract Task<List<string>> DeletedAsync(
+        NocturneDbContext db, HashSet<string> legacyIds, CancellationToken ct);
+
     internal abstract Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct);
 
@@ -113,7 +134,8 @@ public abstract class DecomposedTreatmentTable(Type model)
 internal sealed class DecomposedTreatmentTable<T>(
     Type model,
     Func<NocturneDbContext, DbSet<T>> rowsOf,
-    Func<IQueryable<T>, DateTime?, DateTime?, IQueryable<T>> inWindow) : DecomposedTreatmentTable(model)
+    Func<IQueryable<T>, DateTime?, DateTime?, IQueryable<T>> inWindow,
+    Func<IV4Record, T> toEntity) : DecomposedTreatmentTable(model)
     where T : class, IV4TimeSeriesEntity, IAuditable, IUpstreamFingerprinted
 {
     public override Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
@@ -143,6 +165,21 @@ internal sealed class DecomposedTreatmentTable<T>(
         var blocks = await db.GetBlockingLegacyIdsAsync<T>(legacyIds, ct);
         return blocks.Held.Select(id => (id, !blocks.DeletedByUser.Contains(id)));
     }
+
+    internal override void AddDeleted(NocturneDbContext db, IV4Record record, DateTime deletedAt)
+    {
+        var row = toEntity(record);
+        row.DeletedAt = deletedAt;
+        rowsOf(db).Add(row);
+    }
+
+    internal override Task<List<string>> DeletedAsync(
+        NocturneDbContext db, HashSet<string> legacyIds, CancellationToken ct)
+        => rowsOf(db).IncludingDeleted().AsNoTracking()
+            .Where(e => e.DeletedAt != null && e.LegacyId != null && legacyIds.Contains(e.LegacyId))
+            .Select(e => e.LegacyId!)
+            .Distinct()
+            .ToListAsync(ct);
 
     internal override async Task<List<(string LegacyId, string? Fingerprint)>> FingerprintsFromSourceAsync(
         NocturneDbContext db, string source, string[] legacyIds, CancellationToken ct)

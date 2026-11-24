@@ -260,10 +260,15 @@ internal class TreatmentService : ITreatmentService
     /// into a meal is served under its bolus's. Treatments served as one are announced once. One that
     /// updated a stored record (<see cref="StoredTreatment.Updated"/>) is announced as the update it
     /// is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as a
-    /// create, unlooked-for, it would store a second copy beside one held under another form.
+    /// create, unlooked-for, it would store a second copy beside one held under another form. A live
+    /// treatment the create deleted (<see cref="StoredTreatment.Deleted"/>) is announced as a delete.
     /// </summary>
     private async Task AnnounceCreatedAsync(IReadOnlyList<StoredTreatment> stored)
     {
+        foreach (var deleted in stored.OfType<StoredTreatment.Deleted>())
+            await _events.OnDeletedAsync(deleted.Created, CancellationToken.None);
+
+        stored = [.. stored.Where(s => s is not StoredTreatment.Deleted)];
         if (stored.Count == 0)
             return;
 
@@ -363,15 +368,16 @@ internal class TreatmentService : ITreatmentService
 
         if (updated is null) return null;
 
-        await _events.OnUpdatedAsync(updated, cancellationToken);
+        await AnnounceWrittenAsync(updated, cancellationToken);
 
         return updated;
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// A treatment <see cref="PreBolusSplit"/> leaves alone takes <see cref="UpdateTreatmentAsync"/>.
-    /// A meal it splits is written by <see cref="CreateV1TreatmentsAsync"/> under the stored
+    /// A treatment <see cref="PreBolusSplit"/> leaves alone takes <see cref="UpdateTreatmentAsync"/>, and
+    /// so does one sent with <c>isValid: false</c>, which deletes the stored record it names rather than
+    /// writing a meal. A meal it splits is written by <see cref="CreateV1TreatmentsAsync"/> under the stored
     /// record's upsert key, whose bolus half drops any carbs the meal held under that key.
     /// NIGHTSCOUT-COMPAT: Nightscout's PUT stores the document as sent; a v1 PUT is split as the POST
     /// is, so a re-send cannot double the meal's carbs.
@@ -379,7 +385,7 @@ internal class TreatmentService : ITreatmentService
     public async Task<Treatment?> UpdateV1TreatmentAsync(
         string id, Treatment treatment, CancellationToken cancellationToken = default)
     {
-        if (!PreBolusSplit.Applies(treatment))
+        if (treatment.IsValid == false || !PreBolusSplit.Applies(treatment))
             return await UpdateTreatmentAsync(id, treatment, cancellationToken);
 
         if (await _store.GetForUpdateAsync(id, cancellationToken) is not { Id: { } upsertKey } stored)
@@ -417,10 +423,19 @@ internal class TreatmentService : ITreatmentService
             served = existing;
         }
 
-        await _events.OnUpdatedAsync(served, cancellationToken);
+        await AnnounceWrittenAsync(served, cancellationToken);
 
         return served;
     }
+
+    /// <summary>
+    /// Announces an edited treatment, or its delete when the edit carried <c>isValid: false</c>, which
+    /// stores it deleted.
+    /// </summary>
+    private Task AnnounceWrittenAsync(Treatment written, CancellationToken ct) =>
+        written.IsValid == false
+            ? _events.OnDeletedAsync(written, ct)
+            : _events.OnUpdatedAsync(written, ct);
 
     internal static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {

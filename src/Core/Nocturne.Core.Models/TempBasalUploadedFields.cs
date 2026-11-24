@@ -4,6 +4,10 @@ namespace Nocturne.Core.Models;
 /// Carries the fields AAPS sends on a temp basal (<c>type</c>, <c>isValid</c>, <c>pumpType</c>,
 /// <c>pumpSerial</c>) into the V4 record, so the projected treatment returns them as uploaded.
 /// </summary>
+/// <remarks>
+/// Only <c>isValid: true</c> is kept: a treatment uploaded with <c>isValid: false</c> is stored
+/// deleted. A <c>false</c> kept by a record written before that still reads back.
+/// </remarks>
 public static class TempBasalUploadedFields
 {
     private const string Type = "type";
@@ -14,7 +18,7 @@ public static class TempBasalUploadedFields
     public static Dictionary<string, object?>? Keep(Dictionary<string, object?>? record, Treatment treatment)
     {
         record = KeptField.Add(record, Type, treatment.BolusType);
-        record = KeptField.Add(record, IsValid, treatment.IsValid);
+        record = KeptField.Add(record, IsValid, treatment.IsValid is true ? true : null);
         record = KeptField.Add(record, PumpType, treatment.PumpType);
         record = KeptField.Add(record, PumpSerial, treatment.PumpSerial);
         return KeptField.Add(
