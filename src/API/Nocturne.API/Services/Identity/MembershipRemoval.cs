@@ -6,7 +6,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -27,12 +26,12 @@ namespace Nocturne.API.Services.Identity;
 /// Chat identity directory rows are global and carry no membership join, so a link left behind
 /// would keep answering bot commands for the tenant; the same subject's links to tenants they still
 /// belong to survive. Grants carry no membership join either, so left live every one would work
-/// again the moment the subject joins again. A guest link's grant belongs to its data owner, so it is
-/// found by the member who made it, and each one revoked is audited, as is each invite, before the
-/// membership's own rows so its removed row follows them. All of it goes in one save on the caller's
-/// unit, so the pieces cannot come apart. A membership whose end date passes is not removed, so the
-/// invites its member made are refused at accept instead (<see cref="IMemberInviteRepository.TryClaimUseAsync"/>);
-/// deleting the account removes them with the subject.
+/// again the moment the subject joins again. What the member made is stopped through
+/// <see cref="MadeByStop"/>, its audit rows staged before the membership's own rows so its removed row
+/// follows them. All of it goes in one save on the caller's unit, so the pieces cannot come apart. A
+/// membership whose end date passes is not removed, so the invites its member made are refused at
+/// accept instead (<see cref="IMemberInviteRepository.TryClaimUseAsync"/>); deleting the account
+/// revokes them (<see cref="SubjectDeletion"/>).
 /// </remarks>
 internal static class MembershipRemoval
 {
@@ -55,42 +54,26 @@ internal static class MembershipRemoval
         CancellationToken ct)
     {
         var context = unit.Context;
-        var grants = new OAuthGrantRepository(unit);
-        var handedOut = await grants.GetLiveGuestLinksCreatedByAsync(member.SubjectId, now, ct);
-        var before = AddedAuditRows(context);
-        grants.StageMemberRemovalGuestLinkAudit(handedOut, member.SubjectId);
-        var invites = new MemberInviteRepository(unit);
-        var revokedInvites = await invites.StageRevokeLiveMadeByAsync(tenantId, member.SubjectId, now, ct);
-        var stagedRows = AddedAuditRows(context).Except(before).ToList();
+        var made = await MadeByStop.StageAsync(unit, tenantId, member.SubjectId, now, ct);
 
         var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, how, now, ct);
         if (removal != OwnerGuardedChange.Changed)
         {
-            foreach (var row in stagedRows)
-                context.Entry(row).State = EntityState.Detached;
-            invites.UnstageRevokeLiveMadeBy(revokedInvites.ToHashSet());
+            made.Unstage();
             return (removal, []);
         }
 
         var chatLinks = await context.ChatIdentityDirectory
             .Where(d => d.TenantId == tenantId && d.NocturneUserId == member.SubjectId)
             .ToListAsync(ct);
-        var owned = await grants.GetActiveForSubjectAsync(member.SubjectId, ct);
-        var revoked = owned.Concat(handedOut.ExceptBy(owned.Select(g => g.Id), g => g.Id)).ToList();
+        var owned = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(member.SubjectId, ct);
 
         var directHadEnd = member.DirectReason?.AccessEndsAt is not null;
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await grantRevocation.StageAsync(unit, revoked, now, ct);
-        if (directHadEnd)
-            await MemberCreations.CapAsync(unit, member.SubjectId, now, now, ct);
+        var revoked = await made.FinishAsync(grantRevocation, owned, capCreations: directHadEnd, ct);
         await context.SaveChangesAsync(ct);
         return (removal, revoked);
     }
-
-    /// <summary>The audit rows staged on <paramref name="context"/> and not yet saved.</summary>
-    private static List<AuthAuditLogEntity> AddedAuditRows(NocturneDbContext context) =>
-        context.ChangeTracker.Entries<AuthAuditLogEntity>()
-            .Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
 
     /// <summary>
     /// Removes <paramref name="subjectId"/>'s direct reason on <paramref name="tenantId"/> when it has

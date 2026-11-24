@@ -1758,7 +1758,7 @@ public class PasskeyControllerTests : IDisposable
         var adminList = new AccessRequestController(
             new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
-            _subjectService.Object,
+            Mock.Of<ISubjectDeletion>(),
             new Mock<IAccessRequestService>().Object,
             _tenantAccessor.Object,
             new Mock<IInAppNotificationService>().Object,

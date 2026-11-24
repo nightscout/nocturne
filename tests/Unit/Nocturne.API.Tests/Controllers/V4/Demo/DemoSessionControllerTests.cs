@@ -218,6 +218,7 @@ public class DemoSessionControllerTests : IDisposable
     {
         var demoTenantService = new DemoTenantService(
             BuildDbFactory().AsNocturneFactory(), new TenantRepository(BuildDbFactory().AsNocturneFactory()), new TenantMembershipRepository(BuildDbFactory().AsNocturneFactory(), AccountLinkRoutes.Off), new SubjectRepository(BuildDbFactory().AsNocturneFactory(), AccountLinkRoutes.Off),
+            Mock.Of<ISubjectDeletion>(),
             new EfFirstPartyTokenRepository(BuildDbFactory().AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),

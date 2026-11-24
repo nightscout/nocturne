@@ -1,24 +1,23 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
-
-using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
-/// Covers what <see cref="SubjectService.DeleteSubjectAsync"/> leaves of the deleted subject's auth
+/// Covers what <see cref="SubjectDeletion.DeleteAsync"/> leaves of the deleted subject's auth
 /// audit trail, over SQLite so the scrub's bulk updates and the foreign keys both run for real.
 /// </summary>
-public class SubjectServiceDeleteTests : IDisposable
+public class SubjectDeletionTests : IDisposable
 {
     private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqlite();
     private readonly Guid _deletedId = Guid.CreateVersion7();
@@ -30,7 +29,7 @@ public class SubjectServiceDeleteTests : IDisposable
     private readonly Guid _actedOnByAdminRow = Guid.CreateVersion7();
     private readonly Guid _unrelatedRow = Guid.CreateVersion7();
 
-    public SubjectServiceDeleteTests()
+    public SubjectDeletionTests()
     {
         using var seed = _db.CreateContext();
         seed.Subjects.AddRange(
@@ -130,10 +129,17 @@ public class SubjectServiceDeleteTests : IDisposable
             new HttpContextAccessor { HttpContext = httpContext },
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
-        var service = new SubjectService(
-            new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
+        var deletion = new SubjectDeletion(
+            dbContext.AsFactory(),
+            new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            audit,
+            TimeProvider.System,
+            NullLogger<SubjectDeletion>.Instance);
 
-        (await service.DeleteSubjectAsync(_deletedId)).Should().BeOfType<SubjectChange.Changed>();
+        (await deletion.DeleteAsync(_deletedId, evenLastOwner: false, CancellationToken.None)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
     }
 
     private async Task<Dictionary<Guid, AuthAuditLogEntity>> ReadRowsAsync()
