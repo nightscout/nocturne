@@ -182,8 +182,10 @@ public interface IStateSpanRepository
 
     /// <summary>
     /// Hard-deletes every span written by <paramref name="source"/> and writes <paramref name="stateSpans"/>
-    /// in their place in one transaction, as given: no supersede, end-at-successor or deduplication. For the
-    /// sample-data seeder's idempotent re-seed only.
+    /// in their place in one transaction, as given: no end-at-successor or deduplication of them. A span of
+    /// another source that a purged span ended is reopened. Every span of another source that is open, or
+    /// ended by supersession, is then ended at its first live successor among what is stored after the
+    /// write. For the sample-data seeder's idempotent re-seed only.
     /// </summary>
     Task ReplaceBySourceAsync(
         string source,

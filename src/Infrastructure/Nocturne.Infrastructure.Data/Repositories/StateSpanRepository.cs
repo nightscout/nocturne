@@ -28,18 +28,6 @@ public class StateSpanRepository : IStateSpanRepository
     private readonly ILegacyReadCacheInvalidation? _legacyReads;
 
     /// <summary>
-    /// Categories where only one span can be active at a time.
-    /// When a new span is inserted in one of these categories, any existing open spans are closed.
-    /// </summary>
-    private static readonly HashSet<string> ExclusiveCategories = new(StringComparer.OrdinalIgnoreCase)
-    {
-        nameof(StateSpanCategory.Override),
-        nameof(StateSpanCategory.TemporaryTarget),
-        nameof(StateSpanCategory.PumpMode),
-        nameof(StateSpanCategory.Motion),
-    };
-
-    /// <summary>
     /// The stored <c>Category</c> values that represent v1 Activity records, as strings for
     /// translation into SQL.
     /// </summary>
@@ -543,7 +531,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         var categories = stateSpans
             .Select(s => s.Category.ToString())
-            .Where(ExclusiveCategories.Contains)
+            .Where(StateSpanSuccession.ExclusiveCategories.Contains)
             .Distinct()
             .ToList();
         if (categories.Count == 0)
@@ -564,16 +552,10 @@ public class StateSpanRepository : IStateSpanRepository
     private void SupersedeOpenSpans(
         StateSpanEntity entity, IDictionary<string, object>? metadata, IEnumerable<StateSpanEntity> candidates)
     {
-        if (!ExclusiveCategories.Contains(entity.Category))
+        if (!StateSpanSuccession.ExclusiveCategories.Contains(entity.Category))
             return;
 
-        // PumpMode mixes independent dimensions (Automatic/Manual loop mode vs Suspended
-        // delivery) which can legitimately overlap, so only the SAME state is mutually exclusive
-        // there. Other exclusive categories (Override, TemporaryTarget, Motion) supersede any
-        // open span regardless of state.
-        var sameStateOnly = string.Equals(
-            entity.Category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase);
-
+        var sameStateOnly = StateSpanSuccession.SameStateOnly(entity.Category);
         var superseded = 0;
         foreach (var open in candidates)
         {
@@ -588,7 +570,7 @@ public class StateSpanRepository : IStateSpanRepository
                 || open.StartTimestamp >= entity.StartTimestamp
                 || !string.Equals(open.Category, entity.Category, StringComparison.Ordinal)
                 || (sameStateOnly && !string.Equals(open.State, entity.State, StringComparison.Ordinal))
-                || !Supersedes(entity, metadata, open))
+                || !StateSpanSuccession.Supersedes(entity, metadata, open))
                 continue;
 
             open.EndTimestamp = entity.StartTimestamp;
@@ -602,19 +584,13 @@ public class StateSpanRepository : IStateSpanRepository
                 superseded, entity.Category, entity.Id);
     }
 
-    /// <summary>Stored spans read per open span of a batch, the nearest first, as its successor candidates.</summary>
-    internal const int SuccessorCandidates = 10;
-
-    /// <summary>Open spans whose candidates one statement reads.</summary>
-    private const int SuccessorLookupsPerStatement = 200;
-
     /// <summary>
     /// The stored spans <see cref="EndAtSuccessorAsync"/> can end an open span of the batch at, and the
     /// rows a stored successor already closed.
     /// </summary>
     /// <param name="Later">
-    /// Per open span of the batch, keyed by <see cref="SuccessorKey"/>, the first
-    /// <see cref="SuccessorCandidates"/> stored spans it can follow, oldest first, as the store holds them.
+    /// Per open span of the batch, keyed by <see cref="StateSpanSuccession.Key"/>, the
+    /// <see cref="StateSpanSuccession.LoadCandidatesAsync"/> stored spans it can follow, as the store holds them.
     /// </param>
     /// <param name="Closed">Tracked rows superseded by a candidate or by a row the batch loaded.</param>
     /// <param name="Covered">The ids whose closed rows <paramref name="Closed"/> holds.</param>
@@ -623,53 +599,23 @@ public class StateSpanRepository : IStateSpanRepository
         List<StateSpanEntity> Closed,
         HashSet<Guid> Covered);
 
-    /// <summary>A span can follow only spans of its category, and in PumpMode only of its state.</summary>
-    private static (string Category, string? State, DateTime Start) SuccessorKey(string category, string? state, DateTime start) =>
-        (category, string.Equals(category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase) ? state : null, start);
-
     /// <summary>
-    /// Per open span of the batch, the first <see cref="SuccessorCandidates"/> stored spans it can follow,
-    /// and the rows those candidates and the batch's loaded rows closed: one statement per
-    /// <see cref="SuccessorLookupsPerStatement"/> open spans, and one more.
+    /// Per open span of the batch, its <see cref="StateSpanSuccession.LoadCandidatesAsync"/> successor
+    /// candidates, and the rows those candidates and the batch's loaded rows closed: one statement more.
     /// </summary>
     internal static async Task<Successors> LoadSuccessorsAsync(
         NocturneDbContext db, IReadOnlyList<StateSpan> stateSpans, IEnumerable<StateSpanEntity> loaded,
         CancellationToken cancellationToken)
     {
         var keys = stateSpans
-            .Where(s => s.EndTimestamp == null && ExclusiveCategories.Contains(s.Category.ToString()))
-            .Select(s => SuccessorKey(s.Category.ToString(), s.State ?? string.Empty, s.StartTimestamp))
+            .Where(s => s.EndTimestamp == null && StateSpanSuccession.ExclusiveCategories.Contains(s.Category.ToString()))
+            .Select(s => StateSpanSuccession.Key(s.Category.ToString(), s.State ?? string.Empty, s.StartTimestamp))
             .Distinct()
             .ToList();
-        var later = new Dictionary<(string Category, string? State, DateTime Start), List<StateSpanEntity>>();
         if (keys.Count == 0)
-            return new Successors(later, [], []);
+            return new Successors([], [], []);
 
-        foreach (var key in keys)
-            later[key] = [];
-
-        foreach (var chunk in keys.Chunk(SuccessorLookupsPerStatement))
-        {
-            IQueryable<SuccessorRow>? query = null;
-            for (var i = 0; i < chunk.Length; i++)
-            {
-                var (category, state, start) = chunk[i];
-                var lookup = i;
-                var candidates = db.StateSpans.AsNoTracking()
-                    .Where(s => s.Category == category && s.StartTimestamp > start);
-                if (state is not null)
-                    candidates = candidates.Where(s => s.State == state);
-                var rows = candidates
-                    .OrderBy(s => s.StartTimestamp)
-                    .Take(SuccessorCandidates)
-                    .Select(s => new SuccessorRow { Lookup = lookup, Span = s });
-                query = query is null ? rows : query.Concat(rows);
-            }
-
-            foreach (var group in (await query!.ToListAsync(cancellationToken)).GroupBy(r => r.Lookup))
-                later[chunk[group.Key]] = [.. group.Select(r => r.Span).OrderBy(s => s.StartTimestamp)];
-        }
-
+        var later = await StateSpanSuccession.LoadCandidatesAsync(db, keys, cancellationToken);
         var covered = later.Values.SelectMany(l => l).Select(s => s.Id)
             .Concat(loaded.Select(s => s.Id)).ToHashSet();
         var ids = covered.ToList();
@@ -677,13 +623,6 @@ public class StateSpanRepository : IStateSpanRepository
             .Where(s => s.SupersededById != null && ids.Contains(s.SupersededById.Value))
             .ToListAsync(cancellationToken);
         return new Successors(later, closed, covered);
-    }
-
-    /// <summary>Set by member initialisation, which EF can translate on both sides of a union.</summary>
-    private sealed class SuccessorRow
-    {
-        public int Lookup { get; init; }
-        public StateSpanEntity Span { get; init; } = null!;
     }
 
     /// <summary>
@@ -706,47 +645,19 @@ public class StateSpanRepository : IStateSpanRepository
         NocturneDbContext db, StateSpanEntity entity, IDictionary<string, object>? metadata,
         HashSet<StateSpanEntity> batch, Successors successors, CancellationToken cancellationToken)
     {
-        if (entity.EndTimestamp != null || !ExclusiveCategories.Contains(entity.Category))
+        if (entity.EndTimestamp != null || !StateSpanSuccession.ExclusiveCategories.Contains(entity.Category))
             return;
 
-        var sameStateOnly = string.Equals(
-            entity.Category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase);
-        bool Follows(StateSpanEntity s) =>
-            s.DeletedAt == null
-            && string.Equals(s.Category, entity.Category, StringComparison.Ordinal)
-            && s.StartTimestamp > entity.StartTimestamp
-            && (!sameStateOnly || string.Equals(s.State, entity.State, StringComparison.Ordinal))
-            && Supersedes(entity, metadata, s);
-
-        var successor = batch.Where(Follows).MinBy(s => s.StartTimestamp);
+        var successor = batch.Where(s => StateSpanSuccession.Follows(entity, metadata, s)).MinBy(s => s.StartTimestamp);
 
         var batchIds = batch.Select(s => s.Id).ToHashSet();
         var bound = successor?.StartTimestamp;
-        bool Eligible(StateSpanEntity s) => !batchIds.Contains(s.Id) && (bound is null || s.StartTimestamp < bound);
-
-        var read = successors.Later.TryGetValue(
-            SuccessorKey(entity.Category, entity.State, entity.StartTimestamp), out var candidates);
-        candidates ??= [];
-        var stored = candidates.Where(Eligible).FirstOrDefault(Follows);
-        if (stored is null
-            && (!read || (candidates.Count == SuccessorCandidates && (bound is null || candidates[^1].StartTimestamp < bound))))
-        {
-            var after = read ? candidates[^1].StartTimestamp : entity.StartTimestamp;
-            var further = db.StateSpans.AsNoTracking()
-                .Where(s => s.Category == entity.Category && s.StartTimestamp > after);
-            if (sameStateOnly)
-                further = further.Where(s => s.State == entity.State);
-            if (bound is { } before)
-                further = further.Where(s => s.StartTimestamp < before);
-            await foreach (var later in further.OrderBy(s => s.StartTimestamp).AsAsyncEnumerable()
-                               .WithCancellation(cancellationToken))
-            {
-                if (!Eligible(later) || !Follows(later))
-                    continue;
-                stored = later;
-                break;
-            }
-        }
+        successors.Later.TryGetValue(
+            StateSpanSuccession.Key(entity.Category, entity.State, entity.StartTimestamp), out var candidates);
+        var stored = await StateSpanSuccession.FirstStoredAsync(
+            db, entity, metadata, candidates,
+            s => !batchIds.Contains(s.Id) && (bound is null || s.StartTimestamp < bound),
+            bound, cancellationToken);
 
         successor = stored ?? successor;
         if (successor == null)
@@ -771,6 +682,7 @@ public class StateSpanRepository : IStateSpanRepository
             }));
         }
 
+        var sameStateOnly = StateSpanSuccession.SameStateOnly(entity.Category);
         foreach (var earlier in batch)
         {
             // Only an end the successor set moves; an uploaded end stays where the upload put it.
@@ -779,24 +691,13 @@ public class StateSpanRepository : IStateSpanRepository
                 || earlier.EndTimestamp != successor.StartTimestamp
                 || earlier.StartTimestamp >= entity.StartTimestamp
                 || (sameStateOnly && !string.Equals(earlier.State, entity.State, StringComparison.Ordinal))
-                || !Supersedes(entity, metadata, earlier))
+                || !StateSpanSuccession.Supersedes(entity, metadata, earlier))
                 continue;
 
             earlier.EndTimestamp = entity.StartTimestamp;
             earlier.SupersededById = entity.Id;
         }
     }
-
-    /// <summary>
-    /// Whether <paramref name="entity"/> ends <paramref name="other"/> in an exclusive category.
-    /// Loop uploads one override as a treatment and as devicestatus snapshots, so a treatment span
-    /// and a devicestatus span of the same override do not end each other. Two spans of one kind
-    /// do, even of the same preset and whatever their sources.
-    /// </summary>
-    private static bool Supersedes(
-        StateSpanEntity entity, IDictionary<string, object>? metadata, StateSpanEntity other) =>
-        !string.Equals(entity.Category, nameof(StateSpanCategory.Override), StringComparison.OrdinalIgnoreCase)
-        || !metadata.IsSameOverrideAs(MapperHelpers.DeserializeJson<Dictionary<string, object>>(other.MetadataJson));
 
     /// <summary>
     /// Update an existing state span
@@ -872,7 +773,7 @@ public class StateSpanRepository : IStateSpanRepository
             if (saved == 0)
                 return [];
 
-            await db.ClearSupersededByAsync([entity.Id, .. copyIds], token);
+            await db.ReopenSupersededAsync([entity.Id, .. copyIds], purged: false, token);
             return [StateSpanMapper.ToDomainModel(entity), .. copies.Select(StateSpanMapper.ToDomainModel)];
         }, ct: cancellationToken);
         if (deleted.Count > 0)
@@ -957,8 +858,10 @@ public class StateSpanRepository : IStateSpanRepository
         var purged = await db.ExecuteInTransactionAsync(async ct =>
         {
             var count = await db.StateSpans.PurgeAsync(s => s.Source == source, ct);
-            db.StateSpans.AddRange(stateSpans.Select(StateSpanMapper.ToEntity));
+            var written = stateSpans.Select(StateSpanMapper.ToEntity).ToList();
+            db.StateSpans.AddRange(written);
             await db.SaveChangesAsync(ct);
+            await db.SupersedeByArrivedAsync([.. written.Select(s => s.Id)], asGiven: true, ct);
             return count;
         }, ct: cancellationToken);
         if (purged > 0 || stateSpans.Count > 0)
@@ -1077,7 +980,7 @@ public class StateSpanRepository : IStateSpanRepository
                         .ToListAsync(cancellationToken);
                     entities.AddRange(newest.Where(s => s.EndTimestamp == null));
                 }
-                else if (ExclusiveCategories.Contains(category))
+                else if (StateSpanSuccession.ExclusiveCategories.Contains(category))
                 {
                     var newest = await NewestFirst(before).FirstOrDefaultAsync(cancellationToken);
                     if (newest is { EndTimestamp: null })
