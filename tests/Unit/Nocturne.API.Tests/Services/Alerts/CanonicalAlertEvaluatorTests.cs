@@ -581,6 +581,70 @@ public class CanonicalAlertEvaluatorTests
         EvaluatedRules().Should().Equal(LowRule, bucket);
     }
 
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleIsEvaluatedAloneOnAReadingAlreadyEvaluated()
+    {
+        LatestIs(Latest(Reading, mgdl: 55));
+        RulesAre(LowRule, ReservoirRule, LoopRule);
+        var evaluator = Evaluator(Tenant);
+        await evaluator.EvaluateAsync(GlucoseMoved);
+        _orchestrator.Invocations.Clear();
+
+        var ran = await evaluator.EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        EvaluatedRules().Should().Equal(LowRule);
+        ran.Should().BeFalse("a save claims no reading, so the sweep's record of it is untouched");
+        var context = (SensorContext)_orchestrator.Invocations.Single().Arguments[2]!;
+        context.LatestValue.Should().Be(55, "the saved rule is judged against the current reading");
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleAndAWriteEvaluateTheSavedRuleAndTheRulesTheWriteMoved()
+    {
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, ReservoirRule, LoopRule);
+
+        await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump) with { Rules = new HashSet<Guid> { LowRule.Id } });
+
+        EvaluatedRules().Should().Equal(LowRule, ReservoirRule);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleThatIsNotEnabledEvaluatesNothing()
+    {
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, ReservoirRule);
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([Guid.NewGuid()]));
+
+        VerifyPasses(0);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASaveDoesNotSelectARuleTheEngineCannotRead()
+    {
+        var unreadable = Rule(AlertConditionType.Threshold, """{"direction":"below","value":69}""") with { OnUnknown = "no such policy" };
+        LatestIs(Latest(Reading));
+        RulesAre(LowRule, unreadable);
+        await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump));
+        EvaluatedRules().Should().Equal([unreadable], "a write selects a rule whose facts the engine cannot read");
+        _orchestrator.Invocations.Clear();
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        EvaluatedRules().Should().Equal(LowRule);
+    }
+
+    [NativeFact]
+    public async Task EvaluateAsync_ASavedRuleWithNoReadingEvaluatesNothing()
+    {
+        LatestIs((SensorGlucose?)null);
+
+        await Evaluator(Tenant).EvaluateAsync(MovedFacts.Saved([LowRule.Id]));
+
+        VerifyPasses(0);
+    }
+
     [Fact]
     public void ATargetRangeWriteMovesGlucoseWithoutAReadingAndASensorGlucoseWriteDoesNot()
     {

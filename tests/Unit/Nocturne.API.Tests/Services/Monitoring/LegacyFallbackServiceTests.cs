@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
@@ -109,7 +110,7 @@ public class LegacyFallbackServiceTests
 
         var time = new FakeTimeProvider(Now);
         var writer = new ConsumableTrackerWriter(
-            _deviceEvents.Object, _ruleSync.Object, _reactor.Object, _broadcast.Object, time,
+            _deviceEvents.Object, _ruleSync.Object, Rearms.Unannounced(), _reactor.Object, _broadcast.Object, time,
             NullLogger<ConsumableTrackerWriter>.Instance);
         _service = new LegacyFallbackService(
             _trackers.Object, _lock.Object, _deviceEvents.Object, patientDevices.Object, writer, time,

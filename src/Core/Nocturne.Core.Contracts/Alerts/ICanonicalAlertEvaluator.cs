@@ -12,9 +12,9 @@ public interface ICanonicalAlertEvaluator
 {
     /// <summary>
     /// Builds a sensor context from the latest canonical reading and evaluates the enabled rules that
-    /// read a fact in <paramref name="moved"/>, or every enabled rule when a reading not yet evaluated
-    /// moved the glucose fact. No-op when no usable reading is selected. Failures are logged and
-    /// swallowed.
+    /// read a fact in <paramref name="moved"/> or that it names (<see cref="MovedFacts.Rules"/>), or
+    /// every enabled rule when a reading not yet evaluated moved the glucose fact. No-op when no usable
+    /// reading is selected. Failures are logged and swallowed.
     /// </summary>
     /// <returns>
     /// Whether a pass of every enabled rule over the selected reading ran to its end, whatever it

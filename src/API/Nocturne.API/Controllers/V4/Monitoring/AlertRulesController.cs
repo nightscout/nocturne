@@ -224,7 +224,8 @@ public class AlertRulesController : ControllerBase
 
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.NoStoredRecipients, db, ct) is { } badChannel)
             return badChannel;
@@ -236,7 +237,7 @@ public class AlertRulesController : ControllerBase
         var conditionParamsJson = trees.ConditionParams;
         var channels = await ToWritesAsync(request.Channels ?? [], db, ct);
 
-        var ruleId = await _rules.CreateAsync(
+        var ruleId = await new AlertRuleRepository(unit, _time).CreateAsync(
             new NewAlertRule(
                 new AlertRuleWrite(
                     request.Name,
@@ -255,6 +256,7 @@ public class AlertRulesController : ControllerBase
                     GlucoseFreshnessMinutes: request.GlucoseFreshnessMinutes),
                 channels),
             ct);
+        await _rearm.SaveAndClearAsync(unit, ruleId, ct);
 
         return CreatedAtAction(nameof(GetRule), new { id = ruleId }, await ReadBackAsync(ruleId, ct));
     }
