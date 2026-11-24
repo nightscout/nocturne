@@ -40,7 +40,7 @@ public class ShareDataCategoriesGuardTests
 
         // Internal bookkeeping. The evaluated reading's key is the newest reading's, which the
         // evaluation that wrote it read in full, so it is not history.
-        "alert_evaluated_readings", "dedup_reconcile_state",
+        "alert_evaluated_readings", "dedup_reconcile_state", "google_health_work",
 
         // The owner's onboarding state.
         "setup_hub_additions", "setup_hub_items",

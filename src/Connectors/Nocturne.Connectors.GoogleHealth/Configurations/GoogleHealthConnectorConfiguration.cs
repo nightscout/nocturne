@@ -1,6 +1,7 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Connectors.GoogleHealth.Services;
 
 namespace Nocturne.Connectors.GoogleHealth.Configurations;
@@ -15,7 +16,11 @@ namespace Nocturne.Connectors.GoogleHealth.Configurations;
     SupportedDataTypes = [SyncDataType.Steps, SyncDataType.HeartRate, SyncDataType.BodyWeight, SyncDataType.Sleep],
     DefaultActiveThresholdMinutes = 30,
     DefaultStaleThresholdMinutes = 180,
-    DocumentationUrl = UrlConstants.External.DocsGoogleHealth)]
+    DocumentationUrl = UrlConstants.External.DocsGoogleHealth,
+    // Its resume slot is the live position and the historical range still owed. Reading again what
+    // the purge keeps out costs Google requests (months of them for an unfinished import date) and
+    // stores nothing, since every record is refused.
+    KeptOutPurgeClears = ConnectorStateSlots.None)]
 public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfiguration
 {
     public GoogleHealthConnectorConfiguration()
