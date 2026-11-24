@@ -129,10 +129,10 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
     }
 
     [Theory]
-    [InlineData("created owner", SignInMethod.SetupPasskey)]
-    [InlineData("created owner", SignInMethod.SetupOidc)]
-    [InlineData("adopted holder", SignInMethod.SetupPasskey)]
-    [InlineData("adopted holder", SignInMethod.SetupOidc)]
+    [InlineData("created owner", SignInMethod.Passkey)]
+    [InlineData("created owner", SignInMethod.Oidc)]
+    [InlineData("adopted holder", SignInMethod.Passkey)]
+    [InlineData("adopted holder", SignInMethod.Oidc)]
     public async Task The_sign_in_that_ends_setup_on_a_host_that_resolves_no_tenant_signs_the_owner_in_once(
         string owner, SignInMethod method)
     {
@@ -143,7 +143,7 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
         var created = (await OwnerSubjectIdsAsync()).Should().ContainSingle().Subject;
 
         Guid ownerId;
-        if (holder is null && method == SignInMethod.SetupPasskey)
+        if (holder is null && method == SignInMethod.Passkey)
         {
             await using var conn = await OpenAsync();
             await ExecuteAsync(conn, """
@@ -176,7 +176,8 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
                 new SignInAdmission.Member(Fixture.TenantId),
                 new SecondFactorProof.Primary(TrustedDeviceToken: null),
                 new SessionContext(DeviceDescription: "Setup", IpAddress: "203.0.113.7", UserAgent: "setup-agent"),
-                method == SignInMethod.SetupOidc ? _providerId : null));
+                method == SignInMethod.Oidc ? _providerId : null,
+                Enrolment: SignInEnrolment.Setup));
         }
 
         outcome.Should().BeOfType<SignInOutcome.SignedIn>().Which.Session.SubjectId.Should().Be(ownerId);
@@ -185,7 +186,7 @@ public class SetupOwnerProvedIdentityIntegrationTests : ApiIntegrationTestBase
         row.Should().Be((
             AuthAuditEventType.Login,
             true,
-            method == SignInMethod.SetupPasskey ? "passkey" : "oidc",
+            method == SignInMethod.Passkey ? "passkey" : "oidc",
             "setup",
             2L,
             (Guid?)null));

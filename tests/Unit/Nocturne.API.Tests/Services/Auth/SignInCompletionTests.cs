@@ -3,6 +3,7 @@ using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
@@ -74,12 +75,14 @@ public class SignInCompletionTests
         SignInMethod method = SignInMethod.Passkey,
         SignInAdmission? admission = null,
         SecondFactorProof? secondFactor = null,
-        Guid? providerId = null) =>
+        Guid? providerId = null,
+        SignInEnrolment? enrolment = null) =>
         new(_subjectId, method,
             admission ?? new SignInAdmission.Member(_tenantId),
             secondFactor ?? new SecondFactorProof.Primary("device-cookie"),
             new SessionContext(DeviceDescription: "Passkey", IpAddress: Ip, UserAgent: Agent),
-            providerId);
+            providerId,
+            Enrolment: enrolment);
 
     private void GateAnswers(SecondFactorRequirement requirement) =>
         _totp.Setup(t => t.GetSecondFactorRequirementAsync(_subjectId, "device-cookie"))
@@ -358,12 +361,12 @@ public class SignInCompletionTests
             : DateTimeOffset.MinValue;
 
     [Theory]
-    [InlineData(SignInMethod.SetupPasskey, """{"method":"passkey","enrolment":"setup"}""")]
-    [InlineData(SignInMethod.SetupOidc, """{"method":"oidc","enrolment":"setup"}""")]
+    [InlineData(SignInMethod.Passkey, """{"method":"passkey","enrolment":"setup"}""")]
+    [InlineData(SignInMethod.Oidc, """{"method":"oidc","enrolment":"setup"}""")]
     public async Task A_setup_sign_in_writes_the_login_row_of_its_method_with_the_enrolment_it_completes(
         SignInMethod method, string row)
     {
-        var outcome = await Completion().CompleteAsync(Attempt(method));
+        var outcome = await Completion().CompleteAsync(Attempt(method, enrolment: SignInEnrolment.Setup));
 
         outcome.Should().BeOfType<SignInOutcome.SignedIn>().Which.Method.Should().Be(method);
         _steps.Should().Equal("admission", "gate", "session", "last-login", "audit:login");
@@ -375,7 +378,7 @@ public class SignInCompletionTests
     {
         GateAnswers(SecondFactorRequirement.SatisfiedByTrustedDevice);
 
-        await Completion().CompleteAsync(Attempt(SignInMethod.SetupOidc));
+        await Completion().CompleteAsync(Attempt(SignInMethod.Oidc, enrolment: SignInEnrolment.Setup));
 
         _rows.Single().Details.GetRawText().Should()
             .Be("""{"method":"oidc","enrolment":"setup","secondFactor":"trusted_device"}""");
@@ -386,7 +389,7 @@ public class SignInCompletionTests
     {
         GateAnswers(SecondFactorRequirement.CodeRequired);
 
-        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.SetupPasskey));
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Passkey, enrolment: SignInEnrolment.Setup));
 
         outcome.Should().BeOfType<SignInOutcome.SecondFactorRequired>();
         _sessions.Verify(
@@ -401,7 +404,7 @@ public class SignInCompletionTests
     {
         NotAMember();
 
-        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.SetupPasskey));
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Passkey, enrolment: SignInEnrolment.Setup));
 
         outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
         _audit.Verify(a => a.LogAsync(
@@ -415,7 +418,7 @@ public class SignInCompletionTests
         var context = new DefaultHttpContext();
 
         await context.ApplySignInAsync(
-            new SignInOutcome.SignedIn(_session, false, SignInMethod.SetupPasskey, null), new OidcOptions());
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.Passkey, null), new OidcOptions());
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
         setCookie.Should().Contain($"{new OidcOptions().Cookie.AccessTokenName}=access");
@@ -429,7 +432,7 @@ public class SignInCompletionTests
         var providerId = Guid.NewGuid();
 
         await context.ApplySignInAsync(
-            new SignInOutcome.SignedIn(_session, false, SignInMethod.SetupOidc, providerId), new OidcOptions());
+            new SignInOutcome.SignedIn(_session, false, SignInMethod.Oidc, providerId), new OidcOptions());
 
         context.Response.Headers.SetCookie.ToString().Should()
             .Contain($"{SessionCookieExtensions.LastSignInCookieName}=oidc%3A{providerId}");
@@ -443,5 +446,138 @@ public class SignInCompletionTests
         await context.ApplySignInAsync(new SignInOutcome.Refused(SignInRefusal.NotAMember), new OidcOptions());
 
         context.Response.Headers.SetCookie.ToString().Should().BeEmpty();
+    }
+
+    private static readonly IReadOnlyDictionary<SignInMethod, (string Row, string? Hint)> Methods =
+        new Dictionary<SignInMethod, (string, string?)>
+        {
+            [SignInMethod.Passkey] = ("passkey", "passkey"),
+            [SignInMethod.Oidc] = ("oidc", "oidc"),
+            [SignInMethod.Totp] = ("totp", null),
+        };
+
+    private static readonly IReadOnlyDictionary<SignInEnrolment, string> Enrolments =
+        new Dictionary<SignInEnrolment, string>
+        {
+            [SignInEnrolment.Setup] = "setup",
+            [SignInEnrolment.Invite] = "invite",
+            [SignInEnrolment.TenantInvite] = "tenant_invite",
+        };
+
+    public static TheoryData<SignInMethod> EveryMethod() => new(Enum.GetValues<SignInMethod>());
+
+    public static TheoryData<SignInEnrolment> EveryEnrolment() => new(Enum.GetValues<SignInEnrolment>());
+
+    [Theory]
+    [MemberData(nameof(EveryMethod))]
+    public async Task Every_method_has_a_row_name_and_a_sign_in_hint_decision(SignInMethod method)
+    {
+        Methods.Should().ContainKey(method, "a new method needs its row name and its hint decided here");
+        var (rowName, hint) = Methods[method];
+
+        await Completion().CompleteAsync(Attempt(method));
+        var context = new DefaultHttpContext();
+        await context.ApplySignInAsync(new SignInOutcome.SignedIn(_session, false, method, null), new OidcOptions());
+
+        _rows.Single().Details.GetProperty("method").GetString().Should().Be(rowName);
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        if (hint is null)
+            setCookie.Should().NotContain(SessionCookieExtensions.LastSignInCookieName);
+        else
+            setCookie.Should().Contain($"{SessionCookieExtensions.LastSignInCookieName}={hint}");
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryEnrolment))]
+    public async Task Every_enrolment_has_a_row_name_and_writes_the_sign_in_hint_of_its_method(SignInEnrolment enrolment)
+    {
+        Enrolments.Should().ContainKey(enrolment, "a new enrolment needs its row name decided here");
+        var context = new DefaultHttpContext();
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Passkey, enrolment: enrolment));
+        await context.ApplySignInAsync(outcome, new OidcOptions());
+
+        _rows.Single().Details.GetRawText().Should()
+            .Be($$"""{"method":"passkey","enrolment":"{{Enrolments[enrolment]}}"}""");
+        context.Response.Headers.SetCookie.ToString().Should()
+            .Contain($"{SessionCookieExtensions.LastSignInCookieName}={SessionCookieExtensions.SignInMethods.Passkey}");
+    }
+
+    [Fact]
+    public async Task A_method_with_no_row_name_throws_before_admission_session_last_login_or_any_row()
+    {
+        var act = () => Completion().CompleteAsync(Attempt((SignInMethod)99));
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        _steps.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_enrolment_with_no_row_name_throws_before_admission_session_last_login_or_any_row()
+    {
+        var act = () => Completion().CompleteAsync(Attempt(enrolment: (SignInEnrolment)99));
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        _steps.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_signed_in_method_with_no_hint_decision_throws_before_any_cookie_or_ending_the_handed_off_session()
+    {
+        var options = new OidcOptions();
+        var refreshTokens = new Mock<IRefreshTokenService>();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection()
+                .AddSingleton(refreshTokens.Object)
+                .AddSingleton(_audit.Object)
+                .BuildServiceProvider(),
+        };
+        context.Request.Headers.Cookie = $"{options.Cookie.RefreshTokenName}=handed-off";
+
+        var act = () => context.ApplySignInAsync(
+            new SignInOutcome.SignedIn(_session, false, (SignInMethod)99, null), options);
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        context.Response.Headers.SetCookie.ToString().Should().BeEmpty();
+        refreshTokens.VerifyNoOtherCalls();
+        _rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_method_with_no_hint_decision_fails_rather_than_writing_no_hint()
+    {
+        var context = new DefaultHttpContext();
+
+        var act = () => context.ApplySignInAsync(
+            new SignInOutcome.SecondFactorRequired(_subjectId, "t", (SignInMethod)99, null), new OidcOptions());
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+    }
+
+    [Theory]
+    [InlineData(SignInEnrolment.Invite, """{"method":"passkey","enrolment":"invite"}""")]
+    [InlineData(SignInEnrolment.TenantInvite, """{"method":"passkey","enrolment":"tenant_invite"}""")]
+    public async Task An_invite_enrolment_is_admitted_gated_and_signed_in_in_the_same_order_with_its_row(
+        SignInEnrolment enrolment, string row)
+    {
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Passkey, enrolment: enrolment));
+
+        outcome.Should().BeEquivalentTo(new SignInOutcome.SignedIn(_session, false, SignInMethod.Passkey, null));
+        _steps.Should().Equal("admission", "gate", "session", "last-login", "audit:login");
+        _audit.Verify(a => a.LogAsync(AuthAuditEventType.Login, _subjectId, true, Ip, Agent, null, row, null, null, null));
+    }
+
+    [Fact]
+    public async Task A_refused_invite_enrolment_names_the_enrolment_in_the_refusal_row()
+    {
+        NotAMember();
+
+        var outcome = await Completion().CompleteAsync(Attempt(SignInMethod.Passkey, enrolment: SignInEnrolment.Invite));
+
+        outcome.Should().Be(new SignInOutcome.Refused(SignInRefusal.NotAMember));
+        _audit.Verify(a => a.LogAsync(
+            AuthAuditEventType.FailedAuth, _subjectId, false, Ip, Agent, null,
+            """{"method":"passkey","enrolment":"invite","reason":"not_a_member"}""", null, null, null));
     }
 }

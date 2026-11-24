@@ -882,7 +882,8 @@ public class PasskeyServiceTests
         }
         else
         {
-            thrown.Should().BeOfType<Fido2VerificationException>()
+            thrown.Should().BeOfType<PasskeyRegistrationRefusedException>()
+                .Which.InnerException.Should().BeOfType<Fido2VerificationException>()
                 .Which.Code.Should().Be(Fido2NetLib.Exceptions.Fido2ErrorCode.InvalidAuthenticatorResponseOrigin);
         }
 
@@ -909,7 +910,8 @@ public class PasskeyServiceTests
         var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
             attestation, options.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId));
 
-        thrown.Should().BeOfType<Fido2VerificationException>();
+        thrown.Should().BeOfType<PasskeyRegistrationRefusedException>()
+            .Which.InnerException.Should().BeOfType<Fido2VerificationException>();
         (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(0);
     }
 
@@ -1040,6 +1042,541 @@ public class PasskeyServiceTests
                 ClientDataJson = ClientData("webauthn.create", optionsJson, origin),
             },
         });
+    }
+
+    /// <summary>
+    /// The types a refused registration raises, which the enrolment flows' registration proof in
+    /// <see cref="Nocturne.API.Controllers.Authentication.PasskeyController"/> and the setup owner's in
+    /// <see cref="Nocturne.API.Controllers.V4.SetupController"/> catch.
+    /// </summary>
+    public static readonly Type[] RegistrationRefusals =
+    [
+        typeof(InvalidOperationException), typeof(System.Text.Json.JsonException), typeof(PasskeyRegistrationRefusedException),
+    ];
+
+    /// <summary>Each malformed attestation and the type the verifier throws for it.</summary>
+    public static TheoryData<string, Type> MalformedAttestations() => new()
+    {
+        { "attestation object that is not CBOR", typeof(Fido2VerificationException) },
+        { "attestation object that is a CBOR array", typeof(Fido2VerificationException) },
+        { "attestation object with no format", typeof(Fido2VerificationException) },
+        { "unknown format", typeof(Fido2VerificationException) },
+        { "statement that is not a map", typeof(Fido2VerificationException) },
+        { "truncated authenticator data", typeof(Fido2VerificationException) },
+        { "credential public key that is not CBOR", typeof(Fido2VerificationException) },
+        { "credential public key with a short coordinate", typeof(Fido2VerificationException) },
+        { "credential public key of an unknown key type", typeof(Fido2VerificationException) },
+        { "packed self attestation with a signature that is not DER", typeof(Fido2VerificationException) },
+        { "packed self attestation with an algorithm the key is not", typeof(Fido2VerificationException) },
+        { "packed with a certificate chain that is not DER", typeof(Fido2VerificationException) },
+        { "packed with an empty certificate chain", typeof(Fido2VerificationException) },
+        { "packed with a certificate chain that is text", typeof(Fido2VerificationException) },
+        { "packed with a certificate and a signature that is not DER", typeof(Fido2VerificationException) },
+        { "packed with a certificate key that is an Ed25519 key of 31 bytes", typeof(FormatException) },
+        { "packed with a certificate key that is an EC point off its curve", typeof(CryptographicException) },
+        { "packed with a certificate key that is an RSA key that is not DER", typeof(CryptographicException) },
+        { "fido-u2f with a certificate chain that is not DER", typeof(Fido2VerificationException) },
+        { "tpm with structures that do not parse", typeof(Fido2VerificationException) },
+        { "android-key with a certificate chain that is not DER", typeof(Fido2VerificationException) },
+        { "android-safetynet with a response that is not a JWS", typeof(Fido2VerificationException) },
+        { "android-safetynet with a JWS header that is not a JSON object", typeof(InvalidOperationException) },
+        { "android-safetynet with a certificate key that is an EC point off its curve", typeof(CryptographicException) },
+        { "apple with a certificate chain that is not DER", typeof(Fido2VerificationException) },
+        { "apple-appattest with a chain to another root", typeof(Fido2VerificationException) },
+        { "packed, signed, with a transports extension that is a SEQUENCE", typeof(System.Formats.Asn1.AsnContentException) },
+        { "packed, signed, with a transports extension that is an empty OCTET STRING", typeof(System.Formats.Asn1.AsnContentException) },
+        { "packed, signed, with a transports extension that is an empty BIT STRING", typeof(IndexOutOfRangeException) },
+        { "packed, signed, with an aaguid extension whose length is not minimal", typeof(System.Formats.Asn1.AsnContentException) },
+        { "packed, signed, with a basic constraints extension that is an empty OCTET STRING", typeof(CryptographicException) },
+        { "fido-u2f, signed, with a transports extension that is a SEQUENCE", typeof(System.Formats.Asn1.AsnContentException) },
+        { "fido-u2f, signed, with a transports extension that is an empty BIT STRING", typeof(IndexOutOfRangeException) },
+        { "tpm, signed, with a SAN that holds no directory name", typeof(System.Formats.Asn1.AsnContentException) },
+        { "tpm, signed, with a SAN name that holds its attributes in one flat sequence", typeof(InvalidCastException) },
+        { "tpm, signed, with a SAN value that is not UTF-8", typeof(System.Formats.Asn1.AsnContentException) },
+        { "tpm, signed, with a SAN value that is not a UTF8String", typeof(System.Formats.Asn1.AsnContentException) },
+        { "tpm, signed, with a SAN object identifier that does not parse", typeof(System.Formats.Asn1.AsnContentException) },
+        { "tpm, signed, with an EKU extension that is an empty OCTET STRING", typeof(CryptographicException) },
+        { "tpm, signed, with a basic constraints extension that is an empty OCTET STRING", typeof(CryptographicException) },
+        { "android-key, signed, with an attestation record that is not ASN.1", typeof(Fido2VerificationException) },
+        { "android-key, signed, with an origin that is not a 32-bit integer", typeof(Fido2VerificationException) },
+        { "android-key, signed, with a second certificate that is not DER", typeof(Fido2VerificationException) },
+        { "android-safetynet, signed by its own certificate, with a timestamp after the year 9999", typeof(ArgumentOutOfRangeException) },
+        { "android-safetynet, signed by its own certificate, with the nonce and a chain to another root", typeof(Fido2VerificationException) },
+        { "apple, with the nonce in an extension that does not parse", typeof(Fido2VerificationException) },
+        { "apple, with the nonce and a chain to another root", typeof(Fido2VerificationException) },
+    };
+
+    /// <summary>
+    /// The attestations whose certificate key is on a curve the verifier does not name. Each needs a
+    /// brainpoolP256r1 key, which a platform without that curve cannot create.
+    /// </summary>
+    public static TheoryData<string, Type> UnnamedCurveAttestations() => new()
+    {
+        { "packed with a certificate key on a curve the verifier does not name", typeof(Exception) },
+        { "tpm with an AIK certificate key on a curve the verifier does not name", typeof(Exception) },
+        { "apple with the nonce and a certificate key on a curve the verifier does not name", typeof(Exception) },
+    };
+
+    private static bool BrainpoolIsSupported()
+    {
+        try
+        {
+            using var key = ECDsa.Create(ECCurve.NamedCurves.brainpoolP256r1);
+            return true;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>A theory skipped on a platform that cannot create a brainpoolP256r1 key.</summary>
+    private sealed class BrainpoolTheoryAttribute : TheoryAttribute
+    {
+        public BrainpoolTheoryAttribute()
+        {
+            if (!BrainpoolIsSupported())
+                Skip = "This platform has no brainpoolP256r1 curve.";
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(MalformedAttestations))]
+    public Task AMalformedAttestation_IsRefusedWithTheVerifiersFailureInside_AndStoresNoPasskey(
+        string kind, Type verifierFailure) => AssertRefusedWithTheVerifiersFailure(kind, verifierFailure);
+
+    [BrainpoolTheory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(UnnamedCurveAttestations))]
+    public Task AnAttestationOnAnUnnamedCurve_IsRefusedWithTheVerifiersFailureInside_AndStoresNoPasskey(
+        string kind, Type verifierFailure) => AssertRefusedWithTheVerifiersFailure(kind, verifierFailure);
+
+    private async Task AssertRefusedWithTheVerifiersFailure(string kind, Type verifierFailure)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "invitee", PasskeyRegistrationFlow.MemberInvite);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            MalformedAttestation(kind, key, options.OptionsJson), options.ChallengeToken,
+            PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId));
+
+        var inner = thrown.Should().BeOfType<PasskeyRegistrationRefusedException>($"{kind} threw {thrown}")
+            .Which.InnerException;
+        if (verifierFailure == typeof(CryptographicException))
+            inner.Should().BeAssignableTo<CryptographicException>($"{kind} threw {inner}");
+        else
+            inner.Should().BeOfType(verifierFailure, $"{kind} threw {inner}");
+        (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(0);
+    }
+
+    /// <summary>
+    /// A well-formed attestation of each format the refusal theory signs, built by the same code, so a
+    /// refusal case that fails before the part it names is seen.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("packed, signed, well formed")]
+    [InlineData("fido-u2f, signed, well formed")]
+    [InlineData("tpm, signed, well formed")]
+    public async Task AWellFormedSignedAttestation_IsAccepted_AndStoresThePasskey(string kind)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var provider = RegisteredProvider();
+        var service = RegisteredService(provider);
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "invitee", PasskeyRegistrationFlow.MemberInvite);
+
+        var result = await service.CompleteRegistrationAsync(
+            MalformedAttestation(kind, key, options.OptionsJson), options.ChallengeToken,
+            PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId);
+
+        result.SubjectId.Should().Be(_subjectId);
+        (await _dbContext.PasskeyCredentials.CountAsync(c => c.SubjectId == _subjectId)).Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void TheControllerTests_RefuseExactlyTheRegistrationRefusalsTheServiceNames()
+    {
+        static IEnumerable<Type> TypesOf(IEnumerable<object[]> rows) => rows.Select(row => row[0].GetType());
+
+        TypesOf(Nocturne.API.Tests.Controllers.PasskeyControllerTests.RefusedRegistrations())
+            .Should().BeEquivalentTo(RegistrationRefusals);
+        TypesOf(Nocturne.API.Tests.Controllers.V4.SetupControllerTests.PasskeyProofRefusals)
+            .Should().BeEquivalentTo(RegistrationRefusals);
+    }
+
+    public static TheoryData<Exception> UniquenessReadFaults() => new()
+    {
+        new TimeoutException("The credential store did not answer."),
+        new SpendStoreUnavailableException(),
+    };
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [MemberData(nameof(UniquenessReadFaults))]
+    public async Task AFaultInTheCredentialUniquenessRead_PropagatesAsItself_AndStoresNoPasskey(Exception fault)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var passkeys = new Mock<IPasskeyCredentialRepository>();
+        passkeys.Setup(p => p.ExistsAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ThrowsAsync(fault);
+        var service = ServiceWithCredentials(passkeys);
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "invitee", PasskeyRegistrationFlow.MemberInvite);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId));
+
+        thrown.Should().BeSameAs(fault);
+        passkeys.Verify(p => p.CreateAsync(It.IsAny<Nocturne.Core.Models.Authorization.NewPasskeyCredential>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ACredentialThatIsAlreadyRegistered_IsRefused_AndNotStored()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var passkeys = new Mock<IPasskeyCredentialRepository>();
+        passkeys.Setup(p => p.ExistsAsync(It.IsAny<byte[]>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var service = ServiceWithCredentials(passkeys);
+        var options = await service.GenerateRegistrationOptionsAsync(
+            _subjectId, "invitee", PasskeyRegistrationFlow.MemberInvite);
+
+        var thrown = await Record.ExceptionAsync(() => service.CompleteRegistrationAsync(
+            Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,
+            PasskeyRegistrationFlow.MemberInvite, _tenantId, _subjectId));
+
+        thrown.Should().BeOfType<PasskeyRegistrationRefusedException>().Which.InnerException.Should().BeNull();
+        passkeys.Verify(p => p.CreateAsync(It.IsAny<Nocturne.Core.Models.Authorization.NewPasskeyCredential>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>A service whose credential store is <paramref name="passkeys"/>, for a server whose base domain is <c>localhost</c>.</summary>
+    private PasskeyService ServiceWithCredentials(Mock<IPasskeyCredentialRepository> passkeys)
+    {
+        passkeys.Setup(p => p.GetCredentialIdsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        return new(
+            passkeys.Object, _spent,
+            new Mock<ISubjectRepository>(MockBehavior.Strict).Object,
+            new Mock<ITenantMemberService>(MockBehavior.Strict).Object,
+            new EphemeralDataProtectionProvider(), RelyingParty("localhost"), NullLogger<PasskeyService>.Instance,
+            Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Development"), TimeProvider.System);
+    }
+
+    private static string MalformedAttestation(string kind, ECDsa key, string optionsJson)
+    {
+        var credentialId = Guid.CreateVersion7().ToByteArray();
+        var garbage = new byte[] { 0x30, 0x03, 0x02, 0x01 };
+        var coseKey = new Fido2NetLib.Objects.CredentialPublicKey(key, Fido2NetLib.Objects.COSE.Algorithm.ES256).GetBytes();
+
+        byte[] AuthData(byte[] publicKey) =>
+        [
+            .. SHA256.HashData("localhost"u8),
+            (byte)(Fido2NetLib.Objects.AuthenticatorFlags.UP | Fido2NetLib.Objects.AuthenticatorFlags.UV
+                | Fido2NetLib.Objects.AuthenticatorFlags.AT),
+            0, 0, 0, 0,
+            .. new byte[16],
+            (byte)(credentialId.Length >> 8), (byte)credentialId.Length,
+            .. credentialId,
+            .. publicKey,
+        ];
+
+        var authData = AuthData(coseKey);
+        Fido2NetLib.Cbor.CborArray Chain(params byte[][] certificates)
+        {
+            var chain = new Fido2NetLib.Cbor.CborArray();
+            foreach (var certificate in certificates)
+                chain.Add(certificate);
+            return chain;
+        }
+
+        Fido2NetLib.Cbor.CborMap Statement(params (string Name, object Value)[] fields)
+        {
+            var statement = new Fido2NetLib.Cbor.CborMap();
+            foreach (var (name, value) in fields)
+            {
+                switch (value)
+                {
+                    case int number: statement.Add(name, number); break;
+                    case string text: statement.Add(name, text); break;
+                    case byte[] bytes: statement.Add(name, bytes); break;
+                    default: statement.Add(name, (Fido2NetLib.Cbor.CborObject)value); break;
+                }
+            }
+            return statement;
+        }
+
+        const int es256 = -7;
+        var garbageBytes = garbage;
+
+        byte[] Object(string? format, Fido2NetLib.Cbor.CborObject statement, byte[] data)
+        {
+            var map = new Fido2NetLib.Cbor.CborMap();
+            if (format is not null)
+                map.Add("fmt", format);
+            map.Add("attStmt", statement);
+            map.Add("authData", data);
+            return map.Encode();
+        }
+
+        var selfSigned = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                "CN=Authenticator", key, HashAlgorithmName.SHA256)
+            .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1)).RawData;
+
+        var clientData = ClientData("webauthn.create", optionsJson, "https://localhost");
+        var clientDataHash = SHA256.HashData(clientData);
+        byte[] signedData = [.. authData, .. clientDataHash];
+        byte[] Sign(byte[] data) => key.SignData(data, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
+
+        byte[] Certificate(string subject, bool notACa, params (string Oid, byte[] Value)[] extensions) =>
+            CertificateOf(key, subject, notACa, extensions);
+
+        byte[] CertificateOf(ECDsa certificateKey, string subject, bool notACa, params (string Oid, byte[] Value)[] extensions)
+        {
+            var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                new System.Security.Cryptography.X509Certificates.X500DistinguishedName(subject), certificateKey, HashAlgorithmName.SHA256);
+            if (notACa)
+            {
+                request.CertificateExtensions.Add(
+                    new System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension(false, false, 0, false));
+            }
+            foreach (var (oid, value) in extensions)
+                request.CertificateExtensions.Add(new System.Security.Cryptography.X509Certificates.X509Extension(oid, value, false));
+            return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1)).RawData;
+        }
+
+        static byte[] Der(byte[] tag, params byte[][] contents)
+        {
+            byte[] body = [.. contents.SelectMany(content => content)];
+            return [.. tag, (byte)body.Length, .. body];
+        }
+
+        const string transportsOid = "1.3.6.1.4.1.45724.2.1.1";
+        const string aaguidOid = "1.3.6.1.4.1.45724.1.1.4";
+        const string packedSubject = "C=US, O=Test, OU=Authenticator Attestation, CN=Test";
+
+        byte[] PackedWith(byte[] certificate, int algorithm = es256) => Object("packed", Statement(
+            ("alg", algorithm), ("sig", Sign(signedData)), ("x5c", Chain(certificate))), authData);
+        byte[] Packed(string extensionOid, byte[] extension) =>
+            PackedWith(Certificate(packedSubject, notACa: true, (extensionOid, extension)));
+
+        // A certificate for a subject public key the test writes itself, issued under the attestation key.
+        byte[] CertificateHolding(System.Security.Cryptography.X509Certificates.PublicKey subjectKey, string subject)
+        {
+            var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                new System.Security.Cryptography.X509Certificates.X500DistinguishedName(subject), subjectKey, HashAlgorithmName.SHA256);
+            return request.Create(
+                new System.Security.Cryptography.X509Certificates.X500DistinguishedName("CN=Issuer"),
+                System.Security.Cryptography.X509Certificates.X509SignatureGenerator.CreateForECDsa(key),
+                DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), [1, 2, 3, 4]).RawData;
+        }
+
+        System.Security.Cryptography.X509Certificates.PublicKey SubjectKey(string algorithmOid, byte[]? parameters, byte[] value) =>
+            new(new Oid(algorithmOid), parameters is null ? null : new AsnEncodedData(parameters), new AsnEncodedData(value));
+        byte[] p256Parameters = [0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
+        var ecPointOffItsCurve = SubjectKey("1.2.840.10045.2.1", p256Parameters, [0x04, .. new byte[64]]);
+        var rsaKeyThatIsNotDer = SubjectKey("1.2.840.113549.1.1.1", [0x05, 0x00], [0x30, 0x03, 0x02, 0x01]);
+        var shortEd25519Key = SubjectKey("1.3.101.112", null, new byte[31]);
+        const int edDsa = -8;
+        using var unnamedCurveKey = kind.Contains("a curve the verifier does not name")
+            ? ECDsa.Create(ECCurve.NamedCurves.brainpoolP256r1)
+            : null;
+
+        var point = key.ExportParameters(false).Q;
+        byte[] FidoU2fWith(byte[] certificate) => Object("fido-u2f", Statement(
+            ("sig", Sign([0x00, .. SHA256.HashData("localhost"u8), .. clientDataHash, .. credentialId, 0x04, .. point.X!, .. point.Y!])),
+            ("x5c", Chain(certificate))), authData);
+        byte[] FidoU2f(byte[] transports) => FidoU2fWith(Certificate("CN=U2F", notACa: false, (transportsOid, transports)));
+
+        static byte[] U16(int value) => [(byte)(value >> 8), (byte)value];
+        static byte[] Sized(byte[] value) => [.. U16(value.Length), .. value];
+        const int tpmAlgEcc = 0x0023, tpmAlgSha256 = 0x000B, tpmAlgNull = 0x0010, tpmEccNistP256 = 0x0003;
+        byte[] pubArea =
+        [
+            .. U16(tpmAlgEcc), .. U16(tpmAlgSha256), 0, 0, 0, 0x72, .. U16(0),
+            .. U16(tpmAlgNull), .. U16(tpmAlgNull), .. U16(tpmEccNistP256), .. U16(tpmAlgNull),
+            .. Sized(point.X!), .. Sized(point.Y!),
+        ];
+        byte[] certInfo =
+        [
+            0xFF, 0x54, 0x43, 0x47, 0x80, 0x17, .. U16(0), .. Sized(SHA256.HashData(signedData)),
+            .. new byte[8], .. new byte[4], .. new byte[4], 1, .. new byte[8],
+            .. U16(34), .. U16(tpmAlgSha256), .. SHA256.HashData(pubArea), .. U16(0),
+        ];
+        byte[] tpmManufacturerOid = [0x06, 0x05, 0x67, 0x81, 0x05, 0x02, 0x01];
+        byte[] SanName(params byte[][] attributes) => Der([0x30], Der([0xA4], Der([0x30], attributes)));
+        byte[] TpmWith(byte[] aikCertificate) => Object("tpm", Statement(
+            ("ver", "2.0"), ("alg", es256),
+            ("x5c", Chain(aikCertificate)),
+            ("sig", Sign(certInfo)), ("certInfo", certInfo), ("pubArea", pubArea)), authData);
+        byte[] Tpm(byte[] san) => TpmWith(Certificate("", notACa: true, ("2.5.29.17", san)));
+        byte[] SanAttribute(byte[] oid, string value) => Der([0x31], Der([0x30], oid, Der([0x0C], System.Text.Encoding.UTF8.GetBytes(value))));
+        var wellFormedSan = ("2.5.29.17", SanName(
+            SanAttribute(tpmManufacturerOid, "id:414D4400"),
+            SanAttribute([0x06, 0x05, 0x67, 0x81, 0x05, 0x02, 0x02], "model"),
+            SanAttribute([0x06, 0x05, 0x67, 0x81, 0x05, 0x02, 0x03], "id:13")));
+        var aikEku = ("2.5.29.37", new System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension(
+            new OidCollection { new Oid("2.23.133.8.3") }, false).RawData);
+        (string, byte[]) EmptyOctetString(string oid) => (oid, [0x04, 0x00]);
+
+        const string androidRecordOid = "1.3.6.1.4.1.11129.2.1.17";
+        byte[] AndroidKey(byte[] record, params byte[][] issuers) => Object("android-key", Statement(
+            ("alg", es256), ("sig", Sign(signedData)),
+            ("x5c", Chain([Certificate("CN=Android", notACa: false, (androidRecordOid, record)), .. issuers]))), authData);
+        byte[] AndroidRecord(params byte[][] teeEnforced) => Der([0x30],
+            [0x02, 0x01, 0x03], [0x0A, 0x01, 0x01], [0x02, 0x01, 0x04], [0x0A, 0x01, 0x01],
+            Der([0x04], clientDataHash), [0x04, 0x00], [0x30, 0x00], Der([0x30], teeEnforced));
+
+        const string appleNonceOid = "1.2.840.113635.100.8.2";
+        byte[] AppleWith(byte[] certificate) => Object("apple", Statement(("x5c", Chain(certificate, certificate))), authData);
+        byte[] Apple(byte[] nonceExtension) =>
+            AppleWith(Certificate("CN=Apple", notACa: false, (appleNonceOid, nonceExtension)));
+        byte[] appleNonce = Der([0x30], Der([0xA1], Der([0x04], SHA256.HashData(signedData))));
+
+        byte[] SafetyNet(string jws) => Object("android-safetynet", Statement(
+            ("ver", "1"), ("response", System.Text.Encoding.UTF8.GetBytes(jws))), authData);
+        string SignedJws(byte[] certificate, object claims)
+        {
+            var header = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                new { alg = "ES256", x5c = new[] { Convert.ToBase64String(certificate) } });
+            var signingInput = System.Buffers.Text.Base64Url.EncodeToString(header) + "."
+                + System.Buffers.Text.Base64Url.EncodeToString(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(claims));
+            var signature = key.SignData(
+                System.Text.Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256,
+                DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+            return signingInput + "." + System.Buffers.Text.Base64Url.EncodeToString(signature);
+        }
+        object SafetyNetClaims(long timestampMs) => new
+        {
+            nonce = Convert.ToBase64String(SHA256.HashData(signedData)), timestampMs, ctsProfileMatch = true,
+        };
+        var safetyNetCertificate = Certificate("CN=attest.android.com", notACa: false);
+
+        var attestationObject = kind switch
+        {
+            "attestation object that is not CBOR" => [0xff, 0x00, 0x13],
+            "attestation object that is a CBOR array" => Chain(garbage).Encode(),
+            "attestation object with no format" => Object(null, Statement(), authData),
+            "unknown format" => Object("nope", Statement(), authData),
+            "statement that is not a map" => Object("packed", new Fido2NetLib.Cbor.CborTextString("x"), authData),
+            "truncated authenticator data" => Object("none", Statement(), authData[..40]),
+            "credential public key that is not CBOR" => Object("none", Statement(), AuthData([0xff, 0xff, 0x00])),
+            "credential public key with a short coordinate" => Object("none", Statement(), AuthData(ShortCoordinateKey())),
+            "credential public key of an unknown key type" => Object("none", Statement(), AuthData(UnknownKeyType())),
+            "packed self attestation with a signature that is not DER" =>
+                Object("packed", Statement(("alg", es256), ("sig", garbageBytes)), authData),
+            "packed self attestation with an algorithm the key is not" =>
+                Object("packed", Statement(("alg", -257), ("sig", garbageBytes)), authData),
+            "packed with a certificate chain that is not DER" =>
+                Object("packed", Statement(("alg", es256), ("sig", garbageBytes), ("x5c", Chain(garbage))), authData),
+            "packed with an empty certificate chain" =>
+                Object("packed", Statement(("alg", es256), ("sig", garbageBytes), ("x5c", Chain())), authData),
+            "packed with a certificate chain that is text" =>
+                Object("packed", Statement(("alg", es256), ("sig", garbageBytes), ("x5c", "x")), authData),
+            "packed with a certificate and a signature that is not DER" =>
+                Object("packed", Statement(("alg", es256), ("sig", garbageBytes), ("x5c", Chain(selfSigned))), authData),
+            "fido-u2f with a certificate chain that is not DER" =>
+                Object("fido-u2f", Statement(("sig", garbageBytes), ("x5c", Chain(garbage))), authData),
+            "tpm with structures that do not parse" => Object("tpm", Statement(
+                ("ver", "2.0"), ("alg", es256), ("x5c", Chain(garbage)),
+                ("sig", garbageBytes), ("certInfo", garbageBytes), ("pubArea", garbageBytes)), authData),
+            "android-key with a certificate chain that is not DER" =>
+                Object("android-key", Statement(("alg", es256), ("sig", garbageBytes), ("x5c", Chain(garbage))), authData),
+            "android-safetynet with a response that is not a JWS" => Object("android-safetynet", Statement(
+                ("ver", "1"), ("response", garbageBytes)), authData),
+            "apple with a certificate chain that is not DER" =>
+                Object("apple", Statement(("x5c", Chain(garbage))), authData),
+            "packed, signed, with a transports extension that is a SEQUENCE" => Packed(transportsOid, [0x30, 0x00]),
+            "packed, signed, with a transports extension that is an empty OCTET STRING" => Packed(transportsOid, [0x04, 0x00]),
+            "packed, signed, with a transports extension that is an empty BIT STRING" => Packed(transportsOid, [0x03, 0x01, 0x00]),
+            "packed, signed, with an aaguid extension whose length is not minimal" =>
+                Packed(aaguidOid, [0x04, 0x81, 0x10, .. new byte[16]]),
+            "fido-u2f, signed, with a transports extension that is a SEQUENCE" => FidoU2f([0x30, 0x00]),
+            "fido-u2f, signed, with a transports extension that is an empty BIT STRING" => FidoU2f([0x03, 0x01, 0x00]),
+            "tpm, signed, with a SAN that holds no directory name" => Tpm(Der([0x30], Der([0x82], "x"u8.ToArray()))),
+            "tpm, signed, with a SAN name that holds its attributes in one flat sequence" =>
+                Tpm(SanName(Der([0x30], tpmManufacturerOid, Der([0x0C], "id:414D4400"u8.ToArray())))),
+            "tpm, signed, with a SAN value that is not UTF-8" =>
+                Tpm(SanName(Der([0x31], Der([0x30], tpmManufacturerOid, Der([0x0C], [0xFF, 0xFE]))))),
+            "tpm, signed, with a SAN value that is not a UTF8String" =>
+                Tpm(SanName(Der([0x31], Der([0x30], tpmManufacturerOid, Der([0x13], "id:414D4400"u8.ToArray()))))),
+            "tpm, signed, with a SAN object identifier that does not parse" =>
+                Tpm(SanName(Der([0x31], Der([0x30], [0x06, 0x01, 0x80], Der([0x0C], "id:414D4400"u8.ToArray()))))),
+            "android-key, signed, with an attestation record that is not ASN.1" => AndroidKey(garbage),
+            "android-key, signed, with an origin that is not a 32-bit integer" =>
+                AndroidKey(AndroidRecord(Der([0xBF, 0x85, 0x3E], [0x02, 0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0]))),
+            "android-key, signed, with a second certificate that is not DER" => AndroidKey(AndroidRecord(), garbage),
+            "apple, with the nonce in an extension that does not parse" =>
+                Apple(Der([0x30], Der([0xA1], Der([0x05], SHA256.HashData(signedData))))),
+            "apple, with the nonce and a chain to another root" => Apple(appleNonce),
+            "packed with a certificate key on a curve the verifier does not name" =>
+                PackedWith(CertificateOf(unnamedCurveKey!, packedSubject, notACa: true)),
+            "packed with a certificate key that is an Ed25519 key of 31 bytes" =>
+                PackedWith(CertificateHolding(shortEd25519Key, packedSubject), edDsa),
+            "packed with a certificate key that is an EC point off its curve" =>
+                PackedWith(CertificateHolding(ecPointOffItsCurve, packedSubject)),
+            "packed with a certificate key that is an RSA key that is not DER" =>
+                PackedWith(CertificateHolding(rsaKeyThatIsNotDer, packedSubject)),
+            "tpm with an AIK certificate key on a curve the verifier does not name" =>
+                TpmWith(CertificateOf(unnamedCurveKey!, "", notACa: true, wellFormedSan, aikEku)),
+            "android-safetynet with a JWS header that is not a JSON object" =>
+                SafetyNet(System.Buffers.Text.Base64Url.EncodeToString("[]"u8) + ".e30.AA"),
+            "android-safetynet with a certificate key that is an EC point off its curve" =>
+                SafetyNet(SignedJws(CertificateHolding(ecPointOffItsCurve, "CN=attest.android.com"), new { })),
+            "apple with the nonce and a certificate key on a curve the verifier does not name" =>
+                AppleWith(CertificateOf(unnamedCurveKey!, "CN=Apple", notACa: false, (appleNonceOid, appleNonce))),
+            "apple-appattest with a chain to another root" => Object("apple-appattest", Statement(
+                ("x5c", Chain(Certificate("CN=AppAttest", notACa: false), Certificate("CN=AppAttest CA", notACa: false)))), authData),
+            "packed, signed, with a basic constraints extension that is an empty OCTET STRING" =>
+                PackedWith(Certificate(packedSubject, notACa: false, EmptyOctetString("2.5.29.19"))),
+            "tpm, signed, with an EKU extension that is an empty OCTET STRING" =>
+                TpmWith(Certificate("", notACa: true, wellFormedSan, EmptyOctetString("2.5.29.37"))),
+            "tpm, signed, with a basic constraints extension that is an empty OCTET STRING" =>
+                TpmWith(Certificate("", notACa: false, wellFormedSan, aikEku, EmptyOctetString("2.5.29.19"))),
+            "android-safetynet, signed by its own certificate, with a timestamp after the year 9999" =>
+                SafetyNet(SignedJws(safetyNetCertificate, SafetyNetClaims(253_402_300_800_000))),
+            "android-safetynet, signed by its own certificate, with the nonce and a chain to another root" =>
+                SafetyNet(SignedJws(safetyNetCertificate, SafetyNetClaims(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))),
+            "packed, signed, well formed" => PackedWith(Certificate(packedSubject, notACa: true)),
+            "fido-u2f, signed, well formed" => FidoU2fWith(Certificate("CN=U2F", notACa: false)),
+            "tpm, signed, well formed" => TpmWith(Certificate("", notACa: true, wellFormedSan, aikEku)),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+        };
+
+        return System.Text.Json.JsonSerializer.Serialize(new AuthenticatorAttestationRawResponse
+        {
+            Id = System.Buffers.Text.Base64Url.EncodeToString(credentialId),
+            RawId = credentialId,
+            Type = Fido2NetLib.Objects.PublicKeyCredentialType.PublicKey,
+            Response = new AuthenticatorAttestationRawResponse.AttestationResponse
+            {
+                AttestationObject = attestationObject,
+                ClientDataJson = clientData,
+            },
+        });
+
+        byte[] ShortCoordinateKey()
+        {
+            var cose = new Fido2NetLib.Cbor.CborMap();
+            cose.Add(1L, 2L);
+            cose.Add(3L, -7L);
+            cose.Add(-1L, 1L);
+            cose.Add(-2L, new byte[] { 1, 2, 3 });
+            cose.Add(-3L, new byte[] { 4, 5, 6 });
+            return cose.Encode();
+        }
+
+        byte[] UnknownKeyType()
+        {
+            var cose = new Fido2NetLib.Cbor.CborMap();
+            cose.Add(1L, 99L);
+            cose.Add(3L, -7L);
+            return cose.Encode();
+        }
     }
 
     #endregion
@@ -1185,7 +1722,7 @@ public class PasskeyServiceTests
         var refused = () => service.CompleteRegistrationAsync(
             Attestation(key, options.OptionsJson, "https://cgm.example.com"), options.ChallengeToken,
             PasskeyRegistrationFlow.OwnAccount, _tenantId, _subjectId);
-        await refused.Should().ThrowAsync<Fido2VerificationException>();
+        await refused.Should().ThrowAsync<PasskeyRegistrationRefusedException>();
 
         var valid = () => service.CompleteRegistrationAsync(
             Attestation(key, options.OptionsJson, "https://localhost"), options.ChallengeToken,

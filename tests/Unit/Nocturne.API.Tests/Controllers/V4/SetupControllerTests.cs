@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Fido2NetLib;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -1385,8 +1384,9 @@ public class SetupControllerTests : IDisposable
     public static TheoryData<Exception> PasskeyProofRefusals => new()
     {
         new InvalidOperationException("Registration challenge was not issued for the enrolling subject."),
-        new Fido2VerificationException("Invalid attestation"),
         new JsonException("The attestation is not JSON."),
+        new PasskeyRegistrationRefusedException(
+            "The attestation was refused.", new System.Formats.Asn1.AsnContentException("Must be a primitive")),
     };
 
     [Theory]
@@ -1403,7 +1403,9 @@ public class SetupControllerTests : IDisposable
 
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
-        problem.Value.Should().BeOfType<ProblemDetails>().Which.Title.Should().Be("Registration Failed");
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("Registration Failed");
+        details.Detail.Should().Be("Passkey registration failed during setup");
         _sessionService.Verify(
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);

@@ -217,14 +217,28 @@ public class PasskeyService : IPasskeyService
         var attestationResponse = JsonSerializer.Deserialize<AuthenticatorAttestationRawResponse>(attestationResponseJson)
             ?? throw new InvalidOperationException("Failed to deserialize attestation response.");
 
-        // Fido2 refuses a response with no authenticator response part.
-        var credential = await VerifierFor(attestationResponse.Response?.ClientDataJson).MakeNewCredentialAsync(new MakeNewCredentialParams
+        var verifier = VerifierFor(attestationResponse.Response?.ClientDataJson);
+        RegisteredPublicKeyCredential credential;
+        try
         {
-            AttestationResponse = attestationResponse,
-            OriginalOptions = originalOptions,
-            IsCredentialIdUniqueToUserCallback = async (args, ct) =>
-                !await _passkeys.ExistsAsync(args.CredentialId, ct),
-        });
+            // Fido2 refuses a response with no authenticator response part. Uniqueness is read
+            // after the call, so a failure of that read is not taken for a refusal.
+            credential = await verifier.MakeNewCredentialAsync(new MakeNewCredentialParams
+            {
+                AttestationResponse = attestationResponse,
+                OriginalOptions = originalOptions,
+                IsCredentialIdUniqueToUserCallback = (_, _) => Task.FromResult(true),
+            });
+        }
+        // The verifier parses caller-supplied bytes and lets arbitrary types out of its parsers,
+        // so every failure of this call is a refused registration.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new PasskeyRegistrationRefusedException("The attestation was refused.", ex);
+        }
+
+        if (await _passkeys.ExistsAsync(credential.Id, CancellationToken.None))
+            throw new PasskeyRegistrationRefusedException("The credential is already registered.");
 
         // Enforce 20 credential cap
         var existingCount = await _passkeys.CountAsync(subjectId, CancellationToken.None);
