@@ -153,6 +153,37 @@ public class NightscoutOpenSpanRecheckTests
         harness.Deleted.Should().ContainSingle().Which.Should().BeEquivalentTo([Override1]);
     }
 
+    /// <summary>
+    /// A span stored under an uploader's own <c>id</c> is not an ObjectId, so the canary that vouches
+    /// for the lookup must be a served key of that kind: the <c>id</c> of a treatment the crawl read.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task A_missing_override_under_a_client_id_is_confirmed_gone_by_a_served_client_id_canary(
+        bool copyStillUpstream, bool deleted)
+    {
+        const string servedClientId = "11111111-1111-4111-8111-111111111111";
+        const string spanId = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        var harness = new Harness("15.0.8");
+        harness.Upstream.Add("ccccccccccccccccccccccc1", Now.AddHours(-1), t =>
+        {
+            t["eventType"] = "Carb Correction";
+            t["carbs"] = 10;
+            t["id"] = servedClientId;
+        });
+        if (copyStillUpstream)
+            harness.Upstream.Add(spanId.ToUpperInvariant(), DaysAgo, Indefinite, asObjectId: false);
+        harness.Open.Add(new StoredTreatmentKey(spanId, DaysAgo.UtcDateTime));
+
+        await harness.SyncAsync();
+
+        harness.Upstream.IdReads.Should().Contain(q => q.Contains($"find[id]={servedClientId}"), "the canary is looked up by its id");
+        harness.Deleted.Should().HaveCount(deleted ? 1 : 0);
+        if (deleted)
+            harness.Deleted.Single().Should().BeEquivalentTo([spanId]);
+    }
+
     [Fact]
     public async Task More_than_a_few_missing_overrides_delete_none()
     {
