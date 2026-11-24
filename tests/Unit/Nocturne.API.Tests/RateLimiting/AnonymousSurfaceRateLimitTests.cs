@@ -145,9 +145,7 @@ public class AnonymousSurfaceRateLimitTests
 
         var rejected = await client.GetAsync(url);
 
-        rejected.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
-        (await rejected.Content.ReadAsStringAsync()).Should().Contain("rate_limit_exceeded",
-            "a throttled caller reads the same body here as on every other limited endpoint");
+        await rejected.ShouldBeTheRateLimitProblemAsync();
     }
 
     private static int PermitLimit(string policy) =>

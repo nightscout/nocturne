@@ -23,6 +23,11 @@ async function loginRefusedWith(status: number, body: unknown): Promise<unknown>
 describe("classifyAuthenticatorError over what the generated client throws", () => {
   it("recognises the rate limiter's own body", async () => {
     const thrown = await loginRefusedWith(429, {
+      type: "https://tools.ietf.org/html/rfc6585#section-4",
+      title: "Too Many Requests",
+      status: 429,
+      detail: "Too many requests. Please try again later.",
+      code: "rate_limit_exceeded",
       error: "rate_limit_exceeded",
       error_description: "Too many requests. Please try again later.",
     });

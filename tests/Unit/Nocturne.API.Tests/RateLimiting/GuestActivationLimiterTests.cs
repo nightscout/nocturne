@@ -51,11 +51,9 @@ public class GuestActivationLimiterTests : IDisposable
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
         await refused!.ExecuteResultAsync(new ActionContext(http, new RouteData(), new ActionDescriptor()));
-        http.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         int.Parse(http.Response.Headers.RetryAfter.ToString())
             .Should().BeInRange(1, (int)GuestActivationLimiter.Window.TotalSeconds);
-        http.Response.Body.Position = 0;
-        (await new StreamReader(http.Response.Body).ReadToEndAsync()).Should().Contain("rate_limit_exceeded");
+        await http.Response.ShouldBeTheRateLimitProblemAsync();
     }
 
     [Fact]
