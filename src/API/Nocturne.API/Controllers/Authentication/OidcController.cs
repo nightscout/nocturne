@@ -151,7 +151,7 @@ public class OidcController : ControllerBase
 
     /// <summary>
     /// Handle OIDC callback from provider.
-    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page, and a missing <c>code</c> or <c>state</c> returns 400.
+    /// Exchanges authorization code for tokens and creates session. On success, sets session cookies, or a step-up cookie when a second factor is pending, and redirects. A provider or state failure redirects to the error page, a user who is not a member goes to the login page with the reason (or back to the tenant-creation or join link the sign-in started from), and a missing <c>code</c> or <c>state</c> returns 400.
     /// </summary>
     /// <param name="code">Authorization code from provider.</param>
     /// <param name="state">State parameter for CSRF verification.</param>
@@ -255,7 +255,7 @@ public class OidcController : ControllerBase
                         detailsJson: NotAMemberDetails(result));
                 }
 
-                return RedirectToLogin();
+                return RedirectToRefusal(result);
             }
 
             _logger.LogWarning(
@@ -855,11 +855,31 @@ public class OidcController : ControllerBase
     }
 
     /// <summary>
-    /// Redirect to the tenant login page. Used when an authenticated identity is denied because
-    /// it is not a member of the tenant; the login page surfaces the request-membership option
-    /// when the tenant allows access requests.
+    /// Sends back a person whose provider sign-in was refused. A sign-in that started from a
+    /// tenant-creation link or a join link returns to that link, whose page says why it cannot be
+    /// used. Any other goes to the login page with the refusal's reason, which it words for the host,
+    /// and the return URL; the page also surfaces the request-membership option when the tenant
+    /// allows access requests.
     /// </summary>
-    private IActionResult RedirectToLogin() => Redirect("/auth/login");
+    private IActionResult RedirectToRefusal(OidcCallbackResult refused)
+    {
+        var startedFromLink =
+            OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                ITenantCreationInviteService.StartPath,
+                ITenantCreationInviteService.TokenQueryParameter) != null
+            || OidcAuthService.TokenFromReturnUrl(
+                refused.ReturnUrl,
+                IMemberInviteService.JoinPath,
+                IMemberInviteService.TokenQueryParameter) != null;
+        if (startedFromLink)
+            return Redirect(refused.ReturnUrl!);
+
+        var login = $"/auth/login?reason={Uri.EscapeDataString(refused.Error!)}";
+        return Redirect(string.IsNullOrEmpty(refused.ReturnUrl)
+            ? login
+            : $"{login}&returnUrl={Uri.EscapeDataString(refused.ReturnUrl)}");
+    }
 
     /// <summary>
     /// Names the provider always. The person is the row's subject when there is one, else a digest

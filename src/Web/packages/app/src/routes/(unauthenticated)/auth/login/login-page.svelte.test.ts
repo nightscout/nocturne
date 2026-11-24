@@ -5,6 +5,7 @@ import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const state = vi.hoisted(() => ({
   url: new URL("http://sam.localhost/auth/login"),
+  tenantless: false,
   isAuthenticated: false,
   unreadable: false,
   emailRecoveryOffered: false,
@@ -17,7 +18,9 @@ vi.mock("$app/state", () => ({
       return state.url;
     },
     state: {},
-    data: { tenantless: false },
+    get data() {
+      return { tenantless: state.tenantless };
+    },
   },
 }));
 vi.mock("$app/navigation", async (importOriginal) => ({
@@ -56,7 +59,13 @@ function loginWith(returnUrl: string) {
 
 const DRAFT_KEY = "nocturne.member.custom-report-draft.dev.s.new";
 
+function refusedWith(reason: string, returnUrl = "/calendar") {
+  state.url = new URL(`http://sam.localhost/auth/login?${new URLSearchParams({ reason, returnUrl })}`);
+  return render(LoginPage, { data: {} } as never);
+}
+
 beforeEach(() => {
+  state.tenantless = false;
   state.isAuthenticated = false;
   state.unreadable = false;
   state.emailRecoveryOffered = false;
@@ -118,6 +127,39 @@ describe("Login page", () => {
 
     await vi.waitFor(() => expect(state.goto).toHaveBeenCalled());
     expect(localStorage.getItem(DRAFT_KEY)).toBe("{}");
+  });
+
+  it("says Nocturne has no account for the sign-in when a provider sign-in is refused on a tenantless host", async () => {
+    state.tenantless = true;
+    refusedWith("not_a_member");
+
+    const notice = page.getByTestId("sign-in-refused");
+    await expect.element(notice).toHaveTextContent("Nocturne has no account for that sign-in. To get an account, use an invite link.");
+    await expect.element(notice).not.toHaveTextContent("You are not a member of this site.");
+  });
+
+  it("says the person is not a member when a provider sign-in is refused on a host with a tenant", async () => {
+    refusedWith("not_a_member");
+
+    const notice = page.getByTestId("sign-in-refused");
+    await expect.element(notice).toHaveTextContent("You are not a member of this site. Ask the site owner for access.");
+    await expect.element(notice).not.toHaveTextContent("Nocturne has no account for that sign-in");
+    await expect.element(page.getByTestId("request-membership-link")).toBeInTheDocument();
+  });
+
+  it("shows no refusal for a reason it does not know, and never prints the reason", async () => {
+    refusedWith("<b>boom</b>");
+
+    await expect.element(page.getByTestId("sign-in-card")).toBeInTheDocument();
+    await expect.element(page.getByTestId("sign-in-refused")).not.toBeInTheDocument();
+    await expect.element(page.getByText("boom")).not.toBeInTheDocument();
+  });
+
+  it("shows no refusal on an ordinary visit", async () => {
+    loginWith("/calendar");
+
+    await expect.element(page.getByTestId("sign-in-card")).toBeInTheDocument();
+    await expect.element(page.getByTestId("sign-in-refused")).not.toBeInTheDocument();
   });
 
   it("keeps the drafts when the server could not read the session", async () => {

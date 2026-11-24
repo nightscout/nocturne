@@ -182,12 +182,43 @@ public class OidcControllerLoginCallbackTests
 
         var result = await _controller.Callback("code", "state", null, null);
 
-        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login");
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/auth/login?reason=not_a_member&returnUrl=%2F");
         details.Should().NotBeNull("the refusal is audited with no subject to name");
         using var json = System.Text.Json.JsonDocument.Parse(details!);
         json.RootElement.GetProperty("providerId").GetGuid().Should().Be(providerId);
         json.RootElement.GetProperty("externalIdentityDigest").GetString().Should().Be(digest);
         details.Should().NotContain("external-123");
+        SetCookieHeader().Should().NotContain(_options.Cookie.AccessTokenName);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("/reports?days=7", "/auth/login?reason=not_a_member&returnUrl=%2Freports%3Fdays%3D7")]
+    [InlineData("/join", "/auth/login?reason=not_a_member&returnUrl=%2Fjoin")]
+    [InlineData("/start", "/auth/login?reason=not_a_member&returnUrl=%2Fstart")]
+    [InlineData(null, "/auth/login?reason=not_a_member")]
+    public async Task Callback_ForARefusedSignIn_SendsTheLoginPageTheReasonAndTheReturnUrl(
+        string? returnUrl, string expected)
+    {
+        SetupCallbackResult(OidcCallbackResult.NotAMember(Guid.NewGuid(), Guid.NewGuid(), null, returnUrl));
+
+        var result = await _controller.Callback("code", "state", null, null);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be(expected);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("/start?token=abc")]
+    [InlineData("/start?token=abc&slug=erik&name=Erik%27s%20site")]
+    [InlineData("/join?token=abc")]
+    public async Task Callback_ForARefusedSignInThatStartedFromAnInviteOrCreationLink_ReturnsToThatLink(string link)
+    {
+        SetupCallbackResult(OidcCallbackResult.NotAMember(null, Guid.NewGuid(), "digest", link));
+
+        var result = await _controller.Callback("code", "state", null, null);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be(link);
         SetCookieHeader().Should().NotContain(_options.Cookie.AccessTokenName);
     }
 

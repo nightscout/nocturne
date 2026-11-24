@@ -77,7 +77,9 @@ The GitHub sign-in button will appear on your login page immediately.
 1. Open your Nocturne login page in a private/incognito window
 2. Click **Sign in with GitHub**
 3. Authorize the Nocturne app when prompted by GitHub
-4. You should be redirected back to Nocturne and signed in
+4. If that GitHub account already has a Nocturne account, you are redirected back to Nocturne and signed in
+
+A GitHub sign-in does not create a Nocturne account. See [New accounts and roles](/docs/authentication/oidc#new-accounts-and-roles).
 
 ## GitHub Enterprise
 
