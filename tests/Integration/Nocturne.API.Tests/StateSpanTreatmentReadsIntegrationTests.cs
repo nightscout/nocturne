@@ -1060,20 +1060,6 @@ public class StateSpanTreatmentReadsIntegrationTests : ApiIntegrationTestBase
 
     [Theory]
     [MemberData(nameof(EventTypes))]
-    public async Task A_state_span_treatment_uploaded_invalid_is_served_invalid_on_v1(string eventType)
-    {
-        var client = CreateAuthenticatedClient();
-        var upload = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(Upload(eventType)))!.AsObject();
-        upload["isValid"] = false;
-        await PostAsync(client, upload);
-
-        var served = (await GetArrayAsync(client, "/api/v1/treatments")).Should().ContainSingle().Subject!;
-        served["eventType"]!.GetValue<string>().Should().Be(eventType);
-        served["isValid"]!.GetValue<bool>().Should().BeFalse();
-    }
-
-    [Theory]
-    [MemberData(nameof(EventTypes))]
     public async Task A_state_span_treatment_uploaded_without_validity_or_pump_record_is_served_without_them(
         string eventType)
     {

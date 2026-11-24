@@ -302,6 +302,18 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task UpdateTreatmentAsync_ThatLeavesTheTreatmentDeleted_PublishesItsDelete()
+    {
+        var deleted = new Treatment { Id = "id", EventType = "Correction Bolus", IsValid = false };
+        _mockStore.Setup(x => x.UpdateAsync("id", It.IsAny<Treatment>(), It.IsAny<CancellationToken>())).ReturnsAsync(deleted);
+
+        await _treatmentService.UpdateTreatmentAsync("id", new Treatment { IsValid = false }, CancellationToken.None);
+
+        _mockEvents.Verify(x => x.OnDeletedAsync(deleted, It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task UpdateTreatmentAsync_WhenNotFound_ShouldNotPublish()
     {
         _mockStore.Setup(x => x.UpdateAsync("x", It.IsAny<Treatment>(), It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);

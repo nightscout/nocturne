@@ -155,6 +155,12 @@ internal abstract record StoredTreatment(Treatment Created)
 
     /// <summary><paramref name="Created"/> keeps the id it was sent with, which a read resolves.</summary>
     internal sealed record Unnamed(Treatment Created) : StoredTreatment(Created);
+
+    /// <summary>
+    /// A live treatment the create deleted, being sent under its id with <c>isValid: false</c>;
+    /// <paramref name="Created"/> is it as reads served it before.
+    /// </summary>
+    internal sealed record Deleted(Treatment Created) : StoredTreatment(Created);
 }
 
 /// <param name="Served">
