@@ -451,7 +451,8 @@ public class NightscoutRealtimeListenerTests
     public void NewClient_ForASiteUnderASubPath_DialsTheOriginWithTheSitesSocketPath()
     {
         using var client = NightscoutConnectorBackgroundService.NewClient(
-            NightscoutAddress.Resolve("https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123"));
+            NightscoutAddress.Resolve("https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123"),
+            new ServiceCollection().AddHttpClient().BuildServiceProvider().GetRequiredService<IHttpClientFactory>());
 
         client.Options.Path.TrimEnd('/').Should().Be("/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io");
         client.Options.Query!["token"].Should().Be("reader-abc123");
@@ -487,6 +488,7 @@ public class NightscoutRealtimeListenerTests
 
         db.AddToServices(services);
         services.AddActiveTenantSnapshot();
+        services.AddHttpClient();
 
         services.AddScoped<ITenantAccessor, Nocturne.API.Multitenancy.HttpContextTenantAccessor>();
 

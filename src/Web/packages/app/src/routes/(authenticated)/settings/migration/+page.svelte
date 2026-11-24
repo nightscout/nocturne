@@ -50,7 +50,6 @@
     MigrationPhase,
   } from "#lib/api/index.js";
   import { fresh } from "#lib/api/fresh-query.js";
-  import { maskedSourceUrl } from "#lib/utils/url.js";
 
   // State
   let activeTab = $state("migrate");
@@ -706,9 +705,7 @@
                     <div class="min-w-0 flex-1 space-y-1">
                       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span class="min-w-0 font-medium break-all">
-                          {job.sourceDescription
-                            ? maskedSourceUrl(job.sourceDescription)
-                            : "Unknown source"}
+                          {job.sourceDescription || "Unknown source"}
                         </span>
                         <Badge variant={badge.variant}>
                           {badge.label}
@@ -763,9 +760,7 @@
                     {/if}
                     <div class="min-w-0 flex-1 space-y-1">
                       <p class="font-medium break-all">
-                        {source.nightscoutUrl
-                          ? maskedSourceUrl(source.nightscoutUrl)
-                          : source.mongoDatabaseName || "Unknown"}
+                        {source.nightscoutUrl || source.mongoDatabaseName || "Unknown"}
                       </p>
                       <p class="text-sm text-muted-foreground">
                         Last migration: {formatMediumDateTime(source.lastMigrationAt)}

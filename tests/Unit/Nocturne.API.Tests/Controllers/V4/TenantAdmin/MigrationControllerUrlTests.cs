@@ -5,10 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.TenantAdmin;
-using Nocturne.API.Helpers;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Migration;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
@@ -106,7 +106,7 @@ public class MigrationControllerUrlTests
     {
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
-        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutBaseUri.InvalidUrlMessage);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutAddress.InvalidUrlMessage);
     }
 
     [Theory]

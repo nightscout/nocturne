@@ -4,15 +4,18 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Migration;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Infrastructure.Outbound;
 using Xunit;
 
 namespace Nocturne.API.Tests.Connectors;
 
 /// <summary>
-/// Every HTTP client a connector installer registers must carry
+/// Every HTTP client a connector installer, or the Nightscout import, registers must carry
 /// <see cref="LinkLocalGuardHandler"/>, and have transport-level redirects and the automatic
 /// cookie jar off.
 /// </summary>
@@ -60,9 +63,54 @@ public class ConnectorClientGuardCoverageTests
         services.AddLogging();
         services.AddHttpClient<TypedClientProbe>();
 
-        HttpClientNames(services).Should().Contain(nameof(TypedClientProbe),
+        using var provider = services.BuildServiceProvider();
+
+        HttpClientNames(services, provider).Should().Contain(nameof(TypedClientProbe),
             "client names are read from HttpClientMappingRegistry by reflection; if that stops " +
             "working the coverage theory passes while checking nothing");
+    }
+
+    [Fact]
+    public void ANamedClientIsReadFromItsConfiguration()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient("logging-probe").RemoveAllLoggers();
+        services.AddHttpClient("handler-probe").AddHttpMessageHandler<LinkLocalGuardHandler>();
+        using var provider = services.BuildServiceProvider();
+
+        HttpClientNames(services, provider).Should().Contain(["logging-probe", "handler-probe"],
+            "a named client is read from the name of its configured HttpClientFactoryOptions by " +
+            "reflection; if that stops working no named connector client is checked");
+    }
+
+    [Fact]
+    public void TheNightscoutNamedClientsAreDiscovered()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMigrationServices();
+        new NightscoutConnectorInstaller().Install(services, EnablingConfiguration("Nightscout"));
+        using var provider = services.BuildServiceProvider();
+
+        HttpClientNames(services, provider).Should().Contain(
+            [NightscoutConnectorInstaller.RealtimeHttpClientName, MigrationJobService.HttpClientName],
+            "named clients are found from their configuration, so the coverage checks reach them");
+    }
+
+    [Fact]
+    public void EveryClientTheNightscoutImportRegisters_CarriesTheGuardAndNoTransportRedirects()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMigrationServices();
+        using var provider = services.BuildServiceProvider();
+
+        var clientNames = HttpClientNames(services, provider);
+
+        clientNames.Should().Contain(MigrationJobService.HttpClientName);
+        foreach (var clientName in clientNames)
+            AssertGuarded(provider, "The Nightscout import", clientName);
     }
 
     [Theory]
@@ -78,69 +126,69 @@ public class ConnectorClientGuardCoverageTests
         installer.Install(services, EnablingConfiguration(connectorName));
 
         using var provider = services.BuildServiceProvider();
+
+        // A push-only connector (e.g. Home Assistant) registers no outbound client.
+        foreach (var clientName in HttpClientNames(services, provider))
+            AssertGuarded(provider, connectorName, clientName);
+    }
+
+    private static void AssertGuarded(IServiceProvider provider, string connectorName, string clientName)
+    {
         var monitor = provider.GetRequiredService<IOptionsMonitor<HttpClientFactoryOptions>>();
+        var builder = new HandlerBuilder(provider);
+        foreach (var configure in monitor.Get(clientName).HttpMessageHandlerBuilderActions)
+            configure(builder);
 
-        var clientNames = HttpClientNames(services);
-        if (clientNames.Count == 0)
-            return; // A push-only connector (e.g. Home Assistant) registers no outbound client.
+        builder.AdditionalHandlers.Should().ContainItemsAssignableTo<LinkLocalGuardHandler>(
+            "{0}'s '{1}' client must go through ConfigureConnectorClient; a bare " +
+            "AddHttpClient opts it out of the link-local guard",
+            connectorName, clientName);
 
-        foreach (var clientName in clientNames)
+        var primary = builder.PrimaryHandler;
+        var followsRedirects = primary switch
         {
-            var builder = new HandlerBuilder(provider);
-            foreach (var configure in monitor.Get(clientName).HttpMessageHandlerBuilderActions)
-                configure(builder);
+            SocketsHttpHandler sockets => sockets.AllowAutoRedirect,
+            HttpClientHandler legacy => legacy.AllowAutoRedirect,
+            // A handler this test cannot read counts as following redirects rather than being
+            // skipped: "redirects are off" and "the test could not tell" must not look alike.
+            _ => true,
+        };
 
-            builder.AdditionalHandlers.Should().ContainItemsAssignableTo<LinkLocalGuardHandler>(
-                "{0}'s '{1}' client must go through ConfigureConnectorClient; a bare " +
-                "AddHttpClient opts it out of the link-local guard",
-                connectorName, clientName);
+        followsRedirects.Should().BeFalse(
+            "{0}'s '{1}' client must have redirects off on its primary handler (a {2}); the " +
+            "guard only ever sees the first URI, so a 3xx the transport follows is fetched " +
+            "unwatched. An unrecognised handler type fails here too: a connector's primary " +
+            "handler has to be one whose redirect behaviour this test can verify",
+            connectorName, clientName, primary.GetType().Name);
 
-            var primary = builder.PrimaryHandler;
-            var followsRedirects = primary switch
-            {
-                SocketsHttpHandler sockets => sockets.AllowAutoRedirect,
-                HttpClientHandler legacy => legacy.AllowAutoRedirect,
-                // A handler this test cannot read counts as following redirects rather than being
-                // skipped: "redirects are off" and "the test could not tell" must not look alike.
-                _ => true,
-            };
+        var pin = (primary as SocketsHttpHandler)?.ConnectCallback?.Target as PinnedConnector;
 
-            followsRedirects.Should().BeFalse(
-                "{0}'s '{1}' client must have redirects off on its primary handler (a {2}); the " +
-                "guard only ever sees the first URI, so a 3xx the transport follows is fetched " +
-                "unwatched. An unrecognised handler type fails here too — a connector's primary " +
-                "handler has to be one whose redirect behaviour this test can verify",
-                connectorName, clientName, primary.GetType().Name);
+        pin.Should().NotBeNull(
+            "{0}'s '{1}' client must connect through a PinnedConnector; without it the guard's " +
+            "verdict binds the host name and the transport resolves it again for the socket, " +
+            "so a name that answers differently the second time is reached anyway",
+            connectorName, clientName);
 
-            var pin = (primary as SocketsHttpHandler)?.ConnectCallback?.Target as PinnedConnector;
+        pin!.Policy.Should().Be(OutboundAddressPolicy.NotLinkLocal,
+            "{0}'s '{1}' client is a connector: private and LAN targets are supported and only " +
+            "link-local is refused",
+            connectorName, clientName);
 
-            pin.Should().NotBeNull(
-                "{0}'s '{1}' client must connect through a PinnedConnector; without it the guard's " +
-                "verdict binds the host name and the transport resolves it again for the socket, " +
-                "so a name that answers differently the second time is reached anyway",
-                connectorName, clientName);
+        var usesCookies = primary switch
+        {
+            SocketsHttpHandler sockets => sockets.UseCookies,
+            HttpClientHandler legacy => legacy.UseCookies,
+            // Same rule as the redirect check: a handler this test cannot read counts as
+            // keeping a cookie jar rather than being skipped.
+            _ => true,
+        };
 
-            pin!.Policy.Should().Be(OutboundAddressPolicy.NotLinkLocal,
-                "{0}'s '{1}' client is a connector: private and LAN targets are supported and only " +
-                "link-local is refused",
-                connectorName, clientName);
-
-            var usesCookies = primary switch
-            {
-                SocketsHttpHandler sockets => sockets.UseCookies,
-                HttpClientHandler legacy => legacy.UseCookies,
-                // Same rule as the redirect check: a handler this test cannot read counts as
-                // keeping a cookie jar rather than being skipped.
-                _ => true,
-            };
-
-            usesCookies.Should().BeFalse(
-                "{0}'s '{1}' client must have the automatic cookie jar off on its primary handler " +
-                "(a {2}); the handler is pooled across tenants, so a Set-Cookie one tenant's " +
-                "sign-in returns would be replayed on another's requests and override the Cookie " +
-                "header the connector manages per session",
-                connectorName, clientName, primary.GetType().Name);
-        }
+        usesCookies.Should().BeFalse(
+            "{0}'s '{1}' client must have the automatic cookie jar off on its primary handler " +
+            "(a {2}); the handler is pooled across tenants, so a Set-Cookie one tenant's " +
+            "sign-in returns would be replayed on another's requests and override the Cookie " +
+            "header the connector manages per session",
+            connectorName, clientName, primary.GetType().Name);
     }
 
     /// <summary>
@@ -157,19 +205,32 @@ public class ConnectorClientGuardCoverageTests
             .Build();
 
     /// <summary>
-    /// Names of the HTTP clients registered on <paramref name="services"/>, read from the
-    /// <c>HttpClientMappingRegistry</c> instance <c>AddHttpClient</c> puts in the collection.
+    /// Names of the HTTP clients registered on <paramref name="services"/>: every typed client, from
+    /// the <c>HttpClientMappingRegistry</c> instance <c>AddHttpClient</c> puts in the collection, and
+    /// every named client that configures anything, from the names of its
+    /// <see cref="IConfigureOptions{TOptions}"/> of <see cref="HttpClientFactoryOptions"/>.
     /// </summary>
     /// <remarks>
-    /// Reflection over an internal type, because there is no public way to ask a service
-    /// collection which client names exist, and the alternatives are worse: deriving names from
-    /// type names would miss named-only clients, and reading
-    /// <see cref="HttpClientFactoryOptions"/> cannot distinguish "registered with no handler
-    /// configuration" from "never registered" — which is exactly the bare-AddHttpClient case this
-    /// test exists to catch. If a framework upgrade renames the registry, this returns nothing and
-    /// <see cref="ConnectorRegistryIsReadable"/> fails rather than the coverage silently emptying.
+    /// Reflection over internal and option types, because there is no public way to ask a service
+    /// collection which client names exist. The registry records typed registrations only, and a
+    /// bare typed <c>AddHttpClient&lt;T&gt;()</c> configures nothing, so the options alone cannot tell
+    /// it from no registration. The options name the named clients the registry does not record. A
+    /// named client that configures nothing at all stays invisible: it is the factory's default
+    /// client under another name. If a framework upgrade renames the registry or the options'
+    /// <c>Name</c>, <see cref="ConnectorRegistryIsReadable"/> or
+    /// <see cref="ANamedClientIsReadFromItsConfiguration"/> fails rather than the coverage silently
+    /// emptying.
     /// </remarks>
-    private static List<string> HttpClientNames(IServiceCollection services)
+    private static List<string> HttpClientNames(IServiceCollection services, IServiceProvider provider) =>
+        [.. TypedClientNames(services).Concat(ConfiguredClientNames(provider)).Distinct()];
+
+    private static IEnumerable<string> ConfiguredClientNames(IServiceProvider provider) =>
+        provider.GetServices<IConfigureOptions<HttpClientFactoryOptions>>()
+            .Select(configure => configure.GetType().GetProperty("Name")?.GetValue(configure) as string)
+            .OfType<string>()
+            .Where(name => name.Length > 0);
+
+    private static IEnumerable<string> TypedClientNames(IServiceCollection services)
     {
         var registry = services
             .Select(d => d.ImplementationInstance)
@@ -189,9 +250,8 @@ public class ConnectorClientGuardCoverageTests
     }
 
     /// <summary>
-    /// Stands in for a connector's typed client. The registry records typed registrations, which is
-    /// what every connector uses — a named-only <c>AddHttpClient("x")</c> would not be covered, and
-    /// no connector registers one.
+    /// Stands in for a connector's typed client, which the registry records. A named client is read
+    /// from its configuration instead.
     /// </summary>
     private sealed class TypedClientProbe(HttpClient client)
     {

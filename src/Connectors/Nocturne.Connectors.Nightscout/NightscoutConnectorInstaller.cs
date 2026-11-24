@@ -13,6 +13,9 @@ public class NightscoutConnectorInstaller()
         new ConnectorOptions(),
         config => config.Url)
 {
+    /// <summary>The client the real-time listener's Socket.IO polling transport sends through.</summary>
+    public const string RealtimeHttpClientName = "NightscoutRealtime";
+
     /// <summary>
     ///     A direct singleton of the startup config. The connector service and write-back sinks go
     ///     through <see cref="IConnectorRegistration{TConfig}"/> /
@@ -26,6 +29,15 @@ public class NightscoutConnectorInstaller()
         IServiceCollection services,
         NightscoutConnectorConfiguration config) =>
         services.AddSingleton(config);
+
+    /// <summary>
+    ///     Every client of this connector keeps the site's path out of its telemetry
+    ///     (<see cref="NightscoutClientBuilderExtensions.KeepNightscoutPathOutOfTelemetry"/>).
+    /// </summary>
+    protected override IHttpClientBuilder ConfigureClient(
+        IHttpClientBuilder builder,
+        NightscoutConnectorConfiguration config) =>
+        base.ConfigureClient(builder, config).KeepNightscoutPathOutOfTelemetry();
 
     protected override void InstallAdditional(
         IServiceCollection services,
@@ -42,5 +54,7 @@ public class NightscoutConnectorInstaller()
         RegisterWriteBackClient<NightscoutProfileWriteBackSink>();
         RegisterWriteBackClient<NightscoutFoodWriteBackSink>();
         RegisterWriteBackClient<NightscoutActivityWriteBackSink>();
+
+        ConfigureClient(services.AddHttpClient(RealtimeHttpClientName), config);
     }
 }

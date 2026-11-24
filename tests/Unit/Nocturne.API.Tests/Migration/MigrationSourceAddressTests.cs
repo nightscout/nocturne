@@ -4,9 +4,10 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.API.Helpers;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Tests.Migration;
@@ -127,7 +128,8 @@ public class MigrationSourceAddressTests
             $"{Prefix}/api/v1/food.json",
         ]);
         MigrationJob.ApiSourceIdentifier("https://example-nightscout.invalid/nightscout/?token=synthetic-token&key=proxy")
-            .Should().Be("https://example-nightscout.invalid/nightscout", "the source a run records is stored");
+            .Should().Be(HashUtils.Sha256Hex("https://example-nightscout.invalid/nightscout"),
+                "the source is a digest of the site, whatever query reached it");
     }
 
     [Fact]
@@ -144,7 +146,7 @@ public class MigrationSourceAddressTests
         });
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.SiteName.Should().Be("https://example-nightscout.invalid/nightscout");
+        result.SiteName.Should().Be("example-nightscout.invalid/nightscout");
         source.Requests.Select(u => u.AbsoluteUri).Should().Equal(
             "https://example-nightscout.invalid/nightscout/api/v1/status?token=synthetic-token");
         source.CarriedSecret.Should().Equal(false);
@@ -181,7 +183,7 @@ public class MigrationSourceAddressTests
         });
 
         result.IsSuccess.Should().BeTrue(result.ErrorMessage);
-        result.SiteName.Should().Be("https://example-nightscout.invalid/nightscout");
+        result.SiteName.Should().Be("example-nightscout.invalid/nightscout");
         source.Requests.Select(u => u.AbsoluteUri).Should().Equal(
             "https://example-nightscout.invalid/nightscout/api/v1/status");
     }
@@ -202,7 +204,7 @@ public class MigrationSourceAddressTests
         });
 
         result.IsSuccess.Should().BeFalse();
-        result.ErrorMessage.Should().Be(NightscoutBaseUri.InvalidUrlMessage);
+        result.ErrorMessage.Should().Be(NightscoutAddress.InvalidUrlMessage);
         source.Requests.Should().BeEmpty();
     }
 
@@ -216,7 +218,7 @@ public class MigrationSourceAddressTests
             provider, onCreated: null, ["entries"], nightscoutUrl: "ftp://example-nightscout.invalid/nightscout");
 
         status.State.Should().Be(MigrationJobState.Failed);
-        status.ErrorMessage.Should().Be(NightscoutBaseUri.InvalidUrlMessage);
+        status.ErrorMessage.Should().Be(NightscoutAddress.InvalidUrlMessage);
         source.Requests.Should().BeEmpty();
     }
 
