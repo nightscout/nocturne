@@ -32,15 +32,15 @@ public class MigrationSourceEntity
     public string Mode { get; set; } = "Api";
 
     /// <summary>
-    /// Unique identifier for the source - URL (API mode) or connection string hash (MongoDB)
-    /// Used for deduplication to prevent duplicate sources
+    /// Unique identifier for the source: a SHA-256 digest of the Nightscout base (API mode) or of
+    /// the connection string (MongoDB). Used for deduplication to prevent duplicate sources
     /// </summary>
     [Column("source_identifier")]
     [MaxLength(255)]
     public string SourceIdentifier { get; set; } = string.Empty;
 
     /// <summary>
-    /// Nightscout URL for API mode
+    /// Nightscout URL for API mode, masked: no scheme, query or user info, each long path segment cut
     /// </summary>
     [Column("nightscout_url")]
     [MaxLength(512)]

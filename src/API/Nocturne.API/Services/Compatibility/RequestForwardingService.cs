@@ -111,7 +111,7 @@ public class RequestForwardingService : IRequestForwardingService
 
             if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
             {
-                response.ErrorMessage = NightscoutBaseUri.InvalidUrlMessage;
+                response.ErrorMessage = NightscoutAddress.InvalidUrlMessage;
                 response.StatusCode = 500;
                 return response;
             }
@@ -119,7 +119,7 @@ public class RequestForwardingService : IRequestForwardingService
             var forwardedPath = CredentialPathRedactor.WithoutCredentialQuery(request.Path);
             if (!address.TryFor(forwardedPath, out var requestUri))
             {
-                response.ErrorMessage = NightscoutBaseUri.OutsideBaseMessage;
+                response.ErrorMessage = NightscoutAddress.OutsideBaseMessage;
                 response.StatusCode = 500;
                 return response;
             }

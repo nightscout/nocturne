@@ -160,7 +160,7 @@ public class MigrationJobServiceTests
 
         var sourcesA = await service.GetSourcesAsync(tenantA.TenantId);
 
-        sourcesA.Should().ContainSingle(s => s.NightscoutUrl == "https://example-nightscout.invalid");
+        sourcesA.Should().ContainSingle(s => s.NightscoutUrl == "example-nightscout.invalid");
 
         var sourcesC = await service.GetSourcesAsync(Guid.NewGuid());
         sourcesC.Should().BeEmpty();

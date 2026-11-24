@@ -3,10 +3,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
-using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Xunit;
 
@@ -175,7 +175,7 @@ public class RequestForwardingServiceTests
 
         Assert.NotNull(result);
         Assert.False(result.IsSuccess);
-        Assert.Equal(NightscoutBaseUri.OutsideBaseMessage, result.ErrorMessage);
+        Assert.Equal(NightscoutAddress.OutsideBaseMessage, result.ErrorMessage);
         Assert.Null(handler.RequestUri);
     }
 
@@ -191,7 +191,7 @@ public class RequestForwardingServiceTests
         var result = await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = "/api/v1/status" });
 
         Assert.NotNull(result);
-        Assert.Equal(NightscoutBaseUri.InvalidUrlMessage, result.ErrorMessage);
+        Assert.Equal(NightscoutAddress.InvalidUrlMessage, result.ErrorMessage);
         Assert.Null(handler.RequestUri);
     }
 

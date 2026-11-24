@@ -2,6 +2,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.API.Configuration;
@@ -68,28 +69,30 @@ public static class CompatibilityProxyServiceExtensions
                 .Get<CompatibilityProxyConfiguration>() ?? new CompatibilityProxyConfiguration();
 
         // Requests carry absolute URIs built by NightscoutAddress from the connector URL.
-        services
-            .AddHttpClient(
-                "NightscoutClient",
-                client =>
-                {
-                    client.Timeout = TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds);
-                    client.DefaultRequestHeaders.Add(
-                        "User-Agent",
-                        "Nocturne-CompatibilityProxy/1.0"
-                    );
-                }
-            )
-            .AddForwardingResilience(TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds));
-
-        services.AddHttpClient(
-            ManualTestHttpClientName,
+        var nightscout = services.AddHttpClient(
+            "NightscoutClient",
             client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.Add("User-Agent", "Nocturne-CompatibilityProxy/1.0");
+                client.Timeout = TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds);
+                client.DefaultRequestHeaders.Add(
+                    "User-Agent",
+                    "Nocturne-CompatibilityProxy/1.0"
+                );
             }
         );
+        nightscout.AddForwardingResilience(TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds));
+        nightscout.KeepNightscoutPathOutOfTelemetry();
+
+        services
+            .AddHttpClient(
+                ManualTestHttpClientName,
+                client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                    client.DefaultRequestHeaders.Add("User-Agent", "Nocturne-CompatibilityProxy/1.0");
+                }
+            )
+            .KeepNightscoutPathOutOfTelemetry();
 
         // Discrepancy Forwarding HTTP client
         var forwardingConfig = proxyConfig.DiscrepancyForwarding;

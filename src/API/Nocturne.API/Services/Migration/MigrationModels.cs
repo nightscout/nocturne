@@ -381,7 +381,7 @@ public record MigrationSourceDto
     public required MigrationMode Mode { get; init; }
 
     /// <summary>
-    /// Nightscout URL (for API mode)
+    /// The Nightscout URL masked, with no scheme and each long path segment cut (for API mode)
     /// </summary>
     public string? NightscoutUrl { get; init; }
 

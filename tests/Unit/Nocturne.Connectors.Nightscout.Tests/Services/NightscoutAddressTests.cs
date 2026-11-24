@@ -94,6 +94,40 @@ public class NightscoutAddressTests
     }
 
     [Theory]
+    [InlineData("https://ns.example", "https://ns.example")]
+    [InlineData("https://ns.example/nightscout/", "https://ns.example/nightscout")]
+    [InlineData("https://ns.example/a/b//", "https://ns.example/a/b")]
+    [InlineData("https://ns.example/nightscout?token=synthetic-token#section", "https://ns.example/nightscout")]
+    [InlineData("https://user:pass@ns.example/nightscout", "https://ns.example/nightscout")]
+    [InlineData("http://ns.example:1337/nightscout", "http://ns.example:1337/nightscout")]
+    [InlineData("https://ns.example:443/nightscout", "https://ns.example/nightscout")]
+    [InlineData("https://ns.example/night%20scout", "https://ns.example/night%20scout")]
+    [InlineData("  https://ns.example/nightscout  ", "https://ns.example/nightscout")]
+    [InlineData("ns.example", "https://ns.example")]
+    [InlineData("ns.example:1337/nightscout", "https://ns.example:1337/nightscout")]
+    public void The_base_keeps_scheme_host_port_and_path(string url, string expected)
+    {
+        NightscoutAddress.TryResolve(url, out var address).Should().BeTrue();
+
+        address!.Base.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("ftp://ns.example/nightscout")]
+    [InlineData("file:/etc/passwd")]
+    [InlineData("/nightscout")]
+    [InlineData("ns.example:notaport")]
+    public void An_address_that_is_not_http_or_https_is_not_resolved(string? url)
+    {
+        NightscoutAddress.TryResolve(url, out var address).Should().BeFalse();
+
+        address.Should().BeNull();
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("ftp://ns.example.com")]
     public void A_url_that_is_not_http_is_refused(string url)
@@ -135,5 +169,39 @@ public class NightscoutAddressTests
         NightscoutAddress.Resolve(url).TryFor(pathAndQuery, out var resolved).Should().BeFalse();
 
         resolved.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("https://ns.example/", "https://ns.example")]
+    [InlineData("https://ns.example/nightscout/?token=synthetic-token", "https://ns.example/nightscout")]
+    [InlineData("https://user:pass@NS.example/nightscout#section", "https://ns.example/nightscout")]
+    [InlineData("ns.example/nightscout", "https://ns.example/nightscout")]
+    [InlineData("ftp://ns.example/nightscout?token=synthetic-token", "ftp://ns.example/nightscout")]
+    [InlineData("not an address#section", "not an address")]
+    [InlineData("not an address", "not an address")]
+    [InlineData("ftp://user:pass@ns.example/nightscout?token=synthetic-token", "ftp://ns.example/nightscout")]
+    [InlineData("ftp://user@ns.example", "ftp://ns.example")]
+    [InlineData("ftp://ns.example/a@b", "ftp://ns.example/a@b")]
+    [InlineData("user:pass@not an address/nightscout", "not an address/nightscout")]
+    [InlineData("", "")]
+    public void Display_never_carries_a_query_user_info_or_fragment(string configured, string expected)
+    {
+        NightscoutAddress.Display(configured).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/api", "ns.example.com/AGYL…/api")]
+    [InlineData("https://ns.example.com/", "ns.example.com")]
+    [InlineData("http://ns.example.com:1337/api/v1", "ns.example.com:1337/api/v1")]
+    [InlineData("MongoDB: nightscout", "MongoDB: nightscout")]
+    [InlineData("https://ns.example.com/0123456789abcde/", "ns.example.com/0123456789abcde")]
+    [InlineData("https://ns.example.com/0123456789abcdef", "ns.example.com/0123…")]
+    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/BGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI", "ns.example.com/AGYL…/BGYL…")]
+    [InlineData("https://user:pass@NS.example.com:443/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=synthetic-token#x", "ns.example.com/AGYL…")]
+    [InlineData("ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI", "ns.example.com/AGYL…")]
+    [InlineData("a-very-long-host-name.example.com/nightscout", "a-very-long-host-name.example.com/nightscout")]
+    public void Masked_keeps_host_port_and_path_and_cuts_each_long_path_segment(string configured, string expected)
+    {
+        NightscoutAddress.Masked(configured).Should().Be(expected);
     }
 }

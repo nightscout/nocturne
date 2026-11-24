@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -48,8 +49,7 @@ public class MigrationStartupService : IHostedService
 
         _logger.LogInformation("MIGRATION_MODE is set to {Mode}, checking for pending migration", migrationMode);
 
-        var (sourceIdentifier, legacyIdentifier) = GetSourceIdentifiers(migrationMode);
-        if (string.IsNullOrEmpty(sourceIdentifier))
+        if (GetSource(migrationMode) is not { } source)
         {
             _logger.LogWarning("Could not determine source identifier for migration mode {Mode}", migrationMode);
             return;
@@ -70,7 +70,7 @@ public class MigrationStartupService : IHostedService
         {
             try
             {
-                await NotifyIfPendingAsync(tenant, sourceIdentifier, legacyIdentifier, cancellationToken);
+                await NotifyIfPendingAsync(tenant, source, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -81,8 +81,7 @@ public class MigrationStartupService : IHostedService
 
     private async Task NotifyIfPendingAsync(
         ActiveTenant tenant,
-        string sourceIdentifier,
-        string? legacyIdentifier,
+        (string Identifier, string Label) source,
         CancellationToken cancellationToken)
     {
         await using var scope = TenantJobScope.Open(
@@ -96,20 +95,20 @@ public class MigrationStartupService : IHostedService
 
         var hasCompletedRun = await dbContext.MigrationRuns
             .AnyAsync(r => r.TenantId == tenant.Id
-                       && (r.Source.SourceIdentifier == sourceIdentifier || r.Source.SourceIdentifier == legacyIdentifier)
+                       && r.Source.SourceIdentifier == source.Identifier
                        && r.State == "Completed", cancellationToken);
 
         if (hasCompletedRun)
         {
             _logger.LogDebug(
                 "Completed migration run found for tenant {TenantId} and source {Source}, no notification needed",
-                tenant.Id, sourceIdentifier);
+                tenant.Id, source.Label);
             return;
         }
 
         _logger.LogInformation(
             "No completed migration found for tenant {TenantId} and source {Source}, creating admin notification",
-            tenant.Id, sourceIdentifier);
+            tenant.Id, source.Label);
 
         await scope.ServiceProvider.GetRequiredService<INotificationV1Service>().AddAdminNotificationAsync(new AdminNotification
         {
@@ -121,23 +120,25 @@ public class MigrationStartupService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private (string? Current, string? Legacy) GetSourceIdentifiers(string migrationMode)
+    /// <summary>
+    /// The configured source's identifier, byte-identical to the one
+    /// <c>MigrationJob.UpsertSourceAsync</c> stores, and a label that may be logged.
+    /// </summary>
+    private (string Identifier, string Label)? GetSource(string migrationMode)
     {
-        // Must produce byte-identical identifiers to MigrationJob.UpsertSourceAsync, or the
-        // "was this source ever migrated?" check can never match and the pending-migration
-        // notification reappears on every boot.
         if (migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase))
         {
             var connectionString = _configuration["MIGRATION_MONGO_CONNECTION_STRING"];
-            var digest = string.IsNullOrEmpty(connectionString)
-                ? null
-                : MigrationJob.MongoSourceIdentifier(connectionString);
+            if (string.IsNullOrEmpty(connectionString))
+                return null;
+
+            var digest = MigrationJob.MongoSourceIdentifier(connectionString);
             return (digest, digest);
         }
 
         var url = _configuration["MIGRATION_NS_URL"];
         return string.IsNullOrEmpty(url)
-            ? (null, null)
-            : (MigrationJob.ApiSourceIdentifier(url), MigrationJob.LegacyApiSourceIdentifier(url));
+            ? null
+            : (MigrationJob.ApiSourceIdentifier(url), NightscoutAddress.Masked(url));
     }
 }

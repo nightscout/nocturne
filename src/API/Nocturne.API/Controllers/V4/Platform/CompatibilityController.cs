@@ -6,7 +6,6 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
-using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
@@ -66,7 +65,7 @@ public class CompatibilityController : ControllerBase
         return Ok(
             new ProxyConfigurationDto
             {
-                NightscoutUrl = _nightscoutConfig?.Url is { Length: > 0 } url ? NightscoutBaseUri.Display(url) : string.Empty,
+                NightscoutUrl = _nightscoutConfig?.Url is { Length: > 0 } url ? NightscoutAddress.Masked(url) : string.Empty,
                 Enabled = _configuration.Enabled,
                 EnableDetailedLogging = _configuration.EnableDetailedLogging,
             }
@@ -264,13 +263,13 @@ public class CompatibilityController : ControllerBase
 
         if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out var address))
         {
-            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NightscoutAddress.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
         }
 
         var queryPath = request.QueryPath.StartsWith("/") ? request.QueryPath : "/" + request.QueryPath;
         if (!address.TryFor(queryPath, out var nightscoutUrl))
         {
-            return Problem(detail: NightscoutBaseUri.OutsideBaseMessage, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NightscoutAddress.OutsideBaseMessage, statusCode: 400, title: "Bad Request");
         }
 
         var result = new ManualTestResult

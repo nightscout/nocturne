@@ -8,9 +8,9 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Extensions;
-using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Xunit;
 
@@ -138,13 +138,14 @@ public class CompatibilityManualTestTests
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
-        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutBaseUri.InvalidUrlMessage);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutAddress.InvalidUrlMessage);
     }
 
     [Theory]
-    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "https://ns.example/nightscout")]
+    [InlineData("https://user:pass@ns.example/nightscout/?token=synthetic-token", "ns.example/nightscout")]
+    [InlineData("https://ns.example/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/", "ns.example/AGYL…")]
     [InlineData("", "")]
-    public void The_configuration_shows_the_nightscout_url_without_its_token(string configured, string expected)
+    public void The_configuration_shows_the_nightscout_url_masked(string configured, string expected)
     {
         var response = Controller(new RecordingLogger(), new NightscoutConnectorConfiguration { Url = configured })
             .GetConfiguration();
@@ -170,7 +171,7 @@ public class CompatibilityManualTestTests
 
         var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(400);
-        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutBaseUri.OutsideBaseMessage);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(NightscoutAddress.OutsideBaseMessage);
         logger.States.Should().BeEmpty("nothing is fetched");
         nightscout.Requests.Should().BeEmpty();
     }
