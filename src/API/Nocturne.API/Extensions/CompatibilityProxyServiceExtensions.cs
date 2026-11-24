@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.API.Configuration;
-using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 
 namespace Nocturne.API.Extensions;
@@ -12,6 +12,12 @@ namespace Nocturne.API.Extensions;
 /// </summary>
 public static class CompatibilityProxyServiceExtensions
 {
+    /// <summary>
+    /// The client the manual test reads Nightscout through. It has no resilience handler: a retry
+    /// would write a manual POST twice and distort the status and time the test measures.
+    /// </summary>
+    public const string ManualTestHttpClientName = "CompatibilityManualTest";
+
     /// <summary>
     /// Add compatibility proxy services to the service collection
     /// </summary>
@@ -59,7 +65,7 @@ public static class CompatibilityProxyServiceExtensions
                 .GetSection(CompatibilityProxyConfiguration.ConfigurationSection)
                 .Get<CompatibilityProxyConfiguration>() ?? new CompatibilityProxyConfiguration();
 
-        // Requests carry absolute URIs built by NightscoutBaseUri from the connector URL.
+        // Requests carry absolute URIs built by NightscoutAddress from the connector URL.
         services
             .AddHttpClient(
                 "NightscoutClient",
@@ -73,6 +79,15 @@ public static class CompatibilityProxyServiceExtensions
                 }
             )
             .AddStandardResilienceHandler();
+
+        services.AddHttpClient(
+            ManualTestHttpClientName,
+            client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.Add("User-Agent", "Nocturne-CompatibilityProxy/1.0");
+            }
+        );
 
         // Discrepancy Forwarding HTTP client
         var forwardingConfig = proxyConfig.DiscrepancyForwarding;
@@ -181,11 +196,17 @@ public class CompatibilityProxyHealthCheck : IHealthCheck
     {
         try
         {
+            if (!NightscoutAddress.TryResolve(targetUrl, out var address) || !address.TryFor("", out var probe))
+            {
+                _logger.LogDebug("Target {ClientName} has no usable address", clientName);
+                return false;
+            }
+
             using var client = _httpClientFactory.CreateClient(clientName);
             client.Timeout = TimeSpan.FromSeconds(5); // Short timeout for health checks
 
             using var response = await client.SendAsync(
-                new HttpRequestMessage(HttpMethod.Head, NightscoutBaseUri.For(targetUrl)),
+                new HttpRequestMessage(HttpMethod.Head, probe),
                 cancellationToken
             );
 

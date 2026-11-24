@@ -500,6 +500,7 @@ public class V4ReadLimitClampTests
         new(
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
+            Mock.Of<IHttpClientFactory>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 
