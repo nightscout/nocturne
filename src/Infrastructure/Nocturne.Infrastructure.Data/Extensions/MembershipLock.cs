@@ -17,6 +17,16 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// then the team access locks of every site the teams it will remove have access to, then its
 /// memberships' locks. No path waits for a team access lock while it holds a membership lock, so no
 /// two of them can each hold what the other waits for.
+/// <para>
+/// Account deletion locks the subject's row <c>FOR UPDATE</c> before it takes membership locks
+/// (<see cref="TenantOwnerLock.LockTenantsOfSubjectAsync"/>). A write that held a membership lock and
+/// then inserted a row naming the subject would wait for that row <c>FOR KEY SHARE</c>, through the
+/// row's foreign key, while the deletion waited for the membership lock. A consent avoids the cycle by
+/// taking the subject row <c>FOR KEY SHARE</c> before its membership lock
+/// (<see cref="Nocturne.Core.Contracts.Auth.IOAuthGrantRepository.LockConsentAsync"/>): its own lock on
+/// the subject and client, then the subject row, then one membership lock. Nothing waits for a consent
+/// lock while it holds a membership lock.
+/// </para>
 /// </remarks>
 internal static class MembershipLock
 {

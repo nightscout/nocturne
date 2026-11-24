@@ -864,6 +864,11 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
+        if (HttpContext.IsCallerInactive())
+        {
+            return Challenge();
+        }
+
         if (Scope.ValidateDelegation(request.Scopes, HttpContext.GetGrantedScopes()) is { } violation)
         {
             return BadRequest(new OAuthError

@@ -117,6 +117,69 @@ public class OidcAuthServiceLoginGateTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CompleteSetupAsync_LinksTheIdentityAndAnswersItsProviderAndSessionIdWithoutSigningIn()
+    {
+        var provider = Provider();
+        var ownerId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var state = LoginState(returnUrl: "/setup");
+        state.Intent = "setup";
+        state.SubjectId = ownerId;
+        _subjectService
+            .Setup(s => s.AttachSetupOwnerOidcIdentityAsync(
+                tenantId, ownerId, provider.Id, "google-123", provider.IssuerUrl, "user@example.com", false))
+            .ReturnsAsync(OidcLinkOutcome.Created);
+        _subjectService.Setup(s => s.GetSubjectByIdAsync(ownerId)).ReturnsAsync(new Subject { Id = ownerId, Name = "Owner" });
+
+        var claims = Claims();
+        claims.Sid = "provider-sid";
+
+        var result = await _service.CompleteSetupAsync(state, provider, claims, tenantId);
+
+        result.Success.Should().BeTrue(result.ErrorDescription);
+        result.SubjectId.Should().Be(ownerId);
+        result.ProviderId.Should().Be(provider.Id);
+        result.OidcSessionId.Should().Be("provider-sid");
+        result.ReturnUrl.Should().Be("/setup");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the caller ends setup before the sign-in issues a session");
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteSetupAsync_WhenAnotherCompletionHasClaimedTheSetup_AnswersSetupAlreadyCompleteAndAdoptsNothing()
+    {
+        var provider = Provider();
+        var ownerId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var state = LoginState(returnUrl: "/setup");
+        state.Intent = "setup";
+        state.SubjectId = ownerId;
+        state.TenantSlug = "my-instance";
+        _subjectService
+            .Setup(s => s.AttachSetupOwnerOidcIdentityAsync(
+                tenantId, ownerId, provider.Id, "google-123", provider.IssuerUrl, "user@example.com", false))
+            .ReturnsAsync((OidcLinkOutcome?)null);
+
+        var result = await _service.CompleteSetupAsync(state, provider, Claims(), tenantId);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("setup_already_complete");
+        result.SubjectId.Should().BeNull();
+        _subjectService.Verify(
+            s => s.AdoptForSetupAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+        _subjectService.Verify(
+            s => s.AttachOidcIdentityAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task CompleteLoginAsync_WhenSubjectIsNotMemberOfTenant_DeniesWithoutIssuingSession()
     {
         var subject = SetupResolvedSubject();

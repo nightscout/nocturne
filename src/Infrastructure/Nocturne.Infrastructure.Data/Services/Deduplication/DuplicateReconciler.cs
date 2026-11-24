@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -12,9 +13,13 @@ namespace Nocturne.Infrastructure.Data.Services.Deduplication;
 /// <summary>
 /// Keeps the current tenant's duplicate groups right after insert-time linking: merges the groups it
 /// left apart, moves misplaced state span primaries, prunes groups that never gained a second record,
-/// and audits the stored duplicate flags against the links.
+/// and audits the stored duplicate flags against the links. A reconcile batch and an audit announce the
+/// types whose shown copy they changed once their changes commit (<see cref="RepickAnnouncement"/>).
 /// </summary>
-public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILogger<DuplicateReconciler> logger)
+public sealed class DuplicateReconciler(
+    INocturneDbContextFactory contexts,
+    ILogger<DuplicateReconciler> logger,
+    IRecordChangePublisher? changes = null)
     : IDuplicateReconciler
 {
     /// <summary>
@@ -197,20 +202,31 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     {
         await using var db = await contexts.CreateAsync(ct);
         var drift = new List<DuplicateFlagDrift>();
-        foreach (var recordType in DeduplicatedRecordTypes)
+        var repickedTypes = new HashSet<RecordType>();
+        try
         {
-            int flagged = 0, unflagged = 0, repaired = 0;
-            await foreach (var page in DuplicateGroupPrimaries.DisagreeingPagesAsync(db, recordType, pageSize, ct))
+            foreach (var recordType in DeduplicatedRecordTypes)
             {
-                flagged += page.Count(r => r.IsDuplicate);
-                unflagged += page.Count(r => !r.IsDuplicate);
-                var ids = page.Select(r => r.Id).ToArray();
-                repaired += await UnderWriteLockAsync(
-                    db, token => DuplicateGroupPrimaries.RepairFlagsAsync(db, recordType, ids, token), ct);
-            }
+                int flagged = 0, unflagged = 0, repaired = 0;
+                await foreach (var page in DuplicateGroupPrimaries.DisagreeingPagesAsync(db, recordType, pageSize, ct))
+                {
+                    flagged += page.Count(r => r.IsDuplicate);
+                    unflagged += page.Count(r => !r.IsDuplicate);
+                    var ids = page.Select(r => r.Id).ToArray();
+                    var pageRepaired = await UnderWriteLockAsync(
+                        db, token => DuplicateGroupPrimaries.RepairFlagsAsync(db, recordType, ids, token), ct);
+                    repaired += pageRepaired;
+                    if (pageRepaired > 0)
+                        repickedTypes.Add(recordType);
+                }
 
-            if (flagged + unflagged > 0)
-                drift.Add(new DuplicateFlagDrift(recordType, flagged, unflagged, repaired));
+                if (flagged + unflagged > 0)
+                    drift.Add(new DuplicateFlagDrift(recordType, flagged, unflagged, repaired));
+            }
+        }
+        finally
+        {
+            await RepickAnnouncement.PublishAsync(changes, repickedTypes);
         }
 
         return drift;
@@ -861,7 +877,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
 
         for (var batchNo = 0; batchNo < maxBatches; batchNo++)
         {
-            (int Merged, bool Drained)? batch;
+            ReconciledBatch? batch;
             try
             {
                 batch = await db.ExecuteInTransactionAsync(
@@ -880,6 +896,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             if (batch is not { } step)
                 break;
 
+            await RepickAnnouncement.PublishAsync(changes, step.Repicked);
             merged += step.Merged;
             if (step.Drained)
                 return new ReconcileResult(merged, true);
@@ -897,7 +914,7 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
     /// The skipped batch as <see cref="ReconcileNextBatchAsync"/> reports one, or null when the
     /// failure stands.
     /// </returns>
-    private async Task<(int Merged, bool Drained)?> RecordFailedBatchAsync(
+    private async Task<ReconciledBatch?> RecordFailedBatchAsync(
         NocturneDbContext db,
         int batchSize,
         DateTime horizon,
@@ -932,17 +949,14 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             db.TenantId, string.Join(",", batch.Select(l => l.RecordType).Distinct()),
             cursor.CreatedAt, cursor.Id, last.SysCreatedAt, last.Id, attempts);
         await SetCursorAsync(db, new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
-        return (0, batch.Count < batchSize);
+        return new ReconciledBatch(0, batch.Count < batchSize, []);
     }
 
     /// <summary>
     /// Reconciles the batch after the tenant's cursor and advances it.
     /// </summary>
-    /// <returns>
-    /// The groups merged and whether the batch drained everything up to <paramref name="horizon"/>,
-    /// or null when another transaction holds the tenant's merge lock.
-    /// </returns>
-    private async Task<(int Merged, bool Drained)?> ReconcileNextBatchAsync(
+    /// <returns>The batch, or null when another transaction holds the tenant's merge lock.</returns>
+    private async Task<ReconciledBatch?> ReconcileNextBatchAsync(
         NocturneDbContext db,
         int batchSize,
         DateTime horizon,
@@ -954,9 +968,10 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         var cursor = await GetCursorAsync(db, ct);
         var batch = await LinksAfter(db, cursor, horizon).Take(batchSize).ToListAsync(ct);
         if (batch.Count == 0)
-            return (0, true);
+            return new ReconciledBatch(0, true, []);
 
         var merged = 0;
+        var repicked = new List<RecordType>();
         foreach (var group in batch.GroupBy(l => l.RecordType))
         {
             if (ParseRecordType(group.Key, logger) is not { } type)
@@ -968,7 +983,10 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
             try
             {
                 // GroupsMerged is the reduction in group count (k canonicals -> 1 == k-1), matching MergeDuplicateGroupsAsync.
-                merged += await MergeDuplicateGroupsAsync(db, type, candidateCanonicalIds, ct);
+                var typeMerged = await MergeDuplicateGroupsAsync(db, type, candidateCanonicalIds, ct);
+                merged += typeMerged;
+                if (typeMerged > 0)
+                    repicked.Add(type);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -982,8 +1000,14 @@ public sealed class DuplicateReconciler(INocturneDbContextFactory contexts, ILog
         var last = batch[^1];
         await SetCursorAsync(db, new ReconcileCursor(last.SysCreatedAt, last.Id), ct);
 
-        return (merged, batch.Count < batchSize);
+        return new ReconciledBatch(merged, batch.Count < batchSize, repicked);
     }
+
+    /// <summary>
+    /// One reconcile batch: the groups it merged, whether it drained everything up to the horizon, and
+    /// the record types it merged groups of.
+    /// </summary>
+    private readonly record struct ReconciledBatch(int Merged, bool Drained, IReadOnlyList<RecordType> Repicked);
 
     /// <inheritdoc />
     /// <remarks>

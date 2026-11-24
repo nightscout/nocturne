@@ -41,5 +41,6 @@ public class PublicSubjectFilterTests
             AccessEndsAt: null,
             LastUsedAt: null,
             CreatedFromInviteId: null,
-            SysCreatedAt: DateTime.UtcNow);
+            SysCreatedAt: DateTime.UtcNow,
+            Reasons: []);
 }

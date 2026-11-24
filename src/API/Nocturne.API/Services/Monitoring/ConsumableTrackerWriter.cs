@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -31,6 +32,7 @@ public sealed record CreatedConsumableTracker(
 public sealed class ConsumableTrackerWriter(
     IDeviceEventRepository deviceEvents,
     ITrackerAlertRuleSyncService ruleSync,
+    AlertRuleRearm rearm,
     IDeviceEventReactor deviceEventReactor,
     ISignalRBroadcastService broadcast,
     TimeProvider timeProvider,
@@ -97,7 +99,8 @@ public sealed class ConsumableTrackerWriter(
         && (created.Run is null || await tx.GetInstanceByIdAsync(created.Run.Id, ct) is not null);
 
     /// <summary>
-    /// Announces a committed <paramref name="created"/> tracker and its run, then offers the latest
+    /// Announces a committed <paramref name="created"/> tracker and its run, has the managed rules
+    /// created with it evaluated (<see cref="AlertRuleRearm.Committed"/>), then offers the latest
     /// restarting event again when it is newer than the run's start: one that arrived while the
     /// transaction was open found no committed tracker to advance.
     /// </summary>
@@ -105,6 +108,7 @@ public sealed class ConsumableTrackerWriter(
     public async Task<(TrackerDefinition Definition, TrackerInstance? Run)?> PublishAsync(
         ITrackerRepository trackers, CreatedConsumableTracker created, CancellationToken ct)
     {
+        rearm.Committed();
         await broadcast.BroadcastTrackerDefinitionUpdateAsync(created.Definition.Id);
         if (created.Run is not null && await trackers.GetInstanceByIdAsync(created.Run.Id, ct) is { } started)
             await broadcast.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, TrackerInstanceDto.From(started, timeProvider.GetUtcNow().UtcDateTime));

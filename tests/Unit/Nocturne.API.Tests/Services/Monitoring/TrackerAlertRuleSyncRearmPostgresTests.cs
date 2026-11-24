@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -147,7 +148,7 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             new Factory(() => Context(tenant, failure)),
             classifier.Object,
             references.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             TimeProvider.System,
             NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);

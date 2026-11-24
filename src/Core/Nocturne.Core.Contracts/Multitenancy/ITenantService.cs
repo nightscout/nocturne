@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 
@@ -99,8 +100,9 @@ public interface ITenantService
     /// Sets when a member's access ends, or clears it with null, as
     /// <see cref="ITenantMembershipRepository.SetAccessEndUnlessOwnerAsync"/> does. When a date is set,
     /// every live guest link and device credential the member made in the tenant that would outlive
-    /// it has its expiry lowered to it, in the same transaction. An expiry only ever shrinks: a later
-    /// date lengthens none, and clearing the date changes none.
+    /// the membership's end, the sum of its reasons, has its expiry lowered to it, and so does the
+    /// stop of every alert channel they added, in the same transaction; when the sum has no end, none
+    /// is. An expiry only ever shrinks: a later date lengthens none, and clearing the date changes none.
     /// </summary>
     /// <param name="now">The instant the change is made at, which decides which grants are live.</param>
     Task<OwnerGuardedChange> SetMemberAccessEndAsync(
@@ -170,6 +172,19 @@ public record TenantDetailDto(Guid Id, string Slug, string DisplayName, bool IsA
 /// email (<c>IAccountLinkRoute.IsConfigured</c>), so a reader shows nothing for null. Only the
 /// boolean is carried, never the address.
 /// </param>
+/// <param name="HasDirect">
+/// Whether the member was let in on the tenant itself. A member who holds access only through a team
+/// cannot have their roles, permissions, limit or end changed, nor be removed, from the member list:
+/// stopping the team's access is what changes it.
+/// </param>
+/// <param name="Reasons">
+/// Each reason the member holds, the direct one first; the fields above are their sum. A team reason
+/// is listed only when its team's access is to this tenant.
+/// </param>
+/// <param name="DirectLiftsTeamLimit">
+/// Whether the member's direct reason gives full history while a team reason limits them to the last
+/// 24 hours, so the member reads full history: the sum keeps a limit only when every reason has it.
+/// </param>
 public record TenantMemberDto(
     Guid Id,
     Guid SubjectId,
@@ -185,7 +200,36 @@ public record TenantMemberDto(
     DateTime? AccessEndsAt,
     bool HasEnded,
     bool? HasConfirmedRecoveryEmail,
+    bool HasDirect,
+    List<TenantMemberReasonDto> Reasons,
+    bool DirectLiftsTeamLimit,
     bool OutlastsCaller = false);
+
+/// <summary>Why a member holds their access.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<MemberReasonKind>))]
+public enum MemberReasonKind
+{
+    /// <summary>They were let in on the tenant itself: an invite, a request, a manager, setup or the system.</summary>
+    Direct,
+
+    /// <summary>They are staff of a team the tenant gave access to.</summary>
+    Team,
+}
+
+/// <summary>One reason a <see cref="TenantMemberDto"/> holds, with what it gives.</summary>
+/// <param name="TeamId">The team, for a team reason.</param>
+/// <param name="TeamName">The team's current name, for a team reason.</param>
+/// <param name="AccessEndsAt">When the reason ends, in UTC; null when it does not.</param>
+/// <param name="HasEnded">Whether the reason has ended, so it gives nothing.</param>
+public record TenantMemberReasonDto(
+    MemberReasonKind Kind,
+    Guid? TeamId,
+    string? TeamName,
+    List<TenantMemberRoleDto> Roles,
+    List<string>? DirectPermissions,
+    bool LimitTo24Hours,
+    DateTime? AccessEndsAt,
+    bool HasEnded);
 
 /// <summary>
 /// A role a <see cref="TenantMemberDto"/> holds, with the permissions it confers.
@@ -227,4 +271,8 @@ public sealed class ProvisionConflictException(string message) : Exception(messa
 /// Outcome of removing a membership. <paramref name="Ok"/> is false only for a refusal, which
 /// carries the reason; a membership that was already absent is a success.
 /// </summary>
-public record MemberRemovalResult(bool Ok, string? ErrorDescription = null);
+public record MemberRemovalResult(bool Ok, string? ErrorDescription = null)
+{
+    /// <summary>The refusal is <see cref="Nocturne.Core.Models.Identity.OwnerGuardedChange.FromTeam"/>: the member holds no direct reason.</summary>
+    public bool AccessFromTeam { get; init; }
+}

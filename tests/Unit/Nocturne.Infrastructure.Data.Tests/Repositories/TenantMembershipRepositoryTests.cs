@@ -185,9 +185,9 @@ public class TenantMembershipRepositoryTests : IDisposable
         (await Members().ListMembersAsync(_tenant, CancellationToken.None)).Should().HaveCount(5);
 
         (await Members().AnyOtherOwnerAsync(_tenant, first.Id, CancellationToken.None)).Should().BeTrue();
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, second.Id, MembershipEndHow.Removed, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, first.Id, MembershipEndHow.Removed, CancellationToken.None))
-            .Should().Be(OwnerGuardedChange.LastOwner, "the deactivated owner does not count");
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, second.Id, MembershipEndHow.Removed, Now, CancellationToken.None)).Outcome.Should().Be(OwnerGuardedChange.Changed);
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, first.Id, MembershipEndHow.Removed, Now, CancellationToken.None))
+            .Outcome.Should().Be(OwnerGuardedChange.LastOwner, "the deactivated owner does not count");
         (await Members().ReplaceRolesUnlessLastOwnerAsync(_tenant, first.Id, [_ownerRole], [_caretakerRole], Now, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.LastOwner);
         (await Members().AnyOtherOwnerAsync(_tenant, first.Id, CancellationToken.None)).Should().BeFalse();
@@ -237,7 +237,7 @@ public class TenantMembershipRepositoryTests : IDisposable
         (await Members().ReplaceRolesAsync(_tenant, missing, [], [], Now, CancellationToken.None)).Should().BeFalse();
         (await Members().ReplaceRolesUnlessLastOwnerAsync(_tenant, missing, [_ownerRole], [], Now, CancellationToken.None))
             .Should().Be(OwnerGuardedChange.NotFound);
-        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, missing, MembershipEndHow.Removed, CancellationToken.None)).Should().Be(OwnerGuardedChange.NotFound);
+        (await Members().RemoveMemberUnlessLastOwnerAsync(_tenant, missing, MembershipEndHow.Removed, Now, CancellationToken.None)).Outcome.Should().Be(OwnerGuardedChange.NotFound);
     }
 
     [Fact]

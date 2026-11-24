@@ -32,6 +32,15 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// returns a row the clamp hides: a retried clear of a do-not-disturb window the caller names by id, cleared before
 /// the clamp's window, answers with that window as the first clear did (<see cref="Repositories.DndWindowRepository"/>).
 /// <para>
+/// A keyed upsert (<see cref="Repositories.SystemEventRepository"/>, <see cref="Repositories.StateSpanRepository"/>,
+/// <see cref="Repositories.SleepSessionRepository"/>, the health series) lifts the read that matches a record by
+/// the key a unique index holds over the whole tenant, and the save that overwrites the match. Without it a
+/// clamped writer re-sending a record stored before the window finds no row, inserts, and fails the index with
+/// 23505. The match is overwritten with the writer's own record, and the answer is built from what the writer
+/// sent: a field only the stored row holds (a creation time, a supersession) is not answered for a row the clamp
+/// hides.
+/// </para>
+/// <para>
 /// A user's delete or restore of a record the clamp shows its caller reaches every copy in the
 /// record's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>), so the copies the clamp hides
 /// are read and written by id: tracked by <see cref="DuplicateGroupPrimaries.HiddenRowsAsync{TEntity}"/>

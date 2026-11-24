@@ -10,6 +10,7 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
+using NightscoutAddress = Nocturne.Connectors.Nightscout.Services.NightscoutAddress;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Auth;
@@ -354,7 +355,7 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out var baseAddress))
+        if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out var address))
         {
             return new TestMigrationConnectionResult
             {
@@ -363,7 +364,7 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
+        var httpClient = CreateSourceClient(address, request.NightscoutApiSecret);
 
         try
         {
@@ -393,20 +394,20 @@ public class MigrationJobService : IMigrationJobService
     public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
         string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
     {
-        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
+        if (!NightscoutAddress.TryResolve(nightscoutUrl, out var address))
             throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
-        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var httpClient = CreateSourceClient(address, apiSecret);
         var status = await MigrationJob.ReadFromSourceAsync(
             httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
         var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
         return NightscoutDisplaySettings.Parse(status, profiles);
     }
 
-    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    private HttpClient CreateSourceClient(NightscoutAddress address, string? apiSecret)
     {
         var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
+        httpClient.BaseAddress = address.BaseUri;
 
         // Nightscout expects the SHA1 hash of the secret.
         if (!string.IsNullOrEmpty(apiSecret))
@@ -1408,8 +1409,8 @@ internal class MigrationJob
         using var scope = CreateTenantScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(MigrationJobService.HttpClientName);
-        httpClient.BaseAddress = NightscoutBaseUri.TryFor(_request.NightscoutUrl, out var baseAddress)
-            ? baseAddress
+        httpClient.BaseAddress = NightscoutAddress.TryResolve(_request.NightscoutUrl, out var address)
+            ? address.BaseUri
             : throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
 
         // Add API secret header if provided (Nightscout expects the SHA1 hash)
@@ -1714,7 +1715,9 @@ internal class MigrationJob
         HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, sendToken);
+            response = await httpClient.GetAsync(
+                httpClient.BaseAddress is { } site ? NightscoutAddress.Of(site).For(url) : url,
+                HttpCompletionOption.ResponseHeadersRead, sendToken);
         }
         catch (Nocturne.Infrastructure.Outbound.OutboundRefusedException ex)
         {
@@ -1734,7 +1737,8 @@ internal class MigrationJob
             // ApiSecretRejected cause. That is how Nightscout's admin routes turn down a
             // non-admin secret, which the subjects step skips over rather than failing on.
             throw new MigrationSourceException(
-                NightscoutMessages.ForStatus(response.StatusCode, label, read),
+                NightscoutMessages.ForStatus(
+                    response.StatusCode, label, read, secretSent: httpClient.DefaultRequestHeaders.Contains("api-secret")),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
                     : MigrationFailureCause.Status)
@@ -3017,7 +3021,7 @@ internal class MigrationJob
     private async Task<Dictionary<string, List<string>>> FetchNightscoutRolePermissionsAsync(
         HttpClient httpClient, CancellationToken ct)
     {
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         try
         {

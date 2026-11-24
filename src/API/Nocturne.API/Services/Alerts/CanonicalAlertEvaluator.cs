@@ -19,7 +19,8 @@ namespace Nocturne.API.Services.Alerts;
 /// A reading not yet evaluated selects every enabled rule (docs/alerts/engine-semantics.md §5.2); any
 /// other moved fact selects the rules that read it (<see cref="RuleTrees.Reads"/>), glucose included
 /// when it moved without a reading (<see cref="MovedFacts.GlucoseWithoutReading"/>), and a rule whose
-/// facts the engine cannot read is selected by every write. With no reading selected nothing is
+/// facts the engine cannot read is selected by every write. A saved rule (<see cref="MovedFacts.Rules"/>)
+/// is selected whatever it reads, and alone when nothing else moved. With no reading selected nothing is
 /// evaluated; the sweep then evaluates every wall-clock rule. A selected reading with no glucose value
 /// is evaluated with <see cref="ContextForValueless"/>.
 /// <para>
@@ -145,7 +146,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
     /// <returns>Whether this call claimed <paramref name="latest"/> and its pass ran to its end.</returns>
     private async Task<bool> EvaluateSelectedAsync(SensorGlucose? latest, long readAt, MovedFacts moved, CancellationToken ct)
     {
-        if (latest is null || moved.Facts.Count == 0) return false;
+        if (latest is null || moved.IsEmpty) return false;
 
         var tenantId = _tenantAccessor.TenantId;
         if (tenantId == Guid.Empty) return false;
@@ -166,12 +167,12 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             var selecting = moved.Facts
                 .Where(fact => fact != ContextFactWrites.Glucose || moved.GlucoseWithoutReading)
                 .ToHashSet(StringComparer.Ordinal);
-            if (reading || selecting.Count > 0)
+            if (reading || selecting.Count > 0 || moved.Rules.Count > 0)
             {
                 var enabled = await _alertRepository.GetEnabledRulesAsync(ct);
                 var selected = reading
                     ? enabled
-                    : enabled.Where(rule => ReadsAny(rule, selecting)).ToList();
+                    : enabled.Where(rule => moved.Rules.Contains(rule.Id) || (selecting.Count > 0 && ReadsAny(rule, selecting))).ToList();
                 if (selected.Count > 0)
                 {
                     var context = AlertReadings.HasValue(latest)

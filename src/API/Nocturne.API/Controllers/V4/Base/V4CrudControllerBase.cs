@@ -161,7 +161,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
         footprint?.AddRange(written.Select(w => w.Timestamp));
         var returned = await OnAfterBulkCreateAsync(written, ct);
-        await OnBeforeReturnAsync(returned, ct);
+        await EnrichCommittedAsync(returned, ct);
         return StatusCode(StatusCodes.Status201Created, returned);
     }
 
@@ -202,7 +202,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         {
             var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.AddRange([existing.Timestamp, updated.Timestamp]);
-            await OnBeforeReturnAsync([updated], ct);
+            await EnrichCommittedAsync([updated], ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -294,7 +294,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
             var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
             TenantCacheWriteFootprint.Of(HttpContext)?.Add(restored.Timestamp);
             await OnAfterRestoreAsync(restored, ct);
-            await OnBeforeReturnAsync([restored], ct);
+            await EnrichCommittedAsync([restored], ct);
             return Ok(restored);
         }
         catch (KeyNotFoundException)
@@ -330,9 +330,18 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
         TenantCacheWriteFootprint.Of(HttpContext)?.AddRange(result.Restored.Select(r => r.Timestamp));
-        await OnBeforeReturnAsync([.. result.Restored], ct);
+        await EnrichCommittedAsync([.. result.Restored], ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Runs <see cref="V4ReadOnlyControllerBase{TModel, TRepository}.OnBeforeReturnAsync"/> for an action
+    /// that has already committed its write, and logs a failure of it instead of throwing.
+    /// </summary>
+    /// <param name="records">The records the action returns.</param>
+    /// <param name="ct">Cancellation token. A cancellation of the request is not swallowed.</param>
+    protected Task EnrichCommittedAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)
+        => CommittedWriteEnrichment.RunAsync(this, records, () => OnBeforeReturnAsync(records, ct), ct);
 
     /// <summary>
     /// Records in <paramref name="footprint"/> the stored timestamps of the rows a create of

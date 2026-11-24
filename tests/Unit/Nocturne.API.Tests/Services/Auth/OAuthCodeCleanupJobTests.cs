@@ -263,6 +263,47 @@ public class OAuthCodeCleanupJobTests : IDisposable
             .Should().Equal("live");
     }
 
+    [Fact]
+    public async Task SpentPasskeyChallengeCleanup_DeletesOnlyChallengesExpiredBeyondTheBuffer()
+    {
+        var started = DateTimeOffset.UtcNow;
+        var challenges = new SpentPasskeyChallengeRepository(_seed.AsFactory());
+        await challenges.TrySpendAsync("long-expired", started.UtcDateTime - OAuthCodeCleanupJob.RetentionBuffer - TimeSpan.FromMinutes(1), default);
+        await challenges.TrySpendAsync("just-expired", started.UtcDateTime - TimeSpan.FromMinutes(1), default);
+        await challenges.TrySpendAsync("live", started.UtcDateTime + TimeSpan.FromMinutes(5), default);
+
+        await using var services = new ServiceCollection()
+            .AddSingleton<ISpentPasskeyChallengeRepository>(challenges)
+            .BuildServiceProvider();
+        var outcome = await new SpentPasskeyChallengeCleanupJob(NullLogger<SpentPasskeyChallengeCleanupJob>.Instance)
+            .RunAsync(JobRuns.Platform(services, started), CancellationToken.None);
+
+        outcome.Should().Be(JobOutcome.Resume(null, started + TimeSpan.FromHours(1)));
+        await using var check = _db.CreateContext(Guid.Empty);
+        (await check.SpentPasskeyChallenges.Select(c => c.Challenge).OrderBy(c => c).ToListAsync())
+            .Should().Equal("just-expired", "live");
+    }
+
+    [Fact]
+    public async Task SpentPasskeyChallengeCleanup_DeletesInBatchesUntilABatchComesBackShort()
+    {
+        var started = DateTimeOffset.UtcNow;
+        var cutoff = started.UtcDateTime - OAuthCodeCleanupJob.RetentionBuffer;
+        var challenges = new Mock<ISpentPasskeyChallengeRepository>(MockBehavior.Strict);
+        challenges.SetupSequence(c => c.DeleteExpiredAsync(cutoff, SpentPasskeyChallengeCleanupJob.BatchSize, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SpentPasskeyChallengeCleanupJob.BatchSize)
+            .ReturnsAsync(SpentPasskeyChallengeCleanupJob.BatchSize)
+            .ReturnsAsync(3);
+
+        await using var services = new ServiceCollection().AddSingleton(challenges.Object).BuildServiceProvider();
+        await new SpentPasskeyChallengeCleanupJob(NullLogger<SpentPasskeyChallengeCleanupJob>.Instance)
+            .RunAsync(JobRuns.Platform(services, started), CancellationToken.None);
+
+        challenges.Verify(
+            c => c.DeleteExpiredAsync(cutoff, SpentPasskeyChallengeCleanupJob.BatchSize, It.IsAny<CancellationToken>()),
+            Times.Exactly(3));
+    }
+
     public void Dispose()
     {
         _seed.Dispose();

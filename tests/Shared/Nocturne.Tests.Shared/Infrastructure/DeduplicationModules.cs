@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -15,14 +16,16 @@ public static class DeduplicationModules
         new(contexts, NullLogger<DuplicateLinker>.Instance);
 
     public static DuplicateReconciler Reconciler(
-        INocturneDbContextFactory contexts, ILogger<DuplicateReconciler>? logger = null) =>
-        new(contexts, logger ?? NullLogger<DuplicateReconciler>.Instance);
+        INocturneDbContextFactory contexts, ILogger<DuplicateReconciler>? logger = null,
+        IRecordChangePublisher? changes = null) =>
+        new(contexts, logger ?? NullLogger<DuplicateReconciler>.Instance, changes);
 
     /// <summary>The admin surface for <paramref name="tenantId"/>, as an unclamped caller.</summary>
-    public static DeduplicationAdmin Admin(INocturneDbContextFactory contexts, Guid tenantId) =>
+    public static DeduplicationAdmin Admin(
+        INocturneDbContextFactory contexts, Guid tenantId, IRecordChangePublisher? changes = null) =>
         new(contexts, Linker(contexts), Reconciler(contexts), NullLogger<DeduplicationAdmin>.Instance,
             new FixedTenantAccessor(new TenantContext(tenantId, "test", "Test", true, false)),
-            new CategoryReadContext());
+            new CategoryReadContext(), changes);
 
     /// <summary>
     /// Requests a full run and runs it to its end, slice after slice, as the job scheduler would.

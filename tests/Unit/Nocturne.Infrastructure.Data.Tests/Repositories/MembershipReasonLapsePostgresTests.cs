@@ -123,9 +123,11 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var reason = Guid.CreateVersion7();
         var ends = endsAt is { } end ? $"'{end:O}'" : "NULL";
+        var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(site.Tenant, "Camp");
         return ExecuteAsync(site.Migrator, $"""
+            {teamAccessSql}
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours, access_ends_at)
-            VALUES ('{reason}', '{member}', 'team', '{Guid.CreateVersion7()}', false, {ends});
+            VALUES ('{reason}', '{member}', 'team', '{teamAccess}', false, {ends});
             INSERT INTO tenant_member_reason_roles (id, tenant_member_reason_id, tenant_role_id)
             VALUES ('{Guid.CreateVersion7()}', '{reason}', '{role}');
             """);
@@ -355,7 +357,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             Writer.SetAccessEndUnlessOwner => site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, After, T0, Ct),
             Writer.ReplaceRoles => site.Members.ReplaceRolesAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
             Writer.ReplaceRolesUnlessLastOwner => site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [], T0, Ct),
-            Writer.RemoveMemberUnlessLastOwner => site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Ct),
+            Writer.RemoveMemberUnlessLastOwner => site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, T0, Ct),
             Writer.DeleteRole => site.Members.DeleteRoleAsync(site.Tenant, site.CaretakerRole, T0, Ct),
             Writer.RemoveMembershipsOfSubject => site.Members.RemoveMembershipsOfSubjectAsync(subject, Ct),
             Writer.Recompute => MembershipReasons.RecomputeAsync(site.Factory, site.Tenant, subject, T0, Ct),
@@ -492,7 +494,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var site = await SiteAsync("adopt");
         var subjects = new SubjectRepository(site.Factory, AccountLinkRoutes.Off);
-        var created = await subjects.CreateAsync(new NewSubject("Owner", Username: $"owner-{Guid.NewGuid():N}"), Ct);
+        var created = await subjects.CreateSetupOwnerAsync(site.Tenant, new NewSubject("Owner", Username: $"owner-{Guid.NewGuid():N}"), Ct);
         var ownerRole = (await site.Members.FindRoleIdBySlugAsync(site.Tenant, RoleSeeds.Owner, Ct))!.Value;
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, created, [ownerRole]) { How = MembershipJoinHow.Setup, By = null }, Ct))
             .Should().BeTrue();

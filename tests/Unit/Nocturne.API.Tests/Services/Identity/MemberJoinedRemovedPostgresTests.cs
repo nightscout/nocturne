@@ -371,7 +371,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         var invite = await invites.CreateAsync(
             new NewMemberInvite(s.Tenant, s.Manager, HashUtils.Sha256Hex(token), [s.CaretakerRole], null, null, false,
                 Now.UtcDateTime.AddDays(7), 1, Now.UtcDateTime, null), Ct);
-        (await invites.TryClaimUseAsync(invite, Ct)).Should().BeTrue();
+        (await invites.TryClaimUseAsync(invite, Now.UtcDateTime, Ct)).Should().Be(MemberInviteClaim.Claimed);
         var contexts = Contexts(s.Tenant);
         var service = new MemberInviteService(
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
@@ -457,7 +457,7 @@ public class MemberJoinedRemovedPostgresTests(MemberJoinedRemovedPostgresTests.D
         var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
         var (invite, _) = await InviteAsync(s, "Setup");
         var end = Now.UtcDateTime.AddDays(30);
-        var created = await subjects.CreateAsync(new NewSubject("Owner Name", Username: "owner"), Ct);
+        var created = await subjects.CreateSetupOwnerAsync(s.Tenant, new NewSubject("Owner Name", Username: "owner"), Ct);
         (await new TenantMembershipRepository(contexts, AccountLinkRoutes.Off).AddMemberAsync(
             new NewTenantMember(
                 s.Tenant, created, [s.OwnerRole], [Scope.GlucoseRead], Label: "Owner", Username: "owner", LimitTo24Hours: true,

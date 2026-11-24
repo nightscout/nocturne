@@ -248,10 +248,21 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
     private async Task<Guid> MemberIdAsync(Site site) =>
         (await site.Members.FindMemberAsync(site.Tenant, site.Guest, CancellationToken.None))!.Id;
 
-    private async Task SetAccessEndAsync(Site site, DateTime? accessEndsAt) =>
-        (await site.Members.SetAccessEndUnlessOwnerAsync(
-            site.Tenant, await MemberIdAsync(site), accessEndsAt, site.UtcNow, CancellationToken.None))
-        .Should().Be(OwnerGuardedChange.Changed);
+    private async Task SetAccessEndAsync(Site site, DateTime? accessEndsAt)
+    {
+        var memberId = await MemberIdAsync(site);
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(site.Contexts, site.Tenant);
+        var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
+        var (outcome, _) = await unit.CommitAsync(async ct =>
+        {
+            var change = await members.SetAccessEndUnlessOwnerAsync(site.Tenant, memberId, accessEndsAt, site.UtcNow, ct);
+            if (change == OwnerGuardedChange.Changed && accessEndsAt is { } end)
+                await MemberCreations.CapAsync(unit, site.Guest, end, site.UtcNow, ct);
+            await unit.Context.SaveChangesAsync(ct);
+            return (change, 0);
+        });
+        outcome.Should().Be(OwnerGuardedChange.Changed);
+    }
 
     private async Task RemoveGuestAsync(Site site)
     {

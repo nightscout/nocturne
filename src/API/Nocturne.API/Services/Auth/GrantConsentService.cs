@@ -7,7 +7,8 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// The rule for a subject consenting to a client: the active grant the subject already holds for it
-/// takes the union of its scopes and the new ones, and a subject with none gets a new grant.
+/// takes the union of its scopes and the new ones, and a subject with none gets a new grant. A grant
+/// revoked while the consent reads it is not merged into: the consent creates a new one.
 /// </summary>
 /// <remarks>
 /// A writer on the caller's <see cref="DbUnitOfWork"/>, so a consent can commit with the write that
@@ -15,6 +16,16 @@ namespace Nocturne.API.Services.Auth;
 /// <see cref="DbUnitOfWork.CommitAsync(Func{CancellationToken, Task}, CancellationToken)"/> and saves
 /// the grant there, so a statement that follows in the same transaction can refer to its id. The
 /// owner logs the consent through <see cref="LogCommitted"/> once the commit has landed.
+/// <para>
+/// A lock on the subject and client (<see cref="IOAuthGrantRepository.LockConsentAsync"/>) is held from
+/// before the read to the commit, so a consent that waits on another finds the grant it wrote and
+/// merges into it. <c>ix_oauth_grants_tenant_client_subject_active</c> is the backstop: no path that
+/// takes the lock can reach it.
+/// </para>
+/// <para>
+/// The same call takes the subject's membership lock and reads the membership under it, so a consent
+/// from a removed member writes nothing (<see cref="IOAuthGrantRepository.LockConsentAsync"/>).
+/// </para>
 /// </remarks>
 public sealed class GrantConsentService
 {
@@ -36,7 +47,8 @@ public sealed class GrantConsentService
     /// <param name="limitTo24Hours">The latest consent sets whether tokens read only the last 24 hours.</param>
     /// <param name="approvedByDeviceCode">Whether a device-code approval is consenting. Once set it stays set.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task<StagedGrantConsent> StageAsync(
+    /// <returns>The consent as written; null when the subject holds no membership of the tenant, so nothing was written.</returns>
+    public async Task<StagedGrantConsent?> StageAsync(
         DbUnitOfWork unit,
         Guid clientEntityId,
         Guid subjectId,
@@ -46,22 +58,20 @@ public sealed class GrantConsentService
         CancellationToken ct = default)
     {
         var grants = new OAuthGrantRepository(unit);
+        if (!await grants.LockConsentAsync(clientEntityId, subjectId, ct))
+            return null;
+
         var existingGrant = await grants.FindActiveAsync(clientEntityId, subjectId, ct);
 
         if (existingGrant != null)
         {
-            var mergedScopes = existingGrant.Scopes
-                .Union(scopes)
-                .OrderBy(s => s)
-                .ToList();
-
-            var updated = await grants.UpdateAsync(
-                existingGrant.Id,
-                new OAuthGrantEdit(null, mergedScopes, limitTo24Hours, approvedByDeviceCode),
-                ct) ?? throw new InvalidOperationException($"Grant {existingGrant.Id} vanished while its consent was merged.");
-            await unit.Context.SaveChangesAsync(ct);
-
-            return new StagedGrantConsent(OAuthGrantMapper.ToInfo(updated), Created: false);
+            var updated = await grants.MergeConsentAsync(
+                existingGrant.Id, scopes, limitTo24Hours, approvedByDeviceCode, ct);
+            if (updated != null)
+            {
+                await unit.Context.SaveChangesAsync(ct);
+                return new StagedGrantConsent(OAuthGrantMapper.ToInfo(updated), Created: false);
+            }
         }
 
         var grantId = await grants.CreateAsync(

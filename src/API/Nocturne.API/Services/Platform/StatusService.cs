@@ -711,7 +711,7 @@ public class StatusService : IStatusService
             Subject =
                 authContext.SubjectId?.ToString() ?? authContext.SubjectName ?? authContext.Email,
             Roles =
-                authContext.Roles?.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                authContext.Roles?.Distinct(StringComparer.Ordinal).ToList()
                 ?? new List<string>(),
         };
     }

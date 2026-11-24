@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -51,7 +52,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object, Mock.Of<IUnevaluableRuleNotice>()),
             _clock,
             NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);

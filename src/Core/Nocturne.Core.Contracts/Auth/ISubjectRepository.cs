@@ -59,8 +59,10 @@ public interface ISubjectRepository
     /// tenant's.
     /// <para>
     /// Setup resumes the subject it recorded for this tenant and no other. The record is set in
-    /// the save that creates the subject and cleared when setup completes as it
-    /// (<see cref="ClearSetupOwnerAsync"/>) or when the subject is deleted.
+    /// the save that creates the subject and ended by the first credential store, which claims the
+    /// setup (<see cref="AddSetupOwnerOidcIdentityAsync"/>,
+    /// <see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>,
+    /// <see cref="AdoptForSetupAsync"/>), or when the subject is deleted.
     /// </para>
     /// <para>
     /// The recorded subject is then checked, because setup is first-come and the subject is about
@@ -71,9 +73,8 @@ public interface ISubjectRepository
     /// recovery code from an administrator or the operator, an emailed recovery link, a recovery
     /// session or a login code handed to another browser, or a confirmed address while a recovery
     /// link can be delivered (<see cref="IAccountLinkRoute"/>). The platform-admin flag is not
-    /// refused: the startup bootstrap (<see cref="GrantPlatformAdminAsync"/>) grants it to the
-    /// oldest tenant's owner whether or not that owner holds a factor, so the recorded subject can
-    /// hold it after a restart.
+    /// refused: a subject granted it by hand, or one that lost its factors after the startup
+    /// bootstrap (<see cref="GrantPlatformAdminAsync"/>) granted it, can hold it.
     /// </para>
     /// </remarks>
     Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct);
@@ -84,12 +85,6 @@ public interface ISubjectRepository
     /// in one save, so no subject the step creates is left unrecorded.
     /// </summary>
     Task<Guid> CreateSetupOwnerAsync(Guid tenantId, NewSubject subject, CancellationToken ct);
-
-    /// <summary>
-    /// Ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>) of every tenant
-    /// that names <paramref name="subjectId"/>, once setup has completed as that subject.
-    /// </summary>
-    Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
     /// The system subject the scope's tenant issues its API tokens to, or null when it has never
@@ -225,6 +220,36 @@ public interface ISubjectRepository
     Task<int> GrantPlatformAdminAsync(IReadOnlyCollection<Guid> subjectIds, CancellationToken ct);
 
     /// <summary>
+    /// Whether platform admins exist and every one of them is stranded, as
+    /// <see cref="ReplaceStrandedPlatformAdminsAsync"/> decides it.
+    /// </summary>
+    /// <remarks>On a platform context, as <see cref="AnyPlatformAdminAsync"/> is.</remarks>
+    Task<bool> EveryPlatformAdminIsStrandedAsync(CancellationToken ct);
+
+    /// <summary>
+    /// When platform admins exist and every one of them is stranded, clears the flag from them and
+    /// grants it to <paramref name="successorId"/>, in one save. Returns the subjects it cleared;
+    /// empty when it changed nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On a platform context, as <see cref="AnyPlatformAdminAsync"/> is. Nothing changes when no
+    /// admin exists, when any admin is not stranded, or when the successor cannot sign in, so the
+    /// instance is never left without an admin who can. Only stranded admins are read for the
+    /// clear, so an admin who can sign in is never cleared, even one granted while this runs.
+    /// </para>
+    /// <para>
+    /// The flag moves on lasting state only. An admin is stranded when it cannot sign in by the
+    /// rule every caller shares (<c>OrphanedSubjectFilter</c>) with every provider identity counted,
+    /// so a provider that is off, or whose issuer changed, does not strand its admins; and when it
+    /// holds no unredeemed, unexpired recovery code or recovery session on any tenant it belongs
+    /// to. A deactivated admin is stranded. The successor must be able to sign in now, so only
+    /// working identities count for it.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<Guid>> ReplaceStrandedPlatformAdminsAsync(Guid successorId, CancellationToken ct);
+
+    /// <summary>
     /// Whether the subject is active and whether it holds platform admin; null when there is no
     /// such subject.
     /// </summary>
@@ -258,6 +283,15 @@ public interface ISubjectRepository
     Task<Guid> AddOidcIdentityAsync(NewSubjectOidcIdentity identity, CancellationToken ct);
 
     /// <summary>
+    /// Links the first-run setup owner's provider identity as the first credential store, which
+    /// claims the setup: only while <paramref name="tenantId"/>'s setup owner record
+    /// (<see cref="FindSetupOwnerCandidateAsync"/>) names the identity's subject, ending the record in
+    /// the same transaction. Returns the link's id, or null, with nothing linked, when the record no
+    /// longer names that subject because another completion claimed it.
+    /// </summary>
+    Task<Guid?> AddSetupOwnerOidcIdentityAsync(Guid tenantId, NewSubjectOidcIdentity identity, CancellationToken ct);
+
+    /// <summary>
     /// Makes <paramref name="holderId"/> the subject first-run setup completes, in place of the
     /// subject <paramref name="createdId"/> the owner step created: the created subject's membership,
     /// username, display name and global roles pass to the holder and the created subject is deleted.
@@ -277,7 +311,12 @@ public interface ISubjectRepository
     /// <see cref="TakeUnclaimedOidcIdentityAsync"/>: its one membership is of the tenant
     /// <paramref name="tenantSlug"/> names, the tenant this setup run is for, and holds the owner role;
     /// it holds no global role but admin; nothing else names it, and it holds no provider identity.
-    /// Deleting it ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>).
+    /// <para>
+    /// The adoption is the first credential store, which claims the setup: it goes ahead only while
+    /// the tenant's setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>) names
+    /// <paramref name="createdId"/>, and ends the record in its transaction, so it is refused once a
+    /// passkey or another provider identity has completed setup, and refuses those after it.
+    /// </para>
     /// </remarks>
     Task<bool> AdoptForSetupAsync(Guid createdId, Guid holderId, Guid identityId, string tenantSlug, CancellationToken ct);
 

@@ -17,11 +17,11 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <c>auth_audit_log</c> is not tenant-scoped, so the <c>tenant_id</c> predicate is the isolation, and
 /// the context is pinned to that tenant so the invite lookup reads under its row level security.
 /// <see cref="MemberAccessAudit"/> and <c>SubjectService</c> write the same event types; the writer's
-/// rows carry <c>kind</c> = <c>tenant</c>, which is how its rows are told from the global subject-role
-/// rows and from a global role's permission change. Deleting a subject clears the details of every
-/// row that names it, so a row with no details is kept and reads as a change whose detail is unknown.
-/// A <c>SubjectService</c> row cleared the same way is indistinguishable from one of these when it
-/// carries a tenant id, and reads the same way. An <c>access_end_changed</c> row is told apart by its
+/// rows carry <see cref="AuthAuditKind.Tenant"/>. A row with no details is kept and reads as a change
+/// whose detail is unknown. A global role row (<see cref="AuthAuditKind.Global"/>) carries no tenant id, so
+/// the <c>tenant_id</c> predicate drops it whether or not its details survive; one whose details were
+/// cleared before it lost its tenant id reads as a change whose detail is unknown. An
+/// <c>access_end_changed</c> row is told apart by its
 /// <c>access_ends_at</c> key: a string is the new end, a null is a cleared end, and no key is a row
 /// whose detail is unknown.
 /// <para>
@@ -51,7 +51,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
     ];
 
     private const string MemberChangeRows =
-        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditRows.KindKey}' IN ('{MemberAccessAudit.TenantKind}', '{TeamAudit.TeamAccessKind}')";
+        $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditKind.Key}' IN ('{AuthAuditKind.Tenant}', '{AuthAuditKind.TeamAccess}')";
 
     public async Task<MemberHistoryPage> GetAsync(
         Guid tenantId, Guid? memberSubjectId, int limit, int offset, DateTime now, CancellationToken ct = default)

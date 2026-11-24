@@ -46,12 +46,9 @@ public class ContextFactWritesTests
     [Fact]
     public void EveryV4RecordTypeHasADecisionOnTheFactsItMoves()
     {
-        // A device status's extras row is no V4 record, but its write announces itself because it can
-        // state the sensor's state.
         var recordTypes = typeof(IV4Record).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false }
-                        && typeof(IV4Record).IsAssignableFrom(t))
-            .Append(typeof(DeviceStatusExtras));
+                        && typeof(IV4Record).IsAssignableFrom(t));
 
         ContextFactWrites.MovedBy.Keys.Should().Contain(recordTypes,
             "a record type with no entry would move facts and evaluate nothing");
@@ -71,11 +68,11 @@ public class ContextFactWritesTests
     }
 
     [Fact]
-    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateAndTheDetermination() =>
+    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateTheDeterminationAndDeviceAges() =>
         ContextFactWrites.Facts.Keys.Where(ContextFactWrites.SweepMayWaitFor)
             .Should().BeEquivalentTo(
                 [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter,
-                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination]);
+                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination, ContextFactWrites.DeviceAges]);
 
     [Fact]
     public void OnlyAnApsSnapshotWriteMovesTheDetermination() =>
@@ -95,9 +92,18 @@ public class ContextFactWritesTests
             .Should().Contain(ContextFactWrites.TargetRange);
 
     [Fact]
-    public void AnExtrasWriteMovesOnlyTheSensorState() =>
-        ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(DeviceStatusExtras)])).Facts
+    public void ASensorStateReportWriteMovesOnlyTheSensorState() =>
+        ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(SensorStateReport)])).Facts
             .Should().BeEquivalentTo([ContextFactWrites.SensorState]);
+
+    [Fact]
+    public void AnExtrasWriteAloneMovesNothing() =>
+        ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(DeviceStatusExtras)])).Facts.Should().BeEmpty();
+
+    [Fact]
+    public void OnlyAReadingAndASensorStateReportMoveTheSensorState() =>
+        ContextFactWrites.MovedBy.Where(kv => kv.Value.Contains(ContextFactWrites.SensorState)).Select(kv => kv.Key)
+            .Should().BeEquivalentTo([typeof(SensorGlucose), typeof(SensorStateReport)]);
 
     [Theory]
     [InlineData(ContextFactWrites.Insulin)]
@@ -117,7 +123,6 @@ public class ContextFactWritesTests
     [InlineData(ContextFactWrites.Sleep)]
     [InlineData(ContextFactWrites.ActiveAlerts)]
     [InlineData(ContextFactWrites.DoNotDisturb)]
-    [InlineData(ContextFactWrites.DeviceAges)]
     public void AFactWithAWritePathThatDoesNotAnnounceIsNeverWaitedFor(string fact)
     {
         ContextFactWrites.Facts[fact].EveryWriteAnnounces.Should().BeFalse();

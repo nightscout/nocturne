@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -8,6 +9,10 @@ using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
 using Nocturne.Connectors.Tandem.Models;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Timezones;
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Tandem.Services;
@@ -25,6 +30,8 @@ public class TandemConnectorService
 {
     private readonly TandemSourceApiClient _apiClient;
     private readonly IConnectorSyncCursorStore? _cursorStore;
+    private readonly ITherapySettingsResolver? _therapySettings;
+    private readonly ITimezoneTimelineService? _timezoneTimeline;
 
     public TandemConnectorService(
         HttpClient httpClient,
@@ -34,10 +41,14 @@ public class TandemConnectorService
         TandemAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
         IConnectorSyncCursorStore? cursorStore = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ITherapySettingsResolver? therapySettings = null,
+        ITimezoneTimelineService? timezoneTimeline = null)
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
         _cursorStore = cursorStore;
+        _therapySettings = therapySettings;
+        _timezoneTimeline = timezoneTimeline;
         _apiClient = new TandemSourceApiClient(httpClient, logger);
     }
 
@@ -98,7 +109,7 @@ public class TandemConnectorService
                 return result;
             }
 
-            var time = new TandemTimeResolver(config.TimezoneOffset, config.TimeZoneId);
+            var time = await ResolveTimeAsync(config, cancellationToken);
 
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
@@ -122,6 +133,54 @@ public class TandemConnectorService
         }
 
         return result;
+    }
+
+    private async Task<TandemTimeResolver> ResolveTimeAsync(
+        TandemConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        string? tenantZoneId = null;
+        TimezoneTimeline? tenantTimeline = null;
+        if (TandemTimeResolver.NeedsTenantZone(config.TimezoneOffset, config.TimeZoneId))
+        {
+            if (_timezoneTimeline is not null)
+                tenantTimeline = await _timezoneTimeline.GetResolverAsync(null, cancellationToken);
+            if (_therapySettings is not null)
+                tenantZoneId = await _therapySettings.GetTimezoneAsync(ct: cancellationToken);
+        }
+
+        var time = new TandemTimeResolver(
+            config.TimezoneOffset, config.TimeZoneId, tenantZoneId, tenantTimeline, Clock.GetUtcNow().UtcDateTime);
+
+        if (time.ReadsAsUtc)
+            _logger.LogWarning(
+                "[{Source}] No time zone covers some pump times; reading them as UTC",
+                ConnectorSource);
+
+        await RememberTimeZoneAsync(time.ResolvedZone, cancellationToken);
+        return time;
+    }
+
+    /// <summary>Keeps the zone the run reads the pump's clock in where the connection list finds it.</summary>
+    private async Task RememberTimeZoneAsync(ConnectorTimeZone zone, CancellationToken cancellationToken)
+    {
+        if (_cursorStore is null)
+            return;
+
+        try
+        {
+            var stored = await _cursorStore.GetJsonAsync(
+                TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource, cancellationToken);
+            if (ConnectorTimeZone.FromStored(stored) is { } known && known.Id == zone.Id && known.Source == zone.Source)
+                return;
+
+            await _cursorStore.SetJsonAsync(
+                TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource,
+                JsonSerializer.SerializeToNode(zone)!, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex, "[{Source}] Could not record the time zone in use", ConnectorSource);
+        }
     }
 
     private async Task SyncProfilesAsync(

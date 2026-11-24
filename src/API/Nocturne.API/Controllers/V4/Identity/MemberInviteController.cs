@@ -13,6 +13,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -168,6 +169,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveMember(Guid subjectId, CancellationToken ct)
     {
         if (IsCallersOwnMembership(subjectId))
@@ -179,6 +181,8 @@ public class MemberInviteController : ControllerBase
             return outlasts;
 
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
+        if (result.AccessFromTeam)
+            return AccessFromTeamProblem();
         return result.Ok
             ? NoContent()
             : Problem(detail: result.ErrorDescription, statusCode: 400);
@@ -232,7 +236,7 @@ public class MemberInviteController : ControllerBase
             return Ok(ToJoinInfo(invite, null));
 
         var authContext = HttpContext.GetAuthContext();
-        var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
+        var isMember = await _tenantMemberService.IsDirectMemberAsync(subjectId.Value, tenantId, ct);
 
         return Ok(ToJoinInfo(invite, new InviteViewer(subjectId, authContext?.SubjectName, isMember)));
     }
@@ -265,6 +269,7 @@ public class MemberInviteController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AcceptMemberInviteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> AcceptInvite([CredentialRouteValue] string token)
     {
         var subjectId = HttpContext.GetSubjectId();
@@ -276,6 +281,9 @@ public class MemberInviteController : ControllerBase
 
         // The refusal reason is written for the invitee — "You are already a member of this
         // tenant", "This invite has expired".
+        if (result.ErrorCode == SelfAdmission.OwnInviteCode)
+            return this.ProblemWithCode(SelfAdmission.OwnInviteCode, result.ErrorDescription, StatusCodes.Status403Forbidden);
+
         if (!result.Success)
             return Problem(detail: result.ErrorDescription, statusCode: 400);
 
@@ -376,17 +384,24 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SetMemberRoles(
         Guid id,
         [FromBody] SetMemberRolesRequest request,
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
+
+        if (member.DirectReason is not { } direct)
+            return AccessFromTeamProblem();
 
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
@@ -400,13 +415,13 @@ public class MemberInviteController : ControllerBase
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
 
-        if (request.RoleIds.Count == 0 && (member.DirectPermissions == null || member.DirectPermissions.Count == 0))
+        if (request.RoleIds.Count == 0 && (direct.DirectPermissions == null || direct.DirectPermissions.Count == 0))
         {
             const string reason = "Cannot remove all roles when member has no direct permissions";
             return Problem(detail: reason, statusCode: 400);
         }
 
-        var held = member.Roles.Select(r => r.RoleId).ToList();
+        var held = direct.Roles.Select(r => r.RoleId).ToList();
         var added = request.RoleIds.Except(held).ToList();
         var removed = held.Except(request.RoleIds).ToList();
         var grantedScopes = HttpContext.GetGrantedScopes();
@@ -419,7 +434,8 @@ public class MemberInviteController : ControllerBase
             return Problem(detail: UngrantableRoleRemovalDetail, statusCode: 403);
 
         var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
-        if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
+        if (await WouldExemptAClampedMemberAsync(
+                member, rolesAfter.Concat(direct.DirectPermissions ?? []).Concat(member.PermissionsBesideDirect), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         switch (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct))
@@ -428,6 +444,8 @@ public class MemberInviteController : ControllerBase
                 return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
             case OwnerGuardedChange.OwnerAccessEnds:
                 return Problem(detail: AccessEndRequest.ClearBeforeOwnerDetail, statusCode: 400);
+            case OwnerGuardedChange.FromTeam:
+                return AccessFromTeamProblem();
         }
 
         if (member.IsPublicSubject())
@@ -443,8 +461,9 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The one self-edit allowed past <see cref="IsCallersOwnMembership"/> and
-    /// <see cref="SelfEditDetail"/>. It can only narrow: it is refused unless the caller could grant
-    /// caretaker, which means they already hold everything it confers.
+    /// <see cref="SelfEditDetail"/>. It can only narrow: it is refused unless caretaker is within the
+    /// caller's direct reason, which it writes. The caller's scopes are not enough, since they also sum
+    /// what a team gives, and caretaker written from them would outlive the team's access.
     /// </remarks>
     [HttpPost("members/self/step-down")]
     [RequireInteractiveSession]
@@ -454,6 +473,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> StepDown(CancellationToken ct)
     {
         if (HttpContext.GetSubjectId() is not { } subjectId)
@@ -465,18 +485,24 @@ public class MemberInviteController : ControllerBase
         if (member == null || caretakerId is not { } caretaker)
             return NotFound();
 
+        if (member.DirectReason is not { } direct)
+            return AccessFromTeamProblem();
+
         if (!(await _tenantRoleService.ValidateRoleGrantAsync(
-                tenantId, [caretaker], HttpContext.GetGrantedScopes(), ct)).Ok)
+                tenantId, [caretaker], HttpContext.GetGrantedScopes(), ct)).Ok
+            || !(await _tenantRoleService.ValidateRoleGrantAsync(
+                tenantId, [caretaker], Scope.NormalizeMemberPermissions(direct.EffectivePermissions()), ct)).Ok)
             return Problem(detail: "Cannot step down to a role with more access than you have.", statusCode: 403);
 
-        var removed = member.Roles.Where(r => r.RoleId != caretaker).ToList();
-        var assigned = member.Roles.All(r => r.RoleId != caretaker);
-        if (await _members.ReplaceRolesUnlessLastOwnerAsync(
-                tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct)
-            == OwnerGuardedChange.LastOwner)
-            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
-
-        return NoContent();
+        var removed = direct.Roles.Where(r => r.RoleId != caretaker).ToList();
+        var assigned = direct.Roles.All(r => r.RoleId != caretaker);
+        return await _members.ReplaceRolesUnlessLastOwnerAsync(
+                tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct) switch
+        {
+            OwnerGuardedChange.LastOwner => Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400),
+            OwnerGuardedChange.FromTeam => AccessFromTeamProblem(),
+            _ => NoContent(),
+        };
     }
 
     /// <summary>
@@ -489,17 +515,24 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SetMemberPermissions(
         Guid id,
         [FromBody] SetMemberPermissionsRequest request,
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
+
+        if (member.DirectReason is not { } direct)
+            return AccessFromTeamProblem();
 
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
@@ -513,7 +546,7 @@ public class MemberInviteController : ControllerBase
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
 
-        if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.Roles.Count == 0)
+        if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && direct.Roles.Count == 0)
         {
             const string reason = "Cannot remove all permissions when member has no roles";
             return Problem(detail: reason, statusCode: 400);
@@ -544,9 +577,9 @@ public class MemberInviteController : ControllerBase
         }
 
         var rolePermissions = await _tenantRoleService.GetRolePermissionsAsync(
-            tenantId, member.Roles.Select(r => r.RoleId).ToList(), ct);
+            tenantId, direct.Roles.Select(r => r.RoleId).ToList(), ct);
         if (await WouldExemptAClampedMemberAsync(
-                member, rolePermissions.Concat(request.DirectPermissions ?? []), ct))
+                member, rolePermissions.Concat(request.DirectPermissions ?? []).Concat(member.PermissionsBesideDirect), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         await _members.SetDirectPermissionsAsync(tenantId, member.Id, request.DirectPermissions, DateTime.UtcNow, ct);
@@ -585,17 +618,24 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SetMemberLimitTo24Hours(
         Guid id,
         [FromBody] SetMemberLimitTo24HoursRequest request,
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
+
+        if (member.DirectReason is not { } direct)
+            return AccessFromTeamProblem();
 
         if (member.IsPublicSubject() && this.PublicSharingEndDateRefusal() is { } dated)
             return dated;
@@ -616,7 +656,9 @@ public class MemberInviteController : ControllerBase
 
         if (request.LimitTo24Hours
             && MemberScopeResolver.IsExemptFromHistoryClamp(
-                await _tenantRoleService.GetEffectivePermissionsAsync(id, ct)))
+                member.HeldReasons.Count == 1
+                    ? await _tenantRoleService.GetEffectivePermissionsAsync(id, ct)
+                    : direct.EffectivePermissions()))
             return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
 
         await _members.SetLimitTo24HoursAsync(tenantId, member.Id, request.LimitTo24Hours, DateTime.UtcNow, ct);
@@ -645,17 +687,24 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SetMemberAccessEnd(
         Guid id,
         [FromBody] SetMemberAccessEndRequest request,
         [FromServices] TimeProvider time,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
         if (member == null)
             return NotFound();
+
+        if (member.DirectReason is null)
+            return AccessFromTeamProblem();
 
         if (this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
             return outlasts;
@@ -675,6 +724,7 @@ public class MemberInviteController : ControllerBase
         {
             OwnerGuardedChange.NotFound => NotFound(),
             OwnerGuardedChange.OwnerAccessEnds => Problem(detail: AccessEndRequest.OwnerDetail, statusCode: 400),
+            OwnerGuardedChange.FromTeam => AccessFromTeamProblem(),
             _ => NoContent(),
         };
     }
@@ -686,6 +736,13 @@ public class MemberInviteController : ControllerBase
         "Cannot remove your own membership; ask another member with members.manage.";
 
     private const string UngrantableRoleRemovalDetail = "Cannot remove a role you cannot grant.";
+
+    /// <summary>
+    /// The refusal of a change to a member who holds no direct reason. The member's access comes from
+    /// a team, and the owner's lever is stopping that team's access, not this list.
+    /// </summary>
+    private ObjectResult AccessFromTeamProblem() =>
+        this.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.Detail, StatusCodes.Status409Conflict);
 
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions

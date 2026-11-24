@@ -20,6 +20,9 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </remarks>
 public class OAuthGrantRepository : IOAuthGrantRepository
 {
+    /// <summary>First key of the two-key advisory lock form for a consent of one subject to one client.</summary>
+    private const int ConsentLockClass = 0x4E47_434E;
+
     private readonly INocturneDbContextFactory? _contexts;
     private readonly DbUnitOfWork? _unit;
 
@@ -112,7 +115,10 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     {
         await using var lease = await OpenAsync(ct);
         return ToRecord(await GrantsWithClient(lease.Context)
-            .Where(g => g.ClientEntityId == clientEntityId && g.SubjectId == subjectId && g.RevokedAt == null)
+            .Where(g => g.ClientEntityId == clientEntityId
+                && g.SubjectId == subjectId
+                && g.GrantType == OAuthGrantTypes.App
+                && g.RevokedAt == null)
             .FirstOrDefaultAsync(ct));
     }
 
@@ -227,7 +233,15 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             .ToListAsync(ct));
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Lowers to <paramref name="notAfter"/> the expiry of every guest link and device credential
+    /// <paramref name="createdBySubjectId"/> made that is live at <paramref name="now"/> and expires
+    /// later or never, and stages a <c>guest_link_capped</c> or <c>device_credential_capped</c> audit row
+    /// for each. A grant that expires sooner is left alone, and so is one whose revocation is already
+    /// staged on the unit. Stages on the caller's unit of work and does not save.
+    /// </summary>
+    /// <returns>The grants it lowered, for the caller to evict their sessions once the unit commits.</returns>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
     public virtual async Task<IReadOnlyList<OAuthGrantRecord>> CapGrantsCreatedByAsync(
         Guid createdBySubjectId, DateTime notAfter, DateTime now, CancellationToken ct)
     {
@@ -399,6 +413,58 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         if (entity is null)
             return null;
 
+        Apply(entity, edit);
+        await SaveAsync(db, ct);
+        return ToRecord(entity);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> LockConsentAsync(Guid clientEntityId, Guid subjectId, CancellationToken ct)
+    {
+        var db = OwnUnit("Serialising consents holds a lock to the commit of the caller's unit of work.").Context;
+        await db.LockForTransactionAsync(ConsentLockClass, $"{db.TenantId}|{subjectId}|{clientEntityId}", ct);
+        var tenantId = db.TenantId;
+        await db.LockSubjectRowSharedAsync(subjectId, ct);
+        await db.LockMembershipAsync(tenantId, subjectId, ct);
+        return await db.TenantMembers.AnyAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<OAuthGrantRecord?> MergeConsentAsync(
+        Guid grantId, IEnumerable<string> scopes, bool limitTo24Hours, bool approvedByDeviceCode, CancellationToken ct)
+    {
+        var db = OwnUnit("A grant is held against its revocation until the caller's unit of work commits.").Context;
+        var locks = db.Database.IsNpgsql();
+        if (locks && db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A grant is held against its revocation inside a transaction");
+
+        // A revocation that commits first leaves no row here, and one that follows waits for this
+        // unit's commit, so the merge never lands on a revoked grant.
+        if (locks
+            && !await db.Database
+                .SqlQuery<int>($"SELECT 1 AS \"Value\" FROM oauth_grants WHERE id = {grantId} AND revoked_at IS NULL FOR NO KEY UPDATE")
+                .AnyAsync(ct))
+            return null;
+
+        // The unit tracks what an earlier read returned, and a tracked row keeps the values it was
+        // read with: reload it, so the union is over the scopes the held row has now.
+        if (db.OAuthGrants.Local.FirstOrDefault(g => g.Id == grantId) is { } tracked)
+            await db.Entry(tracked).ReloadAsync(ct);
+
+        var entity = await db.OAuthGrants.Include(g => g.Client).FirstOrDefaultAsync(g => g.Id == grantId, ct);
+        if (entity is null || entity.RevokedAt is not null)
+            return null;
+
+        Apply(entity, new OAuthGrantEdit(
+            null, entity.Scopes.Union(scopes).OrderBy(s => s).ToList(), limitTo24Hours, approvedByDeviceCode));
+        return ToRecord(entity);
+    }
+
+    private DbUnitOfWork OwnUnit(string reason) =>
+        _unit ?? throw new InvalidOperationException(reason);
+
+    private static void Apply(OAuthGrantEntity entity, OAuthGrantEdit edit)
+    {
         if (edit.Label is not null)
             entity.Label = edit.Label;
         if (edit.Scopes is not null)
@@ -406,9 +472,6 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         if (edit.LimitTo24Hours is { } limit)
             entity.LimitTo24Hours = limit;
         entity.ApprovedByDeviceCode |= edit.ApprovedByDeviceCode;
-
-        await SaveAsync(db, ct);
-        return ToRecord(entity);
     }
 
     /// <inheritdoc/>

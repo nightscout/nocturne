@@ -40,6 +40,39 @@ public static class PostgresLockWaits
     }
 
     /// <summary>
+    /// Returns once a session in the connection's database is waiting on a lock held by backend
+    /// <paramref name="blockerPid"/> (<c>NpgsqlConnection.ProcessID</c>), and throws if
+    /// <paramref name="contender"/> finishes first. Waiters on other backends' locks, such as a hosted
+    /// service's, do not count.
+    /// </summary>
+    public static async Task UntilBlockedByAsync(
+        string connectionString, int blockerPid, Task contender, TimeSpan? timeout = null)
+    {
+        await using var observer = new NpgsqlConnection(connectionString);
+        await observer.OpenAsync();
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(30));
+        while (DateTime.UtcNow < deadline)
+        {
+            if (contender.IsCompleted)
+                throw new InvalidOperationException("The contender finished while the lock was held.", contender.Exception);
+
+            await using var command = observer.CreateCommand();
+            command.CommandText = """
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_stat_activity
+                    WHERE datname = current_database() AND @blocker = ANY(pg_blocking_pids(pid)))
+                """;
+            command.Parameters.Add(new NpgsqlParameter("blocker", blockerPid));
+            if ((bool)(await command.ExecuteScalarAsync())!)
+                return;
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"The contender never waited on a lock held by backend {blockerPid}.");
+    }
+
+    /// <summary>
     /// Returns once <paramref name="sessions"/> sessions in the connection's database are waiting on a
     /// lock, and throws if any of <paramref name="contenders"/> finishes first. The database must hold
     /// no other test's sessions at the time, as for <see cref="UntilBlockedAsync"/>.

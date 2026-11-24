@@ -300,6 +300,18 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// Whether the tenant holds demo data, which <see cref="DeleteDemoData"/> would delete.
+    /// </summary>
+    [HttpGet("data-sources/demo")]
+    [RequireScope(Scope.TenantSettings)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(DemoDataPresence), 200)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<DemoDataPresence>> GetDemoDataPresence(
+        CancellationToken cancellationToken = default
+    ) => Ok(new DemoDataPresence(await _dataSourceService.HoldsDemoDataAsync(cancellationToken)));
+
+    /// <summary>
     /// Delete all demo data. This operation is safe as demo data can be easily regenerated.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -307,7 +319,7 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/demo")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetDemoDataPresence"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -813,3 +825,6 @@ public class ConnectorSyncStatus
     /// </summary>
     public DateTime QueriedAt { get; set; }
 }
+
+/// <summary>Whether the tenant holds demo data.</summary>
+public record DemoDataPresence(bool HasDemoData);

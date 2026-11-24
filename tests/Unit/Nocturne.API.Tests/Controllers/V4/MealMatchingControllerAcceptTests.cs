@@ -19,7 +19,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 [Trait("Category", "Unit")]
 public class MealMatchingControllerAcceptTests
 {
-    private readonly Mock<IMealMatchingService> _service = new();
+    private readonly Mock<IMealMatchLinker> _linker = new();
     private readonly Mock<IInAppNotificationService> _notifications = new();
 
     private MealMatchingController Controller()
@@ -32,15 +32,16 @@ public class MealMatchingControllerAcceptTests
         };
 
         return new MealMatchingController(
-            _service.Object, Mock.Of<IConnectorFoodEntryRepository>(), _notifications.Object)
+            Mock.Of<IMealMatchingService>(), _linker.Object, Mock.Of<IConnectorFoodEntryRepository>(),
+            _notifications.Object, TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
     private void ServiceReports(AcceptMatchOutcome outcome) =>
-        _service
-            .Setup(s => s.AcceptMatchAsync(
+        _linker
+            .Setup(s => s.LinkAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outcome);
 

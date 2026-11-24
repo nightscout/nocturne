@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import type { LockedOutMember } from "@nocturne/api-client";
+import { RecoveryIssueRefusal, type LockedOutMember } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let members: LockedOutMember[];
@@ -24,7 +24,6 @@ const orphan: LockedOutMember = {
   name: "Alex",
   username: "alex",
   hasRecoveryCodes: false,
-  operatorOnly: false,
 };
 
 describe("LockedOutMembers", () => {
@@ -50,7 +49,7 @@ describe("LockedOutMembers", () => {
   });
 
   it("leaves a member only the operator can recover without a button", async () => {
-    members = [{ ...orphan, operatorOnly: true, hasRecoveryCodes: true }];
+    members = [{ ...orphan, refusal: RecoveryIssueRefusal.OperatorOnly, hasRecoveryCodes: true }];
     render(LockedOutMembers);
 
     await expect
@@ -97,12 +96,17 @@ describe("LockedOutMembers", () => {
     expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
   });
 
-  it("offers no Create link and says why for a member who outlasts the caller", async () => {
-    members = [{ ...orphan, outlastsCaller: true }];
+  it.each([
+    [RecoveryIssueRefusal.MissingPermissions, "This member holds permissions that you do not hold."],
+    [RecoveryIssueRefusal.HistoryClamped, "You can see the last 24 hours only."],
+    [RecoveryIssueRefusal.AccessOutlasts, "This member's access lasts longer than yours."],
+  ])("offers no Create link and says who can help when the server refuses with %s", async (refusal, reason) => {
+    members = [{ ...orphan, refusal }];
 
     render(LockedOutMembers);
 
-    await expect.element(page.getByText("This member's access lasts longer than yours.")).toBeVisible();
+    await expect.element(page.getByText(reason, { exact: false })).toBeVisible();
+    await expect.element(page.getByText("Ask an owner to create the link.", { exact: false })).toBeVisible();
     expect(page.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
   });
 });

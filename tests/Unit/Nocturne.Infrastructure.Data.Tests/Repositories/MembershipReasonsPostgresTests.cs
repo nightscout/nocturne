@@ -187,7 +187,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_role_id = '{s.CaretakerRole}'")).Should().Be(0);
 
-        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Outcome.Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Be(0);
@@ -228,7 +228,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
             await unit.CommitAsync(async token =>
             {
-                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, token)).Should().Be(OwnerGuardedChange.Changed);
+                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, Now, token)).Outcome.Should().Be(OwnerGuardedChange.Changed);
                 await unit.Context.SaveChangesAsync(token);
                 (await members.AddMemberAsync(new NewTenantMember(s.Tenant, subject, [s.CaretakerRole], ["glucose.read"]) { How = MembershipJoinHow.Direct, By = null }, token))
                     .Should().BeTrue();
@@ -313,11 +313,13 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         await s.Members.AddMemberAsync(new NewTenantMember(s.Tenant, teamSubject, [s.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct);
         var drift = await MemberIdAsync(s, driftSubject);
         var team = await MemberIdAsync(s, teamSubject);
+        var (teamAccessSql, teamAccess) = TeamReasonSql.NewAccess(s.Tenant, "Clinic");
         await ExecuteAsync($"""
+            {teamAccessSql}
             UPDATE tenant_members SET direct_permissions = NULL, limit_to_24_hours = true WHERE id IN ('{drift}', '{team}');
             DELETE FROM tenant_member_roles WHERE tenant_member_id = '{drift}';
             INSERT INTO tenant_member_reasons (id, tenant_member_id, kind, source_id, limit_to_24_hours)
-            VALUES ('{Guid.CreateVersion7()}', '{team}', 'team', '{Guid.CreateVersion7()}', false);
+            VALUES ('{Guid.CreateVersion7()}', '{team}', 'team', '{teamAccess}', false);
             """, migrator);
         var rowsBefore = await RowsAsync(migrator);
         var teamReasonsBefore = await CountAsync(migrator, $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{team}'");

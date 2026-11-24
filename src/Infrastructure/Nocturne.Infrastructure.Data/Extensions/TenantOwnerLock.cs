@@ -31,6 +31,24 @@ internal static class TenantOwnerLock
     }
 
     /// <summary>
+    /// Holds the subject's row against its deletion and against the <c>FOR UPDATE</c> that
+    /// <see cref="LockTenantsOfSubjectAsync"/> takes, to the commit: what a write that inserts a row
+    /// naming the subject takes first, so it orders ahead of the membership lock like those paths do
+    /// (<see cref="MembershipLock"/>). Takes the lock the row's foreign keys would take later, and does
+    /// not conflict with another <c>KEY SHARE</c>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowSharedAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    {
+        if (!db.Database.IsNpgsql())
+            return;
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A row lock is taken inside a transaction");
+
+        await db.Database.ExecuteSqlAsync($"SELECT 1 FROM subjects WHERE id = {subjectId} FOR KEY SHARE", ct);
+    }
+
+    /// <summary>
     /// Takes the owner lock of every tenant the subject belongs to, then returns those whose last
     /// owner the subject is (<see cref="TenantOwnerFilter.IsLastOwnerAsync"/>). The check reads after the locks, so it sees
     /// every write that held one first.

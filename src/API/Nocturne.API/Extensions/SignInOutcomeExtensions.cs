@@ -20,27 +20,37 @@ public static class SignInOutcomeExtensions
         switch (outcome)
         {
             case SignInOutcome.SignedIn signedIn:
+                // Decided first so a method with no hint decision throws before any cookie is
+                // written or the handed-off session is ended.
+                var hint = HintFor(signedIn.Method, signedIn.ProviderId);
                 context.Response.SetSessionCookies(signedIn.Session, options);
                 await context.EndReplacedHandedOffSessionAsync(options);
-                SetHint(context.Response, signedIn.Method, signedIn.ProviderId, options);
+                SetHint(context.Response, hint, options);
                 break;
             case SignInOutcome.SecondFactorRequired required:
-                SetHint(context.Response, required.Method, required.ProviderId, options);
+                SetHint(context.Response, HintFor(required.Method, required.ProviderId), options);
                 break;
+            case SignInOutcome.Refused:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null);
         }
     }
 
-    private static void SetHint(HttpResponse response, SignInMethod method, Guid? providerId, OidcOptions options)
+    /// <summary>The sign-in hint a method writes, or null for one that writes none.</summary>
+    private static SignInHint? HintFor(SignInMethod method, Guid? providerId) => method switch
     {
-        switch (method)
-        {
-            case SignInMethod.Passkey:
-                response.SetLastSignInCookie(SessionCookieExtensions.SignInMethods.Passkey, providerId: null, options);
-                break;
-            case SignInMethod.Oidc:
-                response.SetLastSignInCookie(
-                    SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), options);
-                break;
-        }
+        SignInMethod.Passkey => new SignInHint(SessionCookieExtensions.SignInMethods.Passkey, null),
+        SignInMethod.Oidc => new SignInHint(SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString()),
+        SignInMethod.Totp => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(method), method, null),
+    };
+
+    private static void SetHint(HttpResponse response, SignInHint? hint, OidcOptions options)
+    {
+        if (hint is { } value)
+            response.SetLastSignInCookie(value.Method, value.ProviderId, options);
     }
+
+    private readonly record struct SignInHint(string Method, string? ProviderId);
 }

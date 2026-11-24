@@ -406,3 +406,29 @@ describe("MemberHistoryEntryRow team access with no team name", () => {
       .toHaveTextContent("Alex gave a team that was deleted access. The detail is no longer stored.");
   });
 });
+
+describe("MemberHistoryEntryRow staff of a team", () => {
+  const self = { kind: MemberHistoryActorKind.Person, subjectId: "b1", name: "Sam" };
+  const team = { teamId: "t1", name: "Clinic" };
+
+  it("names the team a staff member joined through", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Joined, joinedHow: MembershipJoinHow.Team, actor: self, team });
+    await expect.element(row).toHaveTextContent("Sam joined as staff of the team Clinic.");
+  });
+
+  it("says the detail is gone when the team's name is not known", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Joined, joinedHow: MembershipJoinHow.Team, actor: self });
+    await expect.element(row).toHaveTextContent("Sam joined as staff of a team. The detail is no longer stored.");
+  });
+
+  it("names the team a staff member is no longer staff of, and never says they left", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Removed, removedHow: MembershipEndHow.Team, actor: self, team });
+    await expect.element(row).toHaveTextContent("Sam is no longer staff of the team Clinic.");
+    expect(row.element().textContent).not.toContain("left");
+  });
+
+  it("says the detail is gone when the team a staff member ended is not known", async () => {
+    const row = await sentence({ kind: MemberHistoryKind.Removed, removedHow: MembershipEndHow.Team, actor: self });
+    await expect.element(row).toHaveTextContent("Sam is no longer staff of a team. The detail is no longer stored.");
+  });
+});

@@ -85,7 +85,8 @@
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
         err,
-        "We could not add you to this instance. Try again in a moment."
+        "We could not add you to this instance. Try again in a moment.",
+        { member_invite_own: "You made this invite, so you cannot accept it. Ask another member to invite you." }
       );
     } finally {
       isAccepting = false;

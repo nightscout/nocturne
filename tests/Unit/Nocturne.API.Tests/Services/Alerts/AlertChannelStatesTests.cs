@@ -22,10 +22,12 @@ public class AlertChannelStatesTests
     private static readonly DateTime Now = new(2026, 11, 22, 9, 0, 0, DateTimeKind.Utc);
     private const string Account = "123456789012345678";
 
-    private static async Task<AlertChannelStates> StatesAsync(Guid member, IReadOnlyList<string> permissions)
+    private static async Task<AlertChannelStates> StatesAsync(
+        Guid member, IReadOnlyList<string> permissions, bool subjectIsActive = true)
     {
         var db = TestDbContextFactory.CreateInMemoryContext($"channel_states_{Guid.NewGuid()}");
         db.TenantId = Tenant;
+        db.Subjects.Add(new SubjectEntity { Id = member, Name = "Member", IsActive = subjectIsActive });
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(), Platform = "discord", PlatformUserId = Account, TenantId = Tenant,
@@ -41,7 +43,7 @@ public class AlertChannelStatesTests
                 SubjectUsername: null, SubjectIsActive: true, IsSystemSubject: false, IsDemoSubject: false,
                 IsPlatformAdmin: false, HasConfirmedEmail: true, Roles: [], DirectPermissions: permissions,
                 Label: null, Username: null, LimitTo24Hours: false, AccessEndsAt: null, LastUsedAt: null,
-                CreatedFromInviteId: null, SysCreatedAt: Now),
+                CreatedFromInviteId: null, SysCreatedAt: Now, Reasons: []),
         ]);
 
         return await AlertChannelStates.LoadAsync(
@@ -64,6 +66,18 @@ public class AlertChannelStatesTests
         states.Of(InApp(member)).State.Should().Be(AlertChannelState.NoRecipient);
         states.Of(DirectMessage()).Should().Match<AlertChannelVerdict>(
             v => v.State == AlertChannelState.NoRecipient && v.MemberSubjectId == member);
+    }
+
+    [Fact]
+    public async Task A_deactivated_subjects_linked_account_receives_no_direct_message_and_an_active_ones_does()
+    {
+        var deactivated = Guid.CreateVersion7();
+        var active = Guid.CreateVersion7();
+
+        (await StatesAsync(deactivated, permissions: ["*"], subjectIsActive: false))
+            .Of(DirectMessage()).IsActive.Should().BeFalse();
+        (await StatesAsync(active, permissions: ["*"], subjectIsActive: true))
+            .Of(DirectMessage()).IsActive.Should().BeTrue();
     }
 
     [Fact]

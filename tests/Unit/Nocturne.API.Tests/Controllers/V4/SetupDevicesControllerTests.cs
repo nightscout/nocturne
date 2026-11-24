@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Authorization;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Controllers.V4.Identity;
@@ -46,7 +47,7 @@ public class SetupDevicesControllerTests
                 t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>())
                     == Task.FromResult(new InsulinActionTime(InsulinActionTimeSource.Default, 3, null))),
             new ConsumableTrackerWriter(
-                Mock.Of<IDeviceEventRepository>(), Mock.Of<ITrackerAlertRuleSyncService>(),
+                Mock.Of<IDeviceEventRepository>(), Mock.Of<ITrackerAlertRuleSyncService>(), Rearms.Unannounced(),
                 Mock.Of<IDeviceEventReactor>(), Mock.Of<ISignalRBroadcastService>(), TimeProvider.System,
                 NullLogger<ConsumableTrackerWriter>.Instance),
             TimeProvider.System,

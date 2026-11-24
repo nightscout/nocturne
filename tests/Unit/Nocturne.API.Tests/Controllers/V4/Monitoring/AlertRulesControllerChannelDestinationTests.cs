@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Models.Responses;
@@ -60,7 +61,7 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
 
@@ -155,6 +156,9 @@ public class AlertRulesControllerChannelDestinationTests
     private static async Task LinkIdentityAsync(
         NocturneDbContext db, string platform, string platformUserId)
     {
+        if (!await db.Subjects.AnyAsync(s => s.Id == Subject))
+            db.Subjects.Add(new SubjectEntity { Id = Subject, Name = "Subject" });
+
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(),

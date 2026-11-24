@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Alerts.Corpus;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.Services.Alerts.Engines;
@@ -152,7 +153,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
         var stored = await unit.Context.AlertRules.SingleAsync(r => r.Id == rule);
         (edit ?? (r => r.ConditionParams = EditedBody))(stored);
         stored.UpdatedAt = DateTime.UtcNow;
-        await new AlertRuleRearm(new AlertRuleEvaluationGate())
+        await Rearms.Unannounced()
             .SaveAndClearAsync(unit, rule, CancellationToken.None);
     };
 
@@ -163,7 +164,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
         var stored = await unit.Context.AlertRules.SingleAsync(r => r.Id == rule);
         stored.ClientConfiguration = clientConfiguration;
         stored.UpdatedAt = DateTime.UtcNow;
-        await new AlertRuleRearm(new AlertRuleEvaluationGate())
+        await Rearms.Unannounced()
             .SaveAndPruneAsync(unit, rule, CancellationToken.None);
     };
 

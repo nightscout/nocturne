@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -114,12 +115,16 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveMember(Guid id, Guid subjectId, CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
         var result = await _tenantService.RemoveMemberAsync(id, subjectId, ct);
+        if (result.AccessFromTeam)
+            return this.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.Detail, StatusCodes.Status409Conflict);
+
         return result.Ok
             ? NoContent()
             : Problem(

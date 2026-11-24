@@ -187,19 +187,19 @@ public class GlookoConnectorServicePublishFailureTests
         publisher.SetupGet(p => p.IsAvailable).Returns(true);
         publisher.SetupGet(p => p.Metadata).Returns(metadata.Object);
         publisher.SetupGet(p => p.Treatments).Returns(treatments.Object);
-        var mealMatching = new Mock<IMealMatchingService>();
+        var mealMatchLinker = new Mock<IMealMatchLinker>();
         var request = BuildFoodRequest();
         request.DataTypes = [.. request.DataTypes, SyncDataType.CarbIntake];
 
         var service = GlookoSyncHarness.Service(
-            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchingService: mealMatching.Object);
+            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchLinker: mealMatchLinker.Object);
         var result = await service.SyncDataAsync(request, BuildConfig(useV3Api: false), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         carbs.Should().ContainSingle(c => c.LegacyId == $"glooko_food_{imports.Single().ExternalEntryId}");
-        mealMatching.Verify(m => m.AcceptMatchAsync(
+        mealMatchLinker.Verify(m => m.LinkAsync(
             matched.Id, storedCarbId, 12m, 0, It.IsAny<CancellationToken>()), Times.Once);
-        mealMatching.VerifyNoOtherCalls();
+        mealMatchLinker.VerifyNoOtherCalls();
     }
 
     /// <summary>
@@ -213,10 +213,10 @@ public class GlookoConnectorServicePublishFailureTests
         var publisher = new Mock<IConnectorPublisher>();
         publisher.SetupGet(p => p.IsAvailable).Returns(false);
         publisher.SetupGet(p => p.Metadata).Returns(metadata.Object);
-        var mealMatching = new Mock<IMealMatchingService>();
+        var mealMatchLinker = new Mock<IMealMatchLinker>();
 
         var service = GlookoSyncHarness.Service(
-            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchingService: mealMatching.Object);
+            new GlookoEndpointHandler(), publisher: publisher.Object, mealMatchLinker: mealMatchLinker.Object);
         var result = await service.SyncDataAsync(
             BuildFoodRequest(), BuildConfig(useV3Api: false), CancellationToken.None);
 
@@ -226,7 +226,7 @@ public class GlookoConnectorServicePublishFailureTests
         metadata.Verify(m => m.PublishConnectorFoodEntriesAsync(
             It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<string>(),
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
-        mealMatching.VerifyNoOtherCalls();
+        mealMatchLinker.VerifyNoOtherCalls();
     }
 
     /// <summary>

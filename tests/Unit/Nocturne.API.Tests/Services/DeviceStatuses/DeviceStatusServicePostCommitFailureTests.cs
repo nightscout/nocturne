@@ -117,6 +117,7 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
             new PumpSnapshotRepository(factory, audit, NullLogger<PumpSnapshotRepository>.Instance),
             new UploaderSnapshotRepository(factory, audit, NullLogger<UploaderSnapshotRepository>.Instance, uploaderBroadcaster),
             new DeviceStatusExtrasRepository(factory, audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
+            new SensorStateReportRepository(factory, audit, NullLogger<SensorStateReportRepository>.Instance),
             spans,
             new UnresolvedDevices(),
             audit,

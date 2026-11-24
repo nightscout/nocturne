@@ -1,9 +1,9 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -99,58 +99,89 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
     }
 
     [Fact]
-    public async Task GetReportedAsync_ReadsTheWindowStoredByThenWithItsSourceAndSectionsAsStored()
+    public async Task GetReportedAsync_ReadsTheWindowStoredByThenOfTheDeviceAndSourceOnly()
     {
         await using var store = await OpenAsync();
-        var extras = new DeviceStatusExtrasRepository(store.Factory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
-        var careLink = new Dictionary<string, object?> { ["sensorState"] = "WARM_UP" };
-        await extras.BulkCreateAsync(
+        var reports = new SensorStateReportRepository(
+            store.Factory, new SystemAuditContext(), NullLogger<SensorStateReportRepository>.Instance);
+        await reports.BulkCreateAsync(
         [
-            Extras(At(0), new() { ["cgm"] = careLink }),
-            Extras(At(5), new() { ["cgm"] = careLink }, "carelink-connector", "CareLink MiniMed 780G"),
-            Extras(At(9), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 6 } }),
-            Extras(At(12), new() { ["cgm"] = careLink }),
+            Report(At(0)),
+            Report(At(5)),
+            Report(At(9), SensorState.Ok),
+            Report(At(12)),
+            Report(At(6), dataSource: "nightscout"),
+            Report(At(6), device: "CareLink Guardian"),
         ], WriteOrigin.Live);
-        var deleted = await extras.CreateAsync(Extras(At(7), new() { ["cgm"] = careLink }), WriteOrigin.Live);
-        await extras.DeleteByCorrelationIdAsync(deleted.CorrelationId);
+        var deleted = Report(At(7));
+        await reports.BulkCreateAsync([deleted], WriteOrigin.Live);
+        await reports.DeleteByCorrelationIdAsync(deleted.CorrelationId!.Value, WriteOrigin.Live);
         store.Recorder.Clear();
 
-        var read = (await extras.GetReportedAsync(At(5), DateTime.UtcNow.AddHours(1), At(10)))
+        var read = (await reports.GetReportedAsync(CareLinkDevice, CareLinkSource, At(5), DateTime.UtcNow.AddHours(1), At(10)))
             .OrderBy(r => r.Timestamp).ToList();
-        var notStoredYet = await extras.GetReportedAsync(At(5), At(10), At(10));
+        var notStoredYet = await reports.GetReportedAsync(CareLinkDevice, CareLinkSource, At(5), At(10), At(10));
 
         store.Recorder.Count("SELECT").Should().Be(2);
-        read.Select(r => r.Timestamp).Should().Equal([At(5), At(9)], "both ends are inside the window, a deleted row is not");
-        read[0].Should().Match<DeviceStatusExtras>(r => r.DataSource == "carelink-connector" && r.Device == "CareLink MiniMed 780G");
-        read[1].Should().Match<DeviceStatusExtras>(r => r.DataSource == null && r.Device == null);
-        ((JsonElement)read[0].Extras!["cgm"]!).GetProperty("sensorState").GetString().Should().Be("WARM_UP");
-        ((JsonElement)read[1].Extras!["xdripjs"]!).GetProperty("state").GetInt32().Should().Be(6);
+        read.Select(r => (r.Timestamp, r.State)).Should().Equal(
+            [(At(5), SensorState.WarmingUp), (At(9), SensorState.Ok)],
+            "both ends are inside the window; a deleted row and another device's or source's are not");
+        read[0].Should().Match<SensorStateReport>(r =>
+            r.ReportedField == SensorStateReport.CareLinkField && r.ReportedValue == "WARM_UP" && r.CreatedAt != default);
         notStoredYet.Should().BeEmpty("a row stored after the instant read was not there then");
     }
 
     [Fact]
-    public async Task A_write_that_stores_or_deletes_a_sensor_state_announces_the_type_and_no_other_does()
+    public async Task A_tenant_with_only_extras_stored_before_reports_existed_reads_no_sensor_state()
+    {
+        await using var store = await OpenAsync();
+        var extras = new DeviceStatusExtrasRepository(store.Factory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
+        await extras.BulkCreateAsync(
+        [
+            Extras(At(5), new() { ["cgm"] = new Dictionary<string, object?> { ["sensorState"] = "NO_ERROR_MESSAGE" } }),
+            Extras(At(6), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 6 } }),
+        ], WriteOrigin.Live);
+        var reports = new SensorStateReportRepository(
+            store.Factory, new SystemAuditContext(), NullLogger<SensorStateReportRepository>.Instance);
+
+        var read = await reports.GetReportedAsync(CareLinkDevice, CareLinkSource, At(0), DateTime.UtcNow.AddHours(1), At(10));
+
+        read.Should().BeEmpty("an extras row states nothing to alerts, so the state is absent and never ok");
+    }
+
+    [Fact]
+    public async Task A_write_or_delete_of_a_report_announces_the_type()
     {
         await using var store = await OpenAsync();
         var changes = new RecordingRecordChanges();
-        var extras = new DeviceStatusExtrasRepository(
-            store.Factory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance, changes);
-        var radio = new Dictionary<string, object?> { ["radioAdapter"] = new Dictionary<string, object?> { ["RSSI"] = -60 } };
+        var reports = new SensorStateReportRepository(
+            store.Factory, new SystemAuditContext(), NullLogger<SensorStateReportRepository>.Instance, changes);
 
-        await extras.BulkCreateAsync([Extras(At(1), radio)], WriteOrigin.Live);
-        var plain = await extras.CreateAsync(Extras(At(2), radio), WriteOrigin.Live);
-        await extras.DeleteByCorrelationIdAsync(plain.CorrelationId);
-        changes.Changes.Should().BeEmpty("no row states the sensor's state");
+        var report = Report(At(3));
+        await reports.BulkCreateAsync([report], WriteOrigin.Backfill);
+        var afterWrite = changes.Changes.Count;
+        await reports.BulkCreateAsync([report], WriteOrigin.Live);
+        var afterResend = changes.Changes.Count;
+        await reports.DeleteByCorrelationIdAsync(report.CorrelationId!.Value, WriteOrigin.Live);
 
-        await extras.BulkCreateAsync(
-            [Extras(At(3), new() { ["cgm"] = new Dictionary<string, object?> { ["sensorState"] = "WARM_UP" } })], WriteOrigin.Backfill);
-        var xdrip = await extras.CreateAsync(
-            Extras(At(4), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 2 } }), WriteOrigin.Live);
-        await extras.DeleteByCorrelationIdAsync(xdrip.CorrelationId);
+        afterWrite.Should().BePositive("a backfilled write announces the type as a live one does");
+        afterResend.Should().Be(afterWrite, "a re-upload the stored row holds writes nothing");
+        changes.Changes.Count.Should().BeGreaterThan(afterResend, "a delete announces the type");
+        changes.Changes.Select(c => c.RecordType).Should().OnlyContain(t => t == typeof(SensorStateReport));
+    }
 
-        changes.Changes.Select(c => (c.RecordType, c.HasRecords)).Should().Equal(
-            [(typeof(DeviceStatusExtras), false), (typeof(DeviceStatusExtras), false), (typeof(DeviceStatusExtras), false)],
-            "a bulk write, a single write and a delete of a state each announce once");
+    [Fact]
+    public async Task A_report_a_grant_backed_credential_writes_carries_its_grant()
+    {
+        await using var store = await OpenAsync();
+        var grant = Guid.NewGuid();
+        var actor = new GrantActor(grant);
+        store.Context.AttributedTo(actor);
+        var reports = new SensorStateReportRepository(store.Factory, actor, NullLogger<SensorStateReportRepository>.Instance);
+
+        await reports.BulkCreateAsync([Report(At(1))], WriteOrigin.Live);
+
+        (await store.Context.SensorStateReports.AsNoTracking().SingleAsync()).WriterGrantId.Should().Be(grant);
     }
 
     [Fact]
@@ -204,10 +235,24 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         FirstSeenTimestamp = Start, LastSeenTimestamp = Start,
     };
 
-    private static DeviceStatusExtras Extras(
-        DateTime at, Dictionary<string, object?> extras, string? dataSource = null, string? device = null) => new()
+    private const string CareLinkDevice = "CareLink MiniMed 780G";
+    private const string CareLinkSource = "carelink-connector";
+
+    private static DeviceStatusExtras Extras(DateTime at, Dictionary<string, object?> extras) => new()
     {
-        CorrelationId = Guid.CreateVersion7(), Timestamp = at, Extras = extras, DataSource = dataSource, Device = device,
+        CorrelationId = Guid.CreateVersion7(), Timestamp = at, Extras = extras,
+    };
+
+    private static SensorStateReport Report(
+        DateTime at, SensorState state = SensorState.WarmingUp, string dataSource = CareLinkSource, string device = CareLinkDevice) => new()
+    {
+        CorrelationId = Guid.CreateVersion7(),
+        Timestamp = at,
+        State = state,
+        ReportedField = SensorStateReport.CareLinkField,
+        ReportedValue = state == SensorState.Ok ? "NO_ERROR_MESSAGE" : "WARM_UP",
+        DataSource = dataSource,
+        Device = device,
     };
 
     private static StateSpan Span(string name, DateTime start, DateTime? end, string originalId, string? source = null) => new()
@@ -261,6 +306,16 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
             .AddInterceptors(recorder)
             .Options) { TenantId = tenant };
         return new Store(conn, context, recorder);
+    }
+
+    private sealed record GrantActor(Guid? TokenId) : IAuditContext
+    {
+        public Guid? SubjectId => null;
+        public string? SubjectName => null;
+        public string? AuthType => nameof(Nocturne.Core.Models.Authorization.AuthType.DirectGrant);
+        public string? IpAddress => null;
+        public string? TraceId => null;
+        public string? Endpoint => "POST /api/v1/devicestatus";
     }
 
     private sealed class Store(NpgsqlConnection connection, NocturneDbContext context, StatementRecorder recorder) : IAsyncDisposable

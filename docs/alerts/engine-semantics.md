@@ -711,9 +711,13 @@ in §3 plus:
   bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
   reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
   dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
-- The backend reads a device status's CareLink `cgm.sensorState` (Medtronic Guardian sensors) and
-  its `xdripjs.state` session code (Dexcom G5 and G6 through Lookout, Logger and xdrip-js), each
-  through an allowlist where every other value is no state. An entry is added only from a real
+- When the backend stores a device status, it reads the status's CareLink `cgm.sensorState`
+  (Medtronic Guardian sensors), then its `xdripjs.state` session code (Dexcom G5 and G6 through
+  Lookout, Logger and xdrip-js), each through an allowlist where every other value is no state, and
+  writes a sensor state report (`SensorStateReport`) for the first value an allowlist maps, under
+  the status's device and the data source it was stored under. A status with neither writes none.
+  The host reads the state only from these reports. A newest report whose state this build cannot
+  read is no state, and an older report does not stand in for it. An entry is added only from a real
   upload. CareLink's: `NO_ERROR_MESSAGE` ok, `WARM_UP` warming up, `CALIBRATION_REQUIRED`
   calibration needed, `SENSOR_ERROR` and `CHANGE_SENSOR` error, `SENSOR_END_OF_LIFE` expired.
   xdripjs: `0x02` warming up, `0x06` ok, `0x04`, `0x05`, `0x08` to `0x0a`, `0x0d` calibration
@@ -1005,9 +1009,14 @@ crate's.
 The backend's map is `ContextFactWrites`: the facts a committed write of each V4 record type
 moves, and for each fact whether every write that moves it announces itself and whether it
 also moves with the clock. Every V4 repository announces each committed write, a restore as a
-creation, through the record-changed event, and so does a data source purge. After the commit,
-outside the write's request, the backend adds the facts the write moved to its tenant's pending
-set (`AlertFactEvaluationScheduler`):
+creation, through the record-changed event, and so does a data source purge. The legacy treatment
+writes that go around the repositories announce too: a V1 or V3 delete, a source's delete and a
+find-query delete name the record types that lost rows, a reclassified treatment the types of the
+records it dropped, and a client id rekey every type it can move. Deduplication announces the record
+types whose shown copy it changed: a reconcile batch, the flag audit and each slice of a full run,
+once their changes have committed, naming no record. After the commit, outside the write's request,
+the backend adds the facts the write moved to its tenant's pending set
+(`AlertFactEvaluationScheduler`):
 
 - A moved `glucose` fact starts an evaluation at once, with every fact pending for the tenant. It
   joins only an evaluation that has not yet begun; once one has begun, a new glucose change starts
@@ -1032,10 +1041,19 @@ set (`AlertFactEvaluationScheduler`):
   200 treatments is one evaluation. A change during an evaluation is taken by the next.
 - A `glucose` move that is not a reading (a target-range schedule moves the bucket) evaluates the
   rules that read `glucose` even when the reading was just evaluated.
+- A rule is first evaluated when it is saved, not at the next reading. A save that creates a rule,
+  enables one, or changes its condition, auto-resolve, glucose freshness bound or `on_unknown`, and
+  leaves it enabled, names the rule to its tenant's pending set once the save has committed
+  (`AlertRuleRearm`, which every such writer but the dev-only sample data seeder saves through). The named rules are evaluated as a
+  non-glucose fact is, after the same debounce, or with a glucose evaluation that has not yet begun,
+  against the reading already evaluated and past its claim. A disabled rule, and a save that changes
+  only what the evaluation does not read (the name, the channels, the smart snooze), names nothing.
+  A save inside a transaction its caller opened (a tracker's managed rules created with the
+  tracker) names its rules once the caller has committed.
 - The evaluation selects the tenant's newest usable canonical reading, as a reading's does, and
-  evaluates the enabled rules that read a moved fact, or every enabled rule when a reading not yet
-  evaluated moved `glucose`, in a scope of its own pinned to the tenant, with none of the writing
-  request's execution context. With no usable reading it evaluates
+  evaluates the enabled rules that read a moved fact and the enabled rules a save named, or every
+  enabled rule when a reading not yet evaluated moved `glucose`, in a scope of its own pinned to the
+  tenant, with none of the writing request's execution context. With no usable reading it evaluates
   nothing.
 
 Pending work lives in one process. On shutdown, after the server has drained its requests, every
@@ -1074,10 +1092,11 @@ The sweep makes good a reading whose evaluation never completed:
   the later of 10 s after its reading was stored and the end of the failed pass: at most that plus
   the 30 s interval. A pass that ran to its end and recorded nothing, because its record failed to
   write or because it read no enabled rule, keeps its claim for 60 s
-  (`AlertEvaluationWatermark.MaxSkipWindow`), so a rule enabled after it is evaluated at most 60 s
-  plus the 30 s interval after the claim. A write's pass still running in the same process holds
-  its claim too, so a later rule of that pass is decided when the pass reaches it, and the sweep
-  cannot take the reading until 60 s after the claim. A process that starts reads the record, so a
+  (`AlertEvaluationWatermark.MaxSkipWindow`), so the sweep takes the reading up at most 60 s plus
+  the 30 s interval after the claim; a rule enabled after the pass is evaluated by its save. A
+  write's pass still running in the same process holds its claim too, so a later rule of that pass
+  is decided when the pass reaches it, and the sweep cannot take the reading until 60 s after the
+  claim. A process that starts reads the record, so a
   reading evaluated before the restart is not evaluated again.
 - The claim keeps the sweep's pass and the write's pass on a reading from both running in one
   process. A write's pass still running in another process past the grace is evaluated a second
@@ -1091,7 +1110,9 @@ The sweep makes good a reading whose evaluation never completed:
   information when the tenant has no record yet, which is the first sweep of each tenant after the
   record begins, and as a warning when the record names another reading.
 
-What stays uncovered: the record names readings only. A lost evaluation of a write that moved
+What stays uncovered: the record names readings only. A lost evaluation of a rule save (the process
+ended between the save and its evaluation, or the shutdown timeout cut it off) leaves the rule to the
+next reading and, when it is wall-clock, the sweep. A lost evaluation of a write that moved
 another fact (a pump snapshot moving `iob`, say) is made good by the next reading's evaluation, or,
 when the newest reading itself was never evaluated, by the sweep's pass, which reads every fact
 afresh; with neither, a rule that reads no clock waits for the next reading. The record holds the
@@ -1102,8 +1123,7 @@ waits for the next reading. A wall-clock rule is evaluated by the sweep as §5.1
 
 Some writes do not announce, and their facts' rules are evaluated only by the next reading and,
 when wall-clock, by the sweep: state spans, trackers, sleep sessions, alert instances and Do
-Not Disturb are written by stores outside the V4 repositories, and deduplication re-picks which
-copy of a device event or a glucose reading reads are shown without announcing it.
+Not Disturb are written by stores outside the V4 repositories.
 
 ### 5.3 Next change
 
@@ -1172,12 +1192,14 @@ does not report it.
 
 The backend's sweep waits for it only for a wall-clock rule every fact of which (§5.2) has an
 announcing write for every write that moves it and does not move with the clock: `glucose`,
-`aps`, `uploader`, `transmitter`, `sensor_state` and `aps_determination`
+`aps`, `uploader`, `transmitter`, `sensor_state`, `aps_determination` and `device_ages`
 (`ContextFactWrites.SweepMayWaitFor`). `aps_determination` moves with an APS snapshot write, which
 announces itself; it goes stale at an instant the engine reports as a next change, so it does not
-move with the clock.
-`sensor_state` moves with a reading (one with no value is `no_value`) and with a device status that
-states it, whose extras write announces itself, as does a purge that deletes extras; a report's
+move with the clock. `device_ages` moves with a device event written, deleted or restored, and with
+deduplication changing which copy of a site change or sensor start reads show, each of which
+announces itself (§5.2).
+`sensor_state` moves with a reading (one with no value is `no_value`) and with a sensor state report
+written or deleted, each of which announces itself, as does a purge that deletes one; a report's
 lapse is its `until`, which the engine reports as a next change, so it does not move with the
 clock. It waits only while
 the newest canonical reading is usable, the one a write's evaluation measures, and the context
@@ -1201,8 +1223,6 @@ Every other wall-clock rule keeps the 30 s cadence:
   (§5.1).
 - `state_spans`, `trackers`, `sleep`, `active_alerts` and `do_not_disturb` have writes that do not
   announce (§5.2).
-- `device_ages` has one too: deduplication can re-pick the copy of a site change or sensor start
-  that reads show, moving the anchor by the match tolerance with no announcement.
 
 A held evaluation (§6.4) records its next change like any other: the value is read from the
 state the evaluation left, which is the state it found with its hold's start, and it is keyed by
@@ -1747,9 +1767,9 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
   replayed as live reads it (§4): no value, `SensorState` `no_value` from the first such reading
   after the last one with a value, and `LastReadingAt` that last reading's time, found among the
   readings replay has loaded rather than 24 hours back. The sensor state a device status reports
-  is read as of each tick through the same enrichment as live, from statuses stored by the tick
-  (receipt-gated), so replay sees a status where live could first have read it. Unlike live, a
-  status that arrives between readings is evaluated at the next tick, not at its write. `LatestReceivedAt` is its arrival
+  is read as of each tick through the same enrichment as live, from sensor state reports stored by
+  the tick (receipt-gated), so replay sees a report where live could first have read it. Unlike
+  live, a report that arrives between readings is evaluated at the next tick, not at its write. `LatestReceivedAt` is its arrival
   when that was a live arrival, else absent (Ticks). `until` is the window's end.
 - Do Not Disturb: for each tick, the rules an excursion opening on it, or on a step before the
   next tick, is recorded for as suppressed (the gate live delivery applies on open,

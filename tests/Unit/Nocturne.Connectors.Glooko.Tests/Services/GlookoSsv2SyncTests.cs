@@ -454,7 +454,7 @@ public class GlookoSsv2SyncTests
             Mock.Of<IRetryDelayStrategy>(),
             new FixedGlookoTokenProvider(),
             publisher,
-            mealMatchingService: null,
+            mealMatchLinker: null,
             timezoneTimelineService: null,
             cursorStore: cursorStore,
             endpointPause: TimeSpan.Zero);

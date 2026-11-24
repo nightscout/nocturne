@@ -24,7 +24,7 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
 {
     private static readonly string[] Tables =
     [
-        "aps_snapshots", "pump_snapshots", "uploader_snapshots", "device_status_extras", "state_spans",
+        "aps_snapshots", "pump_snapshots", "uploader_snapshots", "device_status_extras", "sensor_state_reports", "state_spans",
         "devices", "patient_devices",
     ];
 
@@ -192,6 +192,8 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
 
         foreach (var row in rows["device_status_extras"])
             Name(row, $"extras:{Rename((string?)row["correlation_id"])}");
+        foreach (var row in rows["sensor_state_reports"])
+            Name(row, $"sensor-state:{Rename((string?)row["correlation_id"])}");
         foreach (var row in rows["patient_devices"])
             Name(row, $"patient-device:{Rename((string?)row["device_id"])}|{row["start_date"]}");
         foreach (var row in rows["state_spans"])

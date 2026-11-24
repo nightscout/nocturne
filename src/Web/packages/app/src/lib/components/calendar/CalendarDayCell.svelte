@@ -70,7 +70,7 @@
   function getCellClasses(
     day: CalendarSlot
   ): string {
-    const base = "flex items-center justify-center rounded-lg border min-h-20 relative";
+    const base = "flex min-w-0 items-center justify-center rounded-md @md:rounded-lg border min-h-20 relative";
     const isTodayCell = day && "date" in day && day.date !== undefined && isToday(day.date);
 
     return cn(
@@ -122,14 +122,14 @@
   {#if stats && stats.totalReadings > 0}
     <!-- Day number in corner -->
     <span
-      class="absolute top-1 left-2 text-xs text-muted-foreground font-medium z-10"
+      class="absolute top-1 left-1 @md:left-2 text-xs text-muted-foreground font-medium z-10"
     >
       {getCalendarDayNumber(stats.date)}
     </span>
 
     <!-- Tracker icons in top-right corner -->
     {#if dayTrackerEvents.length > 0}
-      <div class="absolute top-1 right-1 flex gap-0.5 z-10">
+      <div class="absolute right-0.5 bottom-0.5 @md:right-1 @md:bottom-auto @md:top-1 flex gap-0.5 z-10">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
@@ -145,11 +145,11 @@
                 <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
-                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  class="tracker-icon size-3.5 @md:size-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
                   data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
-                  <TrackerCategoryIcon {category} class="h-3 w-3" />
+                  <TrackerCategoryIcon {category} class="size-2.5 @md:size-3" />
                 </button>
               {/snippet}
             </Popover.Trigger>
@@ -176,7 +176,10 @@
           {#if viewMode === "tir"}
             <div
               {...props}
-              class="absolute inset-0 p-2 pt-6"
+              class={cn(
+                "absolute inset-0 p-1 pt-5 @md:p-2 @md:pt-6",
+                dayTrackerEvents.length > 0 && "@max-md:pb-5"
+              )}
             >
               <DayStackedBar
                 veryLowPercent={stats.veryLowPercent}
@@ -265,12 +268,12 @@
     </Tooltip.Root>
   {:else if day && "empty" in day}
     <!-- Day with no data -->
-    <span class="absolute top-1 left-2 text-xs text-muted-foreground">
+    <span class="absolute top-1 left-1 @md:left-2 text-xs text-muted-foreground">
       {day.dayNumber}
     </span>
     <!-- Tracker icons for empty days -->
     {#if dayTrackerEvents.length > 0}
-      <div class="absolute top-1 right-1 flex gap-0.5">
+      <div class="absolute right-0.5 bottom-0.5 @md:right-1 @md:bottom-auto @md:top-1 flex gap-0.5">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
@@ -286,11 +289,11 @@
                 <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
-                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  class="tracker-icon size-3.5 @md:size-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
                   data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
-                  <TrackerCategoryIcon {category} class="h-3 w-3" />
+                  <TrackerCategoryIcon {category} class="size-2.5 @md:size-3" />
                 </button>
               {/snippet}
             </Popover.Trigger>
@@ -309,15 +312,15 @@
         {/each}
       </div>
     {/if}
-    <div class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"></div>
+    <div class="size-4 @md:size-6 rounded-full border-2 border-dashed border-muted-foreground/20"></div>
   {:else if stats}
     <!-- Day exists in data but has no readings -->
-    <span class="absolute top-1 left-2 text-xs text-muted-foreground">
+    <span class="absolute top-1 left-1 @md:left-2 text-xs text-muted-foreground">
       {getCalendarDayNumber(stats.date)}
     </span>
     <!-- Tracker icons for days with no readings -->
     {#if dayTrackerEvents.length > 0}
-      <div class="absolute top-1 right-1 flex gap-0.5">
+      <div class="absolute right-0.5 bottom-0.5 @md:right-1 @md:bottom-auto @md:top-1 flex gap-0.5">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
@@ -333,11 +336,11 @@
                 <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
-                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  class="tracker-icon size-3.5 @md:size-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
                   data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
-                  <TrackerCategoryIcon {category} class="h-3 w-3" />
+                  <TrackerCategoryIcon {category} class="size-2.5 @md:size-3" />
                 </button>
               {/snippet}
             </Popover.Trigger>
@@ -356,7 +359,7 @@
         {/each}
       </div>
     {/if}
-    <div class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"></div>
+    <div class="size-4 @md:size-6 rounded-full border-2 border-dashed border-muted-foreground/20"></div>
   {:else}
     <!-- Empty cell (before/after month) -->
   {/if}

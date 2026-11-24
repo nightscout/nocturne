@@ -51,7 +51,7 @@ public class TeamAccessServiceTests
             new TenantMemberRecord(
                 Guid.CreateVersion7(), tenantId, Caller, "Sam", null, true, false, false, false, false,
                 [new TenantMemberRoleRecord(OwnerRoleId, roleSlug, roleSlug, RoleSeeds.Permissions[roleSlug])],
-                null, null, null, limited, end, null, null, Now));
+                null, null, null, limited, end, null, null, Now, []));
 
     private void Memberships(params SubjectMembership[] memberships) =>
         _members.Setup(m => m.ListMembershipsOfSubjectAsync(Caller, Now, It.IsAny<CancellationToken>())).ReturnsAsync(memberships);
@@ -61,7 +61,7 @@ public class TeamAccessServiceTests
             .ReturnsAsync(RoleGrantValidation.Valid);
 
     private static TeamAccessGrant Grant(bool limit = false, DateTime? end = null) =>
-        new(SiteId, [Guid.CreateVersion7()], limit, end);
+        new(SiteId, [Guid.CreateVersion7()], limit, end, true);
 
     public static TheoryData<TeamAccessSuggestion, bool, DateTime?, TeamAccessGrant, TeamAccessRefusal?> Narrowings => new()
     {

@@ -106,6 +106,12 @@ public class OAuthGrantServiceTests : IDisposable
         var subject = new SubjectEntity { Id = id, Name = name };
         subject.SetEmail(email);
         db.Subjects.Add(subject);
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            SubjectId = id,
+        });
         await db.SaveChangesAsync();
     }
 

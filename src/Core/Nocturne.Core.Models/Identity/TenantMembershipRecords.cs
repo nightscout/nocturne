@@ -25,8 +25,29 @@ public sealed record TenantMemberRecord(
     DateTime? AccessEndsAt,
     DateTime? LastUsedAt,
     Guid? CreatedFromInviteId,
-    DateTime SysCreatedAt)
+    DateTime SysCreatedAt,
+    IReadOnlyList<TenantMemberReasonRecord> Reasons)
 {
+    /// <summary>
+    /// The reasons the member holds, as the writer reads them: one direct reason equal to the row when
+    /// every stored reason is direct or none is stored, since the row wins over a direct reason
+    /// (<c>MembershipReasons.AlignWithRow</c>); otherwise the stored reasons.
+    /// </summary>
+    public IReadOnlyList<TenantMemberReasonRecord> HeldReasons =>
+        Reasons.All(r => r.Kind == MembershipReasonKind.Direct)
+            ? [new TenantMemberReasonRecord(MembershipReasonKind.Direct, null, Roles, DirectPermissions, LimitTo24Hours, AccessEndsAt)]
+            : Reasons;
+
+    /// <summary>
+    /// The reason the member was let in on the tenant itself; null when they hold access only through
+    /// a team, which the member management actions refuse to change (<see cref="OwnerGuardedChange.FromTeam"/>).
+    /// </summary>
+    public TenantMemberReasonRecord? DirectReason => HeldReasons.FirstOrDefault(r => r.Kind == MembershipReasonKind.Direct);
+
+    /// <summary>The permissions every held reason but the direct one gives, which no edit of the direct reason takes away.</summary>
+    public IEnumerable<string> PermissionsBesideDirect =>
+        HeldReasons.Where(r => r.Kind != MembershipReasonKind.Direct).SelectMany(r => r.EffectivePermissions());
+
     /// <summary>The union of the roles' permissions and the direct permissions, leaving out <paramref name="excludingRoleId"/>.</summary>
     public IEnumerable<string> EffectivePermissions(Guid? excludingRoleId = null) =>
         MemberPermissions.Effective(
@@ -40,6 +61,32 @@ public sealed record TenantMemberRecord(
     /// <summary>Whether one of the roles is the tenant's owner role.</summary>
     public bool IsOwner => Roles.Any(r => r.Slug == RoleSeeds.Owner);
 }
+
+/// <summary>One stored reason a membership holds its access, with the roles it gives.</summary>
+/// <param name="Kind">A <see cref="MembershipReasonKind"/>.</param>
+/// <param name="Team">
+/// For a team reason, the team whose access to the member's tenant gives it, when the reader can see
+/// that access; null for a direct reason and for a team reason whose access is not of the member's tenant.
+/// </param>
+/// <param name="AccessEndsAt">When the reason ends, in UTC; null when it does not.</param>
+public sealed record TenantMemberReasonRecord(
+    string Kind,
+    MemberReasonTeam? Team,
+    IReadOnlyList<TenantMemberRoleRecord> Roles,
+    IReadOnlyList<string>? DirectPermissions,
+    bool LimitTo24Hours,
+    DateTime? AccessEndsAt)
+{
+    /// <summary>The union of the reason's roles' permissions and its direct permissions.</summary>
+    public IEnumerable<string> EffectivePermissions() =>
+        MemberPermissions.Effective(Roles.Select(r => r.Permissions), DirectPermissions);
+
+    /// <summary>Whether one of the reason's roles is the tenant's owner role.</summary>
+    public bool IsOwner => Roles.Any(r => r.Slug == RoleSeeds.Owner);
+}
+
+/// <summary>The team a team reason comes from, by its current name.</summary>
+public sealed record MemberReasonTeam(Guid Id, string Name);
 
 /// <summary>A tenant role as held by a member.</summary>
 public sealed record TenantMemberRoleRecord(Guid RoleId, string Name, string Slug, IReadOnlyList<string> Permissions);
@@ -87,6 +134,9 @@ public enum MembershipJoinHow
 
     /// <summary>The platform added them: the Public and device subjects, the demo member, a dev restore.</summary>
     System,
+
+    /// <summary>They are staff of a team the site gave access to.</summary>
+    Team,
 }
 
 /// <summary>How a subject stopped being a member of a tenant.</summary>
@@ -110,6 +160,9 @@ public enum MembershipEndHow
     /// membership to another subject.
     /// </summary>
     System,
+
+    /// <summary>They stopped being staff of a team the site gave access to, or the team's access stopped.</summary>
+    Team,
 }
 
 /// <summary>Who made a membership, as its audit rows record it.</summary>
@@ -224,6 +277,12 @@ public sealed record PlatformAdminDirectory(IReadOnlyList<PlatformAdminMembershi
 /// </summary>
 public sealed record SubjectMembershipsRemoval(int Removed, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
 
+/// <summary>What removing a membership's direct reason did.</summary>
+/// <param name="Outcome">Whether it was removed, or why not.</param>
+/// <param name="MembershipKept">Whether the membership stays for another reason; false when it went with the direct reason.</param>
+/// <param name="KeptAccessEndsAt">The end of the membership that stays; null when it has none or did not stay.</param>
+public sealed record DirectReasonRemoval(OwnerGuardedChange Outcome, bool MembershipKept, DateTime? KeptAccessEndsAt);
+
 /// <summary>What a membership change that may not leave the tenant without an owner found.</summary>
 public enum OwnerGuardedChange
 {
@@ -236,4 +295,10 @@ public enum OwnerGuardedChange
     /// or the owner role given to a membership that has one.
     /// </summary>
     OwnerAccessEnds,
+
+    /// <summary>
+    /// The member holds no direct reason: what they hold comes from a team's access to the tenant,
+    /// which only stopping the team's access changes.
+    /// </summary>
+    FromTeam,
 }

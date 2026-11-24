@@ -16,6 +16,7 @@
   import { page } from "$app/state";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { getDemoDataPresence } from "#lib/api/generated/services.generated.remote.js";
 
   // The two tools answer to different gates: deduplication is RequireSuperuser, so it resolves to
   // the wildcard; deleting demo data is tenant.settings and refuses the demo visitor. Data
@@ -25,12 +26,14 @@
 
   const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
   const canManageData = $derived(canChangeTenantSettings(effectivePermissions, page.data.refusedAsDemoSubject));
+  const demoData = $derived(canManageData ? getDemoDataPresence() : null);
+  const canRemoveDemoData = $derived(demoData?.current?.hasDemoData === true);
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
   let showDemoDataDialog = $state(false);
 </script>
 
-{#if canDeduplicate || canManageData}
+{#if canDeduplicate || canRemoveDemoData}
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -77,7 +80,7 @@
         </div>
       {/if}
 
-      {#if canManageData}
+      {#if canRemoveDemoData}
         <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
           <div
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
@@ -103,9 +106,13 @@
     </CardContent>
   </Card>
 
-  <DemoDataSection bind:open={showDemoDataDialog} />
   <DeduplicationDialog
     bind:open={showDeduplicationDialog}
     bind:isDeduplicating
   />
+{/if}
+
+<!-- Outside the card, so the result stays on screen after the deletion hides the action. -->
+{#if canManageData}
+  <DemoDataSection bind:open={showDemoDataDialog} />
 {/if}

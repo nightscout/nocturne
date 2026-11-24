@@ -180,7 +180,8 @@ internal static class MigrationJobHarness
         TimeProvider? time = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
-        TimeSpan? readFirst = null)
+        TimeSpan? readFirst = null,
+        string? apiSecret = null)
     {
         var tenant = owner ?? NewTenant(tenantId);
 
@@ -191,6 +192,7 @@ internal static class MigrationJobHarness
             {
                 Mode = MigrationMode.Api,
                 NightscoutUrl = nightscoutUrl,
+                NightscoutApiSecret = apiSecret,
                 Collections = [.. collections],
                 StartDate = startDate,
                 EndDate = endDate,

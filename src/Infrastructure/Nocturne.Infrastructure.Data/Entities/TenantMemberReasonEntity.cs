@@ -33,9 +33,14 @@ public class TenantMemberReasonEntity : ISystemTimestamped
     [MaxLength(32)]
     public string Kind { get; set; } = string.Empty;
 
-    /// <summary>What the reason comes from; null for <see cref="MembershipReasonKind.Direct"/>.</summary>
+    /// <summary>
+    /// What the reason comes from: for <see cref="MembershipReasonKind.Team"/> the team's access to the
+    /// tenant (<see cref="TeamAccess"/>); null for <see cref="MembershipReasonKind.Direct"/>.
+    /// </summary>
     [Column("source_id")]
     public Guid? SourceId { get; set; }
+
+    public TeamTenantAccessEntity? TeamAccess { get; set; }
 
     [Column("direct_permissions", TypeName = "jsonb")]
     public List<string>? DirectPermissions { get; set; }

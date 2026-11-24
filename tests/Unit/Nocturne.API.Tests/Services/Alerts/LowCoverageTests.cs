@@ -66,6 +66,8 @@ public class LowCoverageTests
     {
         var db = TestDbContextFactory.CreateInMemoryContext($"low_coverage_{Guid.NewGuid()}");
         db.TenantId = Tenant;
+        db.Subjects.AddRange(
+            new SubjectEntity { Id = Live, Name = "Live" }, new SubjectEntity { Id = Departed, Name = "Departed" });
         db.ChatIdentityDirectory.AddRange(
             Link(LiveDiscord, Live),
             Link(DepartedDiscord, Departed));
@@ -97,7 +99,7 @@ public class LowCoverageTests
         IsPlatformAdmin: false, HasConfirmedEmail: true,
         Roles: [new TenantMemberRoleRecord(Guid.CreateVersion7(), "Caretaker", "caretaker", ["*"])],
         DirectPermissions: null, Label: null, Username: null, LimitTo24Hours: false, AccessEndsAt: null,
-        LastUsedAt: null, CreatedFromInviteId: null, SysCreatedAt: Now);
+        LastUsedAt: null, CreatedFromInviteId: null, SysCreatedAt: Now, Reasons: []);
 
     private static async Task<bool> CoversAsync(AlertRuleRecord rule, IReadOnlyList<RustValidationIssue>? issues) =>
         LowCoverage.Covers(rule, issues, await StatesAsync(rule));

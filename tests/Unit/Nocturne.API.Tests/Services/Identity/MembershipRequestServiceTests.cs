@@ -528,7 +528,7 @@ public class MembershipRequestServiceTests : IDisposable
         // Create first request, then deny it so a second pending can be created
         await _service.CreateRequestAsync(_tenantId, _subjectId, "First");
         var first = await _dbContext.MembershipRequests.FirstAsync();
-        first.CreatedAt = DateTime.UtcNow.AddDays(-1);
+        first.CreatedAt = _time.GetUtcNow().UtcDateTime.AddDays(-1);
         await _dbContext.SaveChangesAsync();
 
         // Deny so that duplicate check passes

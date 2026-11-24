@@ -54,6 +54,7 @@ public sealed class DemoTenantService
     private readonly ITenantRepository _tenants;
     private readonly ITenantMembershipRepository _members;
     private readonly ISubjectRepository _subjects;
+    private readonly ISubjectDeletion _deletion;
     private readonly IFirstPartyTokenRepository _sessions;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
@@ -64,8 +65,9 @@ public sealed class DemoTenantService
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
-    /// <param name="members">Finds the demo member, and removes the memberships of a retired one.</param>
-    /// <param name="subjects">Checks that a retired demo member is a demo subject, then deletes it.</param>
+    /// <param name="members">Finds the demo member.</param>
+    /// <param name="subjects">Checks that a retired demo member is a demo subject.</param>
+    /// <param name="deletion">Deletes a retired demo member with its memberships and what it made.</param>
     /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
     /// <param name="tenantService">Re-seeds the roles and the Public membership after a reset.</param>
     /// <param name="publicAccessCache">Evicted when the Public membership's grant is rewritten.</param>
@@ -77,6 +79,7 @@ public sealed class DemoTenantService
         ITenantRepository tenants,
         ITenantMembershipRepository members,
         ISubjectRepository subjects,
+        ISubjectDeletion deletion,
         IFirstPartyTokenRepository sessions,
         ITenantService tenantService,
         PublicAccessCacheService publicAccessCache,
@@ -89,6 +92,7 @@ public sealed class DemoTenantService
         _tenants = tenants;
         _members = members;
         _subjects = subjects;
+        _deletion = deletion;
         _sessions = sessions;
         _tenantService = tenantService;
         _publicAccessCache = publicAccessCache;
@@ -266,7 +270,7 @@ public sealed class DemoTenantService
     /// <summary>
     /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so no
     /// visitor session outlives the reset, then deletes the subject itself along with any
-    /// membership it picked up.
+    /// membership it picked up and what it made (<see cref="ISubjectDeletion"/>).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -315,15 +319,15 @@ public sealed class DemoTenantService
         }
 
         await _sessions.DeleteAllForSubjectAsync(subjectId.Value, ct);
-        var removal = await _members.RemoveMembershipsOfSubjectAsync(subjectId.Value, ct);
-        foreach (var tenant in removal.TenantsLeftWithoutOwner)
+        var deletion = await _deletion.DeleteAsync(subjectId.Value, evenLastOwner: true, ct);
+        foreach (var tenant in deletion.TenantsLeftWithoutOwner)
         {
             _logger.LogWarning(
                 "Retiring demo member {SubjectId} left tenant {Slug} with no owner who can sign in",
                 subjectId, tenant.Slug);
         }
 
-        switch (await _subjects.DeleteAsync(subjectId.Value, ct))
+        switch (deletion.Change)
         {
             case SubjectChange.LastOwnerOf stillOwner:
                 _logger.LogError(

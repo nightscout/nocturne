@@ -204,6 +204,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ISpentPasskeyChallengeRepository, SpentPasskeyChallengeRepository>();
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
         services.AddTransient<ITrustedDeviceRepository, TrustedDeviceRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
@@ -265,6 +266,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
         services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
         services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
+        services.AddScoped<ISensorStateReportRepository, SensorStateReportRepository>();
         services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
 
         services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();

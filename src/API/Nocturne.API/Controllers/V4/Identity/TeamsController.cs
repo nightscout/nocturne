@@ -20,15 +20,16 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// The teams the signed-in person is a member of, and running them: creating one, renaming it,
-/// adding managers by invite link, removing them, making links that let an owner of a site give the
-/// team access to it, and deleting it. Also the other side of such a link: the person who opens it
-/// reads it and approves it for a site they own.
+/// adding managers and staff by invite link, removing them, making links that let an owner of a site
+/// give the team access to it, and deleting it. Also the other side of such a link: the person who
+/// opens it reads it and approves it for a site they own.
 /// </summary>
 /// <remarks>
 /// Run by a person in a browser session, never by an API key or a device token
 /// (<see cref="RequireInteractiveSessionAttribute"/>). A team belongs to no tenant, so these routes are
 /// served on every host. A caller who is not a member of a team gets 404 on every route that names it,
-/// so a team's existence is never revealed to someone outside it.
+/// so a team's existence is never revealed to someone outside it. A staff member gets the same answer
+/// as a non-manager on every route that only a manager may use.
 /// </remarks>
 [ApiController]
 [Tags("Identity")]
@@ -48,6 +49,9 @@ public class TeamsController(
     public const string JoinPath = "/teams/join";
 
     public const string TokenQueryParameter = "token";
+
+    /// <summary>The web path a staff invite link opens, with the token in <see cref="TokenQueryParameter"/>.</summary>
+    public const string StaffJoinPath = "/teams/join-staff";
 
     /// <summary>The web path an access link opens, with the token in <see cref="TokenQueryParameter"/>.</summary>
     public const string AccessPath = "/teams/access";
@@ -94,9 +98,11 @@ public class TeamsController(
     }
 
     /// <summary>
-    /// The team's name, managers, and what the caller may do to it. A manager also reads the live
-    /// manager invites and access links, and the sites the team has access to: their names, the roles
-    /// given, the limit and the end, never who approved or who is in the site.
+    /// The team's name, managers, and what the caller may do to it. A manager also reads the managers'
+    /// subject ids, the staff, the live manager and staff invites and access links, and the sites the
+    /// team has access to: their names, the roles given, the limit and the end, never who approved or
+    /// who is in the site. A staff member reads the name, the managers' names and what narrows them,
+    /// and nothing else.
     /// </summary>
     [HttpGet("{teamId:guid}")]
     [RemoteQuery]
@@ -172,6 +178,9 @@ public class TeamsController(
     public async Task<IActionResult> CreateManagerInvite(
         Guid teamId, [FromBody] CreateTeamInviteRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
@@ -242,18 +251,138 @@ public class TeamsController(
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
-        var acceptance = await teams.AcceptInviteAsync(HashUtils.Sha256Hex(token), subjectId, Now, ct);
-        return acceptance switch
+        return AcceptanceResult(await teams.AcceptInviteAsync(HashUtils.Sha256Hex(token), subjectId, Now, ct));
+    }
+
+    /// <summary>
+    /// Makes a link that makes whoever opens it, signed in, staff of the team, within the role ceiling,
+    /// 24-hour limit and end it gives. The token is in this response only.
+    /// </summary>
+    [HttpPost("{teamId:guid}/staff-invites")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(typeof(TeamStaffInviteCreated), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CreateStaffInvite(
+        Guid teamId, [FromBody] CreateTeamStaffInviteRequest request, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        if (LinkProblem(request.ExpiresInDays, request.MaxUses, request.Label, out var label) is { } problem)
+            return problem;
+
+        if (NarrowingProblem(request.RoleCeilingSlug, request.LimitTo24Hours, request.StaffEndsAt, refusePassedEnd: true, out var narrowing) is { } narrowingProblem)
+            return narrowingProblem;
+
+        var token = jwtService.GenerateRefreshToken();
+        var expiresAt = Now.AddDays(request.ExpiresInDays);
+        var inviteId = await teams.CreateStaffInviteAsync(
+            teamId, subjectId, new NewTeamStaffInvite(HashUtils.Sha256Hex(token), label, expiresAt, request.MaxUses, narrowing!), ct);
+        if (inviteId is not { } id)
+            return NotFound();
+
+        return StatusCode(StatusCodes.Status201Created, new TeamStaffInviteCreated(id, token, LinkUrl(StaffJoinPath, token), expiresAt));
+    }
+
+    /// <summary>Revokes one of the team's staff invites.</summary>
+    [HttpDelete("{teamId:guid}/staff-invites/{inviteId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeStaffInvite(Guid teamId, Guid inviteId, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return await teams.RevokeStaffInviteAsync(teamId, subjectId, inviteId, Now, ct) ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// The team a staff invite is for, who made it and what narrows the staff member it makes, for the
+    /// signed-in person holding its token. An invite that can no longer be accepted answers with the
+    /// reason alone.
+    /// </summary>
+    [HttpGet("staff-invites/{token}")]
+    [EnableRateLimiting("invite-lookup")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TeamStaffInviteDetails), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetStaffInviteInfo([CredentialRouteValue] string token, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        var info = await teams.GetStaffInviteInfoAsync(HashUtils.Sha256Hex(token), subjectId, Now, ct);
+        if (info is null)
+            return NotFound();
+
+        if (UnusableDetail(info.Refusal) is { } detail)
+            return this.ProblemWithCode(UnusableCode(info.Refusal)!, detail, StatusCodes.Status400BadRequest);
+
+        return Ok(new TeamStaffInviteDetails(
+            info.TeamId, info.TeamName, info.CreatedByName, info.Narrowing, info.Refusal == TeamInviteRefusal.AlreadyMember));
+    }
+
+    /// <summary>
+    /// Makes the caller staff of the invite's team. A caller already a member, of either kind, is told
+    /// so, and nothing changes. This gives the caller no access to any site.
+    /// </summary>
+    [HttpPost("staff-invites/{token}/accept")]
+    [EnableRateLimiting("invite-lookup")]
+    [RemoteCommand(Invalidates = ["GetMyTeams", "GetStaffInviteInfo"])]
+    [ProducesResponseType(typeof(TeamInviteAccepted), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AcceptStaffInvite([CredentialRouteValue] string token, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        return AcceptanceResult(await teams.AcceptStaffInviteAsync(HashUtils.Sha256Hex(token), subjectId, Now, ct));
+    }
+
+    /// <summary>
+    /// Sets what narrows a staff member: the role ceiling, the 24-hour limit and the end. A change that
+    /// gives them more than they held sends the sites that decide for themselves back to waiting.
+    /// </summary>
+    [HttpPut("{teamId:guid}/staff/{subjectId:guid}")]
+    [RemoteCommand(Invalidates = ["GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStaff(
+        Guid teamId, Guid subjectId, [FromBody] UpdateTeamStaffRequest request, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        if (NarrowingProblem(request.RoleCeilingSlug, request.LimitTo24Hours, request.EndsAt, refusePassedEnd: false, out var narrowing) is { } problem)
+            return problem;
+
+        return await teams.UpdateStaffAsync(teamId, callerId, subjectId, narrowing!, Now, ct) switch
         {
-            { Refusal: null, TeamId: { } teamId } => Ok(new TeamInviteAccepted(teamId)),
-            { Refusal: TeamInviteRefusal.NotFound } => NotFound(),
-            { Refusal: TeamInviteRefusal.AlreadyMember } => this.ProblemWithCode(
-                TeamProblemCodes.AlreadyMember, "You are already a member of this team.", StatusCodes.Status400BadRequest),
-            _ => this.ProblemWithCode(
-                UnusableCode(acceptance.Refusal) ?? TeamProblemCodes.NoLongerValid,
-                UnusableDetail(acceptance.Refusal),
-                StatusCodes.Status400BadRequest),
+            TeamStaffChange.Changed => NoContent(),
+            TeamStaffChange.EndPassed => PassedEndProblem(),
+            _ => NotFound(),
         };
+    }
+
+    /// <summary>
+    /// Removes a staff member from the team. The caller's own id means the caller leaves, which a staff
+    /// member may do; removing anyone else is for a manager.
+    /// </summary>
+    [HttpDelete("{teamId:guid}/staff/{subjectId:guid}")]
+    [RemoteCommand(Invalidates = ["GetMyTeams", "GetTeam"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveStaff(Guid teamId, Guid subjectId, CancellationToken ct)
+    {
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return await teams.RemoveStaffAsync(teamId, callerId, subjectId, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>
@@ -268,6 +397,9 @@ public class TeamsController(
     public async Task<IActionResult> CreateAccessLink(
         Guid teamId, [FromBody] CreateTeamAccessLinkRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
@@ -346,11 +478,18 @@ public class TeamsController(
         [FromServices] TeamAccessService access,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (ApproverCredential() is not { } caller)
             return Unauthorized();
 
         var grant = new TeamAccessGrant(
-            request.TenantId, request.RoleIds, request.LimitTo24Hours, AccessEndRequest.Instant(request.AccessEndsAt));
+            request.TenantId,
+            request.RoleIds,
+            request.LimitTo24Hours,
+            AccessEndRequest.Instant(request.AccessEndsAt),
+            request.TeamManagesStaff ?? true);
         var approval = await access.ApproveAsync(HashUtils.Sha256Hex(token), caller, grant, ct);
         return approval.Refusal is { } refusal
             ? AccessProblem(refusal)
@@ -393,6 +532,46 @@ public class TeamsController(
         HttpContext.GetSubjectId() is { } subjectId && HttpContext.GetAuthContext() is { } auth
             ? new TeamAccessApproverCredential(subjectId, auth.AuthType, HttpContext.GetGrantedScopes(), auth.CredentialLimitTo24Hours)
             : null;
+
+    private IActionResult AcceptanceResult(TeamInviteAcceptance acceptance) => acceptance switch
+    {
+        { Refusal: null, TeamId: { } teamId } => Ok(new TeamInviteAccepted(teamId)),
+        { Refusal: TeamInviteRefusal.NotFound } => NotFound(),
+        { Refusal: TeamInviteRefusal.AlreadyMember } => this.ProblemWithCode(
+            TeamProblemCodes.AlreadyMember, "You are already a member of this team.", StatusCodes.Status400BadRequest),
+        _ => this.ProblemWithCode(
+            UnusableCode(acceptance.Refusal) ?? TeamProblemCodes.NoLongerValid,
+            UnusableDetail(acceptance.Refusal),
+            StatusCodes.Status400BadRequest),
+    };
+
+    /// <summary>
+    /// The refusal of a staff member's role ceiling or end, or null with what they narrow to. The ceiling
+    /// is a seed role for data only, or null for everything the team holds at a site. A passed end is
+    /// refused here only when <paramref name="refusePassedEnd"/>; an edit leaves that to the repository,
+    /// which knows the end the staff member already has.
+    /// </summary>
+    private ObjectResult? NarrowingProblem(
+        string? roleCeilingSlug, bool limitTo24Hours, DateTimeOffset? endsAt, bool refusePassedEnd,
+        out TeamStaffNarrowing? narrowing)
+    {
+        narrowing = null;
+        if (roleCeilingSlug is not null && TeamSuggestableRoles.PermissionsOf(roleCeilingSlug) is null)
+            return this.ProblemWithCode(
+                TeamProblemCodes.StaffCeilingInvalid,
+                "The role ceiling must be one a staff member may have.",
+                StatusCodes.Status400BadRequest);
+
+        var end = AccessEndRequest.Instant(endsAt);
+        if (refusePassedEnd && MembershipLiveness.HasEnded(end, Now))
+            return PassedEndProblem();
+
+        narrowing = new TeamStaffNarrowing(roleCeilingSlug, limitTo24Hours, end);
+        return null;
+    }
+
+    private ObjectResult PassedEndProblem() => this.ProblemWithCode(
+        TeamProblemCodes.StaffEndInvalid, "The end must be in the future.", StatusCodes.Status400BadRequest);
 
     /// <summary>The refusal of a link's expiry, number of uses or label, or null with the trimmed label.</summary>
     private ObjectResult? LinkProblem(int expiresInDays, int? maxUses, string? requestedLabel, out string? label)
@@ -472,6 +651,7 @@ public class TeamsController(
         TeamInviteRefusal.Revoked => TeamProblemCodes.Revoked,
         TeamInviteRefusal.UsedUp => TeamProblemCodes.UsedUp,
         TeamInviteRefusal.NoLongerValid => TeamProblemCodes.NoLongerValid,
+        TeamInviteRefusal.StaffEndPassed => TeamProblemCodes.StaffInviteEndPassed,
         _ => null,
     };
 
@@ -481,6 +661,7 @@ public class TeamsController(
         TeamInviteRefusal.Revoked => "This invite has been revoked.",
         TeamInviteRefusal.UsedUp => "This invite has reached its maximum uses.",
         TeamInviteRefusal.NoLongerValid => "This invite is no longer valid.",
+        TeamInviteRefusal.StaffEndPassed => "The end this invite gives has passed.",
         _ => null,
     };
 }
@@ -496,6 +677,27 @@ public sealed record CreateTeamInviteRequest(
 
 /// <summary>A new manager invite. <paramref name="Token"/> is never returned again.</summary>
 public sealed record TeamInviteCreated(Guid Id, string Token, string InviteUrl, DateTime ExpiresAt);
+
+/// <summary>
+/// A staff invite to make. <paramref name="RoleCeilingSlug"/> is a seed role for data only
+/// (<see cref="Scope.IsDataOnly"/>) that the staff member reaches no more than, null for everything the team
+/// holds at a site; <paramref name="LimitTo24Hours"/> limits them to the last 24 hours;
+/// <paramref name="StaffEndsAt"/> is when their place ends, null for no end; and
+/// <paramref name="MaxUses"/> is how many people the link may add, null for no cap.
+/// </summary>
+public sealed record CreateTeamStaffInviteRequest(
+    [property: MaxLength(TeamsController.MaxLabelLength)] string? Label,
+    string? RoleCeilingSlug,
+    bool LimitTo24Hours,
+    DateTimeOffset? StaffEndsAt,
+    int ExpiresInDays = 7,
+    int? MaxUses = 1);
+
+/// <summary>A new staff invite. <paramref name="Token"/> is never returned again.</summary>
+public sealed record TeamStaffInviteCreated(Guid Id, string Token, string InviteUrl, DateTime ExpiresAt);
+
+/// <summary>What narrows a staff member: see <see cref="CreateTeamStaffInviteRequest"/>. <paramref name="EndsAt"/> null means no end.</summary>
+public sealed record UpdateTeamStaffRequest(string? RoleCeilingSlug, bool LimitTo24Hours, DateTimeOffset? EndsAt);
 
 /// <summary>
 /// An access link to make. <paramref name="RoleSlug"/> is the suggested role, a seed role for data
@@ -517,9 +719,15 @@ public sealed record TeamAccessLinkCreated(Guid Id, string Token, string LinkUrl
 /// <summary>
 /// An approval: <paramref name="TenantId"/> is a site the caller owns, <paramref name="RoleIds"/> are at
 /// least one of its roles, and <paramref name="AccessEndsAt"/> is when the access ends, null for no end.
+/// <paramref name="TeamManagesStaff"/> says the team's managers decide which of their staff reach the
+/// site; absent means true, and false makes each staff member wait for the site to approve them.
 /// </summary>
 public sealed record ApproveTeamAccessRequest(
-    Guid TenantId, [property: Required] IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTimeOffset? AccessEndsAt);
+    Guid TenantId,
+    [property: Required] IReadOnlyList<Guid> RoleIds,
+    bool LimitTo24Hours,
+    DateTimeOffset? AccessEndsAt,
+    bool? TeamManagesStaff);
 
 /// <summary>The access an approval made.</summary>
 public sealed record TeamAccessGiven(Guid AccessId, Guid TenantId);
@@ -528,6 +736,14 @@ public sealed record TeamAccessGiven(Guid AccessId, Guid TenantId);
 /// <param name="Kind">What accepting makes the caller, a <see cref="TeamMemberKind"/> value.</param>
 public sealed record TeamInviteDetails(
     Guid TeamId, string TeamName, string CreatedByName, string Kind, bool AlreadyMember);
+
+/// <param name="TeamId">The team the invite is for.</param>
+/// <param name="TeamName">The team's name.</param>
+/// <param name="CreatedByName">The manager who made the invite.</param>
+/// <param name="Narrowing">What narrows the staff member accepting makes the caller.</param>
+/// <param name="AlreadyMember">Whether the caller is already a member of either kind, so accepting changes nothing.</param>
+public sealed record TeamStaffInviteDetails(
+    Guid TeamId, string TeamName, string CreatedByName, TeamStaffNarrowing Narrowing, bool AlreadyMember);
 
 /// <summary>The problem codes the team routes answer with, which the web app words itself.</summary>
 public static class TeamProblemCodes
@@ -557,6 +773,9 @@ public static class TeamProblemCodes
     public const string AccessEndLaterThanLink = "team_access_end_later_than_link";
     public const string AccessEndOutlastsApprover = "team_access_end_outlasts_approver";
     public const string AccessLinkEndPassed = "team_access_link_end_passed";
+    public const string StaffCeilingInvalid = "team_staff_ceiling_invalid";
+    public const string StaffEndInvalid = "team_staff_end_invalid";
+    public const string StaffInviteEndPassed = "team_staff_invite_end_passed";
 }
 
 public sealed record TeamInviteAccepted(Guid TeamId);

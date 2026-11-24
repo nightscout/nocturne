@@ -459,10 +459,6 @@
 
 <SetupChrome>
   {#snippet actions()}
-    <span class="hidden font-mono text-xs text-muted-foreground sm:inline">
-      Step {activeIndex + 1} of {activeSteps.length}
-    </span>
-
     {#if !setupRequired}
       <!-- Marks onboarding complete on the server so it is not offered again. -->
       <Button variant="ghost-muted" size="xs" onclick={handleExitSetup}>
@@ -516,7 +512,7 @@
             <div
               class="flex items-center gap-3 text-xs text-muted-foreground"
             >
-              <span class="font-mono uppercase tracking-wide">Step {String(activeIndex + 1).padStart(2, "0")} / {String(activeSteps.length).padStart(2, "0")}</span>
+              <span>Step {activeIndex + 1} of {activeSteps.length}</span>
               <span aria-hidden="true">·</span>
               <span>{activeStep?.short}</span>
             </div>
@@ -525,10 +521,10 @@
                 <Badge variant="secondary">
                   {#if path === "migration"}
                     <Cable />
-                    Nightscout Migration
+                    Nightscout migration
                   {:else}
                     <Sprout />
-                    Fresh Start
+                    Fresh start
                   {/if}
                 </Badge>
               {/if}
@@ -540,7 +536,7 @@
             </div>
           </div>
 
-          <div class="flex-1 px-1 py-3 @lg/card:px-5 @max-4xl/wizard:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-44">
+          <div class="flex-1 px-1 py-3 @lg/card:px-5 @max-4xl/wizard:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-24">
             <StepArtwork
               art={activeStep?.art ?? "welcome"}
               progress={artProgress}
@@ -632,10 +628,10 @@
                   </div>
                   <ConnectorSetup
                     connectorId={selectedConnectorId}
+                    variant="setup"
                     primaryAction="save-and-finish"
                     showToggle={false}
                     showDangerZone={false}
-                    showCapabilities={true}
                     onComplete={handleConnectorSaved}
                     onCancel={handleBack}
                   />
@@ -691,9 +687,9 @@
 
           {#if !setupRequired}
             <div
-              class="flex flex-col-reverse gap-3 @lg/card:flex-row @lg/card:justify-between @lg/card:items-center px-4 py-3.5 @xl/card:px-7 @xl/card:py-4.5 border-t bg-background @4xl/wizard:bg-muted/40 sticky bottom-0 z-10 @4xl/wizard:static *:@lg/card:w-auto *:w-full"
+              class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 @xl/card:px-7 @xl/card:py-4.5 border-t bg-background @4xl/wizard:bg-muted/40 sticky bottom-0 z-10 @4xl/wizard:static"
             >
-              <div class="empty:hidden [&>button]:w-full @lg/card:[&>button]:w-auto">
+              <div class="empty:hidden">
                 {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
                   <Button variant="outline" onclick={handleBack}>
                     <ArrowLeft class="h-4 w-4" />
@@ -701,7 +697,7 @@
                   </Button>
                 {/if}
               </div>
-              <div class="flex flex-col-reverse gap-3 @lg/card:flex-row @lg/card:items-center *:w-full *:@lg/card:w-auto">
+              <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {#if currentStep?.id === "finish"}
                   <Button onclick={handleContinueToHub}>
                     Continue

@@ -52,7 +52,7 @@
     describePasskeyError,
     parseCeremonyOptions,
   } from "#lib/components/auth/passkey-errors.js";
-  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { describeSubmitError, errorStatus, isSignInRequired } from "#lib/forms/submit-error.js";
   import {
     describeTotpSetupError,
     describeTotpSetupStartError,
@@ -193,7 +193,11 @@
     }
   }
 
-  /** Finish registration, persisting the entered label (or none, when skipped). */
+  /**
+   * Finish registration, persisting the entered label (or none, when skipped). The challenge is
+   * spent by the first attempt, so a failed attempt closes the dialog and a retry starts again
+   * from "Add passkey".
+   */
   async function completePasskeyRegistration() {
     if (!pendingPasskey || isSavingPasskey) return;
     isSavingPasskey = true;
@@ -205,15 +209,19 @@
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
       }).updates(credentialsQuery);
-      showLabelDialog = false;
-      pendingPasskey = null;
-      newPasskeyLabel = "";
       successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
       void invalidateAll();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to register passkey.");
+      const notAdded = "Nocturne did not add the passkey. To try again, select Add passkey.";
+      const status = errorStatus(err);
+      const answersItself = status === 401 || status === 429 || isSignInRequired(err);
+      const refused = status !== undefined && status >= 400 && status < 500;
+      errorMessage = refused && !answersItself ? notAdded : describeSubmitError(err, notAdded);
     } finally {
+      showLabelDialog = false;
+      pendingPasskey = null;
+      newPasskeyLabel = "";
       isSavingPasskey = false;
     }
   }

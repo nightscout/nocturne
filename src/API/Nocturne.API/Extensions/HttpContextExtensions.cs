@@ -275,6 +275,17 @@ public static class HttpContextExtensions
         && RequestMembership.Of(context, subjectId, tenantId) is { SubjectIsInactive: true };
 
     /// <summary>
+    /// <see cref="IsCallerInactive"/> for a route served without a resolved tenant, where the request
+    /// carries no membership to read it from: the subject's own row is read instead
+    /// (<see cref="ISubjectRepository.GetSignInStateAsync"/>), and the refusal is answered the same way.
+    /// A subject with no row counts as inactive.
+    /// </summary>
+    public static async Task<bool> IsCallerSubjectInactiveAsync(this HttpContext context, CancellationToken ct) =>
+        context.GetAuthContext() is { SubjectId: { } subjectId }
+        && await context.RequestServices.GetRequiredService<ISubjectRepository>()
+            .GetSignInStateAsync(subjectId, ct) is not { IsActive: true };
+
+    /// <summary>
     /// The maker a device credential this caller creates is stamped with, or null when no subject is
     /// authenticated. Its end is the earlier of the caller's own access end
     /// (<see cref="CallerAccessEndsAt"/>) and the expiry of the grant the request presented, so a

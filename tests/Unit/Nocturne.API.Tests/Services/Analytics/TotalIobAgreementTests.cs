@@ -343,7 +343,7 @@ public class TotalIobAgreementTests
             Mock.Of<ISleepService>(),
             Mock.Of<ITrackerRepository>(),
             Mock.Of<IReservoirEstimationService>(),
-            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.IDeviceStatusExtrasRepository>(r => r.GetReportedAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusExtras>>(Array.Empty<Nocturne.Core.Models.V4.DeviceStatusExtras>())),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             deps, new ServiceCollection().BuildServiceProvider(), new FakeTimeProvider(Reading),

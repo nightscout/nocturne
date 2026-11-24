@@ -230,7 +230,7 @@ public class AlertSetupService(
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
             if (rule is null)
             {
-                await writer.CreateAsync(
+                rearmed.Add(await writer.CreateAsync(
                     new NewAlertRule(
                         new AlertRuleWrite(
                             name, null, conditionType, conditionParams,
@@ -240,7 +240,7 @@ public class AlertSetupService(
                             ClientConfiguration: "{}"),
                         channelWrites,
                         StarterKind: kind),
-                    ct);
+                    ct));
                 continue;
             }
 

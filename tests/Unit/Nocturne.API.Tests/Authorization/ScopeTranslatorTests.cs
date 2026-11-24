@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -24,6 +25,22 @@ public class ScopeTranslatorTests
         var scopes = ScopeTranslator.FromPermissions(permissions);
 
         Assert.Contains(Scope.FullAccess, scopes);
+    }
+
+    [Theory]
+    [InlineData("ADMIN")]
+    [InlineData("Admin")]
+    [InlineData("READABLE")]
+    [InlineData("Readable")]
+    public void FromPermissions_SeededRoleNamesMatchExactly(string name)
+    {
+        ScopeTranslator.FromPermissions([name]).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FromPermissions_PermissionStringsStillIgnoreCase()
+    {
+        ScopeTranslator.FromPermissions(["API:ENTRIES:READ"]).Should().Equal(Scope.GlucoseRead);
     }
 
     [Fact]

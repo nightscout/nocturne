@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
+import { missingScopeError } from "#lib/forms/submit-messages.svelte.js";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
@@ -206,6 +207,26 @@ describe("SidebarNotifications", () => {
 
     await expect.element(page.getByText("Change site")).toBeVisible();
     expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the notification and names the missing scope when the server refuses the action for it", async () => {
+    const error = vi.spyOn(toast, "error");
+    const answer = pending();
+    render(Harness, { notifications: [changeSite] });
+
+    const bell = page.getByRole("button", { name: "Notifications" });
+    await bell.click();
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await bell.click();
+    await expect.element(page.getByText("No active notifications")).toBeVisible();
+
+    answer.reject({
+      status: 403,
+      body: { message: "This operation requires the 'treatments.readwrite' scope.", code: "missing_scope" },
+    });
+
+    await expect.element(page.getByText("Change site")).toBeVisible();
+    expect(error).toHaveBeenCalledExactlyOnceWith(missingScopeError());
   });
 
   it("leaves a notification off the tray when the server says it is gone", async () => {

@@ -52,6 +52,9 @@
             {/each}
           </div>
           <p class="text-xs text-muted-foreground">
+            {#if invite.createdByName}
+              Made by {invite.createdByName} &middot;
+            {/if}
             Expires {formatMediumDateTime(invite.expiresAt)}
             {#if invite.maxUses}
               &middot; {invite.useCount}/{invite.maxUses} uses

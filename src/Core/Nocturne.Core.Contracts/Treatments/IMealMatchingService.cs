@@ -19,23 +19,12 @@ public interface IMealMatchingService
     Task ProcessNewFoodEntriesAsync(string userId, IEnumerable<Guid> foodEntryIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Accept a meal match, creating a TreatmentFood entry
+    /// Dismiss a match, marking the pending food entry as standalone
     /// </summary>
-    /// <param name="foodEntryId">The connector food entry ID</param>
-    /// <param name="carbIntakeId">The carb intake to link the food to</param>
-    /// <param name="carbs">The carb amount (may be adjusted from original)</param>
-    /// <param name="timeOffsetMinutes">Minutes offset from the carb intake time (0 = ate at bolus time)</param>
     /// <returns>
-    /// What the accept did. Only <see cref="AcceptMatchOutcome.Linked"/> wrote a row, so a caller
-    /// counting links counts that outcome alone. See <see cref="IConnectorFoodEntryRepository.AcceptMatchAsync"/>
-    /// for the others.
+    /// What the dismiss did. See <see cref="IConnectorFoodEntryRepository.DismissAsync"/> for the outcomes.
     /// </returns>
-    Task<AcceptMatchOutcome> AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
-
-    /// <summary>
-    /// Dismiss a match, marking the food entry as standalone
-    /// </summary>
-    Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
+    Task<DismissMatchOutcome> DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
 
     /// <summary>
     /// Withdraws any live match suggestion for a food entry that no longer exists upstream.

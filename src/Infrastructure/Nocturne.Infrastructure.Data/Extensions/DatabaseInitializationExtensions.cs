@@ -418,7 +418,7 @@ public static class DatabaseInitializationExtensions
             if (sweep.Recomputed > 0)
                 logger.LogInformation("Recomputed {Count} memberships whose reasons had lapsed.", sweep.Recomputed);
 
-            var result = await MembershipReasons.ReconcileAsync(Open, now, cancellationToken);
+            var result = await MembershipReasons.ReconcileAsync(Open, now, logger, cancellationToken);
             if (result.Adopted > 0)
                 logger.LogInformation("Gave {Count} memberships with no reason their direct reason.", result.Adopted);
             if (result.Resynced.Count > 0)
@@ -429,6 +429,10 @@ public static class DatabaseInitializationExtensions
                 logger.LogWarning(
                     "Re-projected {Count} memberships that hold a reason of another kind from their reasons, which their rows did not match: {MemberIds}",
                     result.Reprojected.Count, result.Reprojected);
+            if (result.Failed > 0)
+                logger.LogWarning(
+                    "Could not align {Count} memberships with their reasons; they are checked again on the next startup.",
+                    result.Failed);
         }
         catch (Exception ex) when (MembershipReasons.IsMembershipFailure(ex))
         {

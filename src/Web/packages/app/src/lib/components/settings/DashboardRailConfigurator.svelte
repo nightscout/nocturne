@@ -57,7 +57,7 @@
     [RailItemId.Basal]: "Basal rate",
     [RailItemId.Iob]: "Insulin on board (IOB)",
     [RailItemId.Loop]: "Loop status",
-    [RailItemId.Reservoir]: "Reservoir",
+    [RailItemId.Reservoir]: "Reservoir level",
     [RailItemId.LinkBattery]: "Link battery",
     [RailItemId.Trackers]: "Trackers",
   };
@@ -114,6 +114,8 @@
     </CardTitle>
     <CardDescription>
       Select the pills that show next to the glucose value. Drag a pill to change its position.
+      On a phone, the first four pills show. Trackers that give a warning also show. To see the
+      other pills, select Show all.
     </CardDescription>
   </CardHeader>
   <CardContent class="space-y-4">

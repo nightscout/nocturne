@@ -24,6 +24,9 @@ public class MembershipRequestService : IMembershipRequestService
     private static readonly DecideMembershipRequestResult AlreadyAMember =
         new(false, "The subject is already a member.");
 
+    private static readonly DecideMembershipRequestResult OwnRequest =
+        new(false, SelfAdmission.OwnRequestDetail) { Code = SelfAdmission.OwnRequestCode };
+
     private static readonly DecideMembershipRequestResult NoLongerPending =
         new(false, "Request is no longer pending.");
 
@@ -81,7 +84,7 @@ public class MembershipRequestService : IMembershipRequestService
         if (!tenant.AllowAccessRequests)
             return new CreateMembershipRequestResult(CreateMembershipRequestOutcome.Refused, "This profile is not accepting membership requests.");
 
-        if (await _members.IsMemberAsync(tenantId, subjectId, _time.GetUtcNow().UtcDateTime, ct))
+        if (await _members.IsDirectMemberAsync(tenantId, subjectId, _time.GetUtcNow().UtcDateTime, ct))
             return new CreateMembershipRequestResult(CreateMembershipRequestOutcome.AlreadyMember, "You are already a member.");
 
         if (await _members.AnyPendingRequestAsync(tenantId, subjectId, ct))
@@ -189,10 +192,15 @@ public class MembershipRequestService : IMembershipRequestService
                             unit, members, _grantRevocation, tenantId, request.SubjectId, _time.GetUtcNow().UtcDateTime, token)
                         ?? throw new RefusedCommitException<DecideMembershipRequestResult>(AlreadyAMember);
 
-                    if (!await members.AddMemberAsync(
+                    if (request.SubjectId == decidedBySubjectId
+                        && await members.FindMemberAsync(tenantId, request.SubjectId, token) is { DirectReason: null })
+                        throw new RefusedCommitException<DecideMembershipRequestResult>(OwnRequest);
+
+                    if (!await members.AddDirectMemberAsync(
                             new NewTenantMember(
                                 tenantId, request.SubjectId, roleIds, LimitTo24Hours: limitTo24Hours, AccessEndsAt: accessEndsAt)
                                 { How = MembershipJoinHow.Request, By = decidedBySubjectId },
+                            _time.GetUtcNow().UtcDateTime,
                             token))
                         throw new RefusedCommitException<DecideMembershipRequestResult>(AlreadyAMember);
 

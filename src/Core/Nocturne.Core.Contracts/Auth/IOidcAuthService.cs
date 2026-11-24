@@ -160,12 +160,15 @@ public interface IOidcAuthService
         Guid providerId, Guid subjectId, string? tenantSlug = null);
 
     /// <summary>
-    /// Handle the OIDC callback for setup owner creation.
-    /// Links the OIDC identity to the pre-created subject and issues session tokens.
+    /// Handle the OIDC callback for setup owner creation: links the proved identity to the
+    /// pre-created subject, or adopts the subject that already holds it. It issues no session;
+    /// the caller finishes setup and then the sign-in.
     /// </summary>
-    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState,
-        string? ipAddress = null, string? userAgent = null);
+    /// <param name="tenantId">
+    /// The tenant being set up, whose setup the link or adoption claims. Fails with
+    /// <c>setup_already_complete</c> when another completion has claimed it first.
+    /// </param>
+    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(string code, string state, string expectedState, Guid tenantId);
 }
 
 /// <summary>
@@ -452,12 +455,28 @@ public class OidcSetupCallbackResult
     public bool Success { get; set; }
     public string? Error { get; set; }
     public string? ErrorDescription { get; set; }
+
+    /// <summary>The setup owner, holding the proved identity.</summary>
     public Guid? SubjectId { get; set; }
-    public OidcTokenResponse? Tokens { get; set; }
+
+    /// <summary>The provider that proved the identity.</summary>
+    public Guid? ProviderId { get; set; }
+
+    /// <summary>The provider's session id (<c>sid</c>) from the ID token, for the session the sign-in issues.</summary>
+    public string? OidcSessionId { get; set; }
+
     public string? ReturnUrl { get; set; }
 
-    public static OidcSetupCallbackResult Succeeded(Guid subjectId, OidcTokenResponse tokens, string? returnUrl = null) =>
-        new() { Success = true, SubjectId = subjectId, Tokens = tokens, ReturnUrl = returnUrl };
+    public static OidcSetupCallbackResult Succeeded(
+        Guid subjectId, Guid providerId, string? oidcSessionId, string? returnUrl = null) =>
+        new()
+        {
+            Success = true,
+            SubjectId = subjectId,
+            ProviderId = providerId,
+            OidcSessionId = oidcSessionId,
+            ReturnUrl = returnUrl,
+        };
 
     public static OidcSetupCallbackResult Failed(string error, string? description = null) =>
         new() { Success = false, Error = error, ErrorDescription = description };

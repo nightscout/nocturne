@@ -32,11 +32,11 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         harness.Store.Offered[nameof(CarbIntake)].Should().Be(2, "each sync hands the store its own copy");
         harness.StoredCarbIntake.Id.Should().NotBeEmpty();
-        harness.MealMatching.Verify(
-            m => m.AcceptMatchAsync(
+        harness.Linker.Verify(
+            m => m.LinkAsync(
                 harness.FoodEntryId, harness.StoredCarbIntake.Id, 12m, 0, It.IsAny<CancellationToken>()),
             Times.Exactly(2));
-        harness.MealMatching.VerifyNoOtherCalls();
+        harness.Linker.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         result.Success.Should().BeTrue();
         harness.Store.Stored.Keys.Should().NotContain(key => key.Type == nameof(CarbIntake));
-        harness.MealMatching.VerifyNoOtherCalls();
+        harness.Linker.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -61,11 +61,11 @@ public class GlookoConnectorServiceFoodAttributionTests
         await harness.SyncAsync(service, carbIntakes: false);
 
         harness.Store.Offered[nameof(CarbIntake)].Should().Be(1, "the second sync publishes no carb intake");
-        harness.MealMatching.Verify(
-            m => m.AcceptMatchAsync(
+        harness.Linker.Verify(
+            m => m.LinkAsync(
                 harness.FoodEntryId, harness.StoredCarbIntake.Id, 12m, 0, It.IsAny<CancellationToken>()),
             Times.Exactly(2));
-        harness.MealMatching.VerifyNoOtherCalls();
+        harness.Linker.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -82,11 +82,11 @@ public class GlookoConnectorServiceFoodAttributionTests
         await harness.SyncAsync(service, carbIntakes: true);
 
         harness.Store.Stored.Keys.Count(key => key.Type == nameof(CarbIntake)).Should().Be(1);
-        harness.MealMatching.Verify(
-            m => m.AcceptMatchAsync(
+        harness.Linker.Verify(
+            m => m.LinkAsync(
                 harness.FoodEntryId, harness.StoredCarbIntake.Id, 12m, 0, It.IsAny<CancellationToken>()),
             Times.Once);
-        harness.MealMatching.VerifyNoOtherCalls();
+        harness.Linker.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -148,13 +148,13 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public Mock<IMetadataPublisher> Metadata { get; } = new();
 
-        public Mock<IMealMatchingService> MealMatching { get; } = new();
+        public Mock<IMealMatchLinker> Linker { get; } = new();
 
         public MessageLogger<GlookoConnectorService> Log { get; } = new();
 
         public void AcceptMatchReports(AcceptMatchOutcome outcome) =>
-            MealMatching
-                .Setup(m => m.AcceptMatchAsync(
+            Linker
+                .Setup(m => m.LinkAsync(
                     It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(outcome);
 
@@ -165,7 +165,8 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public RecordingGlookoConnectorService Service() =>
             GlookoSyncHarness.Service(
-                new GlookoEndpointHandler(withHistoryMeals: _useV3Api, withGuidlessFoods: _guidless), publisher: Publisher, mealMatchingService: MealMatching.Object, logger: Log);
+                new GlookoEndpointHandler(withHistoryMeals: _useV3Api, withGuidlessFoods: _guidless),
+                publisher: Publisher, mealMatchLinker: Linker.Object, logger: Log);
 
         public Task<SyncResult> SyncAsync(RecordingGlookoConnectorService service, bool carbIntakes)
         {

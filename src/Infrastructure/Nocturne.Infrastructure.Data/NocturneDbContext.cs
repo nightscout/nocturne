@@ -188,6 +188,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TotpStepUpTokenEntity> TotpStepUpTokens { get; set; }
 
+    public DbSet<SpentPasskeyChallengeEntity> SpentPasskeyChallenges { get; set; }
+
     public DbSet<TrustedDeviceEntity> TrustedDevices { get; set; }
 
     /// <summary>
@@ -287,11 +289,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TeamInviteEntity> TeamInvites { get; set; } = null!;
 
+    public DbSet<TeamStaffInviteEntity> TeamStaffInvites { get; set; } = null!;
+
     public DbSet<TeamAccessLinkEntity> TeamAccessLinks { get; set; } = null!;
 
     public DbSet<TeamTenantAccessEntity> TeamTenantAccess { get; set; } = null!;
 
     public DbSet<TeamTenantAccessRoleEntity> TeamTenantAccessRoles { get; set; } = null!;
+
+    public DbSet<TeamSiteStaffEntity> TeamSiteStaff { get; set; } = null!;
 
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
@@ -348,6 +354,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PumpSnapshotEntity> PumpSnapshots { get; set; }
 
     public DbSet<UploaderSnapshotEntity> UploaderSnapshots { get; set; }
+
+    public DbSet<SensorStateReportEntity> SensorStateReports { get; set; }
 
     public DbSet<DeviceStatusExtrasEntity> DeviceStatusExtras { get; set; }
 
@@ -549,7 +557,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private static Type[] Implementing<TMarker>() => [.. MappedEntityTypes.Where(typeof(TMarker).IsAssignableFrom)];
 
     /// <summary>
-    /// The device-status snapshot tables, upserted on the <see cref="ISyncDedupable"/> key.
+    /// The tables a device status decomposes into (<see cref="V4RecordKind.DeviceStatus"/>): the APS,
+    /// pump and uploader snapshots, upserted on the <see cref="ISyncDedupable"/> key, and the sensor
+    /// state report, keyed by its status's correlation id.
     /// </summary>
     internal static readonly Type[] V4SnapshotEntities =
         [.. V4RecordTables.OfKind(V4RecordKind.DeviceStatus).Select(t => t.Entity)];

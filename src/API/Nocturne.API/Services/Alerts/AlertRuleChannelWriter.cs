@@ -198,7 +198,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             return null;
         }
 
-        return await ChatIdentityDirectoryService.ActiveLinksOfTenant(db, db.TenantId)
+        return await ChatIdentityDirectoryService.ReachableLinksOfTenant(db, db.TenantId)
             .Where(d => d.NocturneUserId == subjectId.Value && d.Platform == platform)
             .OrderBy(d => d.CreatedAt)
             .Select(d => d.PlatformUserId)
@@ -273,7 +273,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         var links = new Dictionary<(string Platform, string PlatformUserId), Guid>();
         if (channels.Any(c => ChannelDestinations.ResolvesFromLinkedIdentity(c.ChannelType)))
         {
-            foreach (var link in await ChatIdentityDirectoryService.ActiveLinksOfTenant(db, db.TenantId)
+            foreach (var link in await ChatIdentityDirectoryService.LinksOfTenant(db, db.TenantId)
                          .AsNoTracking()
                          .Select(d => new { d.Platform, d.PlatformUserId, d.NocturneUserId })
                          .ToListAsync(ct))

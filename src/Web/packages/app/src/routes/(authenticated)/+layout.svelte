@@ -325,7 +325,7 @@
   >
     Skip to main content
   </a>
-  <Sidebar.Provider>
+  <Sidebar.Provider open={data.sidebarOpen}>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} tenantTargets={data.tenantTargets} />
     <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
          MobileHeader on a phone, where the banner strip scrolls away; the banner strip from md);

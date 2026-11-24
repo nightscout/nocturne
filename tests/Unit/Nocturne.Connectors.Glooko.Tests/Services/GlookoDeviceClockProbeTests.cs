@@ -167,7 +167,7 @@ public class GlookoDeviceClockProbeTests
                 Mock.Of<IRetryDelayStrategy>(),
                 new StaticGlookoTokenProvider(),
                 Publisher.Object,
-                mealMatchingService: null,
+                mealMatchLinker: null,
                 timezoneTimelineService: Timeline.Object,
                 deviceClockService: DeviceClock.Object,
                 cursorStore: new FakeCursorStore(),

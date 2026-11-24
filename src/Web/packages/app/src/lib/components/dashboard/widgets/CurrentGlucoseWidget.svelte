@@ -37,7 +37,7 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const now = $derived(realtimeStore.now);
 
-  const isLoading = $derived(glucose.currentBG === 0 && realtimeStore.entries.length === 0);
+  const isLoading = $derived(glucose.value === null && !realtimeStore.currentReadingLoaded);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
@@ -110,7 +110,7 @@
   {@const uploader = battery?.min && Object.keys(battery.devices ?? {}).length > 0 ? battery : undefined}
   {#if isLoading || !isStale || uploader}
     <div class="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-      {#if !isLoading && !isStale}
+      {#if glucose.value !== null && !isStale}
         <p class="flex items-baseline gap-1.5 tabular-nums">
           <span class="font-medium">{formatGlucoseDelta(glucose.bgDelta, units)}</span>
           <span class="text-xs text-muted-foreground">{unitLabel}</span>
@@ -151,8 +151,11 @@
         coachFor("share-tour.reading"),
       ])}
     >
+      {#if glucose.value === null && !isLoading}
+        <span class="sr-only">No glucose reading</span>
+      {/if}
       <GlucoseValueIndicator
-        displayValue={formatGlucoseValue(glucose.currentBG, units)}
+        displayValue={glucose.value === null ? "—" : formatGlucoseValue(glucose.value, units)}
         variant={tileVariant}
         {isLoading}
         {isStale}
@@ -160,7 +163,7 @@
         size="xl"
         class="w-full"
         background={tileWash.component ? rangeWash : undefined}
-        trailing={isLoading ? undefined : trend}
+        trailing={glucose.value === null ? undefined : trend}
       />
     </div>
 

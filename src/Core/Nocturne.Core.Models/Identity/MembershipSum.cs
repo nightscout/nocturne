@@ -37,6 +37,12 @@ public sealed record MembershipProjection(MembershipGrant Grant, DateTime? NextR
 /// has it; and no end when any reason has none, otherwise the latest end. Each reason only adds
 /// access, so removing one never takes away what another gives.
 /// </para>
+/// <para>
+/// The end <see cref="InForceAt"/> gives is the same at every instant: a reason with no end is always
+/// in force, and the reason that ends latest is in force whenever any is, and is the latest of them
+/// all when none is. So a reason lapsing never moves the end. Only adding or removing a reason, or
+/// changing one's end, does, and only removing one or bringing its end forward can lower it.
+/// </para>
 /// </remarks>
 public static class MembershipSum
 {
@@ -84,4 +90,11 @@ public static class MembershipReasonKind
     /// system for the Public and device subjects.
     /// </summary>
     public const string Direct = "direct";
+
+    /// <summary>
+    /// Access a team's access to the tenant gives a member of the team. Its source is that access
+    /// (<c>team_tenant_access</c>), which cannot be deleted while a reason names it, and it never gives
+    /// the owner role.
+    /// </summary>
+    public const string Team = "team";
 }

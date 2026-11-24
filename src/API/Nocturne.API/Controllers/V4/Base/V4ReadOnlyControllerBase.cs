@@ -114,6 +114,15 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
     /// that returns records except create, which answers with the row as stored. Override to fill
     /// fields the stored row does not carry, mutating <paramref name="records"/> in place.
     /// </summary>
+    /// <remarks>
+    /// An override that throws fails a read action, which has nothing committed to protect. A write
+    /// action that has committed (update, bulk create, restore, bulk restore) never fails on it: it
+    /// logs a warning naming the record type and ids and answers its normal success with the stored,
+    /// unenriched records. The write is committed, so a failure would be reported for a write that
+    /// happened. Such an action runs the hook through
+    /// <see cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}.EnrichCommittedAsync"/>.
+    /// A cancelled request is not swallowed in either case.
+    /// </remarks>
     /// <param name="records">The records the action returns.</param>
     /// <param name="ct">Cancellation token.</param>
     protected virtual Task OnBeforeReturnAsync(IReadOnlyCollection<TModel> records, CancellationToken ct)

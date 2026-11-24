@@ -15,6 +15,9 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
     public static readonly MemberAccessSource System = new(ActorSubjectId: null);
 }
 
+/// <summary>The team whose access to the site a member's reason comes from, by the name it has when the row is written.</summary>
+internal sealed record MemberAccessTeam(Guid Id, string Name);
+
 /// <summary>
 /// The one writer of the <c>auth_audit_log</c> rows that record a change to what a member can read:
 /// the membership starting and ending, the roles they hold, their direct permissions, their 24-hour
@@ -37,7 +40,9 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 /// one <see cref="AuthAuditEventType.DeviceCredentialCapped"/> row, and a guest link that removing the
 /// member revoked is one <see cref="AuthAuditEventType.GuestLinkRevoked"/> row, each naming the grant
 /// under <c>grant</c> (a cap also its new expiry under <c>expires_at</c>), with the member as the
-/// target. A device credential whose expiry was removed is one
+/// target; a member invite that removing the member revoked is one
+/// <see cref="AuthAuditEventType.MemberInviteRevoked"/> row naming the invite under <c>invite</c>, with
+/// the member as the target. A device credential whose expiry was removed is one
 /// <see cref="AuthAuditEventType.DeviceCredentialKept"/> row with its maker as the target. Every row's details carry <c>kind</c> = <c>tenant</c>, and <c>invite</c> when an invite
 /// caused it. A change that leaves the set as it was stages nothing.
 /// A role whose own permission set changed is one <see cref="AuthAuditEventType.RolePermissionsChanged"/>
@@ -51,8 +56,6 @@ internal sealed record MemberAccessSource(Guid? ActorSubjectId, Guid? InviteId =
 internal static class MemberAccessAudit
 {
     internal const string RoleKey = "role";
-    internal const string TenantKind = "tenant";
-    private const string GlobalKind = "global";
     internal const string GainedKey = "gained";
     internal const string LostKey = "lost";
     internal const string PermissionKey = "permission";
@@ -74,6 +77,7 @@ internal static class MemberAccessAudit
         [MembershipJoinHow.Direct] = "direct",
         [MembershipJoinHow.Setup] = "setup",
         [MembershipJoinHow.System] = "system",
+        [MembershipJoinHow.Team] = "team",
     };
 
     /// <summary>The <c>how</c> each way of leaving is stored as.</summary>
@@ -84,46 +88,58 @@ internal static class MemberAccessAudit
         [MembershipEndHow.AccountDeleted] = "account_deleted",
         [MembershipEndHow.Replaced] = "replaced",
         [MembershipEndHow.System] = "system",
+        [MembershipEndHow.Team] = "team",
     };
 
     /// <summary>
-    /// Stages the <see cref="AuthAuditEventType.MemberJoined"/> row of a membership being added, naming
-    /// <paramref name="how"/>, the invite and <paramref name="by"/> when there is one.
+    /// Stages the <see cref="AuthAuditEventType.MemberJoined"/> row of a membership or one of its reasons
+    /// being added, naming <paramref name="how"/>, the invite and <paramref name="by"/> when there is one,
+    /// and <paramref name="team"/> for a team's reason: its id on the row, its name in the details for
+    /// when the team is gone.
     /// </summary>
     public static void StageJoined(
         NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipJoinHow how, Guid? inviteId, Guid? by,
-        MemberAccessSource? source)
+        MemberAccessTeam? team, MemberAccessSource? source)
     {
         var details = new Dictionary<string, object?>
         {
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             [HowKey] = JoinedHow[how],
         };
         if (inviteId is { } invite)
             details[InviteKey] = invite.ToString();
         if (by is { } responsible)
             details[ByKey] = responsible.ToString();
+        if (team is not null)
+            details[TeamAudit.NameKey] = team.Name;
 
-        Add(db, AuthAuditEventType.MemberJoined, tenantId, subjectId, details, source);
+        Add(db, AuthAuditEventType.MemberJoined, tenantId, team?.Id, subjectId, details, source);
     }
 
     /// <summary>
-    /// Stages the <see cref="AuthAuditEventType.MemberRemoved"/> row of a membership being removed. A
-    /// removal whose actor is the member is recorded as <see cref="MembershipEndHow.Left"/>.
+    /// Stages the <see cref="AuthAuditEventType.MemberRemoved"/> row of a membership or one of its reasons
+    /// being removed, naming <paramref name="team"/> as <see cref="StageJoined"/> does. A removal
+    /// whose actor is the member is recorded as <see cref="MembershipEndHow.Left"/>; a team's
+    /// reason ending never is, since its writer names how and its actor itself.
     /// </summary>
     public static void StageRemoved(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipEndHow how, MemberAccessSource? source)
+        NocturneDbContext db, Guid tenantId, Guid subjectId, MembershipEndHow how, MemberAccessTeam? team,
+        MemberAccessSource? source)
     {
         var actor = source is not null ? source.ActorSubjectId
             : db.AuditContext is { IsSystem: false } audit ? audit.SubjectId : null;
         if (how == MembershipEndHow.Removed && actor == subjectId)
             how = MembershipEndHow.Left;
 
-        Add(db, AuthAuditEventType.MemberRemoved, tenantId, subjectId, new Dictionary<string, object?>
+        var details = new Dictionary<string, object?>
         {
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             [HowKey] = RemovedHow[how],
-        }, source);
+        };
+        if (team is not null)
+            details[TeamAudit.NameKey] = team.Name;
+
+        Add(db, AuthAuditEventType.MemberRemoved, tenantId, team?.Id, subjectId, details, source);
     }
 
     /// <summary>Stages a row for each role slug in <paramref name="removed"/>, then each in <paramref name="added"/>.</summary>
@@ -164,7 +180,7 @@ internal static class MemberAccessAudit
         var details = new Dictionary<string, object?>
         {
             [AccessEndsAtKey] = after is { } end ? DateTime.SpecifyKind(end, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture) : null,
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
@@ -185,7 +201,7 @@ internal static class MemberAccessAudit
             {
                 [GrantKey] = grantId.ToString(),
                 [ExpiresAtKey] = DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture),
-                [AuthAuditRows.KindKey] = TenantKind,
+                [AuthAuditKind.Key] = AuthAuditKind.Tenant,
             }, source: null);
 
     /// <summary>
@@ -197,7 +213,19 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.DeviceCredentialKept, tenantId, makerSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
+        }, source: null);
+
+    /// <summary>
+    /// Stages one <see cref="AuthAuditEventType.MemberInviteRevoked"/> row for a member invite the member
+    /// made, revoked because the member was removed.
+    /// </summary>
+    public static void StageMemberInviteRevoked(
+        NocturneDbContext db, Guid tenantId, Guid memberSubjectId, Guid inviteId) =>
+        Add(db, AuthAuditEventType.MemberInviteRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
+        {
+            [InviteKey] = inviteId.ToString(),
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         }, source: null);
 
     /// <summary>
@@ -209,7 +237,7 @@ internal static class MemberAccessAudit
         Add(db, AuthAuditEventType.GuestLinkRevoked, tenantId, memberSubjectId, new Dictionary<string, object?>
         {
             [GrantKey] = grantId.ToString(),
-            [AuthAuditRows.KindKey] = TenantKind,
+            [AuthAuditKind.Key] = AuthAuditKind.Tenant,
         }, source: null);
 
     /// <summary>
@@ -219,17 +247,17 @@ internal static class MemberAccessAudit
     public static void StageRolePermissions(
         NocturneDbContext db, Guid tenantId, Guid roleId, string roleSlug,
         IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
-        StageRolePermissions(db, tenantId, TenantKind, roleId, roleSlug, before, after);
+        StageRolePermissions(db, tenantId, AuthAuditKind.Tenant, roleId, roleSlug, before, after);
 
     /// <summary>
     /// <see cref="StageRolePermissions(NocturneDbContext, Guid, Guid, string, IReadOnlyCollection{string}, IReadOnlyCollection{string})"/>
-    /// for a global role, which belongs to no tenant: the row's <c>kind</c> is <c>global</c> and its tenant is the one
-    /// the edit was made under, if any.
+    /// for a global role, which belongs to no tenant: the row's <c>kind</c> is <see cref="AuthAuditKind.Global"/>
+    /// and it carries no tenant id, whatever tenant the edit was made under.
     /// </summary>
     public static void StageGlobalRolePermissions(
         NocturneDbContext db, Guid roleId, string roleName,
         IReadOnlyCollection<string> before, IReadOnlyCollection<string> after) =>
-        StageRolePermissions(db, db.TenantIdOrNull, GlobalKind, roleId, roleName, before, after);
+        StageRolePermissions(db, null, AuthAuditKind.Global, roleId, roleName, before, after);
 
     private static void StageRolePermissions(
         NocturneDbContext db, Guid? tenantId, string kind, Guid roleId, string role,
@@ -246,7 +274,7 @@ internal static class MemberAccessAudit
             [RoleKey] = role,
             [GainedKey] = gained,
             [LostKey] = lost,
-            [AuthAuditRows.KindKey] = kind,
+            [AuthAuditKind.Key] = kind,
         }, source: null);
     }
 
@@ -264,7 +292,7 @@ internal static class MemberAccessAudit
         NocturneDbContext db, string eventType, Guid tenantId, Guid subjectId, string key, string item,
         MemberAccessSource? source)
     {
-        var details = new Dictionary<string, object?> { [key] = item, [AuthAuditRows.KindKey] = TenantKind };
+        var details = new Dictionary<string, object?> { [key] = item, [AuthAuditKind.Key] = AuthAuditKind.Tenant };
         if (source?.InviteId is { } inviteId)
             details[InviteKey] = inviteId.ToString();
 
@@ -274,5 +302,10 @@ internal static class MemberAccessAudit
     private static void Add(
         NocturneDbContext db, string eventType, Guid? tenantId, Guid? targetSubjectId,
         Dictionary<string, object?> details, MemberAccessSource? source) =>
-        AuthAuditRows.Stage(db, eventType, tenantId, teamId: null, targetSubjectId, details, source);
+        Add(db, eventType, tenantId, teamId: null, targetSubjectId, details, source);
+
+    private static void Add(
+        NocturneDbContext db, string eventType, Guid? tenantId, Guid? teamId, Guid? targetSubjectId,
+        Dictionary<string, object?> details, MemberAccessSource? source) =>
+        AuthAuditRows.Stage(db, eventType, tenantId, teamId, targetSubjectId, details, source);
 }

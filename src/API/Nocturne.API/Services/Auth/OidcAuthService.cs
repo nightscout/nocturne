@@ -810,26 +810,25 @@ public class OidcAuthService : IOidcAuthService
 
     /// <inheritdoc />
     public async Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState,
-        string? ipAddress = null, string? userAgent = null)
+        string code, string state, string expectedState, Guid tenantId)
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, SetupCallbackPath);
         if (!parsed.Success)
             return OidcSetupCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
 
-        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, ipAddress, userAgent);
+        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, tenantId);
     }
 
     /// <summary>
-    /// Completes the setup owner step after the callback has been validated and the ID token parsed.
-    /// Extracted from <see cref="HandleSetupCallbackAsync"/> so it can be tested without the code exchange.
+    /// Links the identity for the setup owner step after the callback has been validated and the
+    /// ID token parsed. Extracted from <see cref="HandleSetupCallbackAsync"/> so it can be tested
+    /// without the code exchange.
     /// </summary>
     internal async Task<OidcSetupCallbackResult> CompleteSetupAsync(
         OidcStateData stateData,
         OidcProvider provider,
         OidcIdTokenClaims claims,
-        string? ipAddress,
-        string? userAgent)
+        Guid tenantId)
     {
         if (stateData.Intent != "setup")
             return OidcSetupCallbackResult.Failed("invalid_intent", "State was not issued for a setup flow");
@@ -839,13 +838,18 @@ public class OidcAuthService : IOidcAuthService
 
         var subjectId = stateData.SubjectId.Value;
 
-        var (outcome, _) = await _subjectService.AttachOidcIdentityAsync(
+        var outcome = await _subjectService.AttachSetupOwnerOidcIdentityAsync(
+            tenantId,
             subjectId,
             provider.Id,
             claims.Sub,
             provider.IssuerUrl,
             claims.Email,
             claims.EmailVerified == true);
+
+        if (outcome is null)
+            return OidcSetupCallbackResult.Failed(
+                "setup_already_complete", "Another completion has claimed the setup");
 
         if (outcome == OidcLinkOutcome.AlreadyLinkedToOther)
         {
@@ -861,38 +865,15 @@ public class OidcAuthService : IOidcAuthService
             subjectId = adoptedId;
         }
 
-        // Update subject email/name from OIDC claims if not already set
         var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
         if (subject == null)
             return OidcSetupCallbackResult.Failed("subject_not_found", "Pre-created setup subject not found");
-
-        await _subjectService.UpdateLastLoginAsync(subjectId);
-
-        // Issue session via SessionService
-        var session = await _sessionService.IssueSessionAsync(
-            subjectId,
-            new SessionContext(
-                OidcSessionId: claims.SessionId,
-                DeviceDescription: "Setup OIDC",
-                IpAddress: ipAddress,
-                UserAgent: userAgent));
-
-        var tokens = new OidcTokenResponse
-        {
-            AccessToken = session.AccessToken,
-            RefreshToken = session.RefreshToken,
-            TokenType = "Bearer",
-            ExpiresIn = session.ExpiresInSeconds,
-            RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-            SubjectId = subjectId,
-        };
 
         _logger.LogInformation(
             "Setup OIDC: linked identity for subject {SubjectId} via provider {Provider}",
             subjectId, provider.Name);
 
-        return OidcSetupCallbackResult.Succeeded(subjectId, tokens, stateData.ReturnUrl);
+        return OidcSetupCallbackResult.Succeeded(subjectId, provider.Id, claims.SessionId, stateData.ReturnUrl);
     }
 
     /// <summary>

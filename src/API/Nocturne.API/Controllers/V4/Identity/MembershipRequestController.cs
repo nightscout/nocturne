@@ -108,6 +108,9 @@ public class MembershipRequestController(
         [FromServices] TimeProvider time,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = tenantAccessor.TenantId;
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
@@ -120,6 +123,9 @@ public class MembershipRequestController(
         var result = await membershipRequestService.ApproveRequestAsync(
             id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(),
             accessEndsAt, HttpContext.IsCallerHistoryClamped(), ct);
+
+        if (result.Code is { } code)
+            return this.ProblemWithCode(code, result.Error, StatusCodes.Status403Forbidden);
 
         if (!result.Success)
             return BadRequest(result);

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -82,10 +83,11 @@ public class MemberRecoveryController : ControllerBase
             members.Add(new LockedOutMember(
                 s.Id, s.Name, s.Username,
                 HasRecoveryCodes: await _recoveryCodeService.GetRemainingCountAsync(s.Id) > 0,
-                OperatorOnly: await _eligibility.IsOperatorOnlyAsync(
-                    _tenantAccessor.TenantId, s.Id, s.IsPlatformAdmin, ct),
-                OutlastsCaller: HttpContext.OutlastsCallerAccess(
-                    (await _members.FindMemberAsync(_tenantAccessor.TenantId, s.Id, ct))?.AccessEndsAt)));
+                Refusal: await RefusalAsync(
+                    _tenantAccessor.TenantId,
+                    s.Id,
+                    await _eligibility.IsOperatorOnlyAsync(_tenantAccessor.TenantId, s.Id, s.IsPlatformAdmin, ct),
+                    ct)));
         }
 
         return Ok(members);
@@ -121,29 +123,20 @@ public class MemberRecoveryController : ControllerBase
         // [RequireScope] answers 401 to a request with no auth context, as members.manage is not a read scope.
         var auth = HttpContext.GetAuthContext()!;
 
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var tenantId = _tenantAccessor.TenantId;
         await using var db = await _contexts.CreateAsync(ct);
 
-        switch (await _eligibility.CheckAsync(db, tenantId, subjectId, ct))
-        {
-            case RecoveryEligibility.NotLockedOut:
-                return NotFound();
-            case RecoveryEligibility.OperatorOnly:
-                return Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict");
-        }
+        var eligibility = await _eligibility.CheckAsync(db, tenantId, subjectId, ct);
+        if (eligibility == RecoveryEligibility.NotLockedOut)
+            return NotFound();
 
-        var member = await _members.FindMemberAsync(tenantId, subjectId, ct)
-            ?? throw new InvalidOperationException($"Subject {subjectId} is not a member of tenant {tenantId}.");
-
-        var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
-        if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)
-            return Forbid();
-
-        if (!member.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
-            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
-
-        if (HttpContext.OutlastsCallerAccess(member.AccessEndsAt))
-            return Problem(detail: HttpContextExtensions.AccessEndCeilingDetail, statusCode: 403);
+        var refusal = await RefusalAsync(
+            tenantId, subjectId, eligibility == RecoveryEligibility.OperatorOnly, ct);
+        if (refusal is not null)
+            return RefusalResult(refusal.Value);
 
         var issued = await _loginCodeService.IssueAsync(
             db, subjectId, LoginCodePurpose.Recovery,
@@ -155,13 +148,65 @@ public class MemberRecoveryController : ControllerBase
         return Ok(issued);
     }
 
+    /// <summary>
+    /// Why the caller may not issue a recovery code for the member, or null when the caller may.
+    /// <see cref="IssueRecoveryCode"/> refuses on exactly this and the list sends it. The one
+    /// refusal outside it is <see cref="RequireInteractiveSessionAttribute"/>: a non-interactive
+    /// credential that holds <see cref="Scope.MembersManage"/> lists no refusal and the issue
+    /// still answers 403.
+    /// </summary>
+    private async Task<RecoveryIssueRefusal?> RefusalAsync(
+        Guid tenantId, Guid subjectId, bool operatorOnly, CancellationToken ct)
+    {
+        if (operatorOnly)
+            return RecoveryIssueRefusal.OperatorOnly;
+
+        var member = await _members.FindMemberAsync(tenantId, subjectId, ct)
+            ?? throw new InvalidOperationException($"Subject {subjectId} is not a member of tenant {tenantId}.");
+
+        var memberPermissions = await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct);
+        if (Scope.ValidateGrant(memberPermissions, HttpContext.GetGrantedScopes()) is not null)
+            return RecoveryIssueRefusal.MissingPermissions;
+
+        if (!member.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
+            return RecoveryIssueRefusal.HistoryClamped;
+
+        return HttpContext.OutlastsCallerAccess(member.AccessEndsAt)
+            ? RecoveryIssueRefusal.AccessOutlasts
+            : null;
+    }
+
+    private IActionResult RefusalResult(RecoveryIssueRefusal refusal) => refusal switch
+    {
+        RecoveryIssueRefusal.OperatorOnly => Problem(detail: OperatorOnlyDetail, statusCode: 409, title: "Conflict"),
+        RecoveryIssueRefusal.MissingPermissions => Forbid(),
+        RecoveryIssueRefusal.HistoryClamped => Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403),
+        RecoveryIssueRefusal.AccessOutlasts => Problem(detail: HttpContextExtensions.AccessEndCeilingDetail, statusCode: 403),
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, null),
+    };
+}
+
+/// <summary>Why a caller may not issue a member's recovery code, in the order the issue checks.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<RecoveryIssueRefusal>))]
+public enum RecoveryIssueRefusal
+{
+    /// <summary>Only the operator may issue it: the account reaches beyond the tenant.</summary>
+    OperatorOnly,
+
+    /// <summary>The member holds a permission the caller does not.</summary>
+    MissingPermissions,
+
+    /// <summary>The caller sees the last 24 hours only and the member sees more.</summary>
+    HistoryClamped,
+
+    /// <summary>The caller's access ends on a date and the member's lasts longer.</summary>
+    AccessOutlasts,
 }
 
 /// <param name="SubjectId">The member's subject.</param>
 /// <param name="Name">Display name.</param>
 /// <param name="Username">Sign-in name, when the member has one.</param>
 /// <param name="HasRecoveryCodes">Whether the member can still sign in with a recovery code of their own.</param>
-/// <param name="OperatorOnly">Whether only the operator can issue this member's recovery code.</param>
-/// <param name="OutlastsCaller">Whether the caller has an end date and this member's access outlasts it, so the caller may not issue a code.</param>
+/// <param name="Refusal">Why the caller may not issue this member's recovery code; null when the caller may.</param>
 public record LockedOutMember(
-    Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes, bool OperatorOnly, bool OutlastsCaller = false);
+    Guid SubjectId, string Name, string? Username, bool HasRecoveryCodes, RecoveryIssueRefusal? Refusal);

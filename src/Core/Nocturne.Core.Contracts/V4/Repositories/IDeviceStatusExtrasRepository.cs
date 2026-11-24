@@ -7,9 +7,8 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// Repository for <see cref="DeviceStatusExtras"/> records containing uncaptured devicestatus sub-objects.
 /// </summary>
 /// <remarks>
-/// Alpha-phase diagnostic data. Records are created during devicestatus decomposition
-/// and can be queried or deleted by their correlation ID. A write that stores or deletes a row stating
-/// the sensor's state announces the type once it has committed, since alert rules read that state.
+/// Records are created during devicestatus decomposition and can be queried or deleted by their
+/// correlation ID. No write announces itself: no alert or cache reads its writes.
 /// </remarks>
 public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceStatusExtras>
 {
@@ -36,14 +35,6 @@ public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceSta
     /// </summary>
     Task<IReadOnlyList<DeviceStatusExtras?>> FindStoredAsync(
         IReadOnlyList<DeviceStatusExtras> candidates, CancellationToken ct = default);
-
-    /// <summary>
-    /// The live <see cref="DeviceStatusExtras"/> stored by <paramref name="asOf"/>, whose timestamp and
-    /// arrival are both at or after <paramref name="since"/> and whose timestamp is at or before
-    /// <paramref name="latestTimestamp"/>.
-    /// </summary>
-    Task<IReadOnlyList<DeviceStatusExtras>> GetReportedAsync(
-        DateTime since, DateTime asOf, DateTime latestTimestamp, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="DeviceStatusExtras"/> record(s) with the given correlation ID.</summary>
     /// <param name="correlationId">Correlation ID to match.</param>

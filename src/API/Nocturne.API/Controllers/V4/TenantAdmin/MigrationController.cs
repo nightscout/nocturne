@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
@@ -71,6 +72,9 @@ public class MigrationController : ControllerBase
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         // Validate request based on mode
         if (request.Mode == MigrationMode.Api)
         {
@@ -121,6 +125,9 @@ public class MigrationController : ControllerBase
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var source = await NightscoutConnectorSource.ReadAsync(_connectorConfigService, connectorName, ct);
         if (source is null)
         {

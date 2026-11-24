@@ -49,6 +49,7 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
             Mock.Of<IPumpSnapshotRepository>(),
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IDeviceStatusExtrasRepository>(),
+            Mock.Of<ISensorStateReportRepository>(),
             new StateSpanService(
                 MicrosecondPrecision<IStateSpanRepository>.Wrap(_spans), NullLogger<StateSpanService>.Instance),
             new UnresolvedDevices(),
