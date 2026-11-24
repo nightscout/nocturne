@@ -2,7 +2,7 @@
   import type {
     AvailableConnector,
     ConnectorStatusDto,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
 
   export type ConnectorStatusWithDescription = ConnectorStatusDto &
     Pick<AvailableConnector, "description">;
@@ -19,7 +19,7 @@
   import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
   import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -35,8 +35,8 @@
     SyncDataType,
     type ConnectorCapabilities,
     type SyncResult,
-  } from "#lib/api/generated/nocturne-api-client.js";
-  import type { SyncRequestInput } from "#lib/api/generated/schemas.js";
+  } from "@nocturne/api-client";
+  import type { SyncRequestInput } from "@nocturne/api-client/schemas";
   import { formatNumber } from "#lib/utils/formatting.js";
   import ConnectionTime from "./ConnectionTime.svelte";
   import { SkippedRecordsNote } from "#lib/components/shared/index.js";
@@ -55,8 +55,8 @@
     onSyncComplete,
   }: Props = $props();
 
-  const canManage = $derived(
-    canManageConnectors(
+  const canSync = $derived(
+    canSetUpConnectors(
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
@@ -404,7 +404,7 @@
           </div>
         {/if}
 
-        {#if canManage && (selectedConnector.isHealthy || selectedConnector.state === ConnectorState.Configured) && selectedConnector.state !== ConnectorState.Offline && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
+        {#if canSync && (selectedConnector.isHealthy || selectedConnector.state === ConnectorState.Configured) && selectedConnector.state !== ConnectorState.Offline && (selectedConnectorCapabilities?.supportsManualSync ?? true)}
           <Separator />
 
           <div class="@container space-y-3">

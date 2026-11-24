@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AvailableConnector } from "@nocturne/api-client";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
@@ -19,8 +19,10 @@
     getConnectorDataSummary,
   } from "#lib/api/generated/services.generated.remote.js";
   import { getMyPermissions } from "#lib/api/generated/myPermissions.generated.remote.js";
-  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
   import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
   import {
     Card,
@@ -36,10 +38,14 @@
   import ConnectorConfigForm from "#lib/components/settings/ConnectorConfigForm.svelte";
   import CareLinkConnectPanel from "#lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
 
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Info from "@lucide/svelte/icons/info";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectorSelectionGrid from "#lib/components/connectors/ConnectorSelectionGrid.svelte";
   import { EmptyState } from "#lib/components/shared/index.js";
   import ConnectorDangerZone from "#lib/components/connectors/ConnectorDangerZone.svelte";
@@ -66,6 +72,8 @@
     showEnvVarHints?: boolean;
     /** See the config form's `saveLabel`. */
     saveLabel?: string;
+    /** `setup` is the form inside a setup or migration step. See the config form's `variant`. */
+    variant?: "settings" | "setup";
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -83,6 +91,7 @@
     primaryAction = connectorId ? "save-only" : "save-and-finish",
     showEnvVarHints = true,
     saveLabel,
+    variant = "settings",
     extras,
   }: Props = $props();
 
@@ -98,7 +107,13 @@
   // navigation, so the layout's grant is the anonymous one until the next page load.
   const permissionsQuery = getMyPermissions();
   const canManage = $derived(
-    canManageConnectors(
+    canChangeTenantSettings(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
+  const canSetUp = $derived(
+    canSetUpConnectors(
       permissionsQuery.current?.scopes,
       permissionsQuery.current?.refusedAsDemoSubject
     )
@@ -108,10 +123,10 @@
   const servicesOverviewQuery = getServicesOverview();
   const schemaQuery = $derived(activeId ? getConnectorSchema(activeId) : null);
   const configQuery = $derived(
-    activeId && canManage ? getConnectorConfiguration(activeId) : null
+    activeId && canSetUp ? getConnectorConfiguration(activeId) : null
   );
   const effectiveConfigQuery = $derived(
-    activeId && canManage ? getConnectorEffectiveConfig(activeId) : null
+    activeId && canSetUp ? getConnectorEffectiveConfig(activeId) : null
   );
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
@@ -120,7 +135,7 @@
   retainQuery(() => effectiveConfigQuery);
   retainQuery(() => dataSummaryQuery);
   retainQuery(() => capabilitiesQuery);
-  const statusQuery = $derived(canManage ? getAllConnectorStatus() : null);
+  const statusQuery = $derived(canSetUp ? getAllConnectorStatus() : null);
   retainQuery(() => statusQuery);
 
   // --- Derived data from queries ---
@@ -144,6 +159,13 @@
   const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
   const dataSummary = $derived(dataSummaryQuery?.current ?? null);
   const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
+  const savedSecretStopsAt = $derived(
+    connectorCapabilities?.savedSecretStopsAt
+      ? formatMediumDate(accessEndDate(connectorCapabilities.savedSecretStopsAt))
+      : null
+  );
+  /** When the credential that already held a secret this page saved stops, as the save reported it. */
+  let secretInUseStopsAt = $state<string | null>(null);
 
   const connectorStatus = $derived.by(() => {
     const statuses = statusQuery?.current;
@@ -266,10 +288,14 @@
       });
 
       if (Object.keys(newSecrets).length > 0) {
-        await saveSecrets({
+        const saved = await saveSecrets({
           connectorName: connectorInfo.id,
           request: newSecrets,
         });
+        secretInUseStopsAt =
+          saved?.secretAlreadyInUse && saved.secretInUseStopsAt
+            ? formatMediumDate(accessEndDate(saved.secretInUseStopsAt))
+            : null;
       }
 
       // In wizard/setup mode, activate the connector after saving
@@ -286,6 +312,7 @@
 
       if (primaryAction === "save-and-finish") onComplete?.();
     } catch (e) {
+      confirmIdentity.askAfterRefusal(e);
       saveMessage = {
         type: "error",
         text: describeSubmitError(e, "Failed to save configuration"),
@@ -370,12 +397,18 @@
       <!-- Header -->
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
-          <h2 class="text-2xl font-bold tracking-tight">{displayName}</h2>
+          <h2
+            class={variant === "setup"
+              ? "text-lg font-semibold"
+              : "text-2xl font-bold tracking-tight"}
+          >
+            {displayName}
+          </h2>
           {#if connectorInfo.description}
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        {#if canManage && showConfiguration}
+        {#if canSetUp && showConfiguration && variant === "settings"}
           <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
             {isActive ? "Active" : "Inactive"}
           </Badge>
@@ -395,7 +428,7 @@
       {/if}
 
       <!-- Enable/Disable Toggle -->
-      {#if showToggle && canManage}
+      {#if showToggle && canSetUp}
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
@@ -416,20 +449,51 @@
       <!-- CareLink browser-based sign-in -->
       {#if isCareLink && canManage}
         <CareLinkConnectPanel onConnected={onCareLinkConnected} />
+      {:else if isCareLink && canSetUp}
+        <ReadOnlyNotice data-testid="carelink-read-only">
+          Only members who can manage this site's settings can sign in to CareLink.
+        </ReadOnlyNotice>
       {/if}
 
       <!-- Configuration Form -->
-      {#if !canManage}
-        <Card data-testid="connector-read-only">
-          <CardContent class="flex items-center gap-3 py-4">
-            <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />
-            <p class="text-sm text-muted-foreground">
-              Only members who can manage this site's settings can configure or
-              enable this connector.
-            </p>
-          </CardContent>
-        </Card>
+      {#if !canSetUp}
+        <ReadOnlyNotice data-testid="connector-read-only">
+          Only members who can set up this site's data sources can configure or
+          enable this connector.
+        </ReadOnlyNotice>
       {:else if showConfiguration && hasRuntimeConfig}
+        {#if connectorCapabilities?.savedSecretMakesNoCredential}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-makes-no-credential"
+          >
+            <Info class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Saving a Nightscout API secret here does not create an API secret for uploaders.
+            </span>
+          </p>
+        {/if}
+        {#if secretInUseStopsAt}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-in-use"
+          >
+            <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              This secret is already in use. It stops on {secretInUseStopsAt}.
+            </span>
+          </p>
+        {:else if savedSecretStopsAt}
+          <p
+            class="flex items-start gap-2 text-sm text-muted-foreground"
+            data-testid="connector-secret-stops"
+          >
+            <Clock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Your access ends on {savedSecretStopsAt}. This credential stops then.
+            </span>
+          </p>
+        {/if}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -438,6 +502,8 @@
           {hasSecrets}
           {showEnvVarHints}
           {saveLabel}
+          lockedKeys={existingConfig?.lockedKeys ?? []}
+          {variant}
           onSave={handleSave}
         />
       {:else if showConfiguration}
@@ -527,7 +593,17 @@
       {/if}
 
       <!-- Documentation Link -->
-      {#if connectorInfo.documentationUrl}
+      {#if connectorInfo.documentationUrl && variant === "setup"}
+        <a
+          href={connectorInfo.documentationUrl}
+          target="_blank"
+          rel="external noopener noreferrer"
+          class="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+        >
+          <ExternalLink class="h-4 w-4" />
+          View documentation for {displayName}
+        </a>
+      {:else if connectorInfo.documentationUrl}
         <Card>
           <CardContent class="py-4">
             <a

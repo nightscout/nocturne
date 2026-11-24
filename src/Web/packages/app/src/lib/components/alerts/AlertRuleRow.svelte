@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertRuleResponse } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -11,7 +11,9 @@
   import Zap from "@lucide/svelte/icons/zap";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Hourglass from "@lucide/svelte/icons/hourglass";
   import { storedConditionIssuesMessage } from "./conditionIssues.svelte";
+  import { holdFactLines, holdSinceText } from "./holdText.svelte";
   import { reviewReasonMessage } from "./reviewReason";
   import {
     summarizeCondition,
@@ -20,9 +22,11 @@
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import { nodeFromApi } from "./types";
+  import { endsLowCover, lastLowCoverMessage } from "./lastLowCover";
   import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
   import { channelLabel } from "./channelText.svelte";
+  import { channelsNotSendingMessage, isNotSending } from "./channelState.svelte";
 
   interface Props {
     rule: AlertRuleResponse;
@@ -68,8 +72,26 @@
 
   let severityClass = $derived(severity(rule.severity, "dot"));
 
+  let notSending = $derived(
+    channelsNotSendingMessage((rule.channels ?? []).filter(isNotSending).length)
+  );
+
+  let confirmingDisable = $state(false);
+
+  // The switch stays where the server last put it until the change is confirmed.
+  function requestToggle(): void {
+    if (endsLowCover(rule) && rule.isEnabled) {
+      confirmingDisable = true;
+    } else {
+      onToggleEnabled();
+    }
+  }
+
   let attention = $derived(
-    [reviewReasonMessage(rule.reviewReason), storedConditionIssuesMessage(rule.conditionIssues)]
+    [
+      reviewReasonMessage(rule.reviewReason),
+      storedConditionIssuesMessage(rule.conditionIssues),
+    ]
       .filter((m): m is string => m !== null)
       .join(" ")
   );
@@ -106,6 +128,9 @@
       {#if attention}
         <Badge variant="warning" size="sm">Needs review</Badge>
       {/if}
+      {#if rule.hold}
+        <Badge variant="warning" size="sm">Waiting</Badge>
+      {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
       {chip || "No condition configured"}
@@ -116,6 +141,23 @@
         <span>{attention}</span>
       </p>
     {/if}
+    {#if notSending}
+      <p class="mt-1 flex items-start gap-1.5 text-xs text-status-warning">
+        <AlertTriangle class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>{notSending}</span>
+      </p>
+    {/if}
+    {#if rule.hold}
+      <div class="mt-1 flex items-start gap-1.5 text-xs text-status-warning" data-testid="rule-hold">
+        <Hourglass class="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <div>
+          <p>{holdSinceText(rule.hold)}</p>
+          {#each holdFactLines(rule.hold) as line (line)}
+            <p>{line}</p>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Channel icons -->
@@ -123,15 +165,24 @@
     <div class="hidden items-center gap-1 @sm:flex" aria-label="Channels">
       {#each rule.channels.slice(0, 4) as ch (ch.id)}
         {@const meta = findChannelMeta(ch.channelType)}
-        <span
-          class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
-          title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
-        >
-          {#if meta?.logo}
-            <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
-          {:else if meta?.icon}
-            {@const G = meta.icon}
-            <G class="h-3 w-3" />
+        <span class="relative">
+          <span
+            class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
+            title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
+          >
+            {#if meta?.logo}
+              <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
+            {:else if meta?.icon}
+              {@const G = meta.icon}
+              <G class="h-3 w-3" />
+            {/if}
+          </span>
+          {#if isNotSending(ch)}
+            <AlertTriangle
+              class="absolute -right-1 -top-1 h-3 w-3 text-status-warning"
+              aria-hidden="true"
+              data-testid="channel-not-sending"
+            />
           {/if}
         </span>
       {/each}
@@ -147,11 +198,22 @@
   <div class="flex items-center gap-1 shrink-0">
     {#if canManage}
       <Switch
-        checked={rule.isEnabled ?? false}
-        onCheckedChange={onToggleEnabled}
+        bind:checked={() => rule.isEnabled ?? false, requestToggle}
         disabled={isToggling}
         aria-label="Enable rule"
       />
+      <ConfirmDialog
+        bind:open={confirmingDisable}
+        title={`Disable "${rule.name}"?`}
+        confirmLabel="Disable"
+        destructive
+        busy={isToggling}
+        onConfirm={onToggleEnabled}
+      >
+        {#snippet description()}
+          {lastLowCoverMessage}
+        {/snippet}
+      </ConfirmDialog>
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
@@ -205,6 +267,9 @@
               </DropdownMenu.Item>
             {/snippet}
             {#snippet description()}
+              {#if endsLowCover(rule)}
+                {lastLowCoverMessage}
+              {/if}
               This rule will stop firing immediately. Existing alert history
               is preserved. This action cannot be undone.
             {/snippet}

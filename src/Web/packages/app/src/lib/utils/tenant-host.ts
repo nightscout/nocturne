@@ -6,7 +6,7 @@
  * (BASE_DOMAIN, via the root layout) and already carries any non-default port,
  * so it must never be re-derived or re-decorated on the client.
  */
-import type { TenantDto } from "../api/generated/nocturne-api-client";
+import type { TenantDto } from "@nocturne/api-client";
 
 export function tenantUrl(
   slug: string,
@@ -19,11 +19,11 @@ export function tenantUrl(
 }
 
 /**
- * Sends the browser to `slug`'s app. Each tenant is its own origin, so this is a document
+ * Sends the browser to `slug`'s app, or to `path` in it. Each tenant is its own origin, so this is a document
  * navigation rather than a client-side one.
  */
-export function goToTenant(slug: string, baseDomain: string): void {
-  window.location.href = tenantUrl(slug, baseDomain);
+export function goToTenant(slug: string, baseDomain: string, path: string = ""): void {
+  window.location.href = `${tenantUrl(slug, baseDomain)}${path}`;
 }
 
 /**

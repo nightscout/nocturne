@@ -4,10 +4,15 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Models.V4;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
+/// <summary>
+/// Glucose processing settings: whether glucose is shown smoothed or unsmoothed, and the default processing
+/// for each data source. Read and set the preferred processing, and read and set the source defaults.
+/// </summary>
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/settings/glucose-processing")]
@@ -26,6 +31,8 @@ public class GlucoseProcessingSettingsController(
     }
 
     [HttpPut("preference")]
+    [RequireScope(Scope.TenantSettings)]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = [nameof(GetPreference)])]
     [ProducesResponseType(204)]
     public async Task<IActionResult> SetPreference([FromBody] SetGlucoseProcessingPreferenceRequest request)
@@ -53,6 +60,8 @@ public class GlucoseProcessingSettingsController(
     }
 
     [HttpPut("source-defaults")]
+    [RequireScope(Scope.TenantSettings)]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = [nameof(GetSourceDefaults)])]
     [ProducesResponseType(204)]
     public async Task<IActionResult> SetSourceDefaults([FromBody] SetGlucoseProcessingSourceDefaultsRequest request)

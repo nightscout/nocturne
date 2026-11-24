@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "name": "glucose-freshness-late-arrival",
+  "description": "a reading timestamped 12:00 that arrives at 12:20 is fresh on arrival, at exactly 11 minutes after it, and unknown one second later: its age runs from its arrival, not its timestamp",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-03-02T12:20:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-03-02T12:00:00Z",
+        "latest_received_at": "2026-03-02T12:20:00Z",
+        "last_reading_at": "2026-03-02T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:31:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-03-02T12:00:00Z",
+        "latest_received_at": "2026-03-02T12:20:00Z",
+        "last_reading_at": "2026-03-02T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-03-02T12:31:01Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-03-02T12:00:00Z",
+        "latest_received_at": "2026-03-02T12:20:00Z",
+        "last_reading_at": "2026-03-02T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

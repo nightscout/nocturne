@@ -8,6 +8,9 @@ export const toggleVariants = tv({
       default: "bg-transparent",
       outline:
         "border-input shadow-xs hover:bg-accent hover:text-accent-foreground border bg-transparent",
+      // One answer among spaced chips, e.g. a report builder's range or window: the chosen chip is filled, so it reads at a glance.
+      choice:
+        "border-input hover:bg-accent hover:text-accent-foreground border bg-transparent data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground",
     },
     size: {
       default: "h-9 min-w-9 px-2",
@@ -17,6 +20,8 @@ export const toggleVariants = tv({
       lg: "h-10 min-w-10 px-2.5",
       // Matches Button's icon-xs.
       "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3",
+      // A 44px touch target on a phone, sm from the md breakpoint up, for chips in a popover, which has no container to query.
+      "touch-sm": "h-11 min-w-11 px-2 md:h-8 md:min-w-8 md:px-1.5",
     },
   },
   defaultVariants: {

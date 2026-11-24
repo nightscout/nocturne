@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "loop-stale-guard-and-boundaries",
-  "description": "loop_stale is false without HasEverApsCycled, false with a null cycle timestamp, then compares minutes since the cycle",
+  "description": "loop_stale is unknown without HasEverApsCycled, unknown with a null cycle timestamp, then compares minutes since the cycle",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "operator": ">=",
         "minutes": 15
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

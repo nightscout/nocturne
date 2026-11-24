@@ -21,6 +21,7 @@
   import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
   import DeviceScopeList from "#lib/components/oauth/DeviceScopeList.svelte";
   import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
+  import SignInGate from "#lib/components/auth/SignInGate.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -151,6 +152,9 @@
 
         <FormError issues={submission.error} />
 
+        {#if page.data.isHandedOffSession}
+          <SignInGate reason="Sign in again to approve or deny this device." />
+        {:else}
         <div class="flex gap-3">
           <form
             {...denyDeviceForm.enhance(async ({ submit }) => {
@@ -190,6 +194,7 @@
             </Button>
           </form>
         </div>
+        {/if}
       </Card.Content>
     {:else}
       <!-- State 1: Code Entry -->

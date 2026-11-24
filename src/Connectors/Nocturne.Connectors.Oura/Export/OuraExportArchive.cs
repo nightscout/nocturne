@@ -97,37 +97,37 @@ public sealed class OuraExportArchive : IDisposable
     ];
 
     /// <summary>
+    /// Reads every data set once without keeping it, so that an export past a budget is refused
+    /// before a caller writes any of it.
+    /// </summary>
+    /// <exception cref="OuraExportException">A file is unreadable or past its budget.</exception>
+    public void Validate()
+    {
+        MainSleepRows();
+        foreach (var _ in ReadHeartRates()) { }
+        ReadDailySteps();
+        foreach (var _ in DailyRows(DailySleepFile)) { }
+        foreach (var _ in DailyRows(DailySpo2File)) { }
+    }
+
+    /// <summary>
     /// Streams the sleep periods, one session in memory at a time: a period's stages and samples are
     /// the bulk of an export, and the file is read twice so that none of them is held while the
     /// day's main sleep is chosen.
     /// </summary>
     public IEnumerable<SleepSession> ReadSleepSessions()
     {
-        // Oura scores a day, not a period: the score and SpO2 belong to the day's longest long sleep.
-        var mainRowByDay = new Dictionary<string, (int Row, long TotalSleepMs)>(StringComparer.Ordinal);
-        var rowIndex = 0;
-        foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
-        {
-            if (++rowIndex > MaxDailyRows) throw new OuraExportException(OuraExportException.TooMuchData);
-            if (SleepPeriod.From(row) is not { Kind: "long_sleep", Day: { } day } period) continue;
-            if (!mainRowByDay.TryGetValue(day, out var main) || period.Session.TotalSleepMs > main.TotalSleepMs)
-                mainRowByDay[day] = (rowIndex, period.Session.TotalSleepMs);
-        }
-
+        var mainRowByDay = MainSleepRows();
         var scores = DailyValues(DailySleepFile, row => Number(row["score"]));
         var spo2 = DailyValues(DailySpo2File, row => JsonNumber(row["spo2_percentage"], "average"));
 
-        rowIndex = 0;
-        var stagesAndSamples = 0;
+        var rowIndex = 0;
         foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
         {
             rowIndex++;
             if (SleepPeriod.From(row) is not { } period) continue;
 
             var session = period.Session;
-            stagesAndSamples += (session.Stages?.Count ?? 0) + (session.BiometricSamples?.Count ?? 0);
-            if (stagesAndSamples > MaxSleepStagesAndSamples)
-                throw new OuraExportException(OuraExportException.TooMuchData);
             var isMain = period.Day is not null && mainRowByDay.TryGetValue(period.Day, out var main) && main.Row == rowIndex;
             session.IsMainSleep = isMain;
             if (isMain)
@@ -140,6 +140,33 @@ public sealed class OuraExportArchive : IDisposable
 
             yield return session;
         }
+    }
+
+    /// <summary>
+    /// Oura scores a day, not a period: the score and SpO2 belong to the day's longest long sleep.
+    /// This pass also holds the row and stage budgets, so the pass that yields sessions to be
+    /// written starts only for a file within them.
+    /// </summary>
+    private Dictionary<string, (int Row, long TotalSleepMs)> MainSleepRows()
+    {
+        var mainRowByDay = new Dictionary<string, (int Row, long TotalSleepMs)>(StringComparer.Ordinal);
+        var rowIndex = 0;
+        var stagesAndSamples = 0;
+        foreach (var row in Rows(SleepFile, MaxSummaryFileBytes))
+        {
+            if (++rowIndex > MaxDailyRows) throw new OuraExportException(OuraExportException.TooMuchData);
+            if (SleepPeriod.From(row) is not { } period) continue;
+
+            stagesAndSamples += (period.Session.Stages?.Count ?? 0) + (period.Session.BiometricSamples?.Count ?? 0);
+            if (stagesAndSamples > MaxSleepStagesAndSamples)
+                throw new OuraExportException(OuraExportException.TooMuchData);
+
+            if (period is not { Kind: "long_sleep", Day: { } day }) continue;
+            if (!mainRowByDay.TryGetValue(day, out var main) || period.Session.TotalSleepMs > main.TotalSleepMs)
+                mainRowByDay[day] = (rowIndex, period.Session.TotalSleepMs);
+        }
+
+        return mainRowByDay;
     }
 
     /// <summary>

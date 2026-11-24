@@ -1,5 +1,7 @@
+using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
@@ -7,7 +9,9 @@ namespace Nocturne.Connectors.CareLink.Mappers;
 
 public static class CareLinkSystemEventMapper
 {
-    public static SystemEvent? Map(CareLinkAlarm? alarm, double pumpOffsetMs, long serverTimeMs, DateTime now)
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<CareLinkConnectorConfiguration>();
+
+    public static SystemEvent? Map(CareLinkAlarm? alarm, double pumpOffsetMs, long serverTimeMs)
     {
         if (alarm == null || string.IsNullOrEmpty(alarm.Datetime))
             return null;
@@ -20,15 +24,12 @@ public static class CareLinkSystemEventMapper
 
         return new SystemEvent
         {
-            Id = Guid.CreateVersion7().ToString(),
             EventType = SystemEventType.Alarm,
             Category = SystemEventCategory.Pump,
             Code = alarm.Code.ToString(),
             Description = alarm.Type,
             Mills = mills,
-            Source = DataSources.CareLinkConnector,
-            OriginalId = $"carelink_alarm_{alarm.Code}_{mills}",
-            CreatedAt = now,
+            OriginalId = LegacyIds.Of("alarm", alarm.Code, mills),
             Metadata = new Dictionary<string, object>
             {
                 ["flash"] = alarm.Flash,
@@ -42,7 +43,7 @@ public static class CareLinkSystemEventMapper
     /// duplicates. Notifications without a stable <c>referenceGUID</c> are skipped (no reliable key).
     /// </summary>
     public static List<SystemEvent> MapNotifications(
-        CareLinkNotificationHistory? history, double pumpOffsetMs, DateTime now)
+        CareLinkNotificationHistory? history, double pumpOffsetMs)
     {
         if (history == null)
             return [];
@@ -52,7 +53,7 @@ public static class CareLinkSystemEventMapper
 
         foreach (var notification in (history.ActiveNotifications ?? []).Concat(history.ClearedNotifications ?? []))
         {
-            var systemEvent = MapNotification(notification, pumpOffsetMs, now);
+            var systemEvent = MapNotification(notification, pumpOffsetMs);
             if (systemEvent?.OriginalId != null && seen.Add(systemEvent.OriginalId))
                 results.Add(systemEvent);
         }
@@ -60,7 +61,7 @@ public static class CareLinkSystemEventMapper
         return results;
     }
 
-    private static SystemEvent? MapNotification(CareLinkNotification notification, double pumpOffsetMs, DateTime now)
+    private static SystemEvent? MapNotification(CareLinkNotification notification, double pumpOffsetMs)
     {
         if (string.IsNullOrEmpty(notification.ReferenceGUID))
             return null;
@@ -78,7 +79,6 @@ public static class CareLinkSystemEventMapper
 
         return new SystemEvent
         {
-            Id = Guid.CreateVersion7().ToString(),
             EventType = string.Equals(notification.Type, "ALERT", StringComparison.OrdinalIgnoreCase)
                 ? SystemEventType.Alarm
                 : SystemEventType.Info,
@@ -86,9 +86,7 @@ public static class CareLinkSystemEventMapper
             Code = notification.FaultId?.ToString(),
             Description = notification.MessageId,
             Mills = mills,
-            Source = DataSources.CareLinkConnector,
-            OriginalId = $"carelink_notification_{notification.ReferenceGUID}",
-            CreatedAt = now,
+            OriginalId = LegacyIds.Of("notification", notification.ReferenceGUID),
             Metadata = metadata.Count > 0 ? metadata : null,
         };
     }

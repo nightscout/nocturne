@@ -66,6 +66,50 @@ public class SleepSessionRepository : ISleepSessionRepository
     }
 
     /// <inheritdoc />
+    public async Task<bool> AnySessionOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepSessions.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyStageOverlappingAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepStages.AsNoTracking()
+            .AnyAsync(e => e.StartTime < to && e.EndTime >= from, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AnyBiometricSampleInAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .AnyAsync(e => e.Timestamp >= from && e.Timestamp < to, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SleepBiometricSample>> GetBiometricSamplesAsync(
+        DateTime from, DateTime to, int limit, CancellationToken cancellationToken = default)
+    {
+        await using var lease = await OpenAsync(cancellationToken);
+        return await lease.Context.SleepBiometricSamples.AsNoTracking()
+            .Where(s => s.Timestamp >= from && s.Timestamp < to)
+            .OrderBy(s => s.Timestamp).Take(limit)
+            .Select(s => new SleepBiometricSample
+            {
+                Timestamp = s.Timestamp,
+                HeartRate = s.HeartRate,
+                Hrv = s.Hrv,
+                Spo2 = s.Spo2,
+                RespirationRate = s.RespirationRate,
+                Movement = s.Movement,
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<SleepSession?> GetSessionByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         GetSessionAsync(s => s.Id == id, cancellationToken);
 
@@ -104,6 +148,8 @@ public class SleepSessionRepository : ISleepSessionRepository
         return await ctx.ExecuteInTransactionAsync(async token =>
         {
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
+            var sentCreatedAt = entity.CreatedAt;
+            var hidden = false;
 
             // Dedup by Source + OriginalId first: a re-sync of the same source record replaces
             // that row and keeps its primary key, so the session id (and any reference to it)
@@ -117,35 +163,56 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (!string.IsNullOrEmpty(entity.OriginalId))
             {
                 await LockSourceRecordAsync(ctx, entity, token);
-                var bySourceRecord = await WithSoftDeleted(ctx)
-                    .AsNoTracking()
-                    .Where(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId)
-                    .Select(s => (Guid?)s.Id)
-                    .FirstOrDefaultAsync(token);
+                var bySourceRecord = await ctx.WriteWithHistoryClampLiftedAsync(
+                    async lifted => await WithSoftDeleted(ctx)
+                        .AsNoTracking()
+                        .Where(s => s.Source == entity.Source && s.OriginalId == entity.OriginalId)
+                        .Select(s => (Guid?)s.Id)
+                        .FirstOrDefaultAsync(lifted),
+                    token);
                 entity.Id = bySourceRecord ?? entity.Id;
             }
 
             await LockIdAsync(ctx, entity.Id, token);
             var existing = await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, token);
+            if (existing is null && ctx.HistoryClamped)
+            {
+                existing = await ctx.WriteWithHistoryClampLiftedAsync(
+                    async lifted => await WithSoftDeleted(ctx).FirstOrDefaultAsync(s => s.Id == entity.Id, lifted),
+                    token);
+                hidden = existing is not null;
+            }
 
             if (existing is { DeletedAt: not null } && ctx.BlocksRecreation(existing))
             {
                 throw new RecreationBlockedException(
-                    "sleep session", $"original id '{existing.OriginalId}' from '{existing.Source}', which the user deleted");
+                    "sleep session", $"original id '{entity.OriginalId}' from '{entity.Source}', which the user deleted");
             }
 
             if (existing is not null)
             {
                 entity.CreatedAt = existing.CreatedAt;
                 ctx.SleepSessions.Remove(existing);
-                await ctx.SaveChangesAsync(token);
+                await SaveAsync(ctx, hidden, token);
             }
 
             ctx.SleepSessions.Add(entity);
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            var answer = SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            if (hidden)
+                answer.CreatedAt = sentCreatedAt;
+            return answer;
         }, ct: cancellationToken);
     }
+
+    /// <summary>
+    /// A save that removes a row a history-clamped writer cannot see runs with the clamp lifted: the
+    /// <c>DELETE … WHERE</c> of that row is checked against the SELECT policies, which must show it.
+    /// </summary>
+    private static Task<int> SaveAsync(NocturneDbContext ctx, bool hidden, CancellationToken ct) =>
+        hidden
+            ? ctx.WriteWithHistoryClampLiftedAsync(async token => await ctx.SaveChangesAsync(token), ct)
+            : ctx.SaveChangesAsync(ct);
 
     /// <summary>
     /// First key of the two-key advisory lock form for the source-record key. Each key kind has its

@@ -22,7 +22,7 @@ namespace Nocturne.Connectors.FreeStyle.Configurations;
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceEvents],
     SensorReadingIntervalSeconds = 300,
-    DocumentationUrl = UrlConstants.External.DocsLibre
+    LegacyIdPrefix = "libre"
 )]
 public class LibreLinkUpConnectorConfiguration : BaseConnectorConfiguration
 {

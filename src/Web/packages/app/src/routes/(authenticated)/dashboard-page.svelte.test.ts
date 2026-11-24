@@ -8,9 +8,9 @@ import {
   WidgetPlacement,
   type FeatureSettings,
   type WidgetConfig,
-} from "#lib/api/generated/nocturne-api-client.js";
+} from "@nocturne/api-client";
 import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 
 // The dashboard's own sections are stood down to markers, one testid each: what
 // is under test is which of them the page renders, not what any of them shows.
@@ -71,11 +71,14 @@ const pageData: HarnessProps["data"] = {
   isShareHost: false,
   canViewRealtimeData: false,
   showBackupSignInPrompt: false,
+    showRecoveryEmailPrompt: false,
+    recoveryEmailHasAddress: false,
   tenantTargets: [],
   isDemo: false,
   isGuestSession: false,
   isPlatformAdmin: false,
   isPlatformAccessGrant: false,
+  isHandedOffSession: false,
   tenantSlug: "sleepy",
   baseDomain: null,
   guestExpiresAt: null,
@@ -87,6 +90,7 @@ const pageData: HarnessProps["data"] = {
   refusedAsDemoSubject: false,
   onboardingComplete: true,
   pillRows: { desktop: 1, mobile: 1 },
+  sidebarOpen: true,
   displayPreferences: [],
   displayLanguage: "en",
   serverPreferences: null,

@@ -8,7 +8,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.CreateMealRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.NutritionController"/>
-public class CreateMealRequest
+public class CreateMealRequest : IV4RecordHeader
 {
     /// <summary>
     /// When the meal occurred.

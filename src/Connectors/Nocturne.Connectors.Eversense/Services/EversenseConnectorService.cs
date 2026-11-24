@@ -61,12 +61,20 @@ public class EversenseConnectorService
             string.Equals(p.UserName, patientUsername, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <inheritdoc />
+    protected override bool NeedsSignIn(SyncRequest request, EversenseConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
+
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, EversenseConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     /// <summary>
     ///     Performs sync, publishing at most one SensorGlucose record from the latest reading.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         EversenseConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -77,12 +85,9 @@ public class EversenseConnectorService
             return result;
         }
 
-        if (await ValidTokenAsync(config, cancellationToken) is null)
-            return AuthenticationFailedResult();
-
         try
         {
-            var patients = await FetchPatientListAsync(config, cancellationToken);
+            var patients = await FetchPatientListAsync(config, session, cancellationToken);
 
             if (patients == null)
             {
@@ -123,8 +128,8 @@ public class EversenseConnectorService
             }
 
             var now = Clock.GetUtcNow().UtcDateTime;
-            var history = await FetchHistoryAsync(config, patient, request, now, cancellationToken);
-            var records = MergeReadings(history, _mapper.Map(patient, now));
+            var history = await FetchHistoryAsync(config, session, patient, request, now, cancellationToken);
+            var records = MergeReadings(history, _mapper.Map(patient, config.Server));
             if (records.Count == 0)
             {
                 _logger.LogDebug(
@@ -212,6 +217,7 @@ public class EversenseConnectorService
     /// </summary>
     private async Task<IReadOnlyList<SensorGlucose>> FetchHistoryAsync(
         EversenseConnectorConfiguration config,
+        TokenSession session,
         EversensePatientDatum patient,
         SyncRequest request,
         DateTime now,
@@ -225,13 +231,10 @@ public class EversenseConnectorService
             return [];
         }
 
-        var token = await TokenProvider.GetValidTokenAsync(config, cancellationToken);
-        if (string.IsNullOrEmpty(token))
-            return [];
-
         var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
         var records = new List<SensorGlucose>();
-        foreach (var (start, end) in HistoryWindows(request.From, request.To, now))
+        var from = WindowStart(request, ResumeFamily.Glucose);
+        foreach (var (start, end) in HistoryWindows(from, request.To, now))
         {
             var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingUserSensorGlucose}" +
                       $"?UserID={patient.UserId}" +
@@ -242,7 +245,7 @@ public class EversenseConnectorService
                 async () =>
                 {
                     using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
-                    httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
                     var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
                     if (!response.IsSuccessStatusCode)
                         throw new HttpRequestException(
@@ -252,7 +255,7 @@ public class EversenseConnectorService
 
                     return await DeserializeResponseAsync<List<EversenseUserEvent>>(response, cancellationToken) ?? [];
                 },
-                reAuthenticateOnUnauthorized: ReauthenticateWith(config, t => token = t, cancellationToken),
+                reAuthenticateOnUnauthorized: session.ReauthenticateAsync,
                 maxRetries: config.MaxRetryAttempts,
                 operationName: "FetchEversenseGlucoseHistory",
                 cancellationToken: cancellationToken
@@ -267,7 +270,7 @@ public class EversenseConnectorService
                 break;
             }
 
-            records.AddRange(_mapper.MapHistory(events, now));
+            records.AddRange(_mapper.MapHistory(events));
         }
 
         return records;
@@ -278,15 +281,9 @@ public class EversenseConnectorService
     /// </summary>
     private async Task<List<EversensePatientDatum>?> FetchPatientListAsync(
         EversenseConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
-        var token = await ValidTokenAsync(config, cancellationToken);
-        if (token is null)
-        {
-            _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
-            return null;
-        }
-
         var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
         var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingPatientList}";
 
@@ -294,7 +291,7 @@ public class EversenseConnectorService
             async () =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
                 var response = await _httpClient.SendAsync(request, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
@@ -308,7 +305,7 @@ public class EversenseConnectorService
                 var patients = await DeserializeResponseAsync<List<EversensePatientDatum>>(response, cancellationToken);
                 return ConnectorFaults.NonNullRecords(patients, _logger, ConnectorSource, "Eversense patient").ToList();
             },
-            reAuthenticateOnUnauthorized: ReauthenticateWith(config, t => token = t, cancellationToken),
+            reAuthenticateOnUnauthorized: session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchEversensePatientList",
             cancellationToken: cancellationToken

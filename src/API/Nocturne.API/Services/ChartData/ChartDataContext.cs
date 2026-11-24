@@ -2,7 +2,6 @@ using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.ChartData;
 
@@ -101,8 +100,8 @@ public sealed record ChartDataContext
     public IReadOnlyList<ScaleFactorInterval> Overrides { get; init; } = [];
 
     public IReadOnlyList<SystemEvent> SystemEvents { get; init; } = [];
-    public IReadOnlyList<TrackerDefinitionEntity> TrackerDefinitions { get; init; } = [];
-    public IReadOnlyList<TrackerInstanceEntity> TrackerInstances { get; init; } = [];
+    public IReadOnlyList<TrackerDefinition> Trackers { get; init; } = [];
+    public IReadOnlyList<TrackerInstance> RunningTrackers { get; init; } = [];
     public IReadOnlyList<HeartRate> HeartRateList { get; init; } = [];
     public IReadOnlyList<StepCount> StepCountList { get; init; } = [];
     public IReadOnlyList<SleepSession> SleepSessions { get; init; } = [];

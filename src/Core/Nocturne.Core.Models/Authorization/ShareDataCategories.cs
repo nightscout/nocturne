@@ -47,6 +47,7 @@ public static class ShareDataCategories
                 "device_status_extras",
                 "pump_snapshots",
                 "uploader_snapshots",
+                "sensor_state_reports",
                 "aps_snapshots",
             },
             [Scope.AlertsRead] = new[]
@@ -96,6 +97,7 @@ public static class ShareDataCategories
             ["device_status_extras"] = "timestamp",
             ["pump_snapshots"] = "timestamp",
             ["uploader_snapshots"] = "timestamp",
+            ["sensor_state_reports"] = "timestamp",
             ["aps_snapshots"] = "timestamp",
             ["heart_rates"] = "timestamp",
             ["step_counts"] = "timestamp",
@@ -172,6 +174,19 @@ public static class ShareDataCategories
             ["sleep_sessions"] = "end_time",
             ["tracker_instances"] = "completed_at",
             ["in_app_notifications"] = "archived_at",
+            ["dnd_windows"] = "ends_at",
+        };
+
+    /// <summary>
+    /// A second end column per table of <see cref="HiddenSpanEndColumns"/> whose span can also end before its end
+    /// column says: the span ends at the earlier of the two that is set, and runs on while neither is. A do-not-disturb
+    /// window ends at its expiry (<c>ends_at</c>, null until cleared) or when it is turned off early (<c>cleared_at</c>),
+    /// so one turned off three days ago is past however late its expiry, and one with neither set is still on.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> HiddenSpanEarlyEndColumns =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["dnd_windows"] = "cleared_at",
         };
 
     /// <summary>
@@ -243,6 +258,12 @@ public static class ShareDataCategories
     public static string? SpanEndColumnFor(string table) =>
         GovernedSpanEndColumns.TryGetValue(table, out var column) ? column
         : HiddenSpanEndColumns.GetValueOrDefault(table);
+
+    /// <summary>
+    /// Returns the column that can end a span table's span before its <see cref="SpanEndColumnFor"/> column, or
+    /// <c>null</c> when it has none. See <see cref="HiddenSpanEarlyEndColumns"/>.
+    /// </summary>
+    public static string? SpanEarlyEndColumnFor(string table) => HiddenSpanEarlyEndColumns.GetValueOrDefault(table);
 
     /// <summary>
     /// Returns the parent a table is clamped through, or <c>null</c> when it is not. See
@@ -327,6 +348,20 @@ public static class ShareDataCategories
             {
                 throw new InvalidOperationException(
                     $"Parent '{parent.Table}' of '{child}' needs a timestamp column in {nameof(RecencyColumns)} or {nameof(HiddenSpanEndColumns)}.");
+            }
+        }
+
+        foreach (var table in HiddenSpanEarlyEndColumns.Keys)
+        {
+            if (!HiddenSpanEndColumns.ContainsKey(table) || HiddenOpenSpanBounds.ContainsKey(table))
+            {
+                throw new InvalidOperationException(
+                    $"An early end column on '{table}' needs a span end column in {nameof(HiddenSpanEndColumns)} and no open-span bound.");
+            }
+            if (HiddenParentRecency.Values.Any(p => p.Table == table))
+            {
+                throw new InvalidOperationException(
+                    $"'{table}' is a parent in {nameof(HiddenParentRecency)}, whose clamp does not apply an early end column.");
             }
         }
 

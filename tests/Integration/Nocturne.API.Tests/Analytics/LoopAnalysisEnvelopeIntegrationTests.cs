@@ -56,7 +56,29 @@ public class LoopAnalysisEnvelopeIntegrationTests(ApiIntegrationTestFixture fixt
         var body = await GetOkAsync(clamped, $"{Path}?{Week}&compare=previous");
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeTrue("the week asked for ended long before the last 24 hours");
         Absent(body, "comparisonRange").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("daily-profile")]
+    [InlineData("prediction-accuracy")]
+    [InlineData("loop-health")]
+    [InlineData("settings-evidence")]
+    [InlineData("event-response")]
+    public async Task Every_page_serves_a_clamped_member_an_empty_range_before_its_window(string page)
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        using var clamped = await CreateHistoryClampedClientAsync();
+
+        var body = await GetOkAsync(clamped, $"/api/v4/loop-analysis/{page}?{Week}");
+
+        body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeTrue();
+        var range = body.GetProperty("primaryRange");
+        range.GetProperty("to").GetDateTime().Should().Be(range.GetProperty("from").GetDateTime());
+        if (page == "settings-evidence")
+            body.GetProperty("withheldReason").GetString().Should().Be("HistoryClamped");
     }
 
     [Fact]

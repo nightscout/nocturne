@@ -6,7 +6,7 @@ namespace Nocturne.API.Services.Realtime;
 /// <summary>
 /// The storage <c>delete</c> event for a single removed record, as
 /// <see cref="ISignalRBroadcastService.BroadcastStorageDeleteAsync"/> sends it. Five of the six
-/// delete producers use it; <see cref="SignalRV4RecordBroadcaster{TModel}"/> sends its own shape, the
+/// delete producers use it; <see cref="SignalRRecordChangeSubscriber"/> sends its own shape, the
 /// record's <c>id</c> under its V4 category, which no NS v3 client subscribes to.
 /// </summary>
 /// <remarks>

@@ -6,9 +6,11 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { retainQuery } from "#lib/api/retain-query.svelte.js";
 	import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+	import SignInGate from "#lib/components/auth/SignInGate.svelte";
 	import { confirmDiscordLink, getDiscordLinkClaim } from "./finalize.remote";
 
 	const claim = $derived(page.url.searchParams.get("claim") ?? "");
+	const handedOff = $derived(page.data.isHandedOffSession === true);
 
 	$effect(() => {
 		if (!page.data.isAuthenticated && claim) {
@@ -88,12 +90,16 @@
 		{#if confirmError}
 			<p class="text-destructive max-w-md">{confirmError}</p>
 		{/if}
-		<Button onclick={handleConfirm} disabled={isConfirming}>
-			{#if isConfirming}
-				<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
-			{/if}
-			Link account
-		</Button>
+		{#if handedOff}
+			<SignInGate reason="Sign in again to link your Discord account." />
+		{:else}
+			<Button onclick={handleConfirm} disabled={isConfirming}>
+				{#if isConfirming}
+					<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
+				{/if}
+				Link account
+			</Button>
+		{/if}
 	{:else}
 		<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
 	{/if}

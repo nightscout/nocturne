@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -7,7 +8,8 @@ using Nocturne.Connectors.Core.Models;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for cross-tenant connector operations.
+/// Connector sync state and cursor resets for any tenant. List a tenant's connectors, start a cursor
+/// reset, and read or cancel reset jobs.
 /// </summary>
 /// <remarks>
 /// The per-tenant connector endpoints (<c>/api/v4/services/connectors/...</c>) only act on the
@@ -91,7 +93,7 @@ public class ConnectorAdminController : ControllerBase
 
         _logger.LogInformation(
             "Platform admin cursor reset requested for tenant {TenantId} (from {From})",
-            tenantId, request.From?.ToString("o") ?? "beginning");
+            tenantId, request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
         var job = await _resetJobService.StartResetAsync(
             tenantId, request.From, request.DataTypes, ct);

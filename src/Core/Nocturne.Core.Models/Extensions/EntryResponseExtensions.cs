@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Serializers;
 
@@ -64,7 +65,7 @@ public static class EntryResponseExtensions
         if (mills <= 0)
             return string.Empty;
 
-        return DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        return DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 }
 

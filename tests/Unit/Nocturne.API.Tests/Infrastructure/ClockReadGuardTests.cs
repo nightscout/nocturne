@@ -51,6 +51,7 @@ public class ClockReadGuardTests
     private static readonly string[] Files =
     [
         "src/API/Nocturne.API/Services/Auth/JwtService.cs",
+        "src/API/Nocturne.API/Services/Auth/SubjectService.cs",
     ];
 
     /// <summary>

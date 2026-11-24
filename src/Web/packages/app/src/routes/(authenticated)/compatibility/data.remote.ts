@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { ResponseMatchType } from '#lib/api/generated/nocturne-api-client.js';
+import { ResponseMatchType } from '@nocturne/api-client';
 import { errorStatus } from '#lib/forms/submit-error.js';
 
 const CompatibilityFiltersSchema = z.object({

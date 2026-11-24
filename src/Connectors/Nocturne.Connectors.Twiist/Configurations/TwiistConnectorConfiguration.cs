@@ -19,7 +19,8 @@ namespace Nocturne.Connectors.Twiist.Configurations;
     "Twiist Insight",
     SupportsHistoricalSync = false,
     SupportsManualSync = true,
-    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals]
+    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals],
+    LegacyIdPrefix = "twiist"
 )]
 public class TwiistConnectorConfiguration : BaseConnectorConfiguration
 {

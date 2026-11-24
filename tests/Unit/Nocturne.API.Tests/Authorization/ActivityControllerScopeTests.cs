@@ -127,7 +127,7 @@ public class ActivityControllerScopeTests
                 It.Is<IReadOnlySet<string>>(asked =>
                     asked.SetEquals(new[] { Scope.HeartRateRead })),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -194,7 +194,7 @@ public class ActivityControllerScopeTests
 
     private static void Denied(object? result)
     {
-        var denied = result.Should().BeOfType<ObjectResult>().Subject;
+        var denied = result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         denied.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         denied.Value.Should().BeOfType<ProblemDetails>();
     }
@@ -206,7 +206,7 @@ public class ActivityControllerScopeTests
 
     private static void StubPage(Mock<IActivityService> service, IEnumerable<Activity> page) =>
         service.Setup(s => s.GetActivitiesAsync(
-                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
 
     /// <summary>
@@ -216,8 +216,8 @@ public class ActivityControllerScopeTests
     /// </summary>
     private static void StubCounts(Mock<IActivityService> service) =>
         service.Setup(s => s.CountActivitiesByCategoryAsync(
-                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlySet<string> asked, string? _, CancellationToken _) =>
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlySet<string> asked, string? _, DateTime? _, DateTime? _, CancellationToken _) =>
                 (IReadOnlyDictionary<string, long>)CategoryCounts
                     .Where(c => asked.Contains(c.Key))
                     .ToDictionary(c => c.Key, c => c.Value));

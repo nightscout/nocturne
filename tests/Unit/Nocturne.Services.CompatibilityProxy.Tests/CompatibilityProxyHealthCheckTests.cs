@@ -45,9 +45,10 @@ public class CompatibilityProxyHealthCheckTests
     [Theory]
     [InlineData("https://ns.example", "https://ns.example/")]
     [InlineData("https://ns.example/nightscout", "https://ns.example/nightscout/")]
-    [InlineData("https://ns.example/nightscout?token=synthetic-token", "https://ns.example/nightscout/")]
     [InlineData("ns.example/nightscout", "https://ns.example/nightscout/")]
-    public async Task The_health_probe_heads_the_configured_base(string nightscoutUrl, string expected)
+    [InlineData("https://ns.example?token=abc", "https://ns.example/?token=abc")]
+    [InlineData("https://ns.example/nightscout?token=abc", "https://ns.example/nightscout/?token=abc")]
+    public async Task The_health_probe_heads_the_configured_base_with_its_query(string nightscoutUrl, string expected)
     {
         var (result, handler) = await CheckAsync(nightscoutUrl);
 

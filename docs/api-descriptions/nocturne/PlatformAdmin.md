@@ -1,6 +1,11 @@
 ---
 displayName: Platform Admin
 ---
-Super-admin tenant lifecycle management.
+Administration of a whole instance. These operations need platform administrator rights. A member of a tenant, including its owner, cannot call them.
 
-Provides tenant creation, listing, and administration for platform operators. These endpoints require platform-level admin privileges — they are not accessible to regular tenant users.
+```resources Platform Admin
+```
+
+## Good to know
+
+- A reset of the connectors of a tenant runs as a background job. See [Syncing](#nocturne/tag/syncing).

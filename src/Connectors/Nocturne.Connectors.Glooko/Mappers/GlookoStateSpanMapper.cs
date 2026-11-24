@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -9,6 +10,8 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 
 public class GlookoStateSpanMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource;
     private readonly ILogger _logger;
     private readonly GlookoTimeMapper _timeMapper;
@@ -46,12 +49,11 @@ public class GlookoStateSpanMapper
                 stateSpans.Add(
                     new StateSpan
                     {
-                        OriginalId = $"glooko_suspend_{suspend.X}",
+                        OriginalId = LegacyIds.Of("suspend", suspend.X),
                         Category = StateSpanCategory.PumpMode,
                         State = PumpModeState.Suspended.ToString(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
-                        Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
                             { "label", suspend.Label ?? "Suspended" },
@@ -83,12 +85,11 @@ public class GlookoStateSpanMapper
                 stateSpans.Add(
                     new StateSpan
                     {
-                        OriginalId = $"glooko_lgsplgs_{lgsEvent.X}",
+                        OriginalId = LegacyIds.Of("lgsplgs", lgsEvent.X),
                         Category = StateSpanCategory.PumpMode,
                         State = stateValue,
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
-                        Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
                             { "label", lgsEvent.Label ?? lgsEvent.EventType ?? "LGS/PLGS" },
@@ -126,7 +127,7 @@ public class GlookoStateSpanMapper
             var change = profileChanges[i];
             activations.Add(new ProfileActivation
             {
-                SyncIdentifier = $"glooko_profile_{change.X}",
+                SyncIdentifier = LegacyIds.Of("profile", change.X),
                 StartTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X),
                 EndTimestamp = i < profileChanges.Count - 1
                     ? _timeMapper.GetCorrectedGlookoTime(profileChanges[i + 1].X)
@@ -134,7 +135,6 @@ public class GlookoStateSpanMapper
                 Phase = ProfileActivationPhase.Effective,
                 Origin = ProfileActivationOrigin.Connector,
                 BaseProfileName = change.ProfileName ?? change.Label ?? "Unknown",
-                DataSource = _connectorSource,
             });
         }
 
@@ -208,12 +208,11 @@ public class GlookoStateSpanMapper
             stateSpans.Add(
                 new StateSpan
                 {
-                    OriginalId = $"glooko_pumpmode_{glookoType}_{point.X}",
+                    OriginalId = LegacyIds.Of("pumpmode", glookoType, point.X),
                     Category = StateSpanCategory.PumpMode,
                     State = state.ToString(),
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
-                    Source = _connectorSource,
                     Metadata = new Dictionary<string, object>
                     {
                         { "label", point.Type ?? glookoType },
@@ -249,12 +248,11 @@ public class GlookoStateSpanMapper
             stateSpans.Add(
                 new StateSpan
                 {
-                    OriginalId = $"glooko_pumpconn_{glookoType}_{point.X}",
+                    OriginalId = LegacyIds.Of("pumpconn", glookoType, point.X),
                     Category = StateSpanCategory.PumpConnectivity,
                     State = state.ToString(),
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
-                    Source = _connectorSource,
                     Metadata = new Dictionary<string, object>
                     {
                         { "label", point.Type ?? glookoType },
@@ -303,12 +301,11 @@ public class GlookoStateSpanMapper
                 stateSpans.Add(
                     new StateSpan
                     {
-                        OriginalId = $"glooko_v2_suspend_{rawTimestamp.Ticks}",
+                        OriginalId = LegacyIds.Of("v2_suspend", rawTimestamp.Ticks),
                         Category = StateSpanCategory.PumpMode,
                         State = PumpModeState.Suspended.ToString(),
                         StartTimestamp = startTimestamp,
                         EndTimestamp = endTimestamp,
-                        Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
                             { "suspendReason", suspend.SuspendReason ?? "unknown" },

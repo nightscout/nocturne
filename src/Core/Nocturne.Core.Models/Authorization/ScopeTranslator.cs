@@ -74,6 +74,7 @@ public static class ScopeTranslator
         new("reports", [Scope.ReportsRead], []),
         new("identity", [Scope.IdentityRead], []),
         new("sharing", [], [Scope.SharingReadWrite]),
+        new("connectors", [Scope.ConnectorsRead], [Scope.ConnectorsReadWrite]),
 
         // The legacy activity collection is the merged read plane over four Nocturne storages, so
         // it carries all three dedicated categories, and a grant holds it only when it holds all
@@ -85,6 +86,16 @@ public static class ScopeTranslator
             [Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead],
             [Scope.HeartRateReadWrite, Scope.StepCountReadWrite, Scope.SleepReadWrite]),
     ];
+
+    /// <summary>
+    /// The seeded roles a permission list may name outright. Nightscout finds a role by its exact
+    /// name, so unlike the permission strings in <see cref="TrieToScopes"/> these match ordinally.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> NamedRoleScopes = new(StringComparer.Ordinal)
+    {
+        [GlobalRoles.Admin] = [Scope.FullAccess],
+        ["readable"] = ReadEverything,
+    };
 
     private static readonly Dictionary<string, string[]> TrieToScopes = BuildTrieToScopes();
 
@@ -106,10 +117,6 @@ public static class ScopeTranslator
 
             ["api:*"] = [Scope.FullAccess],
             ["*"] = [Scope.FullAccess],
-
-            // Named roles
-            ["admin"] = [Scope.FullAccess],
-            ["readable"] = ReadEverything,
         };
 
         foreach (var collection in Collections)
@@ -155,9 +162,10 @@ public static class ScopeTranslator
     public static IReadOnlySet<string> FromPermissions(IEnumerable<string> permissions)
     {
         var scopes = permissions
-            .SelectMany(permission => TrieToScopes.TryGetValue(permission, out var mapped)
-                ? mapped
-                : Array.Empty<string>())
+            .SelectMany(permission =>
+                NamedRoleScopes.TryGetValue(permission, out var role) ? role
+                : TrieToScopes.TryGetValue(permission, out var mapped) ? mapped
+                : [])
             .ToHashSet();
 
         // If full access is granted, normalize to include everything
@@ -190,6 +198,11 @@ public static class ScopeTranslator
         {
             return new HashSet<string> { "*" };
         }
+
+        // The tenant-administration atoms are enforced against granted scopes only, and
+        // tenant.settings satisfies the connector scopes, so they are dropped here rather than
+        // reaching the trie through the satisfaction checks below.
+        granted.IntersectWith(Scope.ValidRequestScopes);
 
         var permissions = new HashSet<string>();
 

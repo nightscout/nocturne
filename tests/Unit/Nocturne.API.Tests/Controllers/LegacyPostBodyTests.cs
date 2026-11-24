@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.DeviceStatuses;
+using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -243,7 +244,7 @@ public class LegacyPostBodyTests
             .Callback<IEnumerable<Settings>, CancellationToken>((s, _) => settings.AddRange(s))
             .ReturnsAsync([]);
         var controller = WithContext(new LegacyV3.SettingsController(
-            repository.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
+            repository.Object, Mock.Of<IWriteSideEffects>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
         return new Handler(
             $$"""{"Key":"units","Mills":{{Millis}}}""",
             """{"Key":"units","Mills":"abc"}""",
@@ -283,11 +284,10 @@ public class LegacyPostBodyTests
                 It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<Entry>, string?, CancellationToken>((processed, _, _) => entries.AddRange(processed))
             .ReturnsAsync((IReadOnlyList<Entry> processed, string? _, CancellationToken _) =>
-                new EntryUploadResult(processed, processed));
+                new EntryUploadResult(processed));
         var controller = WithContext(new LegacyV1.EntriesController(
             service.Object,
             Passthrough(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             TimeProvider.System,
             NullLogger<LegacyV1.EntriesController>.Instance));
         return new Handler(

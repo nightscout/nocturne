@@ -12,9 +12,14 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Cross-tenant endpoints on the apex domain for authenticated users.
-/// These operate without a resolved tenant context.
+/// Cross-tenant endpoints on the apex domain. Signed-in users list their tenants and read the
+/// multitenancy transition status. They can create a tenant when the operator allows self-service
+/// creation.
 /// </summary>
+/// <remarks>
+/// These operate without a resolved tenant context. Tenant creation requires
+/// <see cref="OperatorConfiguration.AllowSelfServiceCreation"/> to be enabled.
+/// </remarks>
 [ApiController]
 [Tags("Platform")]
 [Route("api/v4/platform")]

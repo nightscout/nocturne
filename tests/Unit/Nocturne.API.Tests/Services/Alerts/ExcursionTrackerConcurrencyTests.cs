@@ -73,7 +73,6 @@ public class ExcursionTrackerConcurrencyTests
     {
         Id = id,
         Name = "Test Rule",
-        ConfirmationReadings = 1,
         HysteresisMinutes = 5,
     };
 
@@ -124,7 +123,6 @@ public class ExcursionTrackerConcurrencyTests
                     {
                         AlertRuleId = state.AlertRuleId,
                         State = state.State,
-                        ConfirmationCount = state.ConfirmationCount,
                         ActiveExcursionId = state.ActiveExcursionId,
                         UpdatedAt = state.UpdatedAt,
                     }

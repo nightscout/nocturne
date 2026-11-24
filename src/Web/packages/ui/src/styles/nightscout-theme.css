@@ -1,0 +1,208 @@
+/* Nightscout Theme - cgm-remote-monitor's own dashboard, "colors" mode.
+   Activated by the .nightscout-theme class on the document root.
+   Nightscout has no light mode, so the light and dark blocks hold the same values.
+   Hex values are the ones static/css/main.css and lib/client/*.js use. */
+
+@font-face {
+  font-family: "Ubuntu";
+  src:
+    local("Ubuntu"),
+    local("Ubuntu-Regular"),
+    url("/fonts/Ubuntu-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Ubuntu";
+  src:
+    local("Ubuntu Bold"),
+    local("Ubuntu-Bold"),
+    url("/fonts/Ubuntu-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root.nightscout-theme,
+:root.nightscout-theme.dark,
+.nightscout-theme .dark {
+  color-scheme: dark;
+
+  --background: #000000;
+  --foreground: #bdbdbd;
+  --card: #111111;
+  --card-foreground: #bdbdbd;
+  --popover: #111111;
+  --popover-foreground: #bdbdbd;
+  --primary: #bdbdbd;
+  --primary-foreground: #000000;
+  --secondary: #333333;
+  --secondary-foreground: #bdbdbd;
+  --muted: #333333;
+  --muted-foreground: #808080;
+  --accent: #333333;
+  --accent-foreground: #bdbdbd;
+  --destructive: #ff0000;
+  --destructive-foreground: #000000;
+  --border: #333333;
+  --input: #333333;
+  --ring: #808080;
+  --radius: 0.3125rem;
+
+  /* sgvToColor: red past the urgent limits, yellow outside the target, #4cff00 inside it. */
+  --glucose-in-range: #4cff00;
+  --glucose-tight-range: #4cff00;
+  --glucose-low: #ffff00;
+  --glucose-very-low: #ff0000;
+  --glucose-high: #ffff00;
+  --glucose-very-high: #ff0000;
+  --glucose-very-low-foreground: #000000;
+  --glucose-low-foreground: #000000;
+  --glucose-in-range-foreground: #000000;
+  --glucose-high-foreground: #000000;
+  --glucose-very-high-foreground: #000000;
+
+  --insulin: #0099ff;
+  --insulin-bolus: #0099ff;
+  --insulin-basal: rgba(0, 153, 255, 0.1);
+  --insulin-temp-basal: rgba(0, 153, 255, 0.2);
+  --insulin-manual-temp-basal: rgba(0, 153, 255, 0.2);
+  --insulin-scheduled-basal: #0099ff;
+  --basal: #0099ff;
+  --insulin-additional-basal: #0099ff;
+
+  --carbs: #ffffff;
+  --carbs-on-board: #ffffff;
+
+  /* openaps.js colorPredictionLines */
+  --pred-iob: #1e88e5;
+  --pred-cob: #fb8c00;
+  --pred-acob: #fb8c00;
+  --pred-zt: #00d2d2;
+  --pred-uam: #c9bd60;
+  --pred-main: #ff00ff;
+  --bias-high: #1e88e5;
+  --bias-low: #ff0000;
+
+  --status-warning: #ffff00;
+  --status-critical: #ff0000;
+  --status-normal: #4cff00;
+  --status-info: #2196f3;
+
+  --iob-basal: rgba(0, 153, 255, 0.6);
+  --iob-bolus: #0099ff;
+  --iob-temporary: rgba(0, 153, 255, 0.8);
+
+  --pump-mode-automatic: #4cff00;
+  --pump-mode-limited: #2196f3;
+  --pump-mode-manual: #808080;
+  --pump-mode-boost: #fb8c00;
+  --pump-mode-ease-off: #c9bd60;
+  --pump-mode-sleep: #8e44ad;
+  --pump-mode-exercise: #ee82ee;
+  --pump-mode-suspended: #ff0000;
+  --pump-mode-off: #555555;
+  --pump-mode-liberty: #00d2d2;
+
+  --system-event-alarm: #ff0000;
+  --system-event-hazard: #fb8c00;
+  --system-event-warning: #ffff00;
+  --system-event-info: #4cff00;
+
+  --gri-zone-a: #4cff00;
+  --gri-zone-b: #b5e61d;
+  --gri-zone-c: #ffff00;
+  --gri-zone-d: #fb8c00;
+  --gri-zone-e: #ff0000;
+
+  --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);
+  --data-exclusion-sensor-error: rgba(255, 0, 0, 0.15);
+
+  --heart-rate: #fa8072;
+  --steps: #ee82ee;
+
+  --sidebar: #000000;
+  --sidebar-foreground: #bdbdbd;
+  --sidebar-primary: #bdbdbd;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #333333;
+  --sidebar-accent-foreground: #bdbdbd;
+  --sidebar-border: #333333;
+  --sidebar-ring: #808080;
+
+  --chart-1: #0099ff;
+  --chart-2: #4cff00;
+  --chart-3: #fb8c00;
+  --chart-4: #00d2d2;
+  --chart-5: #c9bd60;
+  --percentile-outer: #1a1a1a;
+  --percentile-inner: #333333;
+  --percentile-median: #bdbdbd;
+
+  /* Nightscout-only tokens */
+  --ns-pill: #808080;
+  --ns-pill-hover: #989898;
+  --ns-pill-label: #000000;
+  --ns-pill-value-bg: #000000;
+  --ns-pill-value: #bdbdbd;
+  --ns-status: #808080;
+  --ns-chart-bg: #111111;
+  --ns-rule-urgent: #777777;
+  --ns-rule-target: #808080;
+  --treatment-label: #ffffff;
+}
+
+:root.nightscout-theme body {
+  font-family: "Ubuntu", Verdana, Helvetica, Arial, sans-serif;
+  background: var(--background);
+}
+
+/* Pills: main.css .pill / .pill label / .pill em. */
+:root.nightscout-theme [data-pill] {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 2px 0;
+  border: 2px solid var(--ns-pill);
+  border-radius: 5px;
+  background: var(--ns-pill);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+:root.nightscout-theme [data-pill]:hover {
+  background: var(--ns-pill-hover);
+  border-color: var(--ns-pill-hover);
+}
+
+:root.nightscout-theme [data-pill-label] {
+  padding: 0 3px;
+  color: var(--ns-pill-label);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+:root.nightscout-theme [data-pill-value] {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--ns-pill-value-bg);
+  color: var(--ns-pill-value);
+  font-size: inherit;
+  font-weight: 700;
+  line-height: inherit;
+}
+
+/* .pill.warn em / .pill.urgent em. The warning icon stays so the level is not colour alone. */
+:root.nightscout-theme [data-pill-value].text-severity-warn,
+:root.nightscout-theme [data-pill-value].text-severity-hazard {
+  color: #ffff00;
+}
+
+:root.nightscout-theme [data-pill-value].text-severity-urgent {
+  color: #ff0000;
+}
+
+/* "Flipped" pills (timeago, delta, battery): value first, then label. */
+:root.nightscout-theme [data-pill-flip] [data-pill-value] {
+  order: -1;
+}

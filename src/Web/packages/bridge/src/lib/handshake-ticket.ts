@@ -59,11 +59,11 @@ export interface HandshakeTicketPayload extends RealtimeGrant {
   exp: number;
 }
 
-const CANONICAL_SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CANONICAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** The value as a subject id in canonical lowercase `D` GUID form, the only form the bridge rooms on, else undefined. */
-export function canonicalSubjectId(value: unknown): string | undefined {
-  return typeof value === 'string' && CANONICAL_SUBJECT_ID.test(value) ? value : undefined;
+/** The value as an id in canonical lowercase `D` GUID form, the only form the bridge rooms on, else undefined. */
+function canonicalId(value: unknown): string | undefined {
+  return typeof value === 'string' && CANONICAL_ID.test(value) ? value : undefined;
 }
 
 /**
@@ -75,7 +75,7 @@ export function readRealtimeGrant(value: unknown): RealtimeGrant {
   const { categories } = value;
   return {
     tenantRelay: value.tenantRelay === true,
-    subjectId: canonicalSubjectId(value.subjectId),
+    subjectId: canonicalId(value.subjectId),
     categories: Array.isArray(categories)
       ? categories.filter((c): c is string => typeof c === 'string')
       : [],
@@ -118,9 +118,58 @@ export function signHandshakeTicket(
     exp: now + ttlMs,
     ...grant,
   };
+  return signPayload(secret, TENANT_TICKET, payload);
+}
+
+/**
+ * What a ticket admits its holder to. The kind is mixed into the signature, so a ticket of one
+ * kind fails the other's verification whatever its payload says.
+ */
+type TicketKind = typeof TENANT_TICKET | typeof OVERVIEW_TICKET;
+
+const TENANT_TICKET = '';
+const OVERVIEW_TICKET = 'overview.';
+
+function signature(secret: string, kind: TicketKind, payloadB64: string): string {
+  return createHmac('sha256', secret).update(kind + payloadB64).digest('hex');
+}
+
+function signPayload(secret: string, kind: TicketKind, payload: object): string {
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
-  const sig = createHmac('sha256', secret).update(payloadB64).digest('hex');
-  return `${payloadB64}.${sig}`;
+  return `${payloadB64}.${signature(secret, kind, payloadB64)}`;
+}
+
+/** The payload of a ticket of `kind` signed with `secret`, unread, or null when the signature does not verify. */
+function verifiedPayload(secret: string, kind: TicketKind, token: string | undefined): Record<string, unknown> | null {
+  if (!secret || !token) return null;
+
+  const dot = token.indexOf('.');
+  if (dot < 0) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sigHex = token.slice(dot + 1);
+  if (!payloadB64 || !sigHex) return null;
+
+  let expectedHex: string;
+  try {
+    expectedHex = signature(secret, kind, payloadB64);
+  } catch {
+    return null;
+  }
+
+  const actual = Buffer.from(sigHex, 'hex');
+  const expected = Buffer.from(expectedHex, 'hex');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
+  } catch {
+    return null;
+  }
+
+  return isRecord(parsed) ? parsed : null;
 }
 
 const TICKET_SHAPE = /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
@@ -144,38 +193,88 @@ export function verifyHandshakeTicket(
   token: string | undefined,
   now: number = Date.now(),
 ): HandshakeTicketPayload | null {
-  if (!secret || !token) return null;
-
-  const dot = token.indexOf('.');
-  if (dot < 0) return null;
-  const payloadB64 = token.slice(0, dot);
-  const sigHex = token.slice(dot + 1);
-  if (!payloadB64 || !sigHex) return null;
-
-  let expectedHex: string;
-  try {
-    expectedHex = createHmac('sha256', secret).update(payloadB64).digest('hex');
-  } catch {
-    return null;
-  }
-
-  const actual = Buffer.from(sigHex, 'hex');
-  const expected = Buffer.from(expectedHex, 'hex');
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-    return null;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(parsed)) return null;
+  const parsed = verifiedPayload(secret, TENANT_TICKET, token);
+  if (!parsed) return null;
   const { h, t, exp } = parsed;
   if (typeof h !== 'string' || typeof t !== 'string' || !t || typeof exp !== 'number') return null;
   if (exp < now) return null;
 
   return { h, t, exp, ...readRealtimeGrant(parsed) };
+}
+
+/**
+ * The API endpoint answering which tenants a subject's own login hears live changes for on the
+ * cross-tenant overview. It refuses every credential issued for one tenant.
+ */
+export const OVERVIEW_ADMISSION_PATH = '/api/v4/me/overview-admission';
+
+/**
+ * The most tenants one overview ticket carries. A subject who follows more is pinged for the first
+ * this many in canonical id order, and the page's poll keeps the rest current.
+ */
+export const OVERVIEW_TICKET_MAX_TENANTS = 100;
+
+/** What the API's overview admission at {@link OVERVIEW_ADMISSION_PATH} lets an `/overview` socket hear about. */
+export interface OverviewGrant {
+  /** The subject the overview is read for. */
+  subjectId: string;
+  /** The tenants whose overview rooms the socket joins, canonical, distinct and in order. */
+  tenantIds: string[];
+}
+
+export interface OverviewTicketPayload extends OverviewGrant {
+  /** Normalized host (lowercased, port-stripped) the ticket authorizes. */
+  h: string;
+  /** Expiration timestamp in unix milliseconds. */
+  exp: number;
+}
+
+/**
+ * Reads an overview admission, from the API or a ticket, failing closed: null without a canonical
+ * subject id or a tenant list. Ids not in canonical form are dropped, and the rest are capped at
+ * {@link OVERVIEW_TICKET_MAX_TENANTS}.
+ */
+export function readOverviewGrant(value: unknown): OverviewGrant | null {
+  if (!isRecord(value)) return null;
+  const subjectId = canonicalId(value.subjectId);
+  const { tenantIds } = value;
+  if (!subjectId || !Array.isArray(tenantIds)) return null;
+  const canonical = tenantIds.filter((id): id is string => canonicalId(id) !== undefined);
+  return {
+    subjectId,
+    tenantIds: [...new Set(canonical)].sort().slice(0, OVERVIEW_TICKET_MAX_TENANTS),
+  };
+}
+
+/** Sign an overview ticket authorizing an `/overview` connection that arrives on `host`. */
+export function signOverviewTicket(
+  secret: string,
+  host: string,
+  grant: OverviewGrant,
+  ttlMs: number = HANDSHAKE_TICKET_LIFETIME_MS,
+  now: number = Date.now(),
+): string {
+  const payload: OverviewTicketPayload = {
+    h: normalizeHandshakeHost(host),
+    exp: now + ttlMs,
+    ...grant,
+  };
+  return signPayload(secret, OVERVIEW_TICKET, payload);
+}
+
+/**
+ * Verify an overview ticket. Returns the payload when the signature is valid, the ticket has not
+ * expired and it carries a readable grant, otherwise null. A tenant ticket never verifies here.
+ */
+export function verifyOverviewTicket(
+  secret: string,
+  token: string | undefined,
+  now: number = Date.now(),
+): OverviewTicketPayload | null {
+  const parsed = verifiedPayload(secret, OVERVIEW_TICKET, token);
+  if (!parsed) return null;
+  const { h, exp } = parsed;
+  if (typeof h !== 'string' || typeof exp !== 'number' || exp < now) return null;
+  const grant = readOverviewGrant(parsed);
+  return grant ? { h, exp, ...grant } : null;
 }

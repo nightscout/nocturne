@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
@@ -49,6 +50,23 @@ public interface ISensorGlucoseRepository
         Guid? patientDeviceId = null,
         GlucoseStreams streams = GlucoseStreams.All
     );
+
+    /// <summary>
+    /// Count the readings <see cref="GetAsync"/> pages through for the same filters.
+    /// </summary>
+    Task<int> CountAsync(
+        DateTime? from,
+        DateTime? to,
+        string? device,
+        string? source,
+        Guid? patientDeviceId,
+        GlucoseStreams streams = GlucoseStreams.All,
+        CancellationToken ct = default
+    );
+
+    Task<int> IV4Repository<SensorGlucose>.CountAsync(
+        DateTime? from, DateTime? to, string? device, string? source, CancellationToken ct)
+        => CountAsync(from, to, device, source, patientDeviceId: null, ct: ct);
 
     /// <summary>
     /// Partial readings for statistics only; these must not be returned as raw records or projected
@@ -166,11 +184,11 @@ public interface ISensorGlucoseRepository
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
+    /// Soft-deletes every <see cref="SensorGlucose"/> record <paramref name="selector"/> names, under its
+    /// <see cref="RecordSelector.Scope"/>.
     /// </summary>
-    /// <param name="source">Data source identifier (e.g., connector name).</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
+    Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Lists distinct <c>(DataSource, Device)</c> combinations among unattributed readings
@@ -193,4 +211,42 @@ public interface ISensorGlucoseRepository
     /// </summary>
     Task<IReadOnlyList<SensorGlucose>> GetAttributedReadingTimesAsync(
         Guid patientDeviceId, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// The newest live reading of <paramref name="reading"/>'s stream
+    /// (<see cref="CanonicalGlucoseStream.StreamKey"/>) and data source (a null and an empty one
+    /// being the same) with a glucose value, timestamped in
+    /// [<paramref name="since"/>, the reading's timestamp]. Unlike the canonical reads it includes
+    /// non-primary duplicate copies and readings of a stream that lost its bucket, but never a copy
+    /// in the reading's own duplicate group, which is the same reading and not an earlier one.
+    /// </summary>
+    Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default);
+
+    /// <summary>
+    /// The first arrival of every stream the tenant ever stored a reading from: the earliest
+    /// <c>sys_created_at</c> per writer, data source and device, in one grouped read. It is read with
+    /// the member history clamp lifted, since it feeds only replay's internal classification of
+    /// readings as live arrivals or imported history (docs/alerts/engine-semantics.md §8) and no row
+    /// of it reaches the caller.
+    /// </summary>
+    Task<IEnumerable<GlucoseStreamArrival>> GetStreamFirstArrivalsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The readings dated in [<paramref name="from"/>, <paramref name="to"/>], each with the writer,
+    /// data source and device it came with.
+    /// </summary>
+    Task<IEnumerable<GlucoseStreamReading>> GetStreamReadingsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// The live readings in [<paramref name="from"/>, <paramref name="to"/>] a
+    /// <see cref="GlucoseStreams.Canonical"/> read leaves out (non-primary duplicate copies and
+    /// readings of a stream that lost its bucket), oldest first, keyset-paged on (timestamp, id).
+    /// <c>DuplicateOf</c> is the primary of the row's duplicate group when the row is a
+    /// non-primary copy, else null.
+    /// </summary>
+    Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetHiddenAsync(
+        DateTime from, DateTime to, int limit, DateTime? afterTimestamp, Guid? afterId,
+        CancellationToken ct = default);
 }

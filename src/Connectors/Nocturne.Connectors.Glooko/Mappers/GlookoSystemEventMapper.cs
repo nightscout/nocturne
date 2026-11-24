@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
@@ -7,6 +8,8 @@ namespace Nocturne.Connectors.Glooko.Mappers;
 
 public class GlookoSystemEventMapper
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<GlookoConnectorConfiguration>();
+
     private readonly string _connectorSource;
     private readonly ILogger _logger;
     private readonly GlookoTimeMapper _timeMapper;
@@ -48,7 +51,7 @@ public class GlookoSystemEventMapper
                 events.Add(
                     new SystemEvent
                     {
-                        OriginalId = $"glooko_alarm_{alarm.X}",
+                        OriginalId = LegacyIds.Of("alarm", alarm.X),
                         EventType = eventType,
                         Category = SystemEventCategory.Pump,
                         Code = name ?? alarm.Data?.AlarmCode,
@@ -57,7 +60,6 @@ public class GlookoSystemEventMapper
                             ?? alarm.Data?.AlarmDescription
                             ?? "Unknown alarm",
                         Mills = timestamp.ToMills(),
-                        Source = _connectorSource,
                         Metadata = new Dictionary<string, object>
                         {
                             { "severity", alarm.AlarmSeverity ?? "unknown" },
@@ -99,8 +101,8 @@ public class GlookoSystemEventMapper
                 var code = alarm.Value ?? alarm.AlarmType;
 
                 var key = !string.IsNullOrEmpty(alarm.Guid)
-                    ? $"glooko_ssv2_alarm_{alarm.Guid}"
-                    : $"glooko_ssv2_alarm_raw_{alarm.PumpTimestamp}_{code}";
+                    ? LegacyIds.Of("ssv2_alarm", alarm.Guid)
+                    : LegacyIds.Of("ssv2_alarm_raw", alarm.PumpTimestamp, code);
 
                 events.Add(new SystemEvent
                 {
@@ -110,7 +112,6 @@ public class GlookoSystemEventMapper
                     Code = code,
                     Description = code ?? "Unknown alarm",
                     Mills = timestamp.ToMills(),
-                    Source = _connectorSource,
                     Metadata = new Dictionary<string, object>
                     {
                         { "severity", alarm.AlarmSeverity ?? "unknown" },

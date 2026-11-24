@@ -7,8 +7,8 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Eversense.Tests.Services;
 
@@ -28,7 +28,6 @@ public class EversenseSignInFailureTests
         result.Message.Should().Contain("usually temporary")
             .And.NotContain("password")
             .And.NotBe("Authentication failed");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     /// <summary>
@@ -51,7 +50,6 @@ public class EversenseSignInFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("did not accept this sign-in");
-        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
         requests.Should().Be(1);
     }
 
@@ -82,15 +80,15 @@ public class EversenseSignInFailureTests
 
     private static async Task<SyncResult> SyncAgainst(Func<HttpRequestMessage, HttpResponseMessage> answer)
     {
-        using var authClient = new HttpClient(new StubHandler(answer));
-        using var serviceClient = new HttpClient(new StubHandler(answer));
+        using var authClient = new HttpClient(new FakeHttpHandler(answer));
+        using var serviceClient = new HttpClient(new FakeHttpHandler(answer));
         var resolver = new ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null);
 
         using var provider = new EversenseAuthTokenProvider(
             authClient,
             new ConnectorTokenCache(),
             resolver,
-            ResolvedTenant(),
+            ResolvedTenant.Accessor(),
             NullLogger<EversenseAuthTokenProvider>.Instance,
             Mock.Of<IRetryDelayStrategy>());
         var service = new EversenseConnectorService(
@@ -106,17 +104,4 @@ public class EversenseSignInFailureTests
             CancellationToken.None);
     }
 
-    private static ITenantAccessor ResolvedTenant()
-    {
-        var tenant = new Mock<ITenantAccessor>();
-        tenant.Setup(t => t.IsResolved).Returns(true);
-        tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-        return tenant.Object;
-    }
-
-    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(answer(request));
-    }
 }

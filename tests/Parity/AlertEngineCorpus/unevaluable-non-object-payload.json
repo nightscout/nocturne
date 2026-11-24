@@ -10,7 +10,6 @@
       "condition_params": [
         70
       ],
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -24,7 +23,6 @@
           "threshold": "below 70"
         }
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

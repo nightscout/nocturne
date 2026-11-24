@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -35,7 +34,7 @@ public class TrackerScheduleTests
         var instance = Run(TrackerMode.Duration, lifespanHours: 240,
             (NotificationUrgency.Warn, -24), (NotificationUrgency.Urgent, 240));
 
-        var schedule = TrackerInstanceDto.FromEntity(instance).Schedule;
+        var schedule = TrackerInstanceDto.From(instance, Start).Schedule;
 
         schedule.Select(s => (s.Urgency, s.FiresAt)).Should().Equal(
             (NotificationUrgency.Warn, Start.AddHours(216)),
@@ -46,10 +45,12 @@ public class TrackerScheduleTests
     public void InstanceSchedule_ForAnEvent_CountsFromTheScheduledTime()
     {
         var scheduled = Start.AddDays(5);
-        var instance = Run(TrackerMode.Event, lifespanHours: null, (NotificationUrgency.Info, -24));
-        instance.ScheduledAt = scheduled;
+        var instance = Run(TrackerMode.Event, lifespanHours: null, (NotificationUrgency.Info, -24)) with
+        {
+            ScheduledAt = scheduled,
+        };
 
-        TrackerInstanceDto.FromEntity(instance).Schedule.Single().FiresAt
+        TrackerInstanceDto.From(instance, Start).Schedule.Single().FiresAt
             .Should().Be(scheduled.AddHours(-24));
     }
 
@@ -58,7 +59,7 @@ public class TrackerScheduleTests
     {
         var instance = Run(TrackerMode.Duration, lifespanHours: null, (NotificationUrgency.Warn, -24));
 
-        TrackerInstanceDto.FromEntity(instance).Schedule.Should().BeEmpty();
+        TrackerInstanceDto.From(instance, Start).Schedule.Should().BeEmpty();
     }
 
     [Theory]
@@ -72,32 +73,21 @@ public class TrackerScheduleTests
             .Should().Be(expected);
     }
 
-    private static TrackerInstanceEntity Run(
-        TrackerMode mode, int? lifespanHours, params (NotificationUrgency Urgency, int Hours)[] thresholds)
-    {
-        var definition = new TrackerDefinitionEntity
+    private static TrackerInstance Run(
+        TrackerMode mode, int? lifespanHours, params (NotificationUrgency Urgency, int Hours)[] thresholds) =>
+        new()
         {
             Id = Guid.NewGuid(),
-            Name = "Sensor",
-            Mode = mode,
-            LifespanHours = lifespanHours,
-        };
-        foreach (var (urgency, hours) in thresholds)
-        {
-            definition.NotificationThresholds.Add(new TrackerNotificationThresholdEntity
-            {
-                Urgency = urgency,
-                Hours = hours,
-                DisplayOrder = definition.NotificationThresholds.Count,
-            });
-        }
-
-        return new TrackerInstanceEntity
-        {
-            Id = Guid.NewGuid(),
-            DefinitionId = definition.Id,
-            Definition = definition,
+            Definition = TrackerDefinition.Restore(
+                Guid.NewGuid(),
+                "Sensor",
+                mode: mode,
+                lifespanHours: lifespanHours,
+                notificationThresholds:
+                [
+                    .. thresholds.Select((t, order) =>
+                        new TrackerNotificationThreshold(Guid.NewGuid(), t.Urgency, t.Hours, null, order)),
+                ]),
             StartedAt = Start,
         };
-    }
 }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Constants;
 using YamlDotNet.RepresentationModel;
 using Xunit;
 using static Nocturne.Aspire.Host.Tests.Publishing.ComposeYaml;
@@ -33,6 +34,15 @@ public class ShippedBundleTests
 
         Text(environment["DOTNET_gcServer"]).Should().Be("0");
         Text(environment["DOTNET_GCConserveMemory"]).Should().Be("5");
+    }
+
+    [Theory]
+    [MemberData(nameof(Bundles))]
+    public void TheApiContainerOutwaitsTheHostShutdownTimeout(string bundle)
+    {
+        var grace = Text(ShippedService(bundle, "nocturne-api")["stop_grace_period"]);
+
+        grace.Should().Be(ApplicationConstants.Shutdown.ContainerStopGracePeriod);
     }
 
     [Theory]

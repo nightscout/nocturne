@@ -76,6 +76,10 @@ public class AlertSweepJobAutoResolveTests
         services.AddSingleton(enricher.Object);
         services.AddSingleton(engine.Object);
         services.AddSingleton(Mock.Of<IExcursionResolutionHandler>());
+        services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
+        services.AddSingleton(NoHeldRules.Notice());
+        services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
+        services.AddSingleton(Mock.Of<IAlertChannelNotice>());
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
 

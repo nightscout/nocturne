@@ -9,6 +9,8 @@
  *      OpenApsStatus, LoopIob, LoopCob, Bolus, CarbIntake, DeviceEvent, Profile, etc.
  */
 
+import type { V4BasalInjectionStatus } from '@nocturne/api-client';
+
 /**
  * Alert levels for visual styling of pills
  * Maps to Nightscout's severity levels: none, info, warn, urgent
@@ -75,8 +77,6 @@ export interface COBPillData extends PillDisplayProps {
 	cob: number;
 	/** Source of COB data */
 	source?: string;
-	/** Whether COB is actively decaying */
-	isDecaying?: boolean;
 	/** Last carbs info */
 	lastCarbs?: {
 		mills: number;
@@ -100,6 +100,8 @@ export interface BasalPillData extends PillDisplayProps {
 	isComboActive: boolean;
 	/** Active profile name */
 	activeProfile?: string;
+	/** The last long-acting dose, shown in place of a rate when no device reports one */
+	injection?: V4BasalInjectionStatus;
 	/** Temp basal details */
 	tempBasal?: {
 		rate?: number;

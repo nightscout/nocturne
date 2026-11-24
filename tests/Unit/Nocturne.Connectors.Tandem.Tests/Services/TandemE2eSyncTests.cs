@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -11,9 +13,14 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -201,6 +208,223 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
+    public async Task A_connector_with_no_zone_and_no_offset_stamps_records_in_the_tenants_zone()
+    {
+        var tenant = TenantZone("America/New_York");
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: tenant.Object);
+
+        var result = await fixture.RunAsync();
+
+        result.Success.Should().BeTrue();
+        var basal = fixture.Publisher.TempBasals[0];
+        basal.StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        basal.UtcOffset.Should().Be(-240);
+    }
+
+    [Fact]
+    public async Task The_connector_reports_the_tenants_zone_it_read_the_pump_in()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+
+        await fixture.RunAsync();
+
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/New_York", Source = ConnectorTimeZoneSource.TenantZone,
+            });
+    }
+
+    [Fact]
+    public async Task An_offset_that_is_set_is_read_without_asking_for_the_tenants_zone()
+    {
+        var tenant = TenantZone("Asia/Tokyo");
+        var fixture = new Fixture(therapySettings: tenant.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        tenant.Verify(
+            t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "UTC-04:00", Source = ConnectorTimeZoneSource.ConnectorOffset,
+            });
+    }
+
+    [Fact]
+    public async Task A_connector_with_nothing_to_go_by_reads_the_pump_as_utc_and_warns_once()
+    {
+        var logger = new Mock<ILogger<TandemConnectorService>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone(null).Object, logger: logger.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 0, 1, 0));
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone { Id = "UTC", Source = ConnectorTimeZoneSource.Utc });
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => $"{state}".Contains("reading them as UTC")),
+                null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    private static Mock<ITimezoneTimelineService> Timeline(params (DateTime From, string Zone)[] entries)
+    {
+        var timeline = new Mock<ITimezoneTimelineService>();
+        timeline
+            .Setup(t => t.GetResolverAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimezoneTimeline(
+                entries.Select(e => new TimezoneTimelineEntry { EffectiveFrom = e.From, Timezone = e.Zone })));
+        return timeline;
+    }
+
+    [Fact]
+    public async Task A_move_in_the_tenants_zone_history_stamps_records_before_and_after_it_at_their_own_offsets()
+    {
+        var timeline = Timeline(
+            (DateTime.MinValue, "America/New_York"),
+            (new DateTime(2026, 5, 15, 12, 0, 0), "America/Los_Angeles"));
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone("Asia/Tokyo").Object,
+            timezoneTimeline: timeline.Object);
+
+        var result = await fixture.RunAsync();
+
+        result.Success.Should().BeTrue();
+        var pub = fixture.Publisher;
+        pub.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        pub.TempBasals[0].UtcOffset.Should().Be(-240);
+        pub.Boluses.Single().Timestamp.Should().Be(Utc(2026, 5, 14, 15, 4, 18));
+        pub.DeviceEvents.Single(e => e.EventType == DeviceEventType.CannulaChange)
+            .Timestamp.Should().Be(Utc(2026, 5, 16, 7, 14, 9));
+        pub.TempBasals[1].EndTimestamp.Should().Be(Utc(2026, 5, 18, 17, 19, 55));
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/Los_Angeles", Source = ConnectorTimeZoneSource.TenantTimeline,
+            });
+    }
+
+    [Fact]
+    public async Task A_zone_history_that_covers_every_time_needs_no_tenant_zone_and_does_not_warn()
+    {
+        var logger = new Mock<ILogger<TandemConnectorService>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone(null).Object,
+            timezoneTimeline: Timeline((DateTime.MinValue, "America/New_York")).Object,
+            logger: logger.Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+                null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task An_empty_zone_history_falls_back_to_the_tenants_zone_setting()
+    {
+        var fixture = new Fixture(
+            timezoneOffset: 0,
+            therapySettings: TenantZone("America/New_York").Object,
+            timezoneTimeline: Timeline().Object);
+
+        await fixture.RunAsync();
+
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()!.Source.Should().Be(ConnectorTimeZoneSource.TenantZone);
+    }
+
+    [Fact]
+    public async Task A_setting_on_the_connector_is_read_without_asking_for_the_zone_history()
+    {
+        var timeline = Timeline((DateTime.MinValue, "Asia/Tokyo"));
+        var fixture = new Fixture(timezoneTimeline: timeline.Object);
+
+        await fixture.RunAsync();
+
+        timeline.Verify(t => t.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+    }
+
+    [Fact]
+    public async Task The_zone_is_written_only_when_it_differs_from_the_one_stored()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+
+        await fixture.RunAsync();
+        await fixture.RunAsync();
+
+        fixture.ZoneWrites.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_changed_zone_is_written_again()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+        await fixture.RunAsync();
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey] =
+            JsonSerializer.SerializeToNode(new ConnectorTimeZone
+            {
+                Id = "America/Chicago", Source = ConnectorTimeZoneSource.TenantZone,
+            })!;
+
+        await fixture.RunAsync();
+
+        fixture.ZoneWrites.Should().Be(2);
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()!.Id.Should().Be("America/New_York");
+    }
+
+    /// <summary>
+    /// A purge that allows re-import clears the vendor state, the zone in use with it, and the next
+    /// run writes the zone again.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_allowing_reimport_clears_the_zone_and_the_next_run_writes_it_again()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+        await fixture.RunAsync();
+
+        await fixture.State.ClearAsync("tconnectsync-connector", ConnectorStateSlots.Vendor);
+        fixture.State.Vendor.Should().NotContainKey(ConnectorTimeZone.VendorStateKey);
+        await fixture.RunAsync();
+
+        fixture.ZoneWrites.Should().Be(2);
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/New_York", Source = ConnectorTimeZoneSource.TenantZone,
+            });
+    }
+
+    private static Mock<ITherapySettingsResolver> TenantZone(string? zoneId)
+    {
+        var tenant = new Mock<ITherapySettingsResolver>();
+        tenant
+            .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(zoneId);
+        return tenant;
+    }
+
+    [Fact]
     public async Task Requests_carry_bearer_token_and_source_origin()
     {
         var fixture = new Fixture();
@@ -280,6 +504,55 @@ public class TandemE2eSyncTests
         fixture.Publisher.PublishedAnything.Should().BeFalse();
     }
 
+    /// <summary>
+    /// The pump's range starts days before the stored watermarks here, so the first run starts at
+    /// the watermarks rather than at the pump's first event, and the second run's start can only
+    /// come from what the first run published.
+    /// </summary>
+    [Fact]
+    public async Task Scheduled_sync_twice_asks_the_second_time_only_from_the_first_runs_newest_record()
+    {
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("\"start\": \"2026-05-14T00:01:00\"", "\"start\": \"2026-05-10T00:00:00\""),
+            watermarksFollowPublishes: true);
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+        var firstRun = fixture.Requests.Count(r => r.Path.Contains("/pump-logs/"));
+        var newest = new[] { fixture.Publisher.SensorGlucoses.Max(r => r.Timestamp), fixture.Publisher.NewestTreatment!.Value }.Min();
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        firstRun.Should().BePositive();
+        var pumpLogs = fixture.Requests.Where(r => r.Path.Contains("/pump-logs/")).ToList();
+        pumpLogs[0].Path.Should().Contain("startDate=2026-05-12T00%3A00%3A00Z",
+            "the first run resumes from the stored watermarks, which sit before the newest published record");
+        var expected = newest.AddMinutes(-5).Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        expected.Should().Be("2026-05-14");
+        pumpLogs[firstRun].Path.Should().Contain($"startDate={expected}T00%3A00%3A00Z");
+    }
+
+    /// <summary>
+    /// The clamp notice tells a caller that the pump could not serve the bound it chose. A scheduled
+    /// run chose none: its resume point falling before the pump's first event is no news.
+    /// </summary>
+    [Fact]
+    public async Task Clamp_notice_is_given_for_a_callers_bound_and_not_for_a_scheduled_resume_point()
+    {
+        var scheduled = new Fixture(
+            latestEntry: Utc(2026, 1, 1, 0, 0, 0),
+            latestTreatment: Utc(2026, 1, 1, 0, 0, 0));
+        var requested = new Fixture();
+
+        var scheduledResult = await scheduled.RunScheduledAsync();
+        var requestedResult = await requested.RunAsync(new SyncRequest { From = Utc(2026, 1, 1, 0, 0, 0) });
+
+        scheduled.Requests.Should().ContainSingle(r => r.Path.Contains("/pump-logs/"))
+            .Which.Path.Should().Contain("startDate=2026-05-14T00%3A00%3A00Z", "the resume point was clamped");
+        scheduledResult.Success.Should().BeTrue();
+        scheduledResult.Message.Should().BeEmpty();
+        requestedResult.Success.Should().BeTrue();
+        requestedResult.Message.Should().Contain("The pump holds no data before 2026-05-14 04:01 UTC");
+    }
+
     [Fact]
     public async Task Windows_over_28_days_are_paged_and_deduplicated()
     {
@@ -298,6 +571,54 @@ public class TandemE2eSyncTests
         fixture.Publisher.SensorGlucoses.Should().HaveCount(2);
         fixture.Publisher.Boluses.Should().HaveCount(1);
         fixture.Publisher.TempBasals.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Second_sync_of_the_same_window_stores_no_new_row()
+    {
+        var store = new StoringConnectorPublisher();
+        var fixture = new Fixture(publisher: store);
+        var window = new SyncRequest { From = Utc(2026, 5, 14, 0, 0, 0), To = Utc(2026, 5, 18, 23, 59, 59) };
+
+        (await fixture.RunAsync(window)).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        (await fixture.RunAsync(window)).Success.Should().BeTrue();
+
+        stored.Select(k => k.Type).Distinct().Should().Contain(
+            [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal), nameof(DeviceEvent)]);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
+    /// <summary>
+    /// A reset keeps the vendor state, the published-profile fingerprints and the zone in use, so the
+    /// run after it offers every record of the window again, stores none of them twice and does not
+    /// publish the unchanged profile again.
+    /// </summary>
+    [Fact]
+    public async Task A_reset_run_offers_the_window_again_and_keeps_the_published_profile()
+    {
+        var store = new StoringConnectorPublisher();
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000), publisher: store);
+        var from = Utc(2026, 5, 14, 0, 0, 0);
+        var to = Utc(2026, 5, 18, 23, 59, 59);
+
+        (await fixture.RunAsync(new SyncRequest { From = from, To = to })).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        var vendor = ((InMemoryConnectorStateStore)store.State).Vendor.ToDictionary(v => v.Key, v => v.Value.ToJsonString());
+        (await fixture.RunAsync(SyncRequest.Reset(from, to, null))).Success.Should().BeTrue();
+
+        vendor.Keys.Where(key => key.StartsWith("profile:")).Should().ContainSingle();
+        vendor.Keys.Should().Contain(ConnectorTimeZone.VendorStateKey);
+        ((InMemoryConnectorStateStore)store.State).Vendor
+            .ToDictionary(v => v.Key, v => v.Value.ToJsonString())
+            .Should().Equal(vendor);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(
+            o => o.Key, o => o.Key == nameof(Profile) ? o.Value : o.Value * 2));
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
     }
 
     /// <summary>
@@ -533,8 +854,8 @@ public class TandemE2eSyncTests
     }
 
     /// <summary>
-    /// On a background cycle the caller's bound is the glucose watermark, and it must not narrow
-    /// the window past a data type that fell behind: the pump is crawled once for every type, so
+    /// An open-ended caller's bound above a data type that fell behind must not narrow the window
+    /// past it: the pump is crawled once for every type, so
     /// the earliest resume point across them is what the run owes.
     /// </summary>
     [Fact]
@@ -570,6 +891,46 @@ public class TandemE2eSyncTests
 
         fixture.Publisher.Profiles.Should().ContainSingle();
         result.ItemsSynced[SyncDataType.Profiles].Should().Be(0);
+    }
+
+    /// <summary>
+    /// A purge that allows re-import clears the vendor state with the fingerprints in it, so the next
+    /// sync publishes the unchanged settings again in place of the purged profile.
+    /// </summary>
+    [Fact]
+    public async Task Unchanged_pump_settings_are_published_again_after_a_purge_allowing_reimport()
+    {
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000));
+
+        await fixture.RunAsync(ProfilesOnly);
+        await fixture.Publisher.State.ClearAsync(
+            "tconnectsync-connector", ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor);
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        fixture.Publisher.Profiles.Should().HaveCount(2);
+        result.ItemsSynced[SyncDataType.Profiles].Should().Be(1);
+    }
+
+    /// <summary>
+    /// A scheduled run's window starts at the glucose watermark, so one that cannot be read stops the
+    /// run before it asks the pump for anything. A requested run reads it only where it sets its own
+    /// window, after the pump's settings are published.
+    /// </summary>
+    [Fact]
+    public async Task Glucose_watermark_that_cannot_be_read_fails_where_the_window_needs_it()
+    {
+        var scheduled = new Fixture(PumperWithSettings(basalRate: 1000), glucoseWatermarkFails: true);
+        var requested = new Fixture(PumperWithSettings(basalRate: 1000), glucoseWatermarkFails: true);
+
+        var scheduledResult = await scheduled.RunScheduledAsync();
+        var requestedResult = await requested.RunAsync(new SyncRequest { From = Utc(2026, 5, 15, 0, 0, 0) });
+
+        scheduledResult.Success.Should().BeFalse();
+        scheduled.Requests.Should().BeEmpty();
+        scheduled.Publisher.Profiles.Should().BeEmpty();
+        requestedResult.Success.Should().BeFalse();
+        requested.Publisher.Profiles.Should().ContainSingle();
+        requested.Requests.Should().NotContain(r => r.Path.Contains("/pump-logs/"));
     }
 
     [Fact]
@@ -623,11 +984,11 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
-    public async Task A_cursor_store_that_times_out_still_lets_the_profile_publish()
+    public async Task A_state_store_that_times_out_still_lets_the_profile_publish()
     {
         var fixture = new Fixture(
             PumperWithSettings(basalRate: 1000),
-            cursorStoreOnGet: _ => throw new TaskCanceledException("The store timed out."));
+            stateOnRead: _ => throw new TaskCanceledException("The store timed out."));
 
         var result = await fixture.RunAsync(ProfilesOnly);
 
@@ -636,13 +997,39 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
-    public async Task A_cursor_store_read_cancelled_by_the_run_propagates()
+    public async Task A_state_store_that_is_down_still_lets_the_profile_publish()
+    {
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            stateOnRead: _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()));
+
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        result.Success.Should().BeTrue();
+        fixture.Publisher.Profiles.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_defect_reading_the_state_store_fails_the_sync_rather_than_publishing_without_it()
+    {
+        var fixture = new Fixture(
+            PumperWithSettings(basalRate: 1000),
+            stateOnRead: _ => throw new InvalidCastException("defect"));
+
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        result.Success.Should().BeFalse();
+        fixture.Publisher.Profiles.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_state_store_read_cancelled_by_the_run_propagates()
     {
         using var cancellation = new CancellationTokenSource();
         var fixture = new Fixture(
             PumperWithSettings(basalRate: 1000),
             cancellation: cancellation,
-            cursorStoreOnGet: token =>
+            stateOnRead: token =>
             {
                 cancellation.Cancel();
                 token.ThrowIfCancellationRequested();
@@ -767,7 +1154,7 @@ public class TandemE2eSyncTests
         new HttpClient(),
         new ConnectorTokenCache(),
         new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
-        new FakeTenantAccessor(),
+        ResolvedTenant.Accessor(),
         NullLogger<TandemAuthTokenProvider>.Instance,
         Mock.Of<IRetryDelayStrategy>())
     {
@@ -777,40 +1164,6 @@ public class TandemE2eSyncTests
                 "fake-token",
                 DateTime.UtcNow.AddHours(1),
                 new Dictionary<string, string> { [PumperIdKey] = "pumper-1", [AccountIdKey] = "account-1" }));
-
-        private sealed class FakeTenantAccessor : ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public TenantContext? Context => null;
-            public void SetTenant(TenantContext context) { }
-        }
-    }
-
-    private sealed class InMemoryCursorStore(Action<CancellationToken>? onGet = null) : IConnectorSyncCursorStore
-    {
-        private readonly Dictionary<(string, string), ConnectorSyncCursor> _cursors = [];
-
-        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default)
-        {
-            onGet?.Invoke(cancellationToken);
-            return Task.FromResult(_cursors.GetValueOrDefault((connectorName, resource)));
-        }
-
-        public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
-        {
-            _cursors[(connectorName, resource)] = cursor;
-            return Task.CompletedTask;
-        }
-
-        public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     /// <summary>Records every published record; the Nocturne analog of upstream's FakeNightscout.</summary>
@@ -829,12 +1182,23 @@ public class TandemE2eSyncTests
         public List<Profile> Profiles { get; } = [];
         public bool FailProfiles { get; set; }
 
+        /// <summary>Whether the stored watermarks move to the newest record published, as the store's do.</summary>
+        public bool FollowsPublishes { get; init; }
+        public bool GlucoseWatermarkFails { get; init; }
+
+        public DateTime? NewestTreatment =>
+            Boluses.Select(r => r.Timestamp)
+                .Concat(CarbIntakes.Select(r => r.Timestamp))
+                .Concat(BolusCalculations.Select(r => r.Timestamp))
+                .Select(t => (DateTime?)t).Max();
+
         public bool PublishedAnything =>
             SensorGlucoses.Count + Boluses.Count + CarbIntakes.Count + BolusCalculations.Count +
             TempBasals.Count + DeviceEvents.Count + DeviceStatuses.Count + StateSpans.Count +
             SystemEvents.Count + Profiles.Count > 0;
 
         public bool IsAvailable => true;
+        public IConnectorStateStore State { get; init; } = new InMemoryConnectorStateStore();
         public IGlucosePublisher Glucose => this;
         public ITreatmentPublisher Treatments => this;
         public IDevicePublisher Device => this;
@@ -856,7 +1220,10 @@ public class TandemE2eSyncTests
         public Task<bool> PublishSensorGlucoseAsync(IEnumerable<SensorGlucose> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(SensorGlucoses, records);
         public Task<DateTime?> GetLatestEntryTimestampAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult(latestEntry);
+            GlucoseWatermarkFails ? Task.FromException<DateTime?>(new HttpRequestException("watermark store down")) :
+            Task.FromResult(FollowsPublishes && SensorGlucoses.Count > 0
+                ? SensorGlucoses.Max(r => r.Timestamp)
+                : latestEntry);
         public Task<DateTime?> GetLatestSensorGlucoseTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult(latestEntry);
 
@@ -875,12 +1242,18 @@ public class TandemE2eSyncTests
         public Task<bool> PublishBasalInjectionsAsync(IEnumerable<BasalInjection> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult(latestTreatment);
+            Task.FromResult(FollowsPublishes && NewestTreatment is { } newest ? newest : latestTreatment);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
 
+        public Task<IReadOnlyList<StoredTreatmentKey>> GetOpenSpanTreatmentsAsync(string source, StoredTreatmentKey? after, int limit, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<StoredTreatmentKey>>([]);
+
         public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
+
+        public Task<IReadOnlyDictionary<string, Guid>> GetStoredCarbIntakeIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, Guid>>(new Dictionary<string, Guid>());
 
         public Task<int?> PublishRecentTreatmentsAsync(IEnumerable<Treatment> treatments, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult<int?>(0);
@@ -929,10 +1302,6 @@ public class TandemE2eSyncTests
             Task.FromResult<DateTime?>(null);
         public Task<DateTime?> GetLatestStateSpanTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
-        public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
-        public Task SetBackfillLowWaterMarksAsync(string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct = default) =>
-            Task.CompletedTask;
     }
 
     private sealed class Fixture
@@ -944,6 +1313,12 @@ public class TandemE2eSyncTests
         private readonly Dictionary<string, string> _responses;
         private readonly CancellationTokenSource? _cancellation;
 
+        /// <summary>The connector's state when the fixture's own publisher is used.</summary>
+        public InMemoryConnectorStateStore State { get; }
+
+        /// <summary>How many times a run wrote the zone in use.</summary>
+        public int ZoneWrites { get; private set; }
+
         public Fixture(
             string pumperJson = PumperJson,
             string pumpLogsJson = PumpLogsJson,
@@ -953,7 +1328,15 @@ public class TandemE2eSyncTests
             TimeProvider? clock = null,
             string? timesOutOn = null,
             CancellationTokenSource? cancellation = null,
-            Action<CancellationToken>? cursorStoreOnGet = null)
+            Action<CancellationToken>? stateOnRead = null,
+            bool watermarksFollowPublishes = false,
+            bool glucoseWatermarkFails = false,
+            IConnectorPublisher? publisher = null,
+            double timezoneOffset = TimezoneOffsetHours,
+            string? timeZoneId = null,
+            ITherapySettingsResolver? therapySettings = null,
+            ILogger<TandemConnectorService>? logger = null,
+            ITimezoneTimelineService? timezoneTimeline = null)
         {
             _cancellation = cancellation;
             // Default watermarks put the catch-up start just before the pump's available range so
@@ -967,10 +1350,25 @@ public class TandemE2eSyncTests
                 Password = "password",
                 Region = "US",
                 PumpSerialNumber = "11111111", // tconnectsync's "no serial chosen" sentinel
-                TimezoneOffset = TimezoneOffsetHours,
+                TimezoneOffset = timezoneOffset,
+                TimeZoneId = timeZoneId,
             };
 
-            Publisher = new RecordingPublisher(latestEntry, latestTreatment);
+            State = new InMemoryConnectorStateStore
+            {
+                BeforeRead = stateOnRead,
+                OnWrite = key =>
+                {
+                    if (key == ConnectorTimeZone.VendorStateKey)
+                        ZoneWrites++;
+                },
+            };
+            Publisher = new RecordingPublisher(latestEntry, latestTreatment)
+            {
+                FollowsPublishes = watermarksFollowPublishes,
+                GlucoseWatermarkFails = glucoseWatermarkFails,
+                State = State,
+            };
             _responses = new Dictionary<string, string>
             {
                 ["/api/reports/bff/pumper/"] = pumperJson,
@@ -981,15 +1379,19 @@ public class TandemE2eSyncTests
             _service = new TandemConnectorService(
                 new HttpClient(handler),
                 new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
-                NullLogger<TandemConnectorService>.Instance,
+                logger ?? NullLogger<TandemConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
-                Publisher,
-                new InMemoryCursorStore(cursorStoreOnGet),
-                clock);
+                publisher ?? Publisher,
+                clock,
+                therapySettings,
+                timezoneTimeline);
         }
 
         public void ServePumper(string pumperJson) => _responses["/api/reports/bff/pumper/"] = pumperJson;
+
+        public Task<SyncResult> RunScheduledAsync() =>
+            _service.SyncDataAsync(_config, _cancellation?.Token ?? CancellationToken.None);
 
         public Task<SyncResult> RunAsync(SyncRequest? request = null) =>
             _service.SyncDataAsync(request ?? new SyncRequest(), _config, _cancellation?.Token ?? CancellationToken.None);

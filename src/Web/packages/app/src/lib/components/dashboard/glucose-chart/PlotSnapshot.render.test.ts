@@ -2,7 +2,7 @@ import type { ComponentProps } from "svelte";
 import { render } from "svelte/server";
 import { describe, expect, it } from "vitest";
 import PlotSnapshot from "./PlotSnapshot.svelte";
-import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { transformChartData } from "@nocturne/charts/core";
 
 type Props = ComponentProps<typeof PlotSnapshot>;
 
@@ -33,6 +33,7 @@ const props = (style: Partial<Props["style"]> = {}, rest: Partial<Props> = {}): 
     areaMode: "off",
     areaOpacity: 0.5,
     units: "mg/dl",
+    rangePalette: "theme",
     ...style,
   },
   ...rest,
@@ -81,6 +82,13 @@ describe("PlotSnapshot", () => {
       m[1].trim()
     );
     expect(labels.slice(0, 4)).toEqual(["0", "2.8", "5.5", "8.3"]);
+  });
+
+  it("draws the continuous line in the range palette the request resolved", () => {
+    expect(snapshot(props({ rangePalette: "theme" }))).toContain("oklch(");
+    const distinct = snapshot(props({ rangePalette: "clarity" }));
+    expect(distinct).not.toContain("oklch(");
+    expect(distinct).toContain("--glucose-");
   });
 
   it("fills under the line for an area style", () => {

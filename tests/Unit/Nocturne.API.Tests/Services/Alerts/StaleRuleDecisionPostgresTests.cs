@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Alerts.Corpus;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.Services.Alerts.Engines;
@@ -152,7 +153,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
         var stored = await unit.Context.AlertRules.SingleAsync(r => r.Id == rule);
         (edit ?? (r => r.ConditionParams = EditedBody))(stored);
         stored.UpdatedAt = DateTime.UtcNow;
-        await new AlertRuleRearm(new AlertRuleEvaluationGate())
+        await Rearms.Unannounced()
             .SaveAndClearAsync(unit, rule, CancellationToken.None);
     };
 
@@ -163,7 +164,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
         var stored = await unit.Context.AlertRules.SingleAsync(r => r.Id == rule);
         stored.ClientConfiguration = clientConfiguration;
         stored.UpdatedAt = DateTime.UtcNow;
-        await new AlertRuleRearm(new AlertRuleEvaluationGate())
+        await Rearms.Unannounced()
             .SaveAndPruneAsync(unit, rule, CancellationToken.None);
     };
 
@@ -284,6 +285,22 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
 
         (await TimersAsync(tenant)).Should().Equal(new Dictionary<string, DateTime> { ["sustained"] = Now.UtcDateTime });
         (await StoredAsync(tenant)).Should().Be(("idle", (Guid?)null, false, 0));
+    }
+
+    [NativeFact]
+    public async Task A_false_child_s_not_true_instant_is_stored_where_the_timers_table_never_holds_it()
+    {
+        var (tenant, rule, _) = await SeedAsync(active: false, AlertConditionType.Sustained, SustainedBody);
+        await using var db = Context(tenant);
+
+        await Engine(new EditBeforeLockRepository(db, () => Task.CompletedTask))
+            .EvaluateRuleAsync(rule, Glucose(120), AlertEngineOptions.Default, CancellationToken.None);
+
+        (await TimersAsync(tenant)).Should().BeEmpty("the timers table holds only runs");
+        await using var read = Context(tenant);
+        (await read.AlertConditionNotTrue.AsNoTracking()
+                .ToDictionaryAsync(t => t.ConditionPath, t => t.NotTrueAt))
+            .Should().Equal(new Dictionary<string, DateTime> { ["sustained"] = Now.UtcDateTime });
     }
 
     [NativeFact]

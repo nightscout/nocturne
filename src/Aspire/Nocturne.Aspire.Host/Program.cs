@@ -396,7 +396,8 @@ class Program
                 // serving more of that overload, for ~10 ms more at the median under steady load.
                 .WithEnvironment("DOTNET_gcServer", "0")
                 .WithEnvironment("DOTNET_GCConserveMemory", "5")
-                .PublishAsDockerComposeService((_, _) => { })
+                .PublishAsDockerComposeService((_, service) =>
+                    service.StopGracePeriod = ApplicationConstants.Shutdown.ContainerStopGracePeriod)
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
                 .WithPublishImageMetadata(

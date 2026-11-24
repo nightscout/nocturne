@@ -138,6 +138,7 @@ public class TimeQueryStorageGateTests
         attributes.Should().NotBeEmpty();
 
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/api/v1/times";
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
         httpContext.Items["GrantedScopes"] = Scope.Normalize(
             [Scope.SleepRead, Scope.ReportsRead]);

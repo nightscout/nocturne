@@ -190,7 +190,7 @@ public class CarbIntakeRepositoryTests : IDisposable
         // so pagination totals match the returned rows.
         var fetched = (await _repo.GetAsync(
             from: null, to: null, device: null, source: null)).ToList();
-        var count = await _repo.CountAsync(from: null, to: null);
+        var count = await _repo.CountAsync(from: null, to: null, device: null, source: null);
 
         fetched.Should().HaveCount(1);
         count.Should().Be(1);

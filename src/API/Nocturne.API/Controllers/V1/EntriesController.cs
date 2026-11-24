@@ -1,16 +1,15 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
-using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 using Nocturne.Core.Contracts.Entries;
@@ -18,12 +17,14 @@ using Nocturne.Core.Contracts.Entries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Entries controller that provides 1:1 compatibility with Nightscout entries endpoints.
-/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// Nightscout entries: sensor glucose, meter glucose and calibration documents. A client can read the current
+/// entry, query entries, and create, update and delete them.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/entries/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDocumentProcessingService"/>
-/// <seealso cref="IAlertOrchestrator"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
@@ -32,7 +33,6 @@ public class EntriesController : ControllerBase
 {
     private readonly IEntryService _entryService;
     private readonly IDocumentProcessingService _documentProcessingService;
-    private readonly ICanonicalAlertEvaluator _alertEvaluator;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EntriesController> _logger;
 
@@ -41,20 +41,17 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="entryService">Service handling glucose entry operations.</param>
     /// <param name="documentProcessingService">Service for async document processing and ingestion.</param>
-    /// <param name="alertEvaluator">Evaluates alert rules against the canonical stream after writes.</param>
     /// <param name="timeProvider">Clock the default read window is measured from.</param>
     /// <param name="logger">Logger instance.</param>
     public EntriesController(
         IEntryService entryService,
         IDocumentProcessingService documentProcessingService,
-        ICanonicalAlertEvaluator alertEvaluator,
         TimeProvider timeProvider,
         ILogger<EntriesController> logger
     )
     {
         _entryService = entryService;
         _documentProcessingService = documentProcessingService;
-        _alertEvaluator = alertEvaluator;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -83,11 +80,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Current entry endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
 
         Entry[] current = currentEntry is null ? [] : [currentEntry];
@@ -140,7 +132,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Entry spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
             spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
@@ -236,7 +228,7 @@ public class EntriesController : ControllerBase
             type,
             dateString,
             format,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // Nightscout v1 does not filter by ?type=; a type filter arrives as find[type].
@@ -339,12 +331,12 @@ public class EntriesController : ControllerBase
             entries.Length > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(entries[0].Mills)
                 : DateTimeOffset.UtcNow;
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["Last-Modified"] = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
         if (
             entries.Length > 0
             && Request.Headers.IfModifiedSince.Count > 0
-            && DateTimeOffset.TryParse(Request.Headers.IfModifiedSince.First(), out var ifModifiedSince)
+            && DateTimeOffset.TryParse(Request.Headers.IfModifiedSince.First(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var ifModifiedSince)
             && lastModified <= ifModifiedSince
         )
         {
@@ -386,10 +378,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Create entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (!TryParseEntries(entryData, out var entriesToCreate))
@@ -446,8 +434,6 @@ public class EntriesController : ControllerBase
                 Request?.Headers.UserAgent.ToString(),
                 cancellationToken
             );
-
-            await _alertEvaluator.EvaluateForEntriesAsync(upload.GlucoseMoved, cancellationToken);
 
             var echo = BuildSubmittedOrderEcho(entriesToCreate, acceptedIndices, upload.Response);
 
@@ -612,7 +598,7 @@ public class EntriesController : ControllerBase
         {
             entry.DateString = DateTimeOffset
                 .FromUnixTimeMilliseconds(entry.Mills)
-                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         // Default type to "sgv" if not specified
@@ -647,7 +633,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Update entry endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         // A 32-hex id is a record uuid, or a legacy id an older POST /api/v1/entries assigned.
@@ -710,6 +696,7 @@ public class EntriesController : ControllerBase
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -724,7 +711,7 @@ public class EntriesController : ControllerBase
         _logger.LogDebug(
             "Delete entry endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (id == LegacyDeleteStatus.AnyId || LegacyEntryTypes.All.Contains(id))
@@ -781,11 +768,6 @@ public class EntriesController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Bulk delete entries endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
         return await DeleteMatchingEntriesAsync(findQuery, findQuery, cancellationToken);

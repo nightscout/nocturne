@@ -1,6 +1,6 @@
-Static, read-only reference catalogs for populating app UI with prefilled lists.
+Fixed reference lists. They are the same for every tenant and cannot be changed through the API.
 
-- **Device Catalog** — Known pump, CGM, and meter hardware models, filterable by category.
-- **Insulin Catalog** — Insulin formulations with pharmacokinetic profiles (onset, peak, duration).
+Use the catalogs to fill a list from which a person selects a device or an insulin.
 
-This is reference data — it is not tenant-specific and cannot be modified via the API.
+```resources Metadata
+```

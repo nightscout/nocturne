@@ -94,11 +94,11 @@ public interface IOAuthTokenRepository
 
     /// <summary>
     /// Marks the device code approved by <paramref name="subjectId"/> into <paramref name="grantId"/>.
-    /// Returns <c>false</c> when there is no such code to approve.
+    /// Returns <c>false</c> when the code is gone or already approved or denied.
     /// </summary>
     Task<bool> ApproveDeviceCodeAsync(Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct);
 
-    /// <summary>Marks the device code denied. Returns <c>false</c> when there is no such code to deny.</summary>
+    /// <summary>Marks the device code denied. Returns <c>false</c> when the code is gone or already approved or denied.</summary>
     Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct);
 
     /// <summary>Records when the device code was last polled, and nothing else.</summary>
@@ -117,6 +117,9 @@ public interface IOAuthTokenRepository
     /// when another poll redeemed it first.
     /// </summary>
     Task<bool> TryRedeemDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct);
+
+    /// <summary>Deletes the device code <paramref name="id"/>.</summary>
+    Task DeleteDeviceCodeAsync(Guid id, CancellationToken ct);
 
     /// <summary>
     /// Deletes the device codes and authorization codes of <paramref name="tenantId"/> that

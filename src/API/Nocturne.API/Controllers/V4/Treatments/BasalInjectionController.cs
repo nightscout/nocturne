@@ -11,11 +11,14 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// CRUD for long-acting basal insulin injections (MDI).
-/// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
-/// with additional validation and idempotent upsert on (<see cref="V4RecordBase.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
+/// Long-acting basal insulin injections for multiple daily injection (MDI) therapy. List, read,
+/// create (one or in bulk), update and delete injections. List deleted injections and restore them.
+/// Delete an injection by its data source and sync identifier.
 /// </summary>
 /// <remarks>
+/// Standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
+/// with additional validation and idempotent upsert on (<see cref="V4RecordBase.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
+///
 /// Both create and update enforce the same rules: <see cref="BasalInjection.Units"/> must be in (0, 500],
 /// <see cref="V4RecordBase.Timestamp"/> must be set and no more than five minutes in the future, and —
 /// when the request carries a <c>PatientInsulinId</c> — the referenced <see cref="PatientInsulin"/> must
@@ -36,6 +39,8 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="CreateBasalInjectionRequest"/>
 /// <seealso cref="UpdateBasalInjectionRequest"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Basal Injections")]
+[Tags("Treatments")]
 [Route("api/v4/insulin/basal-injections")]
 [RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
@@ -53,7 +58,7 @@ public class BasalInjectionController(
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    protected override V4BulkNaming BulkNaming => new("Basal injection", "injection", "injections");
+    protected override V4BulkNaming BulkNaming => new("Basal injection", "injections");
 
     /// <inheritdoc/>
     protected override async Task<ObjectResult?> OnBeforeCreateAsync(
@@ -83,18 +88,13 @@ public class BasalInjectionController(
     /// <summary>Maps a <see cref="CreateBasalInjectionRequest"/> to a new <see cref="BasalInjection"/>.</summary>
     /// <param name="request">The inbound create request.</param>
     /// <returns>A new <see cref="BasalInjection"/> with all fields populated; <see cref="V4RecordBase.CorrelationId"/> defaults to a new UUID v7 when not supplied. <see cref="BasalInjection.InsulinContext"/> is populated by the caller after PatientInsulin resolution.</returns>
-    protected override BasalInjection MapCreateToModel(CreateBasalInjectionRequest request) => new()
+    protected override BasalInjection MapCreateToModel(CreateBasalInjectionRequest request) => new BasalInjection
     {
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         Units = request.Units,
         Notes = request.Notes,
         CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
-    };
+    }.WithHeaderFrom(request);
 
     /// <summary>Maps an <see cref="UpdateBasalInjectionRequest"/> onto a <see cref="BasalInjection"/>, preserving immutable fields from the existing record.</summary>
     /// <param name="id">The record ID to carry forward.</param>
@@ -102,21 +102,16 @@ public class BasalInjectionController(
     /// <param name="existing">The existing record; <c>LegacyId</c> and <c>CreatedAt</c> are copied from here, and <c>CorrelationId</c> falls back to it when the request does not supply one.</param>
     /// <returns>A fully-populated <see cref="BasalInjection"/> ready for persistence. <see cref="BasalInjection.InsulinContext"/> is populated by the caller after PatientInsulin resolution.</returns>
     protected override BasalInjection MapUpdateToModel(
-        Guid id, UpdateBasalInjectionRequest request, BasalInjection existing) => new()
+        Guid id, UpdateBasalInjectionRequest request, BasalInjection existing) => new BasalInjection
     {
         Id = id,
-        Timestamp = request.Timestamp.UtcDateTime,
-        UtcOffset = request.UtcOffset,
-        Device = request.Device,
-        App = request.App,
-        DataSource = request.DataSource,
         SyncIdentifier = request.SyncIdentifier,
         Units = request.Units,
         Notes = request.Notes,
         CorrelationId = request.CorrelationId ?? existing.CorrelationId,
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
-    };
+    }.WithHeaderFrom(request);
 
     /// <inheritdoc/>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(

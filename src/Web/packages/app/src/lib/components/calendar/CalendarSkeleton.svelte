@@ -40,24 +40,24 @@
   <div class="flex-1 p-3 @md:p-4">
     <Card.Root class="h-full">
       <Card.Content class="p-2 @md:p-4 h-full flex flex-col">
-        <div class="flex-1 overflow-x-auto flex flex-col">
-          <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
+        <div class="flex-1 flex flex-col">
+          <div class="grid grid-cols-7 gap-0.5 @md:gap-1 mb-2">
             {#each Array(7) as _, i (i)}
               <div class="flex justify-center py-2">
-                <Skeleton class="h-5 w-8" />
+                <Skeleton class="h-5 w-6 @md:w-8" />
               </div>
             {/each}
           </div>
 
-          <div class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0">
+          <div class="flex-1 grid grid-rows-6 gap-0.5 @md:gap-1">
             {#each Array(6) as _, idx (idx)}
-              <div class="grid grid-cols-7 gap-1">
+              <div class="grid grid-cols-7 gap-0.5 @md:gap-1">
                 {#each Array(7) as _, i (i)}
                   <div
                     class="flex items-center justify-center rounded-lg border border-border/50 min-h-20 relative"
                   >
-                    <Skeleton class="absolute top-1 left-2 h-3 w-4" />
-                    <Skeleton class="h-10 w-10 rounded-full" />
+                    <Skeleton class="absolute top-1 left-1 @md:left-2 h-3 w-4" />
+                    <Skeleton class="size-6 @md:size-10 rounded-full" />
                   </div>
                 {/each}
               </div>

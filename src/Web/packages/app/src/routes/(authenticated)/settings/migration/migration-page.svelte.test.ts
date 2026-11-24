@@ -82,7 +82,7 @@ const entry = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo =>
     id: "11111111-1111-1111-1111-111111111111",
     mode: MigrationMode.Api,
     createdAt: "2026-09-01T00:00:00Z",
-    sourceDescription: "https://mynightscout.example",
+    sourceDescription: "mynightscout.example",
     state: MigrationJobState.Completed,
     startedAt: "2026-09-01T00:00:00Z",
     completedAt: "2026-09-01T00:00:10Z",
@@ -182,7 +182,7 @@ describe("settings/migration completion moment", () => {
     render(MigrationPage, {});
     await openHistory();
 
-    await expect.element(page.getByText("https://mynightscout.example")).toBeVisible();
+    await expect.element(page.getByText("mynightscout.example")).toBeVisible();
     await expect.element(moment()).not.toBeInTheDocument();
   });
 });

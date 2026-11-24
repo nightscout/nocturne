@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -146,13 +148,13 @@ public class SummaryService : ISummaryService
 
         foreach (var treatment in treatments)
         {
-            if (treatment.EventType == "Temp Basal")
+            if (treatment.EventType == TreatmentTypes.TempBasal)
             {
                 tempBasals.Add(treatment);
                 continue;
             }
 
-            if (treatment.EventType == "Temporary Target")
+            if (treatment.EventType == TreatmentTypes.TemporaryTarget)
             {
                 result.Targets.Add(
                     new SummaryTarget
@@ -457,7 +459,7 @@ public class SummaryService : ISummaryService
 
         // Find the appropriate basal rate for the start time
         var startTime = DateTimeOffset.FromUnixTimeMilliseconds(start);
-        var startHHMM = startTime.ToString("HH:mm");
+        var startHHMM = startTime.ToString("HH:mm", CultureInfo.InvariantCulture);
 
         while (
             currentIndex < basals.Count - 1

@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -37,30 +37,13 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    /// <summary>A scope that reads as <paramref name="scope"/>; a tenant pin reads as the tenant it names.</summary>
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant };
 
-    private ConnectorConfigurationRepository Configurations(Guid scope) => new(new Factory(Context, scope));
+    private ConnectorConfigurationRepository Configurations(Guid scope) => new(new SuppliedContextFactory(() => Context(scope)));
 
     private async Task<Guid> SeedTenantAsync()
     {
@@ -96,7 +79,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
     }
 
     [Fact]
-    public async Task TheCursorStatementsWriteOneKeyBesideTheOthersAndOnlyInTheScopesTenant()
+    public async Task TheVendorStateStatementsWriteOneKeyBesideTheOthersAndOnlyInTheScopesTenant()
     {
         var a = await SeedTenantAsync();
         var b = await SeedTenantAsync();
@@ -104,67 +87,71 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         await Configurations(b).SaveConfigurationAsync("glooko", "{}", null, CancellationToken.None);
         var configurations = Configurations(a);
 
-        (await configurations.SetSyncCursorAsync("Glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g1"}""")!, CancellationToken.None))
+        (await configurations.SetVendorStateAsync("Glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g1"}""")!, CancellationToken.None))
             .Should().BeTrue();
-        await configurations.SetSyncCursorAsync("glooko", "health", JsonValue.Create("h"), CancellationToken.None);
-        await configurations.SetSyncCursorAsync("glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g2"}""")!, CancellationToken.None);
+        await configurations.SetVendorStateAsync("glooko", "health", JsonValue.Create("h"), CancellationToken.None);
+        await configurations.SetVendorStateAsync("glooko", "cgm", JsonNode.Parse("""{"LastGuid":"g2"}""")!, CancellationToken.None);
 
-        (await configurations.GetSyncCursorAsync("glooko", "cgm", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
+        (await configurations.GetVendorStateAsync("glooko", "cgm", CancellationToken.None))!["LastGuid"]!.GetValue<string>()
             .Should().Be("g2");
-        (await configurations.GetSyncCursorAsync("glooko", "health", CancellationToken.None))!.GetValue<string>().Should().Be("h");
+        (await configurations.GetVendorStateAsync("glooko", "health", CancellationToken.None))!.GetValue<string>().Should().Be("h");
 
-        (await configurations.RemoveSyncCursorAsync("glooko", "cgm", CancellationToken.None)).Should().BeTrue();
+        (await configurations.RemoveVendorStateAsync("glooko", "cgm", CancellationToken.None)).Should().BeTrue();
 
-        JsonNode.Parse((await configurations.FindAsync("glooko", CancellationToken.None))!.SyncCursorsJson!)!
+        JsonNode.Parse((await configurations.FindAsync("glooko", CancellationToken.None))!.VendorStateJson!)!
             .AsObject().Select(p => p.Key).Should().Equal("health");
-        (await Configurations(b).FindAsync("glooko", CancellationToken.None))!.SyncCursorsJson.Should().BeNull();
-        (await configurations.SetSyncCursorAsync("libre", "cgm", JsonValue.Create(1), CancellationToken.None)).Should().BeFalse();
-        (await configurations.RemoveSyncCursorAsync("libre", "cgm", CancellationToken.None)).Should().BeFalse();
+        (await Configurations(b).FindAsync("glooko", CancellationToken.None))!.VendorStateJson.Should().BeNull();
+        (await configurations.SetVendorStateAsync("libre", "cgm", JsonValue.Create(1), CancellationToken.None)).Should().BeFalse();
+        (await configurations.RemoveVendorStateAsync("libre", "cgm", CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public async Task ACursorWriteOverStoredCursorsThatAreNotAnObjectStartsAFreshObject()
+    public async Task AVendorStateWriteOverStoredStateThatIsNotAnObjectStartsAFreshObject()
     {
         var a = await SeedTenantAsync();
         await Configurations(a).SaveConfigurationAsync("glooko", "{}", null, CancellationToken.None);
         await using (var db = Context(a))
             await db.Database.ExecuteSqlAsync($"UPDATE connector_configurations SET sync_cursors = '[1]'::jsonb WHERE tenant_id = {a}");
 
-        await Configurations(a).SetSyncCursorAsync("glooko", "cgm", JsonValue.Create(7), CancellationToken.None);
+        await Configurations(a).SetVendorStateAsync("glooko", "cgm", JsonValue.Create(7), CancellationToken.None);
 
-        JsonNode.Parse((await Configurations(a).FindAsync("glooko", CancellationToken.None))!.SyncCursorsJson!)!
+        JsonNode.Parse((await Configurations(a).FindAsync("glooko", CancellationToken.None))!.VendorStateJson!)!
             .ToJsonString().Should().Be("""{"cgm":7}""");
     }
 
     [Fact]
-    public async Task TheLowWaterMarkStatementsKeepEachCollectionAndLeaveNoMapWhenTheLastGoes()
+    public async Task TheResumeStateStatementsKeepEachKeyLeaveNoMapWhenTheLastGoesAndStayInTheScopesTenant()
     {
         var a = await SeedTenantAsync();
+        var b = await SeedTenantAsync();
         await Configurations(a).SaveConfigurationAsync("nightscout", "{}", null, CancellationToken.None);
+        await Configurations(b).SaveConfigurationAsync("nightscout", "{}", null, CancellationToken.None);
         var configurations = Configurations(a);
         var glucose = new DateTime(2024, 6, 1, 12, 30, 15, 123, DateTimeKind.Utc);
         var treatments = new DateTime(2024, 5, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        (await SetMarkAsync(configurations, "nightscout-connector", "Glucose", glucose))
+        (await SetMarkAsync(configurations, "nightscout", "Glucose", glucose))
             .Should().BeTrue();
-        await SetMarkAsync(configurations, "nightscout-connector", "Treatments", treatments);
+        await SetMarkAsync(configurations, "nightscout", "Treatments", treatments);
 
-        var read = await GetMarkAsync(configurations, "nightscout-connector", "Glucose");
+        var read = await GetMarkAsync(configurations, "nightscout", "Glucose");
         read.Should().Be(glucose);
         read!.Value.Kind.Should().Be(DateTimeKind.Utc);
 
         await SetMarkAsync(configurations, "nightscout", "Glucose", null);
-        (await GetMarkAsync(configurations, "nightscout-connector", "Glucose")).Should().BeNull();
-        (await GetMarkAsync(configurations, "nightscout-connector", "Treatments")).Should().Be(treatments);
+        (await GetMarkAsync(configurations, "nightscout", "Glucose")).Should().BeNull();
+        (await GetMarkAsync(configurations, "nightscout", "Treatments")).Should().Be(treatments);
 
-        await SetMarkAsync(configurations, "nightscout-connector", "Treatments", null);
-        (await configurations.FindAsync("nightscout", CancellationToken.None))!.BackfillLowWaterMarks.Should().BeNull();
-        (await SetMarkAsync(configurations, "dexcom-connector", "Glucose", glucose))
+        await SetMarkAsync(configurations, "nightscout", "Treatments", null);
+        (await configurations.FindAsync("nightscout", CancellationToken.None))!.ResumeStateJson.Should().BeNull();
+        await SetMarkAsync(configurations, "Nightscout", "Glucose", glucose);
+        (await Configurations(b).FindAsync("nightscout", CancellationToken.None))!.ResumeStateJson.Should().BeNull();
+        (await SetMarkAsync(configurations, "dexcom", "Glucose", glucose))
             .Should().BeFalse();
     }
 
     [Fact]
-    public async Task OneLowWaterMarkStatementStoresAndRemovesSeveralKeysTogether()
+    public async Task OneResumeStateStatementStoresAndRemovesSeveralKeysTogether()
     {
         var a = await SeedTenantAsync();
         await Configurations(a).SaveConfigurationAsync("nocturneremote", "{}", null, CancellationToken.None);
@@ -173,15 +160,36 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var gapFrom = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var gapTo = new DateTime(2025, 2, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        await configurations.SetBackfillLowWaterMarksAsync("nocturne-remote-connector",
+        await configurations.SetResumeStateAsync("nocturneremote",
             new Dictionary<string, DateTime?> { ["DeviceStatus"] = mark, ["DeviceStatus.GapFrom"] = gapFrom, ["DeviceStatus.GapTo"] = gapTo },
             CancellationToken.None);
-        await configurations.SetBackfillLowWaterMarksAsync("nocturne-remote-connector",
+        await configurations.SetResumeStateAsync("nocturneremote",
             new Dictionary<string, DateTime?> { ["DeviceStatus.GapFrom"] = null, ["DeviceStatus.GapTo"] = null },
             CancellationToken.None);
 
-        (await configurations.GetBackfillLowWaterMarksAsync("nocturne-remote-connector", CancellationToken.None))
+        (await configurations.GetResumeStateAsync("nocturneremote", CancellationToken.None))
             .Should().BeEquivalentTo(new Dictionary<string, DateTime> { ["DeviceStatus"] = mark });
+    }
+
+    [Fact]
+    public async Task ClearingStateNullsTheSlotsNamedOnlyInTheScopesTenant()
+    {
+        var a = await SeedTenantAsync();
+        var b = await SeedTenantAsync();
+        foreach (var tenant in new[] { a, b })
+        {
+            await Configurations(tenant).SaveConfigurationAsync("glooko", "{}", null, CancellationToken.None);
+            await Configurations(tenant).SetVendorStateAsync("glooko", "cgm", JsonValue.Create(1), CancellationToken.None);
+            await SetMarkAsync(Configurations(tenant), "glooko", "full-walk", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        }
+
+        (await Configurations(a).ClearStateAsync("glooko", ConnectorStateSlots.Resume, CancellationToken.None)).Should().BeTrue();
+
+        var cleared = (await Configurations(a).FindAsync("glooko", CancellationToken.None))!;
+        cleared.ResumeStateJson.Should().BeNull();
+        cleared.VendorStateJson.Should().NotBeNull();
+        (await Configurations(b).FindAsync("glooko", CancellationToken.None))!.ResumeStateJson.Should().NotBeNull();
+        (await Configurations(a).ClearStateAsync("libre", ConnectorStateSlots.Resume, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
@@ -190,7 +198,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         var a = await SeedTenantAsync();
         var b = await SeedTenantAsync();
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 1, 8, 0, 0, TimeSpan.Zero));
-        var configurations = new ConnectorConfigurationRepository(new Factory(Context, a), time);
+        var configurations = new ConnectorConfigurationRepository(new SuppliedContextFactory(() => Context(a)), time);
         await configurations.SaveConfigurationAsync(
             "glooko", """{"Enabled":true,"region":"eu","retries":3}""", "owner", CancellationToken.None);
         await configurations.SaveSecretsAsync("glooko", """{"password":"x"}""", "owner", CancellationToken.None);
@@ -380,7 +388,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
     public async Task AResetJobIsStoredAndReadOnAPlatformContext()
     {
         var tenant = await SeedTenantAsync();
-        var jobs = new ConnectorResetJobRepository(new Factory(Context, tenant));
+        var jobs = new ConnectorResetJobRepository(new SuppliedContextFactory(() => Context(tenant)));
         var job = new ConnectorResetJobRecord(
             Guid.NewGuid(), tenant, "home", "Running", DateTime.UtcNow.Date, null, null, null, 1, 0, "[]");
 
@@ -390,9 +398,9 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         (await jobs.FindAsync(job.Id, CancellationToken.None)).Should().Be(job with { State = "Completed", CompletedConnectors = 1 });
     }
 
-    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key, DateTime? mark) =>
-        configurations.SetBackfillLowWaterMarksAsync(source, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
+    private static Task<bool> SetMarkAsync(ConnectorConfigurationRepository configurations, string connector, string key, DateTime? mark) =>
+        configurations.SetResumeStateAsync(connector, new Dictionary<string, DateTime?> { [key] = mark }, CancellationToken.None);
 
-    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string source, string key) =>
-        (await configurations.GetBackfillLowWaterMarksAsync(source, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
+    private static async Task<DateTime?> GetMarkAsync(ConnectorConfigurationRepository configurations, string connector, string key) =>
+        (await configurations.GetResumeStateAsync(connector, CancellationToken.None)).TryGetValue(key, out var mark) ? mark : null;
 }

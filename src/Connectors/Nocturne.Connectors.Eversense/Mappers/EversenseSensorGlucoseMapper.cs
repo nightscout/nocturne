@@ -10,24 +10,33 @@ namespace Nocturne.Connectors.Eversense.Mappers;
 
 public class EversenseSensorGlucoseMapper(ILogger logger)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<EversenseConnectorConfiguration>();
+
     /// <summary>
-    /// Eversense trend values mapped to GlucoseDirection. The wire value is the ordinal of the
-    /// Eversense app's own ARROW_TYPE enum, which runs falling-to-rising — the inverse of LoopKit's
-    /// GlucoseTrend, so this table reads as reversed if checked against LoopKit. In the Eversense 365
-    /// app that enum has eight members: 0 is STALE, 1 and 5 are the single-arrow FALLING_FAST and
-    /// RISING_FAST, and 6 and 7 are DOUBLE_ARROW_FALLING_FAST and DOUBLE_ARROW_RISING_FAST.
+    /// An Eversense trend value as a GlucoseDirection. The wire value is the ordinal of the
+    /// Eversense 365 app's own ARROW_TYPE enum, which runs falling-to-rising — the inverse of
+    /// LoopKit's GlucoseTrend, so this table reads as reversed if checked against LoopKit. 0 is
+    /// STALE, and 1 to 5 run from the single-arrow FALLING_FAST to RISING_FAST in every build.
+    /// The double arrows depend on the build that uploaded the value: the US app (8.3.0) lists
+    /// DOUBLE_ARROW_RISING_FAST before DOUBLE_ARROW_FALLING_FAST, and the outside-US app (80.0.1)
+    /// the other way round, so 6 and 7 follow the account's <paramref name="server"/> region.
     /// </summary>
-    private static readonly Dictionary<int, GlucoseDirection> TrendDirections = new()
+    private static GlucoseDirection Direction(int trend, string server)
     {
-        { 0, GlucoseDirection.NotComputable },
-        { 1, GlucoseDirection.SingleDown },
-        { 2, GlucoseDirection.FortyFiveDown },
-        { 3, GlucoseDirection.Flat },
-        { 4, GlucoseDirection.FortyFiveUp },
-        { 5, GlucoseDirection.SingleUp },
-        { 6, GlucoseDirection.DoubleDown },
-        { 7, GlucoseDirection.DoubleUp },
-    };
+        var us = !string.Equals(server, "OUS", StringComparison.OrdinalIgnoreCase);
+        return trend switch
+        {
+            0 => GlucoseDirection.NotComputable,
+            1 => GlucoseDirection.SingleDown,
+            2 => GlucoseDirection.FortyFiveDown,
+            3 => GlucoseDirection.Flat,
+            4 => GlucoseDirection.FortyFiveUp,
+            5 => GlucoseDirection.SingleUp,
+            6 => us ? GlucoseDirection.DoubleUp : GlucoseDirection.DoubleDown,
+            7 => us ? GlucoseDirection.DoubleDown : GlucoseDirection.DoubleUp,
+            _ => GlucoseDirection.None,
+        };
+    }
 
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -36,7 +45,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
     /// uploaded yet is listed with <c>CurrentGlucose</c> 0 and <c>CGTime</c> 0001-01-01. The value is
     /// in mg/dL whatever the patient's display unit.
     /// </summary>
-    public SensorGlucose? Map(EversensePatientDatum patient, DateTime now)
+    public SensorGlucose? Map(EversensePatientDatum patient, string server)
     {
         try
         {
@@ -49,8 +58,8 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
                 return null;
             }
 
-            var direction = TrendDirections.GetValueOrDefault(patient.GlucoseTrend, GlucoseDirection.None);
-            return Build(timestamp, patient.CurrentGlucose, direction, now);
+            var direction = Direction(patient.GlucoseTrend, server);
+            return Build(timestamp, patient.CurrentGlucose, direction);
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
         {
@@ -63,7 +72,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
     /// Sensor glucose rows of a history feed. The feed carries no trend, so
     /// <see cref="SensorGlucose.Direction"/> is left unset.
     /// </summary>
-    public IReadOnlyList<SensorGlucose> MapHistory(IEnumerable<EversenseUserEvent> events, DateTime now)
+    public IReadOnlyList<SensorGlucose> MapHistory(IEnumerable<EversenseUserEvent> events)
     {
         var records = new List<SensorGlucose>();
         foreach (var e in events)
@@ -77,7 +86,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
                 continue;
             }
 
-            records.Add(Build(timestamp, e.Value, direction: null, now));
+            records.Add(Build(timestamp, e.Value, direction: null));
         }
 
         return records;
@@ -85,19 +94,15 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
 
     private static bool IsReading(double value) => value > 0 && value != EversenseConstants.NoGlucose;
 
-    private static SensorGlucose Build(DateTimeOffset timestamp, double mgdl, GlucoseDirection? direction, DateTime now)
+    private static SensorGlucose Build(DateTimeOffset timestamp, double mgdl, GlucoseDirection? direction)
     {
         return new SensorGlucose
         {
-            Id = Guid.CreateVersion7(),
             Timestamp = timestamp.UtcDateTime,
-            LegacyId = $"eversense_{timestamp.ToUnixTimeMilliseconds()}",
+            LegacyId = LegacyIds.Of(timestamp.ToUnixTimeMilliseconds()),
             Device = DataSources.EversenseConnector,
-            DataSource = DataSources.EversenseConnector,
             Mgdl = mgdl,
             Direction = direction,
-            CreatedAt = now,
-            ModifiedAt = now
         };
     }
 }

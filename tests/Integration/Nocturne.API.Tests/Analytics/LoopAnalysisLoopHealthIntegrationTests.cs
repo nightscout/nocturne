@@ -128,7 +128,7 @@ public class LoopAnalysisLoopHealthIntegrationTests(ApiIntegrationTestFixture fi
         using var clamped = await CreateHistoryClampedClientAsync();
         var now = DateTime.UtcNow;
 
-        var body = await GetOkAsync(clamped, Query($"{Week}&compare=previous"));
+        var body = await GetOkAsync(clamped, Query($"{RecentDays(3)}&compare=previous"));
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
         Absent(body, "comparison").Should().BeTrue();

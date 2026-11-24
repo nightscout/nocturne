@@ -15,6 +15,8 @@ export const inputVariants = tv({
       default: "h-9 px-3 text-base md:text-sm",
       sm: "h-8 px-3 text-sm",
       xs: "h-7 px-2 text-xs",
+      // A heading edited in place, with the title variant, e.g. a custom report's title.
+      heading: "h-10 px-3 text-lg font-semibold md:text-lg",
     },
     variant: {
       default: "",

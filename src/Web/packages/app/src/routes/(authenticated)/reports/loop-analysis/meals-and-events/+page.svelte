@@ -12,6 +12,7 @@
     type EventResponseState,
   } from "#lib/components/reports/loop-analysis/event-response-filter.js";
   import { getEventResponse } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+  import { getFoods } from "#lib/api/generated/foods.generated.remote.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { getLoopAnalysis } from "#lib/components/reports/loop-analysis/loop-analysis-context.svelte.js";
   import PageBodyLoading from "#lib/components/reports/loop-analysis/PageBodyLoading.svelte";
@@ -22,6 +23,12 @@
   const resource = contextResource(() => getEventResponse(eventResponseQuery(analysis.query, events)), { errorTitle: "Cannot load the meals and events" });
 
   let cleanedFilters = $state<string[]>([]);
+
+  // The food picker's catalogue, read only once the API says this viewer can filter by food.
+  const canFilterByFood = $derived(
+    resource.current != null && !(resource.current.unavailableFilters ?? []).some((f) => f.filter === "foodIds")
+  );
+  const foods = $derived(canFilterByFood ? getFoods({}) : null);
 
   const navigate = (next: EventResponseState) =>
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- loopAnalysisPath resolves the path
@@ -57,6 +64,7 @@
       limits={resource.current.limits}
       unavailableAnchors={resource.current.unavailableAnchors}
       unavailableFilters={resource.current.unavailableFilters}
+      foods={foods?.current ?? null}
     />
     <EventResponseBody response={resource.current} {cleanedFilters} />
   </div>

@@ -3,6 +3,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -125,8 +126,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             var asOf = isReplay
                 ? new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
                 : (DateTimeOffset?)null;
-            var predictions = await FetchPredictionsAsync(asOf, ct);
-            enriched = enriched with { Predictions = predictions };
+            var (predictions, curves) = await FetchPredictionsAsync(asOf, ct);
+            enriched = enriched with { Predictions = predictions, PredictionCurves = curves };
         }
 
         if (needs.NeedsReservoir)
@@ -150,11 +151,6 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             var lastSensorStart = await FetchLatestEventAsync(DeviceEventType.SensorStart, isReplay ? now : null, ct);
             enriched = enriched with { LastSensorStartAt = lastSensorStart };
-        }
-
-        if (needs.NeedsTrendBucket)
-        {
-            enriched = enriched with { TrendBucket = DeriveTrendBucket(baseContext.TrendRate) };
         }
 
         if (needs.NeedsActiveAlerts)
@@ -199,7 +195,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 }
             }
 
-            var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(ct);
+            var settings = await _deps.AlertSettings.GetAsync(ct);
             // No row yet means DND has never been configured for this tenant — treat as off.
             // Scheduled DND is tenant-wide, i.e. == scope=all (manual DND is a scope=all window,
             // resolved below); this projects the active scheduled window if any (ADR 0004 D5).
@@ -208,10 +204,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // Scoped DND windows + scheduled DND, folded into the active scope set and the
             // tenant-wide projection by the shared resolver — the same call replay makes (there
             // receipt-gated), so the live gate and replay cannot drift on how a window resolves.
-            // The read is bounded by expiry: a window that merely runs out is never cleared, so
-            // filtering on cleared_at alone would return every timed mute the tenant has ever set,
-            // on a path that runs once per reading.
-            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(now, ct);
+            // The read's bound is stated on IDndWindowRepository.GetUnexpiredSnapshotsAsync.
+            var windows = await _deps.DndWindowRepository.GetUnexpiredSnapshotsAsync(now, ct);
             var dnd = DndWindowResolver.Resolve(windows, now, receiptGated: false, scheduled);
 
             enriched = enriched with
@@ -251,13 +245,17 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
-        // Glucose bucket — resolve target range schedule for the active profile and apply
-        // boundaries from the matching TargetRangeEntry. Falls back to clinical defaults
-        // (54/70/140/250) when the schedule has nulls or is missing entirely.
-        if (needs.NeedsGlucoseBucket && enriched.LatestValue is { } latestValue)
+        // The target-range entry in effect places the glucose bucket and is the target_low and
+        // target_high a limit can name, so both read one lookup and cannot disagree. With no entry
+        // the bucket falls back to clinical defaults and the targets stay absent.
+        var bucketReading = needs.NeedsGlucoseBucket ? enriched.LatestValue : null;
+        if (needs.NeedsTargetRange || bucketReading is not null)
         {
-            var bucket = await ResolveGlucoseBucketAsync(latestValue, now, enriched.TenantTimeZoneId, ct);
-            enriched = enriched with { GlucoseBucket = bucket };
+            var entry = await ResolveTargetEntryAsync(now, enriched.TenantTimeZoneId, ct);
+            if (needs.NeedsTargetRange && entry is not null)
+                enriched = enriched with { TargetLow = entry.Low.ToDecimal(), TargetHigh = entry.High.ToDecimal() };
+            if (bucketReading is { } latestValue)
+                enriched = enriched with { GlucoseBucket = BucketOf(latestValue, entry) };
         }
 
         // Treatments — fetch once and project last-carb/last-bolus timestamps.
@@ -278,24 +276,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             enriched = enriched with { LastCarbAt = lastCarbAt, LastBolusAt = lastBolusAt };
         }
 
-        if (needs.ReferencedPumpStates.Count > 0)
+        if (needs.NeedsPumpModes)
         {
-            // Pump modes are mutually exclusive per StateSpan semantics — at most one mode-span
-            // is active at any instant. Walking the referenced set is still cheap enough to do
-            // sequentially: typical rules reference one or two modes.
-            foreach (var mode in needs.ReferencedPumpStates)
-            {
-                var span = await _deps.StateSpans.GetActiveAtAsync(
-                    StateSpanCategory.PumpMode, mode.ToString(), now, ct);
-                if (span is not null)
-                {
-                    enriched = enriched with
-                    {
-                        ActivePumpState = new PumpStateSnapshot(mode, span.StartTimestamp)
-                    };
-                    break; // exclusive — first match wins
-                }
-            }
+            enriched = enriched with { ActivePumpModes = await ActivePumpModesAsync(now, ct) };
         }
 
         if (needs.ReferencedStateSpans.Count > 0)
@@ -354,53 +337,50 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// Resolves the glucose bucket for <paramref name="glucoseMgdl"/> at <paramref name="at"/>
-    /// by loading the active <see cref="Nocturne.Core.Models.V4.TargetRangeSchedule"/>, finding
-    /// the entry active at the tenant's local wall-clock time, and applying
-    /// <see cref="GlucoseBucketResolver.Compute"/>. Falls back to the InRange-default bucket
-    /// assignment when no schedule exists. <paramref name="tenantTimeZoneId"/> is the IANA
-    /// (or Windows-mapped) id from <see cref="SensorContext.TenantTimeZoneId"/>; null or
-    /// unparseable falls back to treating <paramref name="at"/> as the local wall-clock — the
-    /// pre-fix behaviour, preserved so a tenant with no timezone configured doesn't lose
-    /// bucket resolution entirely.
+    /// The target-range entry in effect at <paramref name="at"/>: the active profile's
+    /// <see cref="Nocturne.Core.Models.V4.TargetRangeSchedule"/> version then, at the local time of day
+    /// in <paramref name="tenantTimeZoneId"/> (IANA or Windows-mapped, from
+    /// <see cref="SensorContext.TenantTimeZoneId"/>; null or unparseable reads as UTC). Null when the
+    /// profile has no schedule or its schedule has no entries.
     /// </summary>
-    private async Task<GlucoseBucket?> ResolveGlucoseBucketAsync(
-        decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
+    private async Task<TargetRangeEntry?> ResolveTargetEntryAsync(
+        DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
-        var atMills = at.ToMills();
-        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
+        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(at.ToMills(), ct);
         // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
             ?? (await _deps.TargetRangeSchedules.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
+        if (schedule is null)
+            return null;
 
-        // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
-        if (schedule is null || schedule.Entries.Count == 0)
-        {
-            return GlucoseBucketResolver.Compute(
-                glucoseMgdl,
-                (decimal)GlucoseConstants.TargetBottomMgdl,
-                (decimal)GlucoseConstants.TargetTopMgdl,
-                null,
-                null,
-                null);
-        }
-
-        // An unparseable tenant tz swallows to UTC (as the engine's day_of_week does) so a
-        // misconfigured tenant tz field still produces a deterministic bucket rather than no
-        // bucket at all.
         var zone = string.IsNullOrEmpty(tenantTimeZoneId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tenantTimeZoneId);
         var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(at.ToMills(), zone);
-        ScheduleEntryTime.TryEntryAt(
-            schedule.Entries, secondsFromMidnight, e => ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), out var active);
-
-        return GlucoseBucketResolver.Compute(
-            glucoseMgdl,
-            active.Low.ToDecimal(),
-            active.High.ToDecimal(),
-            active.VeryLow,
-            active.TightHigh,
-            active.VeryHigh);
+        return ScheduleEntryTime.TryEntryAt(
+            schedule.Entries, secondsFromMidnight, e => ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), out var active)
+            ? active
+            : null;
     }
+
+    /// <summary>
+    /// The bucket of <paramref name="glucoseMgdl"/> by <paramref name="entry"/>'s boundaries, or with
+    /// no entry by the consensus in-range band and clinical bucket defaults.
+    /// </summary>
+    private static GlucoseBucket BucketOf(decimal glucoseMgdl, TargetRangeEntry? entry) =>
+        entry is null
+            ? GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                GlucoseConstants.TargetBottomMgdl.ToDecimal(),
+                GlucoseConstants.TargetTopMgdl.ToDecimal(),
+                null,
+                null,
+                null)
+            : GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                entry.Low.ToDecimal(),
+                entry.High.ToDecimal(),
+                entry.VeryLow,
+                entry.TightHigh,
+                entry.VeryHigh);
 
     /// <summary>
     /// Populates the looping-related facts (APS cycle/enaction/sensitivity, pump status and
@@ -437,6 +417,15 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 var s = await _deps.ApsSnapshots.GetLatestSensitivityRatioAsync(asOf, ct);
                 enriched = enriched with { SensitivityRatio = s, HasEverApsSensitivity = s.HasValue };
             }
+        }
+
+        if (needs.NeedsApsDetermination)
+        {
+            // At any age: the engine judges the determination's freshness (engine-semantics.md §3).
+            var latest = (await _deps.ApsSnapshots.GetAsync(
+                from: null, to: asOf, device: null, source: null, limit: 1, offset: 0, descending: true, ct: ct))
+                .FirstOrDefault();
+            enriched = enriched with { ApsDetermination = latest is null ? null : ApsDeterminations.Of(latest) };
         }
 
         if (needs.NeedsPumpStatus)
@@ -496,6 +485,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
+        if (needs.NeedsTransmitterStatus)
+        {
+            var latest = await _deps.UploaderSnapshots.GetLatestOfTypeAsync(TransmitterStatus.UploaderType, asOf, ct);
+            if (TransmitterStatus.From(latest) is { } transmitter)
+            {
+                enriched = enriched with
+                {
+                    TransmitterVoltageA = transmitter.VoltageA,
+                    TransmitterVoltageB = transmitter.VoltageB,
+                    TransmitterResistance = transmitter.Resistance,
+                    TransmitterDays = transmitter.Days,
+                };
+            }
+        }
+
         if (needs.NeedsOverride)
         {
             var span = await _deps.StateSpans.GetActiveAtAsync(
@@ -512,7 +516,30 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
+        if (needs.NeedsSensorState)
+            enriched = await WithReportedSensorStateAsync(enriched, now, ct);
+
         return enriched;
+    }
+
+    /// <summary>
+    /// The sensor state a recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
+    /// (<see cref="SensorStateReports"/>), with the instant the engine stops counting it. A state other
+    /// than ok replaces the <see cref="SensorState.NoValue"/> the base context may carry for a newest
+    /// reading with no value, since it says why; an ok one does not. A context whose reading source
+    /// lacks a device or a data source reads no report.
+    /// </summary>
+    private async Task<SensorContext> WithReportedSensorStateAsync(
+        SensorContext context, DateTime now, CancellationToken ct)
+    {
+        if (context.LatestSource is not { Device: { Length: > 0 } device, DataSource: { Length: > 0 } dataSource })
+            return context;
+        var reports = await _deps.SensorStates.GetReportedAsync(
+            device, dataSource, now - SensorStateReports.MaxAge, now, AlertReadings.Bound(now), ct);
+        return SensorStateReports.Newest(reports, now, context.LatestSource) is var (reported, until)
+               && (reported != SensorState.Ok || context.SensorState is null)
+            ? context with { SensorState = new SensorStateSnapshot(reported, Since: null, until) }
+            : context;
     }
 
     private static TempBasalSnapshot ProjectTempBasal(TempBasal t, double rate) =>
@@ -588,14 +615,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
     }
 
-    private async Task<IReadOnlyList<PredictedGlucosePoint>> FetchPredictionsAsync(
-        DateTimeOffset? asOf, CancellationToken ct)
+    private static readonly (IReadOnlyList<PredictedGlucosePoint>, IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>)
+        NoPredictions = (Array.Empty<PredictedGlucosePoint>(), new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>());
+
+    /// <summary>
+    /// The default series the prediction service returns and every named curve it returns, each
+    /// under its name with the offsets the default has always had (engine-semantics.md §4).
+    /// </summary>
+    private async Task<(IReadOnlyList<PredictedGlucosePoint> Default, IReadOnlyDictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>> Curves)>
+        FetchPredictionsAsync(DateTimeOffset? asOf, CancellationToken ct)
     {
         // Optional dependency — registered conditionally based on PredictionOptions.
         // GetService<> returns null when unavailable (PredictionSource.None or DI not wired).
         var predictionService = _serviceProvider.GetService<IPredictionService>();
         if (predictionService is null)
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
 
         GlucosePredictionResponse response;
         try
@@ -606,19 +640,53 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             // Documented "no readings available" path — silent empty mirrors the leaf evaluators.
             _logger.LogWarning(ex, "Prediction service had insufficient data; returning empty predictions");
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Prediction service failed; returning empty predictions");
-            return Array.Empty<PredictedGlucosePoint>();
+            return NoPredictions;
         }
 
-        var curve = response.Predictions.Default;
-        if (curve is null || curve.Count == 0)
-            return Array.Empty<PredictedGlucosePoint>();
-
         var interval = response.IntervalMinutes > 0 ? response.IntervalMinutes : PredictionIntervalMinutes;
+        var curves = new (ForecastCurve Name, IReadOnlyList<double>? Values)[]
+        {
+            (ForecastCurve.Iob, response.Predictions.IobOnly),
+            (ForecastCurve.Cob, response.Predictions.Cob),
+            (ForecastCurve.Uam, response.Predictions.Uam),
+            (ForecastCurve.Zt, response.Predictions.ZeroTemp),
+        };
+        if (response.Algorithm is { } algorithm && LoopHealthCalculator.IsOref(algorithm))
+            curves = UntrimmedOrefCurves(curves);
+        var named = new Dictionary<ForecastCurve, IReadOnlyList<PredictedGlucosePoint>>();
+        foreach (var (name, curve) in curves)
+        {
+            if (curve is { Count: > 0 })
+                named[name] = Points(curve, interval);
+        }
+        var main = response.Predictions.Default;
+        return (main is { Count: > 0 } ? Points(main, interval) : Array.Empty<PredictedGlucosePoint>(), named);
+    }
+
+    /// <summary>
+    /// The named oref curves, each one oref shortened carried out to the longest by
+    /// <see cref="OrefCurveTails"/>, so a <c>min_of</c> or <c>max_of</c> reads them as far as any
+    /// goes (engine-semantics.md §4). <c>default</c> is never touched.
+    /// </summary>
+    private static (ForecastCurve Name, IReadOnlyList<double>? Values)[] UntrimmedOrefCurves(
+        (ForecastCurve Name, IReadOnlyList<double>? Values)[] curves)
+    {
+        var longest = curves.Max(c => c.Values?.Count ?? 0);
+        return curves
+            .Select(c => c.Values is { Count: > 0 } values
+                && (c.Name == ForecastCurve.Zt ? values.Count < longest : OrefCurveTails.IsLevelTrimmed(values.Count, longest))
+                    ? (c.Name, (IReadOnlyList<double>?)OrefCurveTails.HoldLast(values, longest))
+                    : c)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<PredictedGlucosePoint> Points(IReadOnlyList<double> curve, int interval)
+    {
         var points = new List<PredictedGlucosePoint>(curve.Count);
         for (var i = 0; i < curve.Count; i++)
         {
@@ -634,6 +702,25 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         var evt = await _deps.DeviceEvents.GetLatestByEventTypeAsync(eventType, asOf, ct);
         return evt?.Timestamp;
+    }
+
+    /// <summary>
+    /// Every pump-mode span active at <paramref name="now"/>, its state as written. Spans of
+    /// different modes overlap (a Suspended span runs on top of an Automatic or Manual one), so none is chosen over another; the
+    /// engine reads the entry for the mode each leaf names.
+    /// </summary>
+    private async Task<IReadOnlyList<PumpModeSnapshot>> ActivePumpModesAsync(DateTime now, CancellationToken ct)
+    {
+        var active = await _deps.StateSpans.GetStateSpansAsync(
+            StateSpanCategory.PumpMode, from: now, to: now, cancellationToken: ct);
+        return active
+            .Where(s => s.State is { Length: > 0 }
+                        && s.StartTimestamp <= now
+                        && (s.EndTimestamp is null || s.EndTimestamp > now))
+            .OrderBy(s => s.StartTimestamp)
+            .ThenBy(s => s.State, StringComparer.Ordinal)
+            .Select(s => new PumpModeSnapshot(s.State!, s.StartTimestamp))
+            .ToList();
     }
 
     /// <summary>
@@ -653,23 +740,5 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             || string.Equals(state, nameof(ProfileState.Active), StringComparison.Ordinal)
             || string.Equals(state, resolved.ProfileName, StringComparison.Ordinal);
         return matches ? resolved.Activation.StartTimestamp : null;
-    }
-
-    /// <summary>
-    /// Maps a glucose rate of change (mg/dL per minute) to a coarse trend bucket. Boundary
-    /// values (e.g. exactly 1.0 mg/dL/min) fall into the more aggressive bucket — matches the
-    /// "rising" labelling that CGM clients show at +1 mg/dL/min.
-    /// </summary>
-    private static TrendBucket? DeriveTrendBucket(decimal? trendRate)
-    {
-        if (trendRate is null)
-            return null;
-
-        var rate = trendRate.Value;
-        if (rate >= 3.0m) return TrendBucket.RisingFast;
-        if (rate >= 1.0m) return TrendBucket.Rising;
-        if (rate >= -1.0m) return TrendBucket.Flat;
-        if (rate >= -3.0m) return TrendBucket.Falling;
-        return TrendBucket.FallingFast;
     }
 }

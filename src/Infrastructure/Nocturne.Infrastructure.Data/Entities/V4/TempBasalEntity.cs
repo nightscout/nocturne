@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
@@ -62,21 +63,21 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     /// Device identifier that set this temp basal
     /// </summary>
     [Column("device")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string? Device { get; set; }
 
     /// <summary>
     /// Application that uploaded this record
     /// </summary>
     [Column("app")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string? App { get; set; }
 
     /// <summary>
     /// Origin data source identifier
     /// </summary>
     [Column("data_source")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.Provenance)]
     public string? DataSource { get; set; }
 
     /// <inheritdoc />
@@ -165,14 +166,14 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     /// uploader retries of the same pump event don't duplicate the span.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>
     /// Pump-specific record identifier for deduplication
     /// </summary>
     [Column("pump_record_id")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.PumpRecordId)]
     public string? PumpRecordId { get; set; }
 
     /// <summary>

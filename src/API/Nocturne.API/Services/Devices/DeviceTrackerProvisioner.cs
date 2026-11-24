@@ -1,8 +1,7 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Devices;
@@ -37,6 +36,7 @@ public interface IDeviceTrackerProvisioner
 /// <inheritdoc />
 internal sealed class DeviceTrackerProvisioner(
     ITrackerRepository trackers,
+    ITrackerConsumableLock consumableLock,
     ConsumableTrackerWriter writer,
     ILogger<DeviceTrackerProvisioner> logger)
     : IDeviceTrackerProvisioner
@@ -54,7 +54,7 @@ internal sealed class DeviceTrackerProvisioner(
         List<CreatedConsumableTracker> created;
         try
         {
-            created = await trackers.ExecuteUnderConsumableLockAsync(
+            created = await consumableLock.ExecuteAsync(
                 async (tx, unit, token) =>
                 {
                     var existing = await tx.GetAllDefinitionsAsync(token);
@@ -79,17 +79,7 @@ internal sealed class DeviceTrackerProvisioner(
                 },
                 ct);
         }
-        catch (DbUpdateException ex)
-        {
-            logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
-            return 0;
-        }
-        catch (DbException ex)
-        {
-            logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
-            return 0;
-        }
-        catch (RetryLimitExceededException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
             return 0;
@@ -101,15 +91,7 @@ internal sealed class DeviceTrackerProvisioner(
             {
                 await writer.PublishAsync(trackers, tracker, CancellationToken.None);
             }
-            catch (DbUpdateException ex)
-            {
-                logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
-            }
-            catch (DbException ex)
-            {
-                logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
-            }
-            catch (RetryLimitExceededException ex)
+            catch (Exception ex) when (StoreFailure.Is(ex))
             {
                 logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
             }

@@ -82,12 +82,16 @@ function defaultRange(days: number): DateRangeInput {
  * from the current URL days, the URL is automatically updated to the report's default.
  *
  * @param defaultDays - The default number of days for this specific report (default: 7)
+ * @param seedsUrl - Whether the page on screen may have the default range written to its URL; a
+ *   page that does not read the shared range keeps its URL as it is (default: always)
  * @returns Reactive params object with helper methods
  */
-export function useDateParams(defaultDays = 7) {
+export function useDateParams(defaultDays = 7, seedsUrl: () => boolean = () => true) {
   // showDefaults: true ensures all params are shown in URL, not just non-default ones
-  // This is critical because runed by default omits params that match schema defaults
-  const params = useSearchParams(ReportsParamsSchema, { showDefaults: true, noScroll: true });
+  // This is critical because runed by default omits params that match schema defaults. runed writes
+  // every default once, as it starts, so a page that may not have its URL seeded starts without them;
+  // isDefault, the one default it would write, then reads as its default.
+  const params = useSearchParams(ReportsParamsSchema, { showDefaults: seedsUrl(), noScroll: true });
 
   // Track initialization to prevent infinite loops
   let initialized = $state(false);
@@ -119,7 +123,7 @@ export function useDateParams(defaultDays = 7) {
 
       // Use untrack to prevent this write from creating a dependency cycle
       untrack(() => {
-        params.update({ ...range, isDefault: true });
+        if (seedsUrl()) params.update({ ...range, isDefault: true });
         initialized = true;
         memoizedInput = range;
       });
@@ -128,7 +132,7 @@ export function useDateParams(defaultDays = 7) {
       const range = defaultRange(defaultDays);
 
       untrack(() => {
-        params.update({ ...range, isDefault: true });
+        if (seedsUrl()) params.update({ ...range, isDefault: true });
         initialized = true;
         memoizedInput = range;
       });

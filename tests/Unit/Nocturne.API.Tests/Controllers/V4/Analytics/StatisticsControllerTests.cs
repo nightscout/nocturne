@@ -852,9 +852,10 @@ public partial class StatisticsControllerTests
         _statsServiceMock
             .Setup(s => s.CalculateBasalAnalysis(
                 It.IsAny<IEnumerable<TempBasal>>(),
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(), It.IsAny<TimeZoneInfo?>()))
-            .Callback<IEnumerable<TempBasal>, DateTime, DateTime, long, TimeZoneInfo?>(
-                (tempBasals, _, _, _, _) => synthesized = tempBasals.ToList())
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(), It.IsAny<TimeZoneInfo?>(),
+                It.IsAny<IEnumerable<BasalInjection>?>()))
+            .Callback<IEnumerable<TempBasal>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?>(
+                (tempBasals, _, _, _, _, _) => synthesized = tempBasals.ToList())
             .Returns(new BasalAnalysisResponse());
 
         await CreateController().GetBasalAnalysis(start, start.AddDays(1));
@@ -890,9 +891,10 @@ public partial class StatisticsControllerTests
         _statsServiceMock
             .Setup(s => s.CalculateBasalAnalysis(
                 It.IsAny<IEnumerable<TempBasal>>(),
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(), It.IsAny<TimeZoneInfo?>()))
-            .Callback<IEnumerable<TempBasal>, DateTime, DateTime, long, TimeZoneInfo?>(
-                (tempBasals, _, _, _, _) => synthesized = tempBasals.ToList())
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<long>(), It.IsAny<TimeZoneInfo?>(),
+                It.IsAny<IEnumerable<BasalInjection>?>()))
+            .Callback<IEnumerable<TempBasal>, DateTime, DateTime, long, TimeZoneInfo?, IEnumerable<BasalInjection>?>(
+                (tempBasals, _, _, _, _, _) => synthesized = tempBasals.ToList())
             .Returns(new BasalAnalysisResponse());
 
         await CreateController().GetBasalAnalysis(start, start.AddDays(1));
@@ -1479,6 +1481,143 @@ public partial class StatisticsControllerTests
     }
 
     [Fact]
+    public async Task GetBasalAnalysis_DailyBasalInjections_ReadAsAFlatRate_AndReplaceTheProfileFallback()
+    {
+        var berlin = TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Berlin");
+        var start = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 11, 1, 0, 0, 0), berlin);
+        var end = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 11, 8, 0, 0, 0), berlin);
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Berlin");
+        SetupEmptyTreatments();
+        SetupBasalInjectionsReadByWindow(Enumerable.Range(0, 31)
+            .Select(d => new BasalInjection
+            {
+                Timestamp = TimeZoneInfo.ConvertTimeToUtc(new DateTime(2026, 10, 15, 21, 0, 0).AddDays(d), berlin),
+                Units = 18,
+                InsulinContext = new TreatmentInsulinContext { Dia = 42 },
+            }));
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(AsAsync([new BasalSegment(Mills(start.AddDays(-3)), Mills(end), 1.0, 1.0, "Default")]));
+
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
+            .GetBasalAnalysis(start, end);
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<BasalAnalysisResponse>().Subject;
+        payload.Stats.AvgRate.Should().Be(0.75);
+        payload.Stats.MaxRate.Should().Be(0.75, "the profile's 1.0 U/h is not delivered by someone who injects");
+        payload.Stats.TotalDeliveredPerDay.Should().Be(18);
+        payload.HourlyPercentiles.Should().HaveCount(24).And.OnlyContain(p => p.P10 == 0.75 && p.P90 == 0.75);
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_CountsTheInWindowPartOfADoseGivenBeforeIt()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBasalInjectionsReadByWindow(
+        [
+            new BasalInjection
+            {
+                Timestamp = start.AddHours(-30),
+                Units = 18,
+                InsulinContext = new TreatmentInsulinContext { Dia = 42 },
+            },
+        ]);
+
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
+            .GetBasalAnalysis(start, start.AddDays(1));
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<BasalAnalysisResponse>().Subject;
+        payload.Stats.TotalDelivered.Should().Be(Math.Round(12 * 18 / 42.0 * 100) / 100);
+    }
+
+    [Fact]
+    public async Task GetHourlyInsulinDelivery_CountsTheInWindowPartOfADoseGivenBeforeIt()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBasalInjectionsReadByWindow(
+        [
+            new BasalInjection
+            {
+                Timestamp = start.AddHours(-30),
+                Units = 18,
+                InsulinContext = new TreatmentInsulinContext { Dia = 42 },
+            },
+        ]);
+
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
+            .GetHourlyInsulinDelivery(start, start.AddDays(1));
+
+        var hours = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<HourlyInsulinDeliveryResponse>().Subject.Hours;
+        hours.Take(12).Should().OnlyContain(h => h.ScheduledBasal == Math.Round(18 / 42.0 * 100) / 100);
+        hours.Skip(12).Should().OnlyContain(h => h.ScheduledBasal == 0);
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_ADoseThatEndsBeforeTheWindow_LeavesTheProfileFallback()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBasalInjectionsReadByWindow([new BasalInjection { Timestamp = start.AddHours(-48), Units = 18 }]);
+        SetupProfileOf(1.0, start);
+
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
+            .GetBasalAnalysis(start, start.AddDays(1));
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<BasalAnalysisResponse>().Subject;
+        payload.Stats.TotalDelivered.Should().Be(24, "the dose was read but ran out a day before the window");
+    }
+
+    [Theory]
+    [InlineData(-48, false)]
+    [InlineData(-12, true)]
+    public async Task GetHourlyInsulinDelivery_SuppressesTheProfileFallback_OnlyWhereAnInjectionReachesTheWindow(
+        int doseHours, bool suppressed)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        SetupBasalInjectionsReadByWindow([new BasalInjection { Timestamp = start.AddHours(doseHours), Units = 18 }]);
+        SetupProfileOf(1.0, start);
+
+        var result = await CreateController(statisticsService: new StatisticsService(TimeProvider.System))
+            .GetHourlyInsulinDelivery(start, start.AddDays(1));
+
+        var hours = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<HourlyInsulinDeliveryResponse>().Subject.Hours;
+        hours.Sum(h => h.ScheduledBasal).Should().BeApproximately(suppressed ? 18 * (12 / 24.0) : 24, 0.01);
+    }
+
+    private void SetupProfileOf(double unitsPerHour, DateTime start)
+    {
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(AsAsync([new BasalSegment(Mills(start.AddDays(-3)), Mills(start.AddDays(2)), unitsPerHour, unitsPerHour, "Default")]));
+    }
+
+    private void SetupBasalInjectionsReadByWindow(IEnumerable<BasalInjection> injections) =>
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                injections.Where(i => i.Timestamp >= from && i.Timestamp <= to).ToList());
+
+    [Fact]
     public async Task GetBasalAnalysis_ForwardsTheRequestTokenToEveryFetch()
     {
         SetupHistoryPastTheOldLimits();
@@ -1488,7 +1627,7 @@ public partial class StatisticsControllerTests
             .GetBasalAnalysis(DenseDay, DenseDay.AddDays(4), cts.Token);
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        _repositoryTokens.Should().HaveCount(1).And.OnlyContain(t => t == cts.Token);
+        _repositoryTokens.Should().HaveCount(2).And.OnlyContain(t => t == cts.Token);
         _therapySettingsResolverMock.Verify(r => r.GetTimezoneAsync(null, cts.Token), Times.Once);
     }
 
@@ -2503,7 +2642,7 @@ public partial class StatisticsControllerTests
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
             It.IsAny<string?>(), It.IsAny<string?>(),
             int.MaxValue, It.IsAny<int>(), false,
-            It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()), Times.Once);
 
         _glucoseRepoMock.Verify(r => r.GetForAnalyticsAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
@@ -2598,6 +2737,35 @@ public partial class StatisticsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>();
         VerifyAidMetricsWindow(now.AddHours(-HistoryClamp.WindowHours), now);
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_ForAClampedMember_CutsARangeThatEndsInsideTheWindowAtItsEnd()
+    {
+        SetupAidMetricsEcho();
+        var reads = new CategoryReadContext();
+        reads.ClampMemberHistory();
+        var now = DefaultNow.UtcDateTime;
+
+        await CreateClampedController(reads).GetAidSystemMetrics(now.AddDays(-30), now.AddHours(-6));
+
+        VerifyAidMetricsWindow(now.AddHours(-HistoryClamp.WindowHours), now.AddHours(-6));
+    }
+
+    [Fact]
+    public async Task GetAidSystemMetrics_ForAClampedMember_ReadsNothingForARangeBeforeTheWindow_AndSaysSo()
+    {
+        SetupAidMetricsEcho();
+        var reads = new CategoryReadContext();
+        reads.ClampMemberHistory();
+        var now = DefaultNow.UtcDateTime;
+
+        var result = await CreateClampedController(reads).GetAidSystemMetrics(now.AddDays(-30), now.AddDays(-2));
+
+        var metrics = (AidSystemMetrics)((OkObjectResult)result.Result!).Value!;
+        metrics.RangeOutsideHistory.Should().BeTrue();
+        metrics.SiteChangeCount.Should().BeNull();
+        _aidMetricsServiceMock.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -2836,7 +3004,7 @@ public partial class StatisticsControllerTests
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
             It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-            It.IsAny<Guid?>(), token), Times.Once);
+            It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), token), Times.Once);
 
         _glucoseRepoMock.Verify(r => r.GetForAnalyticsAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),

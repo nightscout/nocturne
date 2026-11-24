@@ -1,0 +1,956 @@
+{
+  "schema_version": 1,
+  "name": "predicted-oref-trimmed-curves",
+  "description": "oref curves of unequal length: UAM level-trimmed to 13 values, ZT cut at 8 where it turns up, COB falling to 62 at 90 minutes. As stored, the lowest of the four is read only to 40 minutes, so it is false; as the host now sends them, UAM and ZT held at their last value to the longest curve, it is true, met by COB at 90 minutes. A single curve reads the same either way, and the default is the IOB curve both times",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 120,
+        "min_of": [
+          "iob",
+          "cob",
+          "uam",
+          "zt"
+        ]
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 120,
+        "curve": "cob"
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 120
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 118
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 117
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 116
+          },
+          {
+            "offset_minutes": 20,
+            "mgdl": 115
+          },
+          {
+            "offset_minutes": 25,
+            "mgdl": 114
+          },
+          {
+            "offset_minutes": 30,
+            "mgdl": 113
+          },
+          {
+            "offset_minutes": 35,
+            "mgdl": 112
+          },
+          {
+            "offset_minutes": 40,
+            "mgdl": 111
+          },
+          {
+            "offset_minutes": 45,
+            "mgdl": 110
+          },
+          {
+            "offset_minutes": 50,
+            "mgdl": 109
+          },
+          {
+            "offset_minutes": 55,
+            "mgdl": 108
+          },
+          {
+            "offset_minutes": 60,
+            "mgdl": 107
+          },
+          {
+            "offset_minutes": 65,
+            "mgdl": 106
+          },
+          {
+            "offset_minutes": 70,
+            "mgdl": 105
+          },
+          {
+            "offset_minutes": 75,
+            "mgdl": 104
+          },
+          {
+            "offset_minutes": 80,
+            "mgdl": 103
+          },
+          {
+            "offset_minutes": 85,
+            "mgdl": 102
+          },
+          {
+            "offset_minutes": 90,
+            "mgdl": 101
+          },
+          {
+            "offset_minutes": 95,
+            "mgdl": 100
+          },
+          {
+            "offset_minutes": 100,
+            "mgdl": 99
+          },
+          {
+            "offset_minutes": 105,
+            "mgdl": 98
+          },
+          {
+            "offset_minutes": 110,
+            "mgdl": 97
+          },
+          {
+            "offset_minutes": 115,
+            "mgdl": 96
+          },
+          {
+            "offset_minutes": 120,
+            "mgdl": 95
+          }
+        ],
+        "prediction_curves": {
+          "iob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 118
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 117
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 116
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 115
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 114
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 113
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 112
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 111
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 109
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 107
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 106
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 105
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 103
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 102
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 101
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 99
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 98
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 97
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 95
+            }
+          ],
+          "cob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 140
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 136
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 132
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 128
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 124
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 120
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 116
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 112
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 88
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 84
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 76
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 62
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 64
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 66
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 68
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 70
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 72
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 74
+            }
+          ],
+          "uam": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 106
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 102
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 99
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 98
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 97
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 95
+            }
+          ],
+          "zt": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 88
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 85
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 86
+            }
+          ]
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 120,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 118
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 117
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 116
+          },
+          {
+            "offset_minutes": 20,
+            "mgdl": 115
+          },
+          {
+            "offset_minutes": 25,
+            "mgdl": 114
+          },
+          {
+            "offset_minutes": 30,
+            "mgdl": 113
+          },
+          {
+            "offset_minutes": 35,
+            "mgdl": 112
+          },
+          {
+            "offset_minutes": 40,
+            "mgdl": 111
+          },
+          {
+            "offset_minutes": 45,
+            "mgdl": 110
+          },
+          {
+            "offset_minutes": 50,
+            "mgdl": 109
+          },
+          {
+            "offset_minutes": 55,
+            "mgdl": 108
+          },
+          {
+            "offset_minutes": 60,
+            "mgdl": 107
+          },
+          {
+            "offset_minutes": 65,
+            "mgdl": 106
+          },
+          {
+            "offset_minutes": 70,
+            "mgdl": 105
+          },
+          {
+            "offset_minutes": 75,
+            "mgdl": 104
+          },
+          {
+            "offset_minutes": 80,
+            "mgdl": 103
+          },
+          {
+            "offset_minutes": 85,
+            "mgdl": 102
+          },
+          {
+            "offset_minutes": 90,
+            "mgdl": 101
+          },
+          {
+            "offset_minutes": 95,
+            "mgdl": 100
+          },
+          {
+            "offset_minutes": 100,
+            "mgdl": 99
+          },
+          {
+            "offset_minutes": 105,
+            "mgdl": 98
+          },
+          {
+            "offset_minutes": 110,
+            "mgdl": 97
+          },
+          {
+            "offset_minutes": 115,
+            "mgdl": 96
+          },
+          {
+            "offset_minutes": 120,
+            "mgdl": 95
+          }
+        ],
+        "prediction_curves": {
+          "iob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 118
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 117
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 116
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 115
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 114
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 113
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 112
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 111
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 109
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 107
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 106
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 105
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 103
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 102
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 101
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 99
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 98
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 97
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 95
+            }
+          ],
+          "cob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 140
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 136
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 132
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 128
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 124
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 120
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 116
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 112
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 88
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 84
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 80
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 76
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 62
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 64
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 66
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 68
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 70
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 72
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 74
+            }
+          ],
+          "uam": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 110
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 108
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 106
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 104
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 102
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 99
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 98
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 97
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 96
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 95
+            }
+          ],
+          "zt": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 100
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 95
+            },
+            {
+              "offset_minutes": 15,
+              "mgdl": 92
+            },
+            {
+              "offset_minutes": 20,
+              "mgdl": 90
+            },
+            {
+              "offset_minutes": 25,
+              "mgdl": 88
+            },
+            {
+              "offset_minutes": 30,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 35,
+              "mgdl": 85
+            },
+            {
+              "offset_minutes": 40,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 45,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 50,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 55,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 60,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 65,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 70,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 75,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 80,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 85,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 90,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 95,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 100,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 105,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 110,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 115,
+              "mgdl": 86
+            },
+            {
+              "offset_minutes": 120,
+              "mgdl": 86
+            }
+          ]
+        },
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

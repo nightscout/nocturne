@@ -7,8 +7,8 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// Repository for <see cref="DeviceStatusExtras"/> records containing uncaptured devicestatus sub-objects.
 /// </summary>
 /// <remarks>
-/// Alpha-phase diagnostic data. Records are created during devicestatus decomposition
-/// and can be queried or deleted by their correlation ID.
+/// Records are created during devicestatus decomposition and can be queried or deleted by their
+/// correlation ID. No write announces itself: no alert or cache reads its writes.
 /// </remarks>
 public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceStatusExtras>
 {

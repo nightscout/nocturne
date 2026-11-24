@@ -11,6 +11,7 @@ using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -25,20 +26,20 @@ public class GlookoFetchRetryTests
     [Fact]
     public async Task FetchWithRetry_WhenEveryAttemptFails_ThrowsAfterSpendingEveryAttempt()
     {
-        var handler = new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var handler = new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var (service, delays) = BuildService(handler);
 
         var act = () => service.FetchFromGlookoEndpointWithRetry(Context(), Url);
 
         (await act.Should().ThrowAsync<HttpRequestException>()).WithMessage("*500*");
-        handler.Requests.Should().Be(3, "three attempts, not three retries on top of a first try");
+        handler.Requests.Count.Should().Be(3, "three attempts, not three retries on top of a first try");
         delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task FetchWithRetry_WhenForbidden_BailsOutWithoutSpendingTheRemainingAttempts()
     {
-        var handler = new CountingHandler(() => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        var handler = new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
         {
             Content = new StringContent(
                 "{\"status\":403,\"code\":\"data_cant_view\"}", Encoding.UTF8, "application/json"),
@@ -48,7 +49,7 @@ public class GlookoFetchRetryTests
         var act = () => service.FetchFromGlookoEndpointWithRetry(Context(), Url);
 
         await act.Should().ThrowAsync<GlookoDataForbiddenException>();
-        handler.Requests.Should().Be(1, "the patient code is part of the URL, so retrying it unchanged would 403 again");
+        handler.Requests.Count.Should().Be(1, "the patient code is part of the URL, so retrying it unchanged would 403 again");
         delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -69,7 +70,7 @@ public class GlookoFetchRetryTests
     }
 
     private static (GlookoConnectorService service, Mock<IRetryDelayStrategy> delays) BuildService(
-        CountingHandler handler)
+        FakeHttpHandler handler)
     {
         var delays = new Mock<IRetryDelayStrategy>();
         delays.Setup(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -83,19 +84,5 @@ public class GlookoFetchRetryTests
             endpointPause: TimeSpan.Zero);
 
         return (service, delays);
-    }
-
-    private sealed class CountingHandler(Func<HttpResponseMessage> response) : HttpMessageHandler
-    {
-        private int _requests;
-
-        public int Requests => Volatile.Read(ref _requests);
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Interlocked.Increment(ref _requests);
-            return Task.FromResult(response());
-        }
     }
 }

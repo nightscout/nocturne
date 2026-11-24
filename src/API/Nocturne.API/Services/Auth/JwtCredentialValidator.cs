@@ -24,8 +24,8 @@ namespace Nocturne.API.Services.Auth;
 public interface IJwtCredentialValidator
 {
     /// <summary>
-    /// Validates <paramref name="token"/>'s signature and lifetime, then checks that neither the
-    /// token nor the grant behind it has been revoked.
+    /// Validates <paramref name="token"/>'s signature and lifetime, then checks that the token has
+    /// not been revoked and the grant behind it is live: neither revoked nor past its expiry.
     /// </summary>
     Task<JwtCredentialResult> ValidateAsync(string token, CancellationToken cancellationToken = default);
 }
@@ -36,7 +36,7 @@ public enum JwtCredentialRejection
     /// <summary>Signature, lifetime, issuer or audience did not hold up.</summary>
     Invalid,
 
-    /// <summary>The token, or the grant it was minted against, has been revoked.</summary>
+    /// <summary>The token has been revoked, or the grant it was minted against is revoked or expired.</summary>
     Revoked,
 }
 
@@ -112,10 +112,10 @@ public sealed class JwtCredentialValidator : IJwtCredentialValidator
                     JwtCredentialRejection.Revoked, "Token has been revoked");
             }
 
-            if (await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value, cancellationToken))
+            if (!await _grantService.IsGrantLiveAsync(claims.GrantId.Value, claims.TenantId.Value, cancellationToken))
             {
                 _logger.LogDebug(
-                    "Access token's grant has been revoked (grant: {GrantId})", claims.GrantId);
+                    "Access token's grant is revoked or expired (grant: {GrantId})", claims.GrantId);
                 return JwtCredentialResult.Refused(
                     JwtCredentialRejection.Revoked, "Token has been revoked");
             }

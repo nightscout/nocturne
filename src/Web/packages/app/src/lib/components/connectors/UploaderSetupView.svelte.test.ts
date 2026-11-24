@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "@nocturne/api-client";
 
 const mocks = vi.hoisted(() => ({
   sources: [] as unknown[],

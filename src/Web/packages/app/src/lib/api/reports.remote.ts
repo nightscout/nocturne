@@ -116,7 +116,7 @@ export const getBolusesAndCarbs = query(
         apiClient.bolus.getAll(startDate, endDate, limit, offset)
       ),
       fetchAllPages("CarbIntake", (limit, offset) =>
-        apiClient.nutrition.getCarbIntakes(startDate, endDate, limit, offset)
+        apiClient.carbIntake.getAll(startDate, endDate, limit, offset)
       ),
     ]);
 

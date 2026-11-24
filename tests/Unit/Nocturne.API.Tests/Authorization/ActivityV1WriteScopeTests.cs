@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using System.Reflection;
 using System.Text.Json;
@@ -110,7 +111,7 @@ public class ActivityV1WriteScopeTests
         var result = await controller.UpdateActivity(
             "a1", new Activity { Type = "heartrate" }, CancellationToken.None);
 
-        var forbidden = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        var forbidden = result.Result.Should().BeOfType<ScopeForbiddenResult>().Subject;
         forbidden.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         JsonSerializer.Serialize(forbidden.Value).Should().Contain(Scope.TreatmentsReadWrite);
         service.Verify(
@@ -170,6 +171,6 @@ public class ActivityV1WriteScopeTests
         if (allowed)
             result.Should().BeOfType<OkObjectResult>();
         else
-            result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+            result.Should().BeOfType<ScopeForbiddenResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 }

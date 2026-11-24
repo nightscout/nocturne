@@ -41,7 +41,7 @@ public class SleepReportServiceTests
             _sessionRepo.Object,
             _glucoseRepo.Object,
             _patientRecord.Object,
-            new SubjectRepository(_db.AsFactory()),
+            new SubjectRepository(_db.AsFactory(), AccountLinkRoutes.Off),
             _caller.Object,
             TimeProvider.System,
             NullLogger<SleepReportService>.Instance);

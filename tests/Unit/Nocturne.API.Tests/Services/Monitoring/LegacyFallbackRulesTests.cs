@@ -1,9 +1,7 @@
-using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -13,19 +11,23 @@ public class LegacyFallbackRulesTests
 {
     private static readonly DateTime Now = new(2026, 10, 25, 12, 0, 0, DateTimeKind.Utc);
 
-    internal static TrackerDefinitionEntity Definition(
+    internal static TrackerDefinition Definition(
         TrackerMode mode = TrackerMode.Duration,
         TrackerCategory category = TrackerCategory.Custom,
         DashboardVisibility visibility = DashboardVisibility.Always,
+        IReadOnlySet<PumpCapability>? covers = null,
+        string? deviceComponent = null,
+        string name = "Tracker",
         params string[] triggers) =>
-        new()
-        {
-            Name = "Tracker",
-            Mode = mode,
-            Category = category,
-            DashboardVisibility = visibility,
-            TriggerEventTypes = JsonSerializer.Serialize(triggers),
-        };
+        TrackerDefinition.Restore(
+            Guid.NewGuid(),
+            name,
+            category,
+            mode,
+            dashboardVisibility: visibility,
+            triggerEventTypes: triggers,
+            covers: covers,
+            deviceComponent: deviceComponent);
 
     [Fact]
     public void ADurationTrackerRestartedByAKindsEvent_CoversIt_WhateverItsCategory()
@@ -89,8 +91,7 @@ public class LegacyFallbackRulesTests
     [Fact]
     public void AMembersPhoneBatteryTracker_DoesNotHideThePumpBattery()
     {
-        var phone = Definition(category: TrackerCategory.Battery);
-        phone.Name = "Phone battery";
+        var phone = Definition(category: TrackerCategory.Battery, name: "Phone battery");
 
         LegacyFallbackRules.IsCovered(LegacyConsumableKind.PumpBattery, [phone]).Should().BeFalse();
     }
@@ -122,11 +123,11 @@ public class LegacyFallbackRulesTests
             ["infusion set"] = ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("dana-i")!)
                 .Single(s => s.Category == TrackerCategory.Cannula),
         };
-        var trackers = new Dictionary<string, TrackerDefinitionEntity>
+        var trackers = new Dictionary<string, TrackerDefinition>
         {
             ["pod"] = Definition(category: TrackerCategory.Cannula, triggers: ["Pod Change", "Site Change"]),
             ["infusion set"] = Definition(category: TrackerCategory.Cannula, triggers: ["Site Change", "Cannula Change"]),
-            ["generic"] = ConsumableTrackerSpecs.ToDefinition(ConsumableTrackerSpecs.Generic(LegacyConsumableKind.Site), "member"),
+            ["generic"] = ConsumableTrackerSpecs.ToDefinition(ConsumableTrackerSpecs.Generic(LegacyConsumableKind.Site), "member", Now),
             ["no triggers"] = Definition(category: TrackerCategory.Cannula),
         };
 
@@ -252,7 +253,7 @@ public class ConsumableTrackerSpecsTests
     public void TheFallbackLadder_WarnsADayBeforeTheEndAndRaisesAHazardAtIt()
     {
         var spec = ConsumableTrackerSpecs.Generic(LegacyConsumableKind.Sensor);
-        var definition = ConsumableTrackerSpecs.ToDefinition(spec, "user");
+        var definition = ConsumableTrackerSpecs.ToDefinition(spec, "user", DateTime.UtcNow);
 
         definition.NotificationThresholds
             .Select(t => (t.Urgency, TrackerSchedule.OffsetMinutes(definition.Mode, definition.LifespanHours, t.Hours)))
@@ -275,8 +276,9 @@ public class ConsumableTrackerSpecsTests
     [Fact]
     public void StatedCoverage_OverridesTheTriggers()
     {
-        var definition = LegacyFallbackRulesTests.Definition(category: TrackerCategory.Cannula, triggers: ["Pod Change", "Pump Battery Change"]);
-        definition.Covers = """["Site"]""";
+        var definition = LegacyFallbackRulesTests.Definition(
+            category: TrackerCategory.Cannula, covers: new HashSet<PumpCapability> { PumpCapability.Site },
+            triggers: ["Pod Change", "Pump Battery Change"]);
 
         LegacyFallbackRules.Covers(LegacyConsumableKind.Site, definition).Should().BeTrue();
         LegacyFallbackRules.Covers(LegacyConsumableKind.PumpBattery, definition).Should().BeFalse();
@@ -375,7 +377,7 @@ public class ConsumableTrackerSpecsTests
     public void APodTrackerOfAnotherPodPump_FollowsThePodSpec()
     {
         var medtrum = ConsumableTrackerSpecs.ToDefinition(
-            ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("medtrum-nano")!).Single(), "member");
+            ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("medtrum-nano")!).Single(), "member", DateTime.UtcNow);
         var omnipod = ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("omnipod-5")!).Single();
         var equilSite = ConsumableTrackerSpecs.SpecsFor(DeviceCatalog.GetById("equil")!)
             .Single(s => s.Category == TrackerCategory.Cannula);
@@ -389,8 +391,8 @@ public class ConsumableTrackerSpecsTests
     {
         var entry = DeviceCatalog.GetById("beta-bionics-mint")!;
         var controller = ConsumableTrackerSpecs.SpecFor(entry, entry.Pump!.Components.Single(c => c.Key == "controller"))!;
-        var definition = LegacyFallbackRulesTests.Definition(category: TrackerCategory.Custom);
-        definition.DeviceComponent = "beta-bionics-mint/controller";
+        var definition = LegacyFallbackRulesTests.Definition(
+            category: TrackerCategory.Custom, deviceComponent: "beta-bionics-mint/controller");
 
         LegacyFallbackRules.Follows(definition, controller).Should().BeTrue();
         LegacyFallbackRules.Follows(LegacyFallbackRulesTests.Definition(category: TrackerCategory.Custom), controller).Should().BeFalse();

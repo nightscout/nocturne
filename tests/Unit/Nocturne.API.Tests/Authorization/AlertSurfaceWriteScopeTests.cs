@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Nocturne.API.Authorization;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Tests.Infrastructure;
@@ -52,12 +53,13 @@ public class AlertSurfaceWriteScopeTests
     private static readonly IReadOnlyDictionary<string, string> Ungated =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // Both actions read the saved rules over a historical window and return the events that
+            // These actions read a historical window and return the events that
             // would have fired. AlertReplayService has no SaveChangesAsync and adds to no DbSet, so
             // these are reads the request-body shape forced off GET; gating them would deny replay
             // to an alerts.read holder.
             ["AlertReplayController.Replay"] = "reads and returns; persists nothing",
             ["AlertReplayController.ReplayDryRun"] = "reads and returns; persists nothing",
+            ["AlertReplayController.FindFirings"] = "reads and returns; persists nothing",
 
             // The caller's own notification bookkeeping — read_at, and the archive flags — on a row
             // InAppNotificationService confines to the caller's subject. Neither acknowledges nor
@@ -234,7 +236,7 @@ public class AlertSurfaceWriteScopeTests
             }
             else
             {
-                result.Should().BeOfType<ForbidResult>(
+                result.Should().BeOfType<ScopeForbiddenResult>(
                     $"the {role} role holds no alerts.readwrite, so it must not reach {key}");
             }
         }
@@ -268,7 +270,7 @@ public class AlertSurfaceWriteScopeTests
         foreach (var (controller, action) in GatedWriteActions())
         {
             Evaluate(controller, action, authenticated: true, guestScopes)
-                .Should().BeOfType<ForbidResult>(
+                .Should().BeOfType<ScopeForbiddenResult>(
                     $"a read-only guest session must not reach {controller.Name}.{action.Name}");
         }
     }
@@ -327,7 +329,7 @@ public class AlertSurfaceWriteScopeTests
             }
             else
             {
-                result.Should().BeOfType<ForbidResult>(
+                result.Should().BeOfType<ScopeForbiddenResult>(
                     $"a device capability grant must not reach {key}");
             }
         }

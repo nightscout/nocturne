@@ -172,7 +172,7 @@ public class UISettingsControllerSectionPatchTests
     [Theory]
     [InlineData("""{"display":{"focusHours":"soon"}}""")]
     [InlineData("not json")]
-    public async Task AStoredRowThatDoesNotRead_ReportsAServerFaultForAnOrdinaryPatch(string stored)
+    public async Task AStoredRowThatDoesNotRead_LetsTheFaultEscapeForAnOrdinaryPatch(string stored)
     {
         var database = NewDatabase();
         database.Settings.Add(
@@ -185,9 +185,9 @@ public class UISettingsControllerSectionPatchTests
             });
         await database.SaveChangesAsync();
 
-        var result = await NewController(database).PatchFeatures("""{"trackerPills":{"enabled":false}}""");
+        var act = () => NewController(database).PatchFeatures("""{"trackerPills":{"enabled":false}}""");
 
-        StatusOf(result.Result).Should().Be(StatusCodes.Status500InternalServerError);
+        await act.Should().ThrowAsync<Exception>();
     }
 
     private static int? StatusOf(IActionResult? result) => (result as ObjectResult)?.StatusCode;

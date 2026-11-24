@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using Nocturne.Core.Clinical.Schedules;
@@ -41,13 +42,13 @@ public class DDataService : IDDataService
 
     private static readonly (string EventType, long WindowMills)[] FrameLatestTreatments =
     {
-        ("Profile Switch", 31 * 12 * DayMills),
-        ("Sensor Start", 62 * DayMills),
-        ("Sensor Change", 62 * DayMills),
-        ("Sensor Stop", 62 * DayMills),
-        ("Site Change", 62 * DayMills),
-        ("Insulin Change", 62 * DayMills),
-        ("Pump Battery Change", 62 * DayMills),
+        (TreatmentTypes.ProfileSwitch, 31 * 12 * DayMills),
+        (TreatmentTypes.SensorStart, 62 * DayMills),
+        (TreatmentTypes.SensorChange, 62 * DayMills),
+        (TreatmentTypes.SensorStop, 62 * DayMills),
+        (TreatmentTypes.SiteChange, 62 * DayMills),
+        (TreatmentTypes.InsulinChange, 62 * DayMills),
+        (TreatmentTypes.PumpBatteryChange, 62 * DayMills),
     };
 
     // Device type fields that should be considered for recent device status
@@ -210,14 +211,14 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Site Change' events
         ddata.SiteChangeTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Site Change"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.SiteChange))
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Insulin Change' events
         ddata.InsulinChangeTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Insulin Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.InsulinChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -225,7 +226,7 @@ public class DDataService : IDDataService
         // filter & prepare 'Pump Battery Change' events
         ddata.BatteryTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Pump Battery Change")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.PumpBatteryChange)
             )
             .OrderBy(t => t.Mills)
             .ToList();
@@ -238,13 +239,13 @@ public class DDataService : IDDataService
 
         // filter & prepare 'Combo Bolus' events
         ddata.ComboBolusTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Combo Bolus")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ComboBolus)
             .OrderBy(t => t.Mills)
             .ToList();
 
         // filter & prepare 'Profile Switch' events
         var profileTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == "Profile Switch")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType == TreatmentTypes.ProfileSwitch)
             .OrderBy(t => t.Mills)
             .ToList();
         if (preserveOriginalTreatments)
@@ -255,7 +256,7 @@ public class DDataService : IDDataService
 
         // filter & prepare temp basals
         var tempBasalTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temp Basal"))
+            .Where(t => !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TempBasal))
             .ToList();
         if (preserveOriginalTreatments)
         {
@@ -266,7 +267,7 @@ public class DDataService : IDDataService
         // filter temp target
         var tempTargetTreatments = treatments
             .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains("Temporary Target")
+                !string.IsNullOrEmpty(t.EventType) && t.EventType.Contains(TreatmentTypes.TemporaryTarget)
             )
             .ToList();
         if (preserveOriginalTreatments)
@@ -656,8 +657,8 @@ public class DDataService : IDDataService
         {
             ["created_at"] = new Dictionary<string, string>
             {
-                ["$gte"] = fromMills.ToUtcDateTime().ToString("o"),
-                ["$lte"] = toMills.ToUtcDateTime().ToString("o"),
+                ["$gte"] = fromMills.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
+                ["$lte"] = toMills.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
             },
         });
 
@@ -812,8 +813,8 @@ public class DDataService : IDDataService
             {
                 ["created_at"] = new Dictionary<string, string>
                 {
-                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o"),
-                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o"),
+                    ["$gte"] = (timestamp - DeviceStatusWindowMills).ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
+                    ["$lte"] = timestamp.ToUtcDateTime().ToString("o", CultureInfo.InvariantCulture),
                 },
             };
             var deviceStatuses = await _deviceStatuses.GetDeviceStatusesAsync(

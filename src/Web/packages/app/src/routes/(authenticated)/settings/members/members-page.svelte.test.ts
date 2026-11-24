@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import { RoleAccessLevel, type TenantMemberDto, type TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  RoleAccessLevel,
+  type LockedOutMember,
+  type MembershipRequestDto,
+  type TenantMemberDto,
+  type TenantRoleDto,
+  type TenantTeamAccess,
+} from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { accessEndInstant } from "#lib/components/members/access-end.js";
 
 const mocks = vi.hoisted(() => ({
   getMembers: vi.fn(),
@@ -13,9 +21,17 @@ const mocks = vi.hoisted(() => ({
   setMemberRoles: vi.fn(),
   setMemberPermissions: vi.fn(),
   setMemberLimitTo24Hours: vi.fn(),
+  setMemberAccessEnd: vi.fn(),
+  approveRequest: vi.fn(),
+  getLockedOutMembers: vi.fn(),
+  stopTeamAccess: vi.fn(),
+  refreshTeamAccess: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
+let lockedOut: LockedOutMember[] = [];
+let pendingRequests: MembershipRequestDto[] = [];
+let teamAccess: TenantTeamAccess[] = [];
 
 const viewer: TenantRoleDto = {
   id: "22222222-2222-2222-2222-222222222222",
@@ -26,23 +42,44 @@ const viewer: TenantRoleDto = {
   canGrant: true,
 };
 
+const owner: TenantRoleDto = {
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "Owner",
+  slug: "owner",
+  permissions: ["*"],
+  accessLevel: RoleAccessLevel.Manage,
+  canGrant: true,
+};
+let roles: TenantRoleDto[] = [viewer];
+
 vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   getMembers: () => {
     mocks.getMembers();
     return remoteQuery(() => members);
   },
   listInvites: () => remoteQuery(() => []),
+  getTeamAccess: () => {
+    const query = remoteQuery(() => teamAccess);
+    const refresh = query.refresh.bind(query);
+    query.refresh = () => {
+      mocks.refreshTeamAccess();
+      return refresh();
+    };
+    return query;
+  },
+  stopTeamAccess: (teamId: string) => mocks.stopTeamAccess(teamId),
   revokeInvite: () => Promise.resolve(),
   createInvite: vi.fn(),
   removeMember: () => Promise.resolve(),
   setMemberRoles: mocks.setMemberRoles,
   setMemberPermissions: mocks.setMemberPermissions,
   setMemberLimitTo24Hours: mocks.setMemberLimitTo24Hours,
+  setMemberAccessEnd: mocks.setMemberAccessEnd,
 }));
 vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => {
     mocks.getRoles();
-    return remoteQuery(() => [viewer]);
+    return remoteQuery(() => roles);
   },
 }));
 vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
@@ -51,10 +88,17 @@ vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
 vi.mock("#lib/api/generated/membershipRequests.generated.remote.js", () => ({
   getPendingRequests: () => {
     mocks.getPendingRequests();
-    return remoteQuery(() => []);
+    return remoteQuery(() => pendingRequests);
   },
-  approveRequest: () => Promise.resolve(),
+  approveRequest: mocks.approveRequest,
   denyRequest: () => Promise.resolve(),
+}));
+vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
+  getLockedOutMembers: () => {
+    mocks.getLockedOutMembers();
+    return remoteQuery(() => lockedOut);
+  },
+  issueRecoveryCode: vi.fn(),
 }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 vi.mock("#lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
@@ -88,6 +132,7 @@ describe("members page saving a member", () => {
     mocks.setMemberRoles.mockResolvedValue(undefined);
     mocks.setMemberPermissions.mockResolvedValue(undefined);
     mocks.setMemberLimitTo24Hours.mockResolvedValue(undefined);
+    mocks.setMemberAccessEnd.mockResolvedValue(undefined);
   });
 
   it("saves only the 24-hour limit when that is all that changed", async () => {
@@ -121,6 +166,49 @@ describe("members page saving a member", () => {
     expect(mocks.setMemberLimitTo24Hours).not.toHaveBeenCalled();
   });
 
+  it("sets the end through the access end command and nothing else when only the end changed", async () => {
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+    expect(mocks.setMemberRoles).not.toHaveBeenCalled();
+    expect(mocks.setMemberLimitTo24Hours).not.toHaveBeenCalled();
+  });
+
+  it("removes the end by sending null", async () => {
+    members = [{ ...member, accessEndsAt: accessEndInstant("2099-07-14") }];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("button", { name: "Remove the end date" }).click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: null },
+    });
+  });
+
+  it("reports an end the server refused on the card instead of claiming success", async () => {
+    mocks.setMemberAccessEnd.mockImplementation(async () =>
+      error(403, "Your access ends on a date, so you cannot give anyone access that lasts longer than yours."),
+    );
+
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByRole("alert")).toBeVisible();
+    expect(browserPage.getByText("Member updated successfully.").elements()).toHaveLength(0);
+  });
+
   it("reports a failed limit save on the card instead of claiming success", async () => {
     mocks.setMemberLimitTo24Hours.mockImplementation(async () =>
       error(400, "The limit could not be applied."),
@@ -151,6 +239,141 @@ describe("members page saving a member", () => {
 
     await expect.element(browserPage.getByRole("button", { name: "Save" })).toBeVisible();
     expect(browserPage.getByRole("alert").elements()).toHaveLength(0);
+  });
+});
+
+describe("members page ordering the commands of a save", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    roles = [viewer, owner];
+    mocks.setMemberRoles.mockResolvedValue(undefined);
+    mocks.setMemberPermissions.mockResolvedValue(undefined);
+    mocks.setMemberLimitTo24Hours.mockResolvedValue(undefined);
+    mocks.setMemberAccessEnd.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    roles = [viewer];
+  });
+
+  it("removes the end before it makes the member an owner", async () => {
+    members = [{ ...member, accessEndsAt: accessEndInstant("2099-07-14") }];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("button", { name: "Remove the end date" }).click();
+    await browserPage.getByRole("checkbox", { name: "Owner" }).click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({ id: member.id, request: { accessEndsAt: null } });
+    expect(mocks.setMemberAccessEnd.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setMemberRoles.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("changes the roles before it sets an end on a member who stops being an owner", async () => {
+    members = [
+      {
+        ...member,
+        roles: [{ roleId: owner.id, slug: owner.slug, name: owner.name }],
+      },
+    ];
+    render(MembersPage);
+    await browserPage.getByRole("button", { name: "Edit" }).click();
+    await browserPage.getByRole("checkbox", { name: "Owner" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect.element(browserPage.getByText("Member updated successfully.")).toBeVisible();
+    expect(mocks.setMemberAccessEnd).toHaveBeenCalledWith({
+      id: member.id,
+      request: { accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+    expect(mocks.setMemberRoles.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setMemberAccessEnd.mock.invocationCallOrder[0],
+    );
+  });
+});
+
+describe("members page approving a request", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    pendingRequests = [{ id: "77777777-7777-7777-7777-777777777777", subjectName: "Sam" }];
+    mocks.approveRequest.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    pendingRequests = [];
+  });
+
+  it("sends the instant the picked day ends with the approval", async () => {
+    render(MembersPage);
+    await browserPage.getByRole("checkbox", { name: "Viewer" }).click();
+    await browserPage.getByLabelText("Access ends (optional)").fill("2099-07-14");
+    await browserPage.getByRole("button", { name: "Approve" }).click();
+
+    await expect.element(browserPage.getByText("Membership request approved.")).toBeVisible();
+    expect(mocks.approveRequest).toHaveBeenCalledWith({
+      id: pendingRequests[0].id,
+      request: { roleIds: [viewer.id], accessEndsAt: accessEndInstant("2099-07-14") },
+    });
+  });
+});
+
+describe("members page when the caller's own access ends", () => {
+  const ownSubjectId = "55555555-5555-5555-5555-555555555555";
+  const last = "2099-07-14";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage", "members.invite"];
+    page.data.user = { subjectId: ownSubjectId };
+    members = [
+      member,
+      {
+        ...member,
+        id: "66666666-6666-6666-6666-666666666666",
+        subjectId: ownSubjectId,
+        name: "Casey",
+        accessEndsAt: accessEndInstant(last),
+      },
+    ];
+  });
+
+  it("limits another member's end to the caller's own last day", async () => {
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Edit" }).first().click();
+
+    await expect.element(browserPage.getByLabelText("Access ends (optional)")).toHaveAttribute("max", last);
+  });
+
+  it("reads the ceiling from the caller's own row, not another member's", async () => {
+    members = [
+      { ...member, accessEndsAt: accessEndInstant("2098-01-01") },
+      { ...members[1], accessEndsAt: undefined },
+    ];
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Edit" }).first().click();
+
+    const field = browserPage.getByLabelText("Access ends (optional)");
+    await expect.element(field).toBeVisible();
+    await expect.element(field).not.toHaveAttribute("max");
+    await expect.element(browserPage.getByText("Your own access ends", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("limits a new invite to the caller's own last day", async () => {
+    render(MembersPage);
+    await expect.element(browserPage.getByText("Casey")).toBeVisible();
+    await browserPage.getByRole("button", { name: "Create invite link" }).click();
+
+    await expect.element(browserPage.getByLabelText("Access ends (optional)")).toHaveAttribute("max", last);
   });
 });
 
@@ -218,5 +441,280 @@ describe("members page loading roles and pending requests", () => {
     await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
     expect(mocks.getPendingRequests).toHaveBeenCalled();
     expect(mocks.getRoles).toHaveBeenCalled();
+  });
+});
+
+describe("members page listing members who cannot sign in", () => {
+  const stuck: LockedOutMember = {
+    subjectId: "66666666-6666-6666-6666-666666666666",
+    name: "Sam",
+    username: "sam",
+    hasRecoveryCodes: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [stuck];
+    page.data.isHandedOffSession = false;
+  });
+
+  it("lists them on a handed-off session and offers a sign-in in place of the recovery link", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.isHandedOffSession = true;
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Sam", { exact: true })).toBeVisible();
+    await expect.element(browserPage.getByText("Sign in again to make a recovery link.")).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Create link" }).elements()).toHaveLength(0);
+    page.data.isHandedOffSession = false;
+  });
+
+  it("shows them to a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Members who cannot sign in")).toBeVisible();
+    await expect.element(browserPage.getByText("Sam", { exact: true })).toBeVisible();
+  });
+
+  it("shows nothing to a caller with members.manage when nobody is stuck", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    lockedOut = [];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(mocks.getLockedOutMembers).toHaveBeenCalled();
+    expect(browserPage.getByText("Members who cannot sign in").elements()).toHaveLength(0);
+  });
+
+  it("neither requests nor shows them for a caller who can only invite", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(mocks.getLockedOutMembers).not.toHaveBeenCalled();
+    expect(browserPage.getByText("Members who cannot sign in").elements()).toHaveLength(0);
+  });
+});
+
+describe("members page linking to the member history", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [];
+  });
+
+  it("links the page and each member to the history for a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    const historyLink = browserPage.getByRole("link", { name: /Member history/ });
+    await expect.element(historyLink).toHaveAttribute("href", "/settings/members/history");
+    await expect
+      .element(browserPage.getByRole("link", { name: "View history for Alex" }))
+      .toHaveAttribute("href", expect.stringContaining(`/settings/members/history?member=${member.subjectId}`));
+  });
+
+  it("offers neither link without members.manage", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("link", { name: /Member history/ }).elements()).toHaveLength(0);
+    expect(browserPage.getByRole("link", { name: "View history for Alex" }).elements()).toHaveLength(0);
+  });
+});
+
+describe("members page recovery email badge", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [{ ...member, hasConfirmedRecoveryEmail: false }];
+    lockedOut = [];
+  });
+
+  it("marks a member with no confirmed recovery email for a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("No recovery email")).toBeVisible();
+  });
+
+  it("shows nothing for a caller who can only share, even if the list carried the flag", async () => {
+    page.data.effectivePermissions = ["sharing.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+
+  it("shows nothing for a member the list does not report on", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    members = [{ ...member, hasConfirmedRecoveryEmail: undefined }];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("No recovery email").elements()).toHaveLength(0);
+  });
+});
+
+describe("members page listing the teams with access", () => {
+  const clinicId = "66666666-6666-6666-6666-666666666666";
+  const clinic: TenantTeamAccess = {
+    teamId: clinicId,
+    teamName: "Clinic",
+    roles: [
+      { id: viewer.id, name: "Viewer", slug: "viewer" },
+      { id: "77777777-7777-7777-7777-777777777777", name: "Caretaker", slug: "caretaker" },
+    ],
+    limitTo24Hours: true,
+    accessEndsAt: "2099-01-01T00:00:00Z",
+    hasEnded: false,
+    approvedByName: "Sam",
+    givenAt: "2026-11-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+    lockedOut = [];
+    teamAccess = [clinic];
+    mocks.stopTeamAccess.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    teamAccess = [];
+  });
+
+  it("lists a team as one row in its own section, apart from the people", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByRole("heading", { name: "Teams" })).toBeVisible();
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    await expect.element(browserPage.getByText("Roles: Viewer, Caretaker")).toBeVisible();
+    await expect.element(browserPage.getByText("Only the last 24 hours", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("Access ends", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("Approved by Sam", { exact: false })).toBeVisible();
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(browserPage.getByText("Clinic", { exact: true }).elements()).toHaveLength(1);
+  });
+
+  it("says a team's access has ended when the API says so", async () => {
+    teamAccess = [{ ...clinic, hasEnded: true }];
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Access ended", { exact: false })).toBeVisible();
+    expect(browserPage.getByText("Access ends", { exact: false }).elements()).toHaveLength(0);
+  });
+
+  it("shows no Teams section when no team has access", async () => {
+    teamAccess = [];
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Alex", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("heading", { name: "Teams" }).elements()).toHaveLength(0);
+  });
+
+  it("stops the access only after a confirmation that names the team and states what follows", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+
+    const dialog = browserPage.getByRole("alertdialog");
+    await expect.element(dialog).toHaveTextContent("Stop the access of Clinic?");
+    await expect.element(dialog).toHaveTextContent("The staff of the team lose access at once.");
+    await expect.element(dialog).toHaveTextContent("A manager of the team must ask again.");
+    expect(mocks.stopTeamAccess).not.toHaveBeenCalled();
+
+    await dialog.getByRole("button", { name: "Stop access" }).click();
+
+    await vi.waitFor(() => expect(mocks.stopTeamAccess).toHaveBeenCalledWith(clinicId));
+  });
+
+  it("does not stop the access when the confirmation is cancelled", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
+
+    await expect.element(browserPage.getByRole("alertdialog")).not.toBeInTheDocument();
+    expect(mocks.stopTeamAccess).not.toHaveBeenCalled();
+  });
+
+  it("shows the team but no Stop access to a caller who may only invite", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: /Stop the access of/ }).elements()).toHaveLength(0);
+  });
+
+  it("shows the team but no Stop access to a caller who may only manage sharing", async () => {
+    page.data.effectivePermissions = ["sharing.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Clinic", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: /Stop the access of/ }).elements()).toHaveLength(0);
+  });
+
+  it("reports a refused stop on the page", async () => {
+    mocks.stopTeamAccess.mockRejectedValue(new Error("down"));
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect
+      .element(browserPage.getByText("Failed to stop the access of the team. Try again.", { exact: false }))
+      .toBeVisible();
+  });
+
+  it("says the team no longer has access, and reads the list again, when the stop finds it gone", async () => {
+    mocks.stopTeamAccess.mockRejectedValue({ status: 404, body: { message: "Not found" } });
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(browserPage.getByText("This team no longer has access.")).toBeVisible();
+    expect(mocks.refreshTeamAccess).toHaveBeenCalled();
+  });
+
+  it("says the person may not do this, and does not read the list again, when the stop is refused", async () => {
+    mocks.stopTeamAccess.mockRejectedValue({
+      status: 403,
+      body: { message: "English detail", code: "missing_scope" },
+    });
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Stop the access of Clinic" }).click();
+    await browserPage.getByRole("alertdialog").getByRole("button", { name: "Stop access" }).click();
+
+    await expect.element(browserPage.getByText("You do not have permission to do this.")).toBeVisible();
+    expect(browserPage.getByText("English detail").elements()).toHaveLength(0);
+    expect(mocks.refreshTeamAccess).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Teams section outside the Members & invites block", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    const teams = browserPage.getByRole("heading", { name: "Teams" });
+    await expect.element(teams).toBeVisible();
+    const block = browserPage.getByRole("heading", { name: "Members & invites" }).element().parentElement!;
+    expect(block.contains(teams.element())).toBe(false);
   });
 });

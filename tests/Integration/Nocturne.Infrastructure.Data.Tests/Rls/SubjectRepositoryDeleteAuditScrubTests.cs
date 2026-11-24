@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Services;
@@ -7,8 +8,9 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
 /// <summary>
 /// What <see cref="SubjectRepository.DeleteAsync"/> leaves of the deleted subject in
-/// <c>mutation_audit_log</c> and <c>read_access_log</c>, run as <c>nocturne_app</c> under the live
-/// policies, in a tenant the subject still belongs to and in one it has left.
+/// <c>mutation_audit_log</c>, <c>read_access_log</c> and <c>membership_requests</c>, run as
+/// <c>nocturne_app</c> under the live policies, in a tenant the subject still belongs to and in one
+/// it has left.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -63,6 +65,10 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
                     INSERT INTO read_access_log (id, tenant_id, endpoint, status_code, actor_subject_id, actor_name, ip_address, user_agent, created_at)
                     VALUES (gen_random_uuid(), @tenant, 'GET /api/v4/sensor-glucoses', 200, @actor, @name, @ip, @agent, now())
                     """, ("tenant", tenant), ("actor", actor), ("name", Name(actor)), ("ip", Ip(actor)), ("agent", Agent(actor)));
+                await ExecuteAsync(conn, """
+                    INSERT INTO membership_requests (id, tenant_id, subject_id, message, status, created_at)
+                    VALUES (gen_random_uuid(), @tenant, @actor, 'let me in', 'pending', now())
+                    """, ("tenant", tenant), ("actor", actor));
             }
         }
     }
@@ -117,6 +123,31 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Delete_RemovesTheSubjectsMembershipRequestsInEveryTenantAndNoOneElses(bool deletedFromTheMemberTenant)
+    {
+        await DeleteLeaverAsync(deletedFromTheMemberTenant);
+
+        foreach (var tenant in Tenants)
+            (await RequestersAsync(tenant)).Should().Equal([_bystander], $"tenant {tenant} held a request from each");
+    }
+
+    private async Task<List<Guid>> RequestersAsync(Guid tenant)
+    {
+        var requesters = new List<Guid>();
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await SetTenantAsync(conn, tenant);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT subject_id FROM membership_requests WHERE tenant_id = @tenant";
+        cmd.Parameters.AddWithValue("tenant", tenant);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            requesters.Add(reader.GetGuid(0));
+        return requesters;
+    }
+
     /// <summary>
     /// Deletes as a reader with no tenant, as a platform admin on the apex does, or as a reader of the
     /// tenant the subject still belongs to, whose context the tenant query filter would hold there.
@@ -127,7 +158,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         if (fromTheMemberTenant)
             TenantReaderData.Resolve(scope.ServiceProvider, _memberTenant);
 
-        var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>());
+        var repository = new SubjectRepository(scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(), AccountLinkRoutes.Off);
         (await repository.DeleteAsync(_leaver, CancellationToken.None)).Should().BeOfType<SubjectChange.Changed>();
     }
 

@@ -8,13 +8,15 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// Operator diagnostics for the Loop APNs push configuration.
+/// Nightscout Loop: operator diagnostics for the Loop APNs push configuration. A client reads the status of
+/// that configuration.
 /// </summary>
 /// <seealso cref="ILoopService"/>
 [ApiController]
 [Tags("V2")]
 [Route("api/v2")]
 [Produces("application/json")]
+[ErrorEnvelope]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class LoopController : ControllerBase
 {

@@ -41,12 +41,12 @@ public class DexcomConnectorService
     ///     Fetches SensorGlucose records from the Dexcom Share API.
     /// </summary>
     private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
-        DexcomConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
+        DexcomConnectorConfiguration config, TokenSession session, DateTime? since, CancellationToken cancellationToken)
     {
-        var batchData = await FetchBatchDataAsync(config, since, cancellationToken);
+        var batchData = await FetchBatchDataAsync(config, session, since, cancellationToken);
         if (batchData == null) return [];
 
-        var records = _sensorGlucoseMapper.MapBatchData(batchData, Clock.GetUtcNow().UtcDateTime).ToList();
+        var records = _sensorGlucoseMapper.MapBatchData(batchData).ToList();
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} SensorGlucose records from Dexcom",
             ConnectorSource,
@@ -55,12 +55,20 @@ public class DexcomConnectorService
         return records;
     }
 
+    /// <inheritdoc />
+    protected override bool NeedsSignIn(SyncRequest request, DexcomConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
+
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, DexcomConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
     /// <summary>
     ///     Performs sync, publishing SensorGlucose records directly to the V4 data store.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         DexcomConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -71,12 +79,10 @@ public class DexcomConnectorService
             return result;
         }
 
-        if (await ValidTokenAsync(config, cancellationToken) is null)
-            return AuthenticationFailedResult();
-
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
+            var sensorGlucose = await FetchSensorGlucoseAsync(
+                config, session, WindowStart(request, ResumeFamily.Glucose), cancellationToken);
 
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose.ToList(), config, cancellationToken);
@@ -90,21 +96,11 @@ public class DexcomConnectorService
     }
 
     private async Task<DexcomEntry[]?> FetchBatchDataAsync(
-        DexcomConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
+        DexcomConnectorConfiguration config, TokenSession session, DateTime? since, CancellationToken cancellationToken)
     {
-        var sessionId = await ValidTokenAsync(config, cancellationToken);
-        if (sessionId is null)
-        {
-            _logger.LogWarning(
-                "[{ConnectorSource}] Failed to get valid session, authentication failed",
-                ConnectorSource
-            );
-            return null;
-        }
-
         var fetched = await ExecuteWithRetryAsync(
-            async () => await FetchRawDataCoreAsync(config, sessionId, since, cancellationToken),
-            ReauthenticateWith(config, t => sessionId = t, cancellationToken),
+            async () => await FetchRawDataCoreAsync(config, session.Token, since, cancellationToken),
+            session.ReauthenticateAsync,
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchDexcomData",
             cancellationToken: cancellationToken

@@ -41,11 +41,10 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// <c>V4ReadOnlyControllerBaseTests</c> and <c>V4CrudControllerBaseTests</c>.
 /// </summary>
 /// <remarks>
-/// Grouped rather than split per controller because only four of these controllers have a test
-/// class of their own; those four are covered in place, next to their existing fixtures
-/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>NutritionControllerTests</c>,
-/// <c>ActivityControllerV4Tests</c>). <c>V4ReadLimitCoverageTests</c> guards that the whole
-/// surface stays covered.
+/// Grouped rather than split per controller because only three of these controllers have a test
+/// class of their own; those three are covered in place, next to their existing fixtures
+/// (<c>AuditControllerTests</c>, <c>FoodsControllerTests</c>, <c>ActivityControllerV4Tests</c>).
+/// <c>V4ReadLimitCoverageTests</c> guards that the whole surface stays covered.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class V4ReadLimitClampTests
@@ -242,7 +241,7 @@ public class V4ReadLimitClampTests
 
         var response = ((OkObjectResult)result.Result!).Value.Should().BeOfType<PaginatedResponse<TherapySettings>>().Subject;
         response.Pagination.Total.Should().BeNull();
-        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        repo.Verify(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static ProfileController CreateProfileController(Mock<ITherapySettingsRepository> repo) =>
@@ -501,6 +500,7 @@ public class V4ReadLimitClampTests
         new(
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
+            Mock.Of<IHttpClientFactory>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             Mock.Of<ILogger<CompatibilityController>>());
 
@@ -581,19 +581,24 @@ public class V4ReadLimitClampTests
         repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo) =>
-        new(
-            repo.Object,
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<ITrackerAlertRuleSyncService>(),
-            Mock.Of<IAlertRepository>(),
-            Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAlertAcknowledgementService>(),
-            new TrackerDeviceEventWriter(
-                Mock.Of<IDeviceEventRepository>(),
-                Mock.Of<IPatientDeviceStamper>(),
-                Mock.Of<ILogger<TrackerDeviceEventWriter>>()),
-            Mock.Of<ILogger<TrackersController>>())
+    private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo)
+    {
+        repo.Setup(r => r.GetCompletedInstancesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return new(
+            new TrackerService(
+                repo.Object,
+                Mock.Of<ISignalRBroadcastService>(),
+                Mock.Of<ITrackerAlertRuleSyncService>(),
+                Mock.Of<IAlertRepository>(),
+                Mock.Of<ITenantAccessor>(),
+                Mock.Of<IAlertAcknowledgementService>(),
+                new TrackerDeviceEventWriter(
+                    Mock.Of<IDeviceEventRepository>(),
+                    Mock.Of<IPatientDeviceStamper>(),
+                    Mock.Of<ILogger<TrackerDeviceEventWriter>>()),
+                TimeProvider.System,
+                Mock.Of<ILogger<TrackerService>>()))
         {
             ControllerContext = new ControllerContext
             {
@@ -614,4 +619,5 @@ public class V4ReadLimitClampTests
                 },
             },
         };
+    }
 }

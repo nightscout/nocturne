@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 
@@ -67,7 +68,7 @@ public sealed class RequireDeclaredWriteScopeAttribute : Attribute, IActionFilte
         }
 
         if (!Scope.Satisfies(context.HttpContext.GetGrantedScopes(), writeScope))
-            context.Result = new ForbidResult();
+            context.Result = ScopeForbiddenResult.For(context.HttpContext, [writeScope]);
     }
 
     /// <summary>No-op; the check runs before the action executes.</summary>

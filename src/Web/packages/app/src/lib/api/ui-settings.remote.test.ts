@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ApiException } from "#lib/api/generated/nocturne-api-client.js";
+import { ApiException } from "@nocturne/api-client";
 import { errorMessage } from "#lib/forms/submit-error.js";
 
 let upstream: () => Promise<unknown>;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SupportDiagnosticsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import type { SupportDiagnosticsResponse } from "@nocturne/api-client";
 import { buildDiagnosticInfo, type DiagnosticSources } from "./diagnostic-info";
 import { isRecord } from "#lib/utils/type-guards.js";
 

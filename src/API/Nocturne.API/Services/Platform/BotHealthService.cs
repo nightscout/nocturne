@@ -62,6 +62,7 @@ public sealed class BotHealthService(TimeProvider time)
                     Offered = ChannelDestinations.Offered.Contains(ct),
                     RequiresDestination = ChannelDestinations.RequiresDestination(ct),
                     RequiresLink = ChannelDestinations.ResolvesFromLinkedIdentity(ct),
+                    DeliversWhileClosed = Nocturne.API.Services.SetupHub.AlertDeliveryCheck.DeliversWhileClosed(ct),
                 };
 
                 var platform = ChannelDestinations.PlatformOf(ct);
@@ -102,4 +103,7 @@ public class ChannelStatusEntry
 
     /// <summary>Whether this channel's destination comes from the caller's linked chat identity.</summary>
     public bool RequiresLink { get; set; }
+
+    /// <inheritdoc cref="Nocturne.API.Services.SetupHub.AlertDeliveryCheck.DeliversWhileClosed"/>
+    public bool DeliversWhileClosed { get; set; }
 }

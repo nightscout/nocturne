@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
+using CredentialMaker = Nocturne.Core.Models.Authorization.CredentialMaker;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 using DirectGrantLookup = Nocturne.Core.Models.Authorization.DirectGrantLookup;
 using OAuthGrantEdit = Nocturne.Core.Models.Authorization.OAuthGrantEdit;
@@ -139,6 +140,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             Email = subject.Email,
         };
 
+        var issuedAt = _time.GetUtcNow();
+        var lifetime = GrantTokenLifetime.Of(ExchangedJwtLifetime, grant.ExpiresAt, issuedAt);
         var jwt = _jwtService.GenerateAccessToken(
             subjectInfo,
             permissions: [],
@@ -146,7 +149,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             scopes: grant.Scopes,
             limitTo24Hours: grant.LimitTo24Hours,
             tenantId: grant.TenantId,
-            lifetime: ExchangedJwtLifetime,
+            lifetime: lifetime,
             grantId: grant.Id
         );
 
@@ -162,15 +165,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             _logger.LogWarning(ex, "Failed to update last used metadata for grant {GrantId}", grant.Id);
         }
 
-        var now = _time.GetUtcNow();
-        var exp = now.Add(ExchangedJwtLifetime);
-
         return new AuthorizationResponse
         {
             Token = jwt,
             Sub = subject.Name,
-            Iat = now.ToUnixTimeSeconds(),
-            Exp = exp.ToUnixTimeSeconds(),
+            Iat = issuedAt.ToUnixTimeSeconds(),
+            Exp = issuedAt.Add(lifetime).ToUnixTimeSeconds(),
             PermissionGroups = [[.. ScopeTranslator.ToPermissions(grant.Scopes).Order(StringComparer.Ordinal)]],
         };
     }
@@ -364,8 +364,9 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// Create a new subject
     /// </summary>
     /// <param name="subject">Subject to create</param>
+    /// <param name="maker">The member who creates it; null for a system write.</param>
     /// <returns>Created subject, carrying the plaintext token this one time</returns>
-    public async Task<Subject> CreateSubjectAsync(Subject subject)
+    public async Task<Subject> CreateSubjectAsync(Subject subject, CredentialMaker? maker)
     {
         try
         {
@@ -390,12 +391,13 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 deviceSubjectId,
                 label,
                 [.. scopes],
-                expiresAt: null,
+                expiresAt: maker?.AccessEndsAt,
                 // A clamped caller may not mint a token wider than itself; see
                 // HttpContextExtensions.IsCallerHistoryClamped.
                 limitTo24Hours: _categoryReadContext.IsHistoryClamped,
                 ipAddress: null,
-                userAgent: null);
+                userAgent: null,
+                createdBySubjectId: maker?.SubjectId);
 
             if (result.Response is not { } created)
             {
@@ -541,7 +543,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         }
 
         var definitions = (await _roleService.GetAllRolesAsync())
-            .ToDictionary(r => r.Name, r => r.Permissions ?? [], StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(r => r.Name, r => r.Permissions ?? [], StringComparer.Ordinal);
 
         var permissions = roleNames.SelectMany(name =>
             definitions.TryGetValue(name, out var defined) ? defined : [name]);

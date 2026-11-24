@@ -8,7 +8,7 @@ const predictionStatus = vi.hoisted(() => ({
 const unavailable = predictionStatus.next;
 
 vi.mock("#lib/api/chart-data.remote.js", () => ({
-  getChartData: vi.fn(async () => (await import("#lib/utils/chart-data-transform.js")).transformChartData({})),
+  getChartData: vi.fn(async () => (await import("@nocturne/charts/core")).transformChartData({})),
 }));
 vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),

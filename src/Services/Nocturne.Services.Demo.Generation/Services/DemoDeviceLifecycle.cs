@@ -1,3 +1,5 @@
+using System.Globalization;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -34,13 +36,13 @@ public static class DemoDeviceLifecycle
     private static readonly DeviceKind[] Kinds =
     [
         new(new TrackerSeedSpec("CGM Sensor", TrackerCategory.Sensor, "radio", 240,
-            "Sensor Start", CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
+            TreatmentTypes.SensorStart, CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
         new(new TrackerSeedSpec("Infusion Site", TrackerCategory.Cannula, "syringe", 72,
-            "Site Change", CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.SiteChange, CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Reservoir", TrackerCategory.Reservoir, "cylinder", 72,
-            "Insulin Change", CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.InsulinChange, CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Pump Battery", TrackerCategory.Battery, "battery", 504,
-            "Pump Battery Change", CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
+            TreatmentTypes.PumpBatteryChange, CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
     ];
 
     /// <summary>Tracker definitions matching the generated schedule.</summary>
@@ -120,7 +122,7 @@ public static class DemoDeviceLifecycle
     {
         EventType = change.EventType,
         Mills = change.TimestampUtc.ToMills(),
-        Created_at = change.TimestampUtc.ToString("o"),
+        Created_at = change.TimestampUtc.ToString("o", CultureInfo.InvariantCulture),
         EnteredBy = "demo-user",
         DataSource = dataSource,
     };

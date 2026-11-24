@@ -58,6 +58,15 @@ internal sealed class ConnectorResetJobEntityConfiguration : IEntityTypeConfigur
     }
 }
 
+internal sealed class GoogleHealthWorkEntityConfiguration : IEntityTypeConfiguration<GoogleHealthWorkEntity>
+{
+    public void Configure(EntityTypeBuilder<GoogleHealthWorkEntity> entity)
+    {
+        entity.HasKey(e => e.TenantId);
+        entity.Property(e => e.TenantId).ValueGeneratedNever();
+    }
+}
+
 internal sealed class GoogleHealthGrantHolderEntityConfiguration : IEntityTypeConfiguration<GoogleHealthGrantHolderEntity>
 {
     public void Configure(EntityTypeBuilder<GoogleHealthGrantHolderEntity> entity)

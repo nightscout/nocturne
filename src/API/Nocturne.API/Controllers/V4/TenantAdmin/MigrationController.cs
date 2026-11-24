@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
-using Nocturne.API.Helpers;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Migration;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Migration endpoints for importing data from Nightscout.
+/// Import data from Nightscout. Test a source, start an import, check or cancel a job, and list past
+/// jobs and sources.
 /// </summary>
 /// <seealso cref="IMigrationJobService"/>
 /// <seealso cref="IConnectorConfigurationService"/>
@@ -70,6 +72,9 @@ public class MigrationController : ControllerBase
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         // Validate request based on mode
         if (request.Mode == MigrationMode.Api)
         {
@@ -77,9 +82,9 @@ public class MigrationController : ControllerBase
             {
                 return Problem(detail: "Nightscout URL is required for API mode", statusCode: 400, title: "Bad Request");
             }
-            if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out _))
+            if (!NightscoutAddress.TryResolve(request.NightscoutUrl, out _))
             {
-                return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+                return Problem(detail: NightscoutAddress.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
             }
         }
         else
@@ -120,6 +125,9 @@ public class MigrationController : ControllerBase
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var source = await NightscoutConnectorSource.ReadAsync(_connectorConfigService, connectorName, ct);
         if (source is null)
         {
@@ -133,9 +141,9 @@ public class MigrationController : ControllerBase
             return Problem(detail: "Nightscout URL not found in connector configuration", statusCode: 400, title: "Bad Request");
         }
 
-        if (!NightscoutBaseUri.TryFor(url, out _))
+        if (!NightscoutAddress.TryResolve(url, out _))
         {
-            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+            return Problem(detail: NightscoutAddress.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
         }
 
         var request = new StartMigrationRequest

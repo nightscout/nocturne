@@ -19,10 +19,10 @@ public sealed record OverrideSnapshot(
 /// on stale data after the uploader goes offline.</summary>
 public sealed record PumpSuspensionSnapshot(DateTime StartedAt);
 
-/// <summary>Lightweight projection of the active pump-mode StateSpan for alert evaluation.
-/// Pump modes are mutually exclusive (one span per category) so this is a single record
-/// rather than a collection.</summary>
-public sealed record PumpStateSnapshot(PumpModeState Mode, DateTime StartedAt);
+/// <summary>Lightweight projection of an active pump-mode StateSpan for alert evaluation.
+/// <paramref name="Mode"/> is the stored state as written, which
+/// may name a mode this build's <see cref="PumpModeState"/> lacks; the engine reads that as unknown.</summary>
+public sealed record PumpModeSnapshot(string Mode, DateTime StartedAt);
 
 /// <summary>Lightweight projection of an active StateSpan for the generic state-span-active
 /// condition. The category and state are echoed back so the engine can audit lookups,

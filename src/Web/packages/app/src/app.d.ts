@@ -46,6 +46,8 @@ declare global {
 			errorId?: string;
 			/** The server's structured validation issues, when the rejection carried them. */
 			issues?: RustValidationIssue[];
+			/** The stable machine code of the problem, when the rejection carried one. */
+			code?: string;
 		}
 		type TenantStatus = TenantStatusResponse;
 		/** How this request's status call settled: its body, or the failure the client threw. */
@@ -108,6 +110,11 @@ declare global {
 			 * tenant the subject is not a member of (distinct from ordinary membership)
 			 */
 			isPlatformAccessGrant: boolean;
+			/**
+			 * Whether the current session was opened from a sign-in link someone else issued, so it
+			 * cannot change sign-in methods, credentials or sharing until the person signs in again
+			 */
+			isHandedOffSession?: boolean;
 			/**
 			 * Whether the current session is a guest link session (read-only, no subjectId)
 			 */

@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -11,7 +13,9 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Twiist.Configurations;
 using Nocturne.Connectors.Twiist.Models;
 using Nocturne.Connectors.Twiist.Services;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Connectors.Twiist.Tests.Mappers;
+using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Twiist.Tests.Services;
@@ -194,6 +198,65 @@ public class TwiistConnectorServiceTests
         await run.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSamePackage_StoresNoNewRow()
+    {
+        var at = new DateTime(2026, 6, 16, 22, 42, 0, DateTimeKind.Utc);
+        var store = new StoringConnectorPublisher();
+        var package = new TwiistPackage
+        {
+            PwdId = PwdId,
+            Status = new TwiistStatus
+            {
+                Summary = new TwiistSummary { LastGlucoseTrend = "Flat" },
+                Details = new TwiistDetails { BasalRateUnitsPerHour = "0.4" },
+                GlucoseHistory = new TwiistRawBlob { Data = GlucoseBlob((at, 120), (at.AddMinutes(5), 124)) },
+                InsulinDelivery = new TwiistRawBlob { Data = TwiistTempBasalMapperTests.BuildBlob((at, at.AddMinutes(5), 0.5)) },
+                InsulinHistory =
+                [
+                    new() { Identifier = "dose-1", DoseType = "Bolus", StartDate = at, Value = 1.5m },
+                    new() { DoseType = "Suspend", StartDate = at.AddMinutes(30) },
+                    new() { DoseType = "Resume", StartDate = at.AddMinutes(50) },
+                ],
+                MealHistory = [new TwiistMeal { StartDate = at, Grams = 30m }],
+            },
+        };
+        var fixture = new ServiceFixture(
+            responses: new() { ["/package"] = Json(package) }, patientId: PwdId, publisher: store);
+        var request = new SyncRequest
+        {
+            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals],
+        };
+
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        stored.Select(k => k.Type).Distinct().Should().BeEquivalentTo(
+            [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal)]);
+        stored.Should().HaveCount(2 + 1 + 1 + 2);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
+    private static string GlucoseBlob(params (DateTime At, double Mgdl)[] readings)
+    {
+        var raw = new byte[readings.Length * 8];
+        for (var i = 0; i < readings.Length; i++)
+        {
+            var span = raw.AsSpan(i * 8);
+            BinaryPrimitives.WriteUInt32LittleEndian(span, (uint)(readings[i].At - TwiistConstants.BlobEpoch).TotalSeconds);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[4..], (uint)(readings[i].Mgdl * 100));
+        }
+
+        using var output = new MemoryStream();
+        using (var deflate = new DeflateStream(output, CompressionMode.Compress, leaveOpen: true))
+            deflate.Write(raw, 0, raw.Length);
+        return Convert.ToBase64String(output.ToArray());
+    }
+
     private static HttpResponseMessage Json<T>(T content) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(JsonSerializer.Serialize(content), Encoding.UTF8, "application/json")
@@ -203,7 +266,7 @@ public class TwiistConnectorServiceTests
         new HttpClient(),
         new ConnectorTokenCache(),
         new ConnectorServerResolver<TwiistConnectorConfiguration>(null, null, null),
-        new FakeTenantAccessor(),
+        ResolvedTenant.Accessor(),
         NullLogger<TwiistAuthTokenProvider>.Instance,
         Mock.Of<IRetryDelayStrategy>())
     {
@@ -211,49 +274,23 @@ public class TwiistConnectorServiceTests
             TwiistConnectorConfiguration config, CancellationToken cancellationToken) =>
             Task.FromResult<(string?, DateTime, IReadOnlyDictionary<string, string>?)>(
                 token is null ? (null, DateTime.MinValue, null) : (token, DateTime.UtcNow.AddHours(1), null));
-
-        private sealed class FakeTenantAccessor : ITenantAccessor
-        {
-            public bool IsResolved => true;
-            public Guid TenantId => Guid.Empty;
-            public TenantContext? Context => null;
-            public void SetTenant(TenantContext context) { }
-        }
-    }
-
-    private sealed class CapturingHandler(
-        Dictionary<string, HttpResponseMessage> responses, List<string> requested, string? timesOutOn = null,
-        CancellationTokenSource? cancelsOnTimeout = null)
-        : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var path = request.RequestUri?.PathAndQuery ?? string.Empty;
-            requested.Add(path);
-            if (timesOutOn is not null && path.Contains(timesOutOn, StringComparison.OrdinalIgnoreCase))
-            {
-                cancelsOnTimeout?.Cancel();
-                throw new TaskCanceledException("The request timed out.");
-            }
-            foreach (var (key, response) in responses)
-                if (path.Contains(key, StringComparison.OrdinalIgnoreCase))
-                    return Task.FromResult(response);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
-        }
     }
 
     private sealed class ServiceFixture
     {
         public TwiistConnectorService Service { get; }
         public TwiistConnectorConfiguration Config { get; }
-        public List<string> RequestedPaths { get; } = [];
+        public IReadOnlyList<string> RequestedPaths => [.. _handler.Requests.Select(r => r.Uri!.PathAndQuery)];
+
+        private readonly FakeHttpHandler _handler = new();
 
         public ServiceFixture(
             Dictionary<string, HttpResponseMessage> responses,
             string? token = "valid-token",
             string patientId = "",
             string? timesOutOn = null,
-            CancellationTokenSource? cancellation = null)
+            CancellationTokenSource? cancellation = null,
+            IConnectorPublisher? publisher = null)
         {
             Config = new TwiistConnectorConfiguration
             {
@@ -262,9 +299,22 @@ public class TwiistConnectorServiceTests
                 PatientId = patientId
             };
 
-            var httpClient = new HttpClient(new CapturingHandler(responses, RequestedPaths, timesOutOn, cancellation));
-            var publisher = new Mock<IConnectorPublisher>();
-            publisher.Setup(p => p.IsAvailable).Returns(true);
+            if (timesOutOn is not null)
+                _handler.On(timesOutOn, _ =>
+                {
+                    cancellation?.Cancel();
+                    throw new TaskCanceledException("The request timed out.");
+                });
+            foreach (var (path, response) in responses)
+                _handler.On(path, response);
+
+            var httpClient = new HttpClient(_handler);
+            if (publisher is null)
+            {
+                var mock = new Mock<IConnectorPublisher>();
+                mock.Setup(p => p.IsAvailable).Returns(true);
+                publisher = mock.Object;
+            }
 
             Service = new TwiistConnectorService(
                 httpClient,
@@ -272,7 +322,7 @@ public class TwiistConnectorServiceTests
                 NullLogger<TwiistConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTwiistAuthTokenProvider(token),
-                publisher.Object);
+                publisher);
         }
     }
 }

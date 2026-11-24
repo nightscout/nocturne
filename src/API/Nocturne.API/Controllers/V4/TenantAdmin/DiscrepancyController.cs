@@ -14,14 +14,16 @@ using Nocturne.Infrastructure.Data.Abstractions;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Controller for discrepancy analysis and compatibility dashboard.
-/// Provides endpoints for monitoring Nightscout/Nocturne compatibility.
+/// Discrepancy analyses for Nightscout compatibility. A caller with full access can read the
+/// metrics, endpoints, analyses and status. The ingest operation receives discrepancy data
+/// forwarded from another instance. It checks a shared forwarding key in place of a sign-in.
 /// </summary>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
+[ErrorEnvelope]
 public class DiscrepancyController : ControllerBase
 {
     private readonly IDiscrepancyAnalysisRepository _discrepancyRepository;
@@ -58,27 +60,19 @@ public class DiscrepancyController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            _logger.LogDebug(
-                "Retrieving compatibility metrics from {FromDate} to {ToDate}",
-                fromDate,
-                toDate
-            );
+        _logger.LogDebug(
+            "Retrieving compatibility metrics from {FromDate} to {ToDate}",
+            fromDate,
+            toDate
+        );
 
-            var metrics = await _discrepancyRepository.GetCompatibilityMetricsAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
+        var metrics = await _discrepancyRepository.GetCompatibilityMetricsAsync(
+            fromDate,
+            toDate,
+            cancellationToken
+        );
 
-            return Ok(metrics);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving compatibility metrics");
-            return Problem(detail: "Error retrieving compatibility metrics", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(metrics);
     }
 
     /// <summary>
@@ -96,27 +90,19 @@ public class DiscrepancyController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            _logger.LogDebug(
-                "Retrieving endpoint metrics from {FromDate} to {ToDate}",
-                fromDate,
-                toDate
-            );
+        _logger.LogDebug(
+            "Retrieving endpoint metrics from {FromDate} to {ToDate}",
+            fromDate,
+            toDate
+        );
 
-            var metrics = await _discrepancyRepository.GetEndpointMetricsAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
+        var metrics = await _discrepancyRepository.GetEndpointMetricsAsync(
+            fromDate,
+            toDate,
+            cancellationToken
+        );
 
-            return Ok(metrics);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving endpoint metrics");
-            return Problem(detail: "Error retrieving endpoint metrics", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(metrics);
     }
 
     /// <summary>
@@ -142,86 +128,78 @@ public class DiscrepancyController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        // Validate parameters
+        if (count <= 0)
         {
-            // Validate parameters
-            if (count <= 0)
-            {
-                return Problem(detail: "Count must be positive", statusCode: 400, title: "Bad Request");
-            }
-
-            if (skip < 0)
-            {
-                return Problem(detail: "Skip must be non-negative", statusCode: 400, title: "Bad Request");
-            }
-
-            count = V4ReadLimits.ClampLimit(count);
-
-            _logger.LogDebug(
-                "Retrieving discrepancy analyses: path={RequestPath}, match={OverallMatch}, count={Count}, skip={Skip}",
-                requestPath,
-                overallMatch,
-                count,
-                skip
-            );
-
-            var analyses = await _discrepancyRepository.GetAnalysesAsync(
-                requestPath,
-                overallMatch,
-                fromDate,
-                toDate,
-                count,
-                skip,
-                cancellationToken
-            );
-
-            // Convert to DTOs to avoid exposing internal entities
-            var analysisResults = analyses.Select(a => new DiscrepancyAnalysisDto
-            {
-                Id = a.Id,
-                TraceId = a.TraceId,
-                AnalysisTimestamp = a.AnalysisTimestamp,
-                RequestMethod = a.RequestMethod,
-                RequestPath = a.RequestPath,
-                OverallMatch = (int)a.OverallMatch,
-                StatusCodeMatch = a.StatusCodeMatch,
-                BodyMatch = a.BodyMatch,
-                NightscoutStatusCode = a.NightscoutStatusCode,
-                NocturneStatusCode = a.NocturneStatusCode,
-                NightscoutResponseTimeMs = a.NightscoutResponseTimeMs,
-                NocturneResponseTimeMs = a.NocturneResponseTimeMs,
-                TotalProcessingTimeMs = a.TotalProcessingTimeMs,
-                Summary = a.Summary,
-                SelectedResponseTarget = a.SelectedResponseTarget,
-                SelectionReason = a.SelectionReason,
-                CriticalDiscrepancyCount = a.CriticalDiscrepancyCount,
-                MajorDiscrepancyCount = a.MajorDiscrepancyCount,
-                MinorDiscrepancyCount = a.MinorDiscrepancyCount,
-                NightscoutMissing = a.NightscoutMissing,
-                NocturneMissing = a.NocturneMissing,
-                ErrorMessage = a.ErrorMessage,
-                Discrepancies = a
-                    .Discrepancies.Select(d => new DiscrepancyDetailDto
-                    {
-                        Id = d.Id,
-                        DiscrepancyType = d.DiscrepancyType,
-                        Severity = d.Severity,
-                        Field = d.Field,
-                        NightscoutValue = d.NightscoutValue,
-                        NocturneValue = d.NocturneValue,
-                        Description = d.Description,
-                        RecordedAt = d.RecordedAt,
-                    })
-                    .ToList(),
-            });
-
-            return Ok(analysisResults);
+            return Problem(detail: "Count must be positive", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+
+        if (skip < 0)
         {
-            _logger.LogError(ex, "Error retrieving discrepancy analyses");
-            return Problem(detail: "Error retrieving discrepancy analyses", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Skip must be non-negative", statusCode: 400, title: "Bad Request");
         }
+
+        count = V4ReadLimits.ClampLimit(count);
+
+        _logger.LogDebug(
+            "Retrieving discrepancy analyses: path={RequestPath}, match={OverallMatch}, count={Count}, skip={Skip}",
+            requestPath,
+            overallMatch,
+            count,
+            skip
+        );
+
+        var analyses = await _discrepancyRepository.GetAnalysesAsync(
+            requestPath,
+            overallMatch,
+            fromDate,
+            toDate,
+            count,
+            skip,
+            cancellationToken
+        );
+
+        // Convert to DTOs to avoid exposing internal entities
+        var analysisResults = analyses.Select(a => new DiscrepancyAnalysisDto
+        {
+            Id = a.Id,
+            TraceId = a.TraceId,
+            AnalysisTimestamp = a.AnalysisTimestamp,
+            RequestMethod = a.RequestMethod,
+            RequestPath = a.RequestPath,
+            OverallMatch = (int)a.OverallMatch,
+            StatusCodeMatch = a.StatusCodeMatch,
+            BodyMatch = a.BodyMatch,
+            NightscoutStatusCode = a.NightscoutStatusCode,
+            NocturneStatusCode = a.NocturneStatusCode,
+            NightscoutResponseTimeMs = a.NightscoutResponseTimeMs,
+            NocturneResponseTimeMs = a.NocturneResponseTimeMs,
+            TotalProcessingTimeMs = a.TotalProcessingTimeMs,
+            Summary = a.Summary,
+            SelectedResponseTarget = a.SelectedResponseTarget,
+            SelectionReason = a.SelectionReason,
+            CriticalDiscrepancyCount = a.CriticalDiscrepancyCount,
+            MajorDiscrepancyCount = a.MajorDiscrepancyCount,
+            MinorDiscrepancyCount = a.MinorDiscrepancyCount,
+            NightscoutMissing = a.NightscoutMissing,
+            NocturneMissing = a.NocturneMissing,
+            ErrorMessage = a.ErrorMessage,
+            Discrepancies = a
+                .Discrepancies.Select(d => new DiscrepancyDetailDto
+                {
+                    Id = d.Id,
+                    DiscrepancyType = d.DiscrepancyType,
+                    Severity = d.Severity,
+                    Field = d.Field,
+                    NightscoutValue = d.NightscoutValue,
+                    NocturneValue = d.NocturneValue,
+                    Description = d.Description,
+                    RecordedAt = d.RecordedAt,
+                })
+                .ToList(),
+        });
+
+        return Ok(analysisResults);
     }
 
     /// <summary>
@@ -237,60 +215,52 @@ public class DiscrepancyController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
+        var analysis = await _discrepancyRepository.GetAnalysisByIdAsync(id, cancellationToken);
+        if (analysis == null)
         {
-            var analysis = await _discrepancyRepository.GetAnalysisByIdAsync(id, cancellationToken);
-            if (analysis == null)
-            {
-                return NotFound($"Discrepancy analysis with ID {id} not found");
-            }
-
-            var result = new DiscrepancyAnalysisDto
-            {
-                Id = analysis.Id,
-                TraceId = analysis.TraceId,
-                AnalysisTimestamp = analysis.AnalysisTimestamp,
-                RequestMethod = analysis.RequestMethod,
-                RequestPath = analysis.RequestPath,
-                OverallMatch = (int)analysis.OverallMatch,
-                StatusCodeMatch = analysis.StatusCodeMatch,
-                BodyMatch = analysis.BodyMatch,
-                NightscoutStatusCode = analysis.NightscoutStatusCode,
-                NocturneStatusCode = analysis.NocturneStatusCode,
-                NightscoutResponseTimeMs = analysis.NightscoutResponseTimeMs,
-                NocturneResponseTimeMs = analysis.NocturneResponseTimeMs,
-                TotalProcessingTimeMs = analysis.TotalProcessingTimeMs,
-                Summary = analysis.Summary,
-                SelectedResponseTarget = analysis.SelectedResponseTarget,
-                SelectionReason = analysis.SelectionReason,
-                CriticalDiscrepancyCount = analysis.CriticalDiscrepancyCount,
-                MajorDiscrepancyCount = analysis.MajorDiscrepancyCount,
-                MinorDiscrepancyCount = analysis.MinorDiscrepancyCount,
-                NightscoutMissing = analysis.NightscoutMissing,
-                NocturneMissing = analysis.NocturneMissing,
-                ErrorMessage = analysis.ErrorMessage,
-                Discrepancies = analysis
-                    .Discrepancies.Select(d => new DiscrepancyDetailDto
-                    {
-                        Id = d.Id,
-                        DiscrepancyType = d.DiscrepancyType,
-                        Severity = d.Severity,
-                        Field = d.Field,
-                        NightscoutValue = d.NightscoutValue,
-                        NocturneValue = d.NocturneValue,
-                        Description = d.Description,
-                        RecordedAt = d.RecordedAt,
-                    })
-                    .ToList(),
-            };
-
-            return Ok(result);
+            return NotFound($"Discrepancy analysis with ID {id} not found");
         }
-        catch (Exception ex)
+
+        var result = new DiscrepancyAnalysisDto
         {
-            _logger.LogError(ex, "Error retrieving discrepancy analysis {Id}", id);
-            return Problem(detail: "Error retrieving discrepancy analysis", statusCode: 500, title: "Internal Server Error");
-        }
+            Id = analysis.Id,
+            TraceId = analysis.TraceId,
+            AnalysisTimestamp = analysis.AnalysisTimestamp,
+            RequestMethod = analysis.RequestMethod,
+            RequestPath = analysis.RequestPath,
+            OverallMatch = (int)analysis.OverallMatch,
+            StatusCodeMatch = analysis.StatusCodeMatch,
+            BodyMatch = analysis.BodyMatch,
+            NightscoutStatusCode = analysis.NightscoutStatusCode,
+            NocturneStatusCode = analysis.NocturneStatusCode,
+            NightscoutResponseTimeMs = analysis.NightscoutResponseTimeMs,
+            NocturneResponseTimeMs = analysis.NocturneResponseTimeMs,
+            TotalProcessingTimeMs = analysis.TotalProcessingTimeMs,
+            Summary = analysis.Summary,
+            SelectedResponseTarget = analysis.SelectedResponseTarget,
+            SelectionReason = analysis.SelectionReason,
+            CriticalDiscrepancyCount = analysis.CriticalDiscrepancyCount,
+            MajorDiscrepancyCount = analysis.MajorDiscrepancyCount,
+            MinorDiscrepancyCount = analysis.MinorDiscrepancyCount,
+            NightscoutMissing = analysis.NightscoutMissing,
+            NocturneMissing = analysis.NocturneMissing,
+            ErrorMessage = analysis.ErrorMessage,
+            Discrepancies = analysis
+                .Discrepancies.Select(d => new DiscrepancyDetailDto
+                {
+                    Id = d.Id,
+                    DiscrepancyType = d.DiscrepancyType,
+                    Severity = d.Severity,
+                    Field = d.Field,
+                    NightscoutValue = d.NightscoutValue,
+                    NocturneValue = d.NocturneValue,
+                    Description = d.Description,
+                    RecordedAt = d.RecordedAt,
+                })
+                .ToList(),
+        };
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -304,34 +274,26 @@ public class DiscrepancyController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            // Get metrics for the last 24 hours
-            var last24Hours = DateTimeOffset.UtcNow.AddHours(-24);
-            var metrics = await _discrepancyRepository.GetCompatibilityMetricsAsync(
-                last24Hours,
-                null,
-                cancellationToken
-            );
+        // Get metrics for the last 24 hours
+        var last24Hours = DateTimeOffset.UtcNow.AddHours(-24);
+        var metrics = await _discrepancyRepository.GetCompatibilityMetricsAsync(
+            last24Hours,
+            null,
+            cancellationToken
+        );
 
-            var status = new CompatibilityStatus
-            {
-                OverallScore = metrics.CompatibilityScore,
-                TotalRequests = metrics.TotalRequests,
-                HealthStatus = DetermineHealthStatus(metrics),
-                LastUpdated = DateTimeOffset.UtcNow,
-                CriticalIssues = metrics.CriticalDifferences,
-                MajorIssues = metrics.MajorDifferences,
-                MinorIssues = metrics.MinorDifferences,
-            };
-
-            return Ok(status);
-        }
-        catch (Exception ex)
+        var status = new CompatibilityStatus
         {
-            _logger.LogError(ex, "Error retrieving compatibility status");
-            return Problem(detail: "Error retrieving compatibility status", statusCode: 500, title: "Internal Server Error");
-        }
+            OverallScore = metrics.CompatibilityScore,
+            TotalRequests = metrics.TotalRequests,
+            HealthStatus = DetermineHealthStatus(metrics),
+            LastUpdated = DateTimeOffset.UtcNow,
+            CriticalIssues = metrics.CriticalDifferences,
+            MajorIssues = metrics.MajorDifferences,
+            MinorIssues = metrics.MinorDifferences,
+        };
+
+        return Ok(status);
     }
 
     /// <summary>
@@ -386,82 +348,70 @@ public class DiscrepancyController : ControllerBase
             return Unauthorized();
         }
 
-        try
+        if (request == null || request.Analysis == null)
         {
-            if (request == null || request.Analysis == null)
-            {
-                return Problem(detail: "Invalid request body", statusCode: 400, title: "Bad Request");
-            }
-
-            var sourceId = request.SourceId;
-            var traceId = request.Analysis.TraceId;
-
-            _logger.LogInformation(
-                "Received forwarded discrepancy from {SourceId}: {CorrelationId}",
-                sourceId,
-                traceId
-            );
-
-            // Store the forwarded discrepancy in the database
-            // Mark the source to distinguish from local discrepancies
-            var discrepancies = request.Analysis.Discrepancies
-                .Select(d => new Nocturne.Infrastructure.Data.Repositories.DiscrepancyDetailData
-                {
-                    Type = d.DiscrepancyType,
-                    Severity = d.Severity,
-                    Field = d.Field,
-                    NightscoutValue = d.NightscoutValue,
-                    NocturneValue = d.NocturneValue,
-                    Description = d.Description,
-                })
-                .ToList();
-
-            await _discrepancyRepository.StoreAnalysisAsync(
-                traceId,
-                request.Analysis.AnalysisTimestamp,
-                request.Analysis.RequestMethod,
-                request.Analysis.RequestPath,
-                request.Analysis.OverallMatch,
-                request.Analysis.StatusCodeMatch,
-                request.Analysis.BodyMatch,
-                request.Analysis.NightscoutStatusCode,
-                request.Analysis.NocturneStatusCode,
-                request.Analysis.NightscoutResponseTimeMs,
-                request.Analysis.NocturneResponseTimeMs,
-                request.Analysis.TotalProcessingTimeMs,
-                $"[{sourceId}] {request.Analysis.Summary}",
-                request.Analysis.SelectedResponseTarget,
-                request.Analysis.SelectionReason,
-                discrepancies,
-                request.Analysis.NightscoutMissing,
-                request.Analysis.NocturneMissing,
-                request.Analysis.ErrorMessage,
-                cancellationToken
-            );
-
-            _logger.LogDebug(
-                "Stored forwarded discrepancy from {SourceId}: {CorrelationId}",
-                sourceId,
-                traceId
-            );
-
-            return Ok(new
-            {
-                status = 200,
-                message = "Discrepancy received and stored",
-                correlationId = traceId,
-                sourceId,
-            });
+            return Problem(detail: "Invalid request body", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+
+        var sourceId = request.SourceId;
+        var traceId = request.Analysis.TraceId;
+
+        _logger.LogInformation(
+            "Received forwarded discrepancy from {SourceId}: {CorrelationId}",
+            sourceId,
+            traceId
+        );
+
+        // Store the forwarded discrepancy in the database
+        // Mark the source to distinguish from local discrepancies
+        var discrepancies = request.Analysis.Discrepancies
+            .Select(d => new Nocturne.Infrastructure.Data.Repositories.DiscrepancyDetailData
+            {
+                Type = d.DiscrepancyType,
+                Severity = d.Severity,
+                Field = d.Field,
+                NightscoutValue = d.NightscoutValue,
+                NocturneValue = d.NocturneValue,
+                Description = d.Description,
+            })
+            .ToList();
+
+        await _discrepancyRepository.StoreAnalysisAsync(
+            traceId,
+            request.Analysis.AnalysisTimestamp,
+            request.Analysis.RequestMethod,
+            request.Analysis.RequestPath,
+            request.Analysis.OverallMatch,
+            request.Analysis.StatusCodeMatch,
+            request.Analysis.BodyMatch,
+            request.Analysis.NightscoutStatusCode,
+            request.Analysis.NocturneStatusCode,
+            request.Analysis.NightscoutResponseTimeMs,
+            request.Analysis.NocturneResponseTimeMs,
+            request.Analysis.TotalProcessingTimeMs,
+            $"[{sourceId}] {request.Analysis.Summary}",
+            request.Analysis.SelectedResponseTarget,
+            request.Analysis.SelectionReason,
+            discrepancies,
+            request.Analysis.NightscoutMissing,
+            request.Analysis.NocturneMissing,
+            request.Analysis.ErrorMessage,
+            cancellationToken
+        );
+
+        _logger.LogDebug(
+            "Stored forwarded discrepancy from {SourceId}: {CorrelationId}",
+            sourceId,
+            traceId
+        );
+
+        return Ok(new
         {
-            _logger.LogError(
-                ex,
-                "Error ingesting forwarded discrepancy from {SourceId}",
-                request?.SourceId ?? "unknown"
-            );
-            return Problem(detail: "Error processing forwarded discrepancy", statusCode: 500, title: "Internal Server Error");
-        }
+            status = 200,
+            message = "Discrepancy received and stored",
+            correlationId = traceId,
+            sourceId,
+        });
     }
 
     /// <summary>

@@ -21,7 +21,8 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
     /// <inheritdoc />
     /// <remarks>
     /// One round trip per table for each of the reads by id and by sync key
-    /// (<see cref="ResolveAsync{TModel,TEntity}"/>), each record planned onto its row in memory
+    /// (<see cref="ResolveAsync{TModel,TEntity}"/>), two more for a history-clamped writer whose
+    /// records name rows outside its window, each record planned onto its row in memory
     /// (<see cref="Plan{TModel,TEntity}"/>), then one save for both tables.
     /// </remarks>
     public async Task<ActivitySeriesWrites> WriteHealthSeriesAsync(
@@ -37,7 +38,12 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
         var stepCountPlan = Plan(db, db.StepCounts, stepCountRows, StepCountMapper.UpdateEntity);
 
         if (heartRatePlan.Writes || stepCountPlan.Writes)
-            await db.SaveChangesAsync(ct);
+        {
+            if (heartRateRows.Hidden.Count == 0 && stepCountRows.Hidden.Count == 0)
+                await db.SaveChangesAsync(ct);
+            else
+                await db.WriteWithHistoryClampLiftedAsync(async token => await db.SaveChangesAsync(token), ct);
+        }
 
         return new ActivitySeriesWrites(
             heartRatePlan.Written(HeartRateMapper.ToDomainModel),
@@ -48,16 +54,13 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
-        var recordId = RecordIdKey.ParseIdToGuid(id);
 
-        return await db.UserTombstones<StateSpanEntity>().AnyAsync(
-                s => ActivityCategoryNames.Contains(s.Category) && (s.LegacyId == id || s.Id == recordId), ct)
-            || await db.UserTombstones<SleepSessionEntity>().AnyAsync(
-                s => s.OriginalId == id || s.Id == recordId, ct)
-            || await db.UserTombstones<HeartRateEntity>().AnyAsync(
-                h => h.OriginalId == id || h.Id == recordId, ct)
-            || await db.UserTombstones<StepCountEntity>().AnyAsync(
-                s => s.OriginalId == id || s.Id == recordId, ct);
+        return await db.UserTombstones<StateSpanEntity>()
+                .Where(s => ActivityCategoryNames.Contains(s.Category))
+                .AnyAsync(RecordIdKey.MatchingLegacy<StateSpanEntity>(id), ct)
+            || await db.UserTombstones<SleepSessionEntity>().AnyAsync(RecordIdKey.Matching<SleepSessionEntity>(id), ct)
+            || await db.UserTombstones<HeartRateEntity>().AnyAsync(RecordIdKey.Matching<HeartRateEntity>(id), ct)
+            || await db.UserTombstones<StepCountEntity>().AnyAsync(RecordIdKey.Matching<StepCountEntity>(id), ct);
     }
 
     /// <inheritdoc />
@@ -71,16 +74,15 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
         await using var db = await contexts.CreateAsync(ct);
         var deleted = 0;
         var now = time.GetUtcNow().UtcDateTime;
-        var recordId = RecordIdKey.ParseIdToGuid(legacyId);
 
-        var heartRate = await db.HeartRates.FirstOrDefaultAsync(h => h.OriginalId == legacyId || h.Id == recordId, ct);
+        var heartRate = await db.HeartRates.FirstOrDefaultAsync(RecordIdKey.Matching<HeartRateEntity>(legacyId), ct);
         if (heartRate != null)
         {
             heartRate.DeletedAt = now;
             deleted++;
         }
 
-        var stepCount = await db.StepCounts.FirstOrDefaultAsync(s => s.OriginalId == legacyId || s.Id == recordId, ct);
+        var stepCount = await db.StepCounts.FirstOrDefaultAsync(RecordIdKey.Matching<StepCountEntity>(legacyId), ct);
         if (stepCount != null)
         {
             stepCount.DeletedAt = now;
@@ -99,13 +101,17 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
         Dictionary<string, TEntity> ById,
         HashSet<string> UserDeletedIds,
         Dictionary<(string? DataSource, string SyncIdentifier), TEntity> ByKey,
-        HashSet<(string? DataSource, string SyncIdentifier)> UserDeletedKeys)
+        HashSet<(string? DataSource, string SyncIdentifier)> UserDeletedKeys,
+        HashSet<TEntity> Hidden)
         where TEntity : class;
 
     /// <summary>
     /// Maps a table's records and reads, in one query each, the rows their ids name
     /// (<see cref="ResolveByIdAsync{TEntity}"/>) and the rows the sync keys of those with no id
     /// name (<see cref="ResolveBySyncKeyAsync{TEntity}"/>). Only a record with no id carries a sync key.
+    /// A history-clamped writer's records those reads miss are read again with the clamp lifted: the unique
+    /// indexes span the whole tenant, so an insert beside a row the clamp hides fails with 23505. Those rows
+    /// are <see cref="Resolved{TModel,TEntity}.Hidden"/>, and a hidden user tombstone still blocks its record.
     /// </summary>
     private static async Task<Resolved<TModel, TEntity>> ResolveAsync<TModel, TEntity>(
         NocturneDbContext db, DbSet<TEntity> set, IReadOnlyList<(int Index, TModel Record)> models,
@@ -114,6 +120,52 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
     {
         var records = models.Select(m => (m.Index, Model: m.Record, Entity: toEntity(m.Record))).ToList();
+        var (byId, userDeletedIds, byKey, userDeletedKeys) = await ReadRowsAsync(db, set, records, ct);
+        var hidden = new HashSet<TEntity>(ReferenceEqualityComparer.Instance);
+        if (db.HistoryClamped)
+        {
+            var missed = records
+                .Where(r => r.Model.Id is { } id
+                    ? !byId.ContainsKey(id) && !userDeletedIds.Contains(id)
+                    : r.Entity.SyncIdentifier is { } sync
+                        && !byKey.ContainsKey((r.Entity.DataSource, sync)) && !userDeletedKeys.Contains((r.Entity.DataSource, sync)))
+                .ToList();
+            if (missed.Count > 0)
+            {
+                var held = await db.WriteWithHistoryClampLiftedAsync(token => ReadRowsAsync(db, set, missed, token), ct);
+                foreach (var (id, row) in held.ById)
+                {
+                    if (byId.ContainsKey(id))
+                        continue;
+                    byId[id] = row;
+                    hidden.Add(row);
+                }
+
+                foreach (var (key, row) in held.ByKey)
+                {
+                    if (byKey.ContainsKey(key))
+                        continue;
+                    byKey[key] = row;
+                    hidden.Add(row);
+                }
+
+                userDeletedIds.UnionWith(held.UserDeletedIds);
+                userDeletedKeys.UnionWith(held.UserDeletedKeys);
+            }
+        }
+
+        return new(records, byId, userDeletedIds, byKey, userDeletedKeys, hidden);
+    }
+
+    private static async Task<(
+        Dictionary<string, TEntity> ById,
+        HashSet<string> UserDeletedIds,
+        Dictionary<(string? DataSource, string SyncIdentifier), TEntity> ByKey,
+        HashSet<(string? DataSource, string SyncIdentifier)> UserDeletedKeys)> ReadRowsAsync<TModel, TEntity>(
+        NocturneDbContext db, DbSet<TEntity> set, List<(int Index, TModel Model, TEntity Entity)> records, CancellationToken ct)
+        where TModel : ProcessableDocumentBase
+        where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified, ISyncDedupable
+    {
         var (byId, userDeletedIds) = await ResolveByIdAsync(
             db, set,
             [.. records.Where(r => r.Model.Id != null).Select(r => (Id: r.Model.Id!, Key: r.Entity.Id)).DistinctBy(r => r.Id, StringComparer.Ordinal)],
@@ -122,11 +174,13 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
             set,
             [.. records.Where(r => r.Model.Id == null).Select(r => r.Entity.SyncIdentifier).OfType<string>().Distinct(StringComparer.Ordinal)],
             ct);
-        return new(records, byId, userDeletedIds, byKey, userDeletedKeys);
+        return (byId, userDeletedIds, byKey, userDeletedKeys);
     }
 
     /// <summary>
     /// The rows a table's records write, per <see cref="IActivityRecordRepository.WriteHealthSeriesAsync"/>.
+    /// A hidden row is answered as updated even when the record equals it, so an unchanged answer never
+    /// tells a history-clamped writer what the row it cannot read holds.
     /// </summary>
     private static TablePlan<TModel, TEntity> Plan<TModel, TEntity>(
         NocturneDbContext db, DbSet<TEntity> set, Resolved<TModel, TEntity> resolved,
@@ -176,7 +230,8 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
 
             applyUpdate(stored, model);
             stored.DeletedAt = null;
-            (db.Entry(stored).State == EntityState.Unchanged ? plan.Unchanged : plan.Updated).Add((index, stored));
+            (db.Entry(stored).State == EntityState.Unchanged && !resolved.Hidden.Contains(stored) ? plan.Unchanged : plan.Updated)
+                .Add((index, stored));
         }
 
         set.AddRange(plan.Inserted.Select(i => i.Entity));

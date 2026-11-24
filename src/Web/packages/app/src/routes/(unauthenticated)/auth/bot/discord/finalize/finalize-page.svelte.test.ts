@@ -15,6 +15,7 @@ import FinalizePage from "./+page.svelte";
 describe("finalizing a Discord link", () => {
   beforeEach(() => {
     page.data.isAuthenticated = true;
+    page.data.isHandedOffSession = false;
     page.url = new URL("http://localhost/auth/bot/discord/finalize?claim=signed-claim") as typeof page.url;
     confirm_discord_link.mockReset();
   });
@@ -31,5 +32,14 @@ describe("finalizing a Discord link", () => {
 
     await expect.element(browser_page.getByText(message)).toBeVisible();
     await expect.element(browser_page.getByText("Discord account linked")).not.toBeInTheDocument();
+  });
+
+  it("offers a handed-off session a sign-in in place of Link account", async () => {
+    page.data.isHandedOffSession = true;
+    render(FinalizePage);
+
+    await expect.element(browser_page.getByText("Sign in again to link your Discord account.")).toBeVisible();
+    expect(browser_page.getByRole("button", { name: "Link account" }).elements()).toHaveLength(0);
+    expect(confirm_discord_link).not.toHaveBeenCalled();
   });
 });

@@ -157,8 +157,7 @@ public sealed record HubAuthorization(
     {
         AuthType.InstanceKey => HubCredentialKind.Infrastructure,
 
-        AuthType.OidcToken
-            or AuthType.LegacyJwt
+        AuthType.LegacyJwt
             or AuthType.ApiKey
             or AuthType.SessionCookie
             or AuthType.OAuthAccessToken
@@ -325,7 +324,8 @@ public static class HubAuthorizationState
                 Middleware.AuthenticationMiddleware.CredentialScopes(authContext),
                 authContext.LimitTo24Hours,
                 authContext.ExpiresAt,
-                authContext.SessionId),
+                authContext.SessionId,
+                authContext.CredentialFingerprint),
         };
     }
 }

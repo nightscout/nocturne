@@ -23,5 +23,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.Nightscout/Nocturne.Connectors.Nightscout.csproj" />
+    <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj"/>
   </ItemGroup>
 </Project>

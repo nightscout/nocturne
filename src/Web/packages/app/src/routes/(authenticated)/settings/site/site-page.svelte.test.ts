@@ -3,7 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import type { TenantSettingsDto } from "#lib/api/generated/nocturne-api-client.js";
+import type { TenantSettingsDto } from "@nocturne/api-client";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({

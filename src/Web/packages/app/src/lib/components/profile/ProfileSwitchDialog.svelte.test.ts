@@ -17,8 +17,11 @@ vi.mock("#lib/api/generated/profileActivations.generated.remote.js", () => ({
 
 import ProfileSwitchDialog from "./ProfileSwitchDialog.svelte";
 
-function open_dialog() {
+// The dialog focuses its first field a frame after it opens. A `fill` of another field that
+// lands before that frame has its text typed into the first field instead.
+async function open_dialog() {
   render(ProfileSwitchDialog, { props: { open: true, profileName: "Rhys" } });
+  await expect.element(page.getByLabelText("Percentage")).toHaveFocus();
 }
 
 const record = () => page.getByRole("button", { name: "Record switch" });
@@ -31,7 +34,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("says the switch is not sent to the pump", async () => {
-    open_dialog();
+    await open_dialog();
 
     await expect.element(page.getByText("Switch to Rhys")).toBeVisible();
     await expect.element(page.getByText(/not sent to your pump, and AAPS and\s+Nightscout followers never see it/)).toBeVisible();
@@ -43,7 +46,7 @@ describe("ProfileSwitchDialog", () => {
       recordedSwitchesApply: false,
       reported: { app: "AAPS", baseProfileName: "Pump", phase: "Effective" },
     };
-    open_dialog();
+    await open_dialog();
 
     await expect
       .element(page.getByText(/AAPS is reporting the profile your pump\s+runs/))
@@ -51,7 +54,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("records a permanent switch at 100% with no shift by default", async () => {
-    open_dialog();
+    await open_dialog();
 
     await record().click();
 
@@ -61,7 +64,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("sends the percentage, shift, a temporary length in minutes and notes", async () => {
-    open_dialog();
+    await open_dialog();
 
     await page.getByLabelText("Percentage").fill("110");
     await page.getByLabelText("Timeshift (hours)").fill("-2");
@@ -77,7 +80,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("refuses a percentage outside 30 to 250", async () => {
-    open_dialog();
+    await open_dialog();
 
     await page.getByLabelText("Percentage").fill("300");
 
@@ -86,7 +89,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("refuses a shift beyond 23 hours", async () => {
-    open_dialog();
+    await open_dialog();
 
     await page.getByLabelText("Timeshift (hours)").fill("24");
 
@@ -95,7 +98,7 @@ describe("ProfileSwitchDialog", () => {
   });
 
   it("refuses a temporary length longer than 7 days", async () => {
-    open_dialog();
+    await open_dialog();
 
     await page.getByLabelText("Temporary").click();
     await page.getByLabelText("Duration").fill("169");
@@ -107,7 +110,7 @@ describe("ProfileSwitchDialog", () => {
 
   it("shows the server's reason when the switch is refused", async () => {
     create_impl = () => Promise.reject(error(400, "Percentage must be between 30 and 250."));
-    open_dialog();
+    await open_dialog();
 
     await record().click();
 

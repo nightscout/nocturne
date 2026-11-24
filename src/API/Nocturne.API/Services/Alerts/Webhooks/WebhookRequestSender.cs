@@ -1,5 +1,5 @@
 using System.Text;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.API.Services.Alerts.Webhooks;
 
@@ -8,15 +8,18 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// each request with an HMAC-SHA256 signature via <see cref="WebhookSignature"/>.
 /// </summary>
 /// <remarks>
-/// Blank or null URLs are silently skipped. Failed URLs are collected and returned
-/// rather than raising an exception so that partial success is possible. A URL that is
-/// not a publicly routable http(s) destination is reported as failed without being
-/// requested — see <see cref="OutboundDestination"/>.
+/// Blank or null URLs are silently skipped. A URL fails on a non-2xx answer, a transport
+/// failure, or when its attempt (the destination check and the POST together) outlasts
+/// <see cref="AlertDeliveryClient.Timeout"/>; failed URLs are collected and returned so that
+/// partial success is possible. The caller's own cancellation is not a failure and propagates.
+/// A URL that is not a publicly routable http(s) destination is reported as failed without
+/// being requested; see <see cref="OutboundDestination"/>.
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
     ILogger<WebhookRequestSender> logger,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    OutboundDestination.AddressResolver? resolver = null)
 {
     /// <summary>
     /// Name of the HTTP client used for webhook delivery. Configured not to follow
@@ -37,8 +40,8 @@ public class WebhookRequestSender(
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// A read-only list of URLs that failed to receive the payload (non-2xx response or exception).
-    /// An empty list indicates full success.
+    /// A read-only list of URLs that failed to receive the payload (non-2xx answer, transport
+    /// failure or timeout). An empty list indicates full success.
     /// </returns>
     public async Task<IReadOnlyList<string>> SendAsync(
         IEnumerable<string> urls,
@@ -53,16 +56,19 @@ public class WebhookRequestSender(
 
         foreach (var url in urlList)
         {
-            if (!await OutboundDestination.IsPubliclyRoutableAsync(url, cancellationToken))
-            {
-                failures.Add(url);
-                logger.LogWarning(
-                    "Refusing to send webhook to {Url}: not a publicly routable http(s) destination", url);
-                continue;
-            }
+            using var limit = new CancellationTokenSource(AlertDeliveryClient.Timeout, timeProvider);
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, limit.Token);
 
             try
             {
+                if (!await OutboundDestination.IsPubliclyRoutableAsync(url, attempt.Token, resolver))
+                {
+                    failures.Add(url);
+                    logger.LogWarning(
+                        "Refusing to send webhook to {Url}: not a publicly routable http(s) destination", url);
+                    continue;
+                }
+
                 using var content = new StringContent(
                     payload,
                     Encoding.UTF8,
@@ -78,7 +84,7 @@ public class WebhookRequestSender(
                     content.Headers.Add("X-Nocturne-Signature-Version", "v1");
                 }
 
-                var response = await httpClient.PostAsync(url, content, cancellationToken);
+                var response = await httpClient.PostAsync(url, content, attempt.Token);
                 if (response.IsSuccessStatusCode) continue;
                 failures.Add(url);
                 logger.LogWarning(
@@ -87,7 +93,14 @@ public class WebhookRequestSender(
                     response.StatusCode
                 );
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                failures.Add(url);
+                logger.LogWarning(
+                    "Webhook to {Url} timed out after {Timeout} seconds", url, AlertDeliveryClient.Timeout.TotalSeconds);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
+                                          or NotSupportedException or UriFormatException)
             {
                 failures.Add(url);
                 logger.LogWarning(ex, "Failed to send webhook to {Url}", url);

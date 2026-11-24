@@ -11,10 +11,10 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Lean data feed for the actogram report (sleep, steps, and heart-rate variants).
-/// Returns glucose, thresholds, heart rates, step counts, and sleep spans for a window.
+/// Glucose, thresholds, heart rates, step counts and sleep spans for the actogram report over a time window.
 /// </summary>
 /// <remarks>
+/// Serves the sleep, steps and heart-rate variants of the actogram report.
 /// Distinct from <see cref="ChartDataController"/>: the actogram does not render IOB,
 /// COB, basal series, or treatment markers, so the dashboard pipeline (which is O(n·m)
 /// in interval-ticks × temp basals on wide windows) is bypassed entirely.

@@ -5,11 +5,25 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { page } from "$app/state";
-  import { AuthErrorCode } from "#lib/api/generated/nocturne-api-client.js";
+  import { AuthErrorCode } from "@nocturne/api-client";
+  import { getAuthStatus } from "#lib/api/generated/passkeys.generated.remote.js";
+  import RecoveryNextStep from "#lib/components/auth/RecoveryNextStep.svelte";
+  import { resolve } from "$app/paths";
+
+  const RECOVERY_SESSION_REQUIRED = "recovery_session_required";
+
+  // A refused recovery link carries the same codes as an ordinary sign-in, the provider's own
+  // included, so the API marks the redirect. The refusal leaves the recovery session usable, and
+  // the enrol screen answers for itself once that session has ended.
+  const RECOVERY_FLOW = "recovery";
 
   // Get error details from URL params
   const rawError = $derived(page.url.searchParams.get("error") || AuthErrorCode.ServerError);
   const error = $derived(Object.values(AuthErrorCode).find((c) => c === rawError));
+  const sessionRequired = $derived(rawError === RECOVERY_SESSION_REQUIRED);
+  const offerEnrolScreen = $derived(page.url.searchParams.get("flow") === RECOVERY_FLOW);
+  const authStatusQuery = getAuthStatus();
+  const emailRecoveryOffered = $derived(authStatusQuery.current?.emailRecoveryOffered ?? false);
   const description = $derived(
     page.url.searchParams.get("description") ||
       "An authentication error occurred"
@@ -32,6 +46,7 @@
       [AuthErrorCode.ProviderError]: "Provider error",
       [AuthErrorCode.OidcDisabled]: "Authentication disabled",
     };
+    if (sessionRequired) return "Recovery ended";
     return (code && titles[code]) || "Authentication error";
   }
 
@@ -84,9 +99,16 @@
 
     <Card.Content class="space-y-4">
       <div class="rounded-lg border border-muted bg-muted/50 p-4">
-        <p class="text-sm text-muted-foreground">
-          {getSuggestion(error)}
-        </p>
+        {#if sessionRequired}
+          <p class="text-sm text-muted-foreground">
+            The recovery session has ended. Start again with a new link or code.
+          </p>
+          <RecoveryNextStep {emailRecoveryOffered} />
+        {:else}
+          <p class="text-sm text-muted-foreground">
+            {getSuggestion(error)}
+          </p>
+        {/if}
       </div>
 
       <div class="flex flex-col gap-2">
@@ -94,6 +116,11 @@
           <RefreshCw class="mr-2 h-4 w-4" />
           Try again
         </Button>
+        {#if offerEnrolScreen}
+          <Button href={resolve("auth/recovery/passkey")} variant="outline" class="w-full">
+            Back to add a way to sign in
+          </Button>
+        {/if}
         <Button href="/" variant="outline" class="w-full">
           <ArrowLeft class="mr-2 h-4 w-4" />
           Return home

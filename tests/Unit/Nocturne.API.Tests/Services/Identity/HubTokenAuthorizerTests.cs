@@ -117,6 +117,11 @@ public class HubTokenAuthorizerTests
     {
         using (var db = _dbContextFactory.CreateDbContext())
         {
+            if (db.Subjects.Find(subjectId) is null)
+            {
+                db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member" });
+            }
+
             db.TenantMembers.Add(new TenantMemberEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -133,7 +138,7 @@ public class HubTokenAuthorizerTests
                 subjectId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid queriedTenant, CancellationToken _) =>
                 queriedTenant == tenantId
-                    ? new TenantMemberAccess(rolePermissions.ToHashSet(), limitTo24Hours)
+                    ? new TenantMemberAccess(rolePermissions.ToHashSet(), limitTo24Hours, null)
                     : null);
     }
 
@@ -249,8 +254,8 @@ public class HubTokenAuthorizerTests
         var grantId = Guid.CreateVersion7();
         SetupValidJwt(Tenant, grantId, Scope.GlucoseRead);
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .Setup(g => g.IsGrantLiveAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.AuthorizeTokenAsync(

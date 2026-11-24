@@ -33,7 +33,7 @@ pnpm --filter @nocturne/video run preview -- compositions/idp   # HyperFrames St
 
 `render` and `check` build first. The build needs the app's generated API client: run the API
 build once (`aspire start` or `dotnet build src/API/Nocturne.API`) if
-`src/Web/packages/app/src/lib/api/generated/` is missing. HyperFrames downloads its own headless
+`src/Web/packages/api-client/src/` is missing. HyperFrames downloads its own headless
 Chrome on first run.
 
 ## How the report films work

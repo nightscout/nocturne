@@ -21,7 +21,7 @@ public class RoleService : IRoleService
         (string Description, string[] Permissions)
     > DefaultRoles = new()
     {
-        ["admin"] = ("Full administrative access", new[] { "*" }),
+        [GlobalRoles.Admin] = ("Full administrative access", new[] { "*" }),
         ["readable"] = (
             "Read-only access to all data",
             new[]

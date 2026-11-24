@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -46,13 +47,37 @@ public class DeviceSubjectFilterTests : IDisposable
     }
 
     [Fact]
+    public async Task The_holders_full_access_is_audited_once_when_it_is_created()
+    {
+        var subjectId = await _context.DeviceSubjectOf(_tenant);
+        await _context.DeviceSubjectOf(_tenant);
+
+        var rows = await _context.AuthAuditLog.AsNoTracking().OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.MemberJoined,
+            TargetSubjectId = (Guid?)subjectId,
+            TenantId = (Guid?)_tenant,
+            DetailsJson = """{"kind":"tenant","how":"system"}""",
+        });
+        rows[1].Should().BeEquivalentTo(new
+        {
+            EventType = AuthAuditEventType.RoleAssigned,
+            TargetSubjectId = (Guid?)subjectId,
+            TenantId = (Guid?)_tenant,
+            DetailsJson = $$"""{"permission":"{{Scope.FullAccess}}","kind":"tenant"}""",
+        });
+    }
+
+    [Fact]
     public async Task The_holder_does_not_read_as_locked_out()
     {
         await _context.DeviceSubjectOf(_tenant);
 
-        // It holds a membership and can never hold a passkey, which is the shape that puts a tenant
-        // into recovery mode for every request.
-        (await _context.OrphanedSubjectsOf(_tenant).ToListAsync()).Should().BeEmpty();
+        // It holds a membership and can never hold a passkey or an address, which is the shape of a
+        // locked-out account.
+        (await _context.OrphanedSubjectsOf(_tenant, AccountLinkRoutes.Off).ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Notifications;
@@ -11,10 +12,13 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V2;
 
 /// <summary>
-/// V2 Notifications controller providing enhanced notifications system endpoints.
+/// Nightscout notifications v2: send notifications and read their status. A client can post a notification,
+/// post a Loop notification, and read the notification status.
+/// </summary>
+/// <remarks>
 /// Implements the legacy /api/v2/notifications endpoints with 1:1 backwards compatibility.
 /// Based on the legacy notifications-v2.js implementation.
-/// </summary>
+/// </remarks>
 /// <seealso cref="INotificationV2Service"/>
 [ApiController]
 [Tags("V2")]
@@ -22,6 +26,7 @@ namespace Nocturne.API.Controllers.V2;
 [Produces("application/json")]
 [ClientPropertyName("v2Notifications")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationV2Service _notificationService;
@@ -64,7 +69,7 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SendLoopNotification(CancellationToken cancellationToken = default)
     {
-        var remoteAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
         LoopNotificationData data;
         try
@@ -140,65 +145,44 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug("V2 notification endpoint requested from {RemoteAddress}", remoteAddress);
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
 
-        try
+        if (notification == null)
         {
-            if (notification == null)
-            {
-                _logger.LogWarning(
-                    "Notification request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationV2Response
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = await _notificationService.ProcessNotificationAsync(
-                notification,
-                cancellationToken
-            );
-
-            if (!response.Success)
-            {
-                _logger.LogWarning(
-                    "Notification processing failed from {RemoteAddress}: {Message}",
-                    remoteAddress,
-                    response.Message
-                );
-                return BadRequest(response);
-            }
-
-            _logger.LogDebug(
-                "Notification processed successfully from {RemoteAddress}",
+            _logger.LogWarning(
+                "Notification request body is null from {RemoteAddress}",
                 remoteAddress
             );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error processing notification from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
+            return BadRequest(
                 new NotificationV2Response
                 {
                     Success = false,
-                    Message = "Internal server error processing notification",
+                    Message = "Request body is required",
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 }
             );
         }
+
+        var response = await _notificationService.ProcessNotificationAsync(
+            notification,
+            cancellationToken
+        );
+
+        if (!response.Success)
+        {
+            _logger.LogWarning(
+                "Notification processing failed from {RemoteAddress}: {Message}",
+                remoteAddress,
+                response.Message
+            );
+            return BadRequest(response);
+        }
+
+        _logger.LogDebug(
+            "Notification processed successfully from {RemoteAddress}",
+            remoteAddress
+        );
+        return Ok(response);
     }
 
     /// <summary>
@@ -220,37 +204,14 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+        var remoteAddress = HttpContext?.GetClientAddress() ?? "unknown";
+
+        var status = await _notificationService.GetNotificationStatusAsync(cancellationToken);
+
         _logger.LogDebug(
-            "Notification status endpoint requested from {RemoteAddress}",
+            "Notification status retrieved successfully from {RemoteAddress}",
             remoteAddress
         );
-
-        try
-        {
-            var status = await _notificationService.GetNotificationStatusAsync(cancellationToken);
-
-            _logger.LogDebug(
-                "Notification status retrieved successfully from {RemoteAddress}",
-                remoteAddress
-            );
-            return Ok(status);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error retrieving notification status from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new
-                {
-                    error = "Internal server error retrieving notification status",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                }
-            );
-        }
+        return Ok(status);
     }
 }

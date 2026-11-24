@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.DeviceStatuses;
 using Nocturne.Core.Contracts.Legacy;
@@ -14,8 +16,12 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
-/// V3 DeviceStatus controller that provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// Nightscout device status documents. A client can list, read, create, update and delete them, and read changes
+/// since a given modified time.
 /// </summary>
+/// <remarks>
+/// Provides full V3 API compatibility with Nightscout devicestatus endpoints.
+/// </remarks>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -50,11 +56,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ErrorEnvelope]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug(
-            "V3 devicestatus endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var parameters = ParseV3QueryParameters();
@@ -129,7 +130,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus by ID endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         var result = await _deviceStatuses.GetDeviceStatusByIdAsync(id, cancellationToken);
@@ -162,10 +163,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "V3 devicestatus create endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
         try
         {
             if (
@@ -306,7 +303,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
 
         var updated = await _deviceStatuses.ReplaceDeviceStatusAsync(id, deviceStatus, cancellationToken);
@@ -346,7 +343,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         _logger.LogDebug(
             "V3 devicestatus delete endpoint requested for ID {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         if (!await _deviceStatuses.DeleteDeviceStatusAsync(id, cancellationToken))
@@ -376,34 +373,21 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(500)]
     [RequireScope(Scope.DevicesRead)]
     [ErrorEnvelope]
-    public async Task<ActionResult> GetDeviceStatusHistory(
+    public Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
         CancellationToken cancellationToken = default
     )
-    {
-        _logger.LogDebug(
-            "V3 devicestatus history requested since {LastModified} with limit {Limit}",
-            lastModified,
-            limit
-        );
-
-        limit = Math.Min(Math.Max(limit, 1), 1000);
-
-        var deviceStatuses = (await _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(
+        =>
+        CreateV3ClockHistoryResponseAsync(
+            "devicestatus",
             lastModified,
             limit,
-            cancellationToken
-        )).ToList();
-
-        if (deviceStatuses.Count > 0)
-        {
-            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.SrvModified ?? d.Mills));
-        }
-
-        var mappedData = deviceStatuses.Select(ToDocument);
-        return CreateV3SuccessResponse(mappedData);
-    }
+            (since, take) =>
+                _deviceStatuses.GetDeviceStatusesModifiedSinceAsync(since, take, cancellationToken),
+            d => d.SrvModified ?? d.Mills,
+            records => records.Select(ToDocument)
+        );
 
     /// <summary>
     /// Process device status for creation/update (date parsing, validation, etc.)
@@ -420,7 +404,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure DeviceStatus has required properties for V3 compatibility
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         }
     }
 

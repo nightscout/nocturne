@@ -16,15 +16,41 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// back once the write returns, so a statement the transaction runs afterwards is clamped again. A
 /// lifted statement filters and returns rows as an unclamped reader would, so a write lifted here
 /// inserts, or targets rows the clamp already shows its caller, and reads back only the rows it
-/// wrote. The exceptions are writes that must reach hidden rows, set one bookkeeping column and
-/// return only a count: a referential clean-up
-/// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
+/// wrote. The exceptions are writes that must reach hidden rows and return only a count: the supersession
+/// a removed or arrived span leaves (<see cref="StateSpanSupersessionExtensions"/>), which sets the end and
+/// pointer of the spans it ends from a lifted read of their successors and answers them only to a restore,
+/// which takes them onto the rows it gives back, the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
 /// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, and the stamp of a
 /// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
 /// whose rows feed only an internal decision and never reach the caller: the repick's reads
 /// (<see cref="DuplicateGroupPrimaries.LiveIdsAsync"/>, <see cref="DuplicateGroupPrimaries.LiveSpanEndsAsync"/>)
-/// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>).
+/// and matching's (<see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>, <see cref="LinkedRecordTypes.UnlinkedAsync"/>),
+/// the restore's check of the unique keys a restored row would take
+/// (<see cref="SoftDeleteRestoreExtensions"/>), which the index enforces over the whole tenant, and
+/// the first arrival of each glucose stream, which replay classifies readings by
+/// (<see cref="Repositories.V4.SensorGlucoseRepository.GetStreamFirstArrivalsAsync"/>). One lifted read
+/// returns a row the clamp hides: a retried clear of a do-not-disturb window the caller names by id, cleared before
+/// the clamp's window, answers with that window as the first clear did (<see cref="Repositories.DndWindowRepository"/>).
+/// <para>
+/// A keyed upsert (<see cref="Repositories.SystemEventRepository"/>, <see cref="Repositories.StateSpanRepository"/>,
+/// <see cref="Repositories.SleepSessionRepository"/>, the health series) lifts the read that matches a record by
+/// the key a unique index holds over the whole tenant, and the save that overwrites the match. Without it a
+/// clamped writer re-sending a record stored before the window finds no row, inserts, and fails the index with
+/// 23505. The match is overwritten with the writer's own record, and the answer is built from what the writer
+/// sent: a field only the stored row holds (a creation time, a supersession) is not answered for a row the clamp
+/// hides.
+/// </para>
+/// <para>
+/// A user's delete or restore of a record the clamp shows its caller reaches every copy in the
+/// record's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>), so the copies the clamp hides
+/// are read and written by id: tracked by <see cref="DuplicateGroupPrimaries.HiddenRowsAsync{TEntity}"/>
+/// and <see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>, and by statement in the bulk
+/// delete (<see cref="AuditedBulkDeleteExtensions"/>). The ids come from the links of the record the
+/// caller named, which it could read. What either gives back or broadcasts is only what the caller's
+/// clamped context reads. Each hidden copy written gets the audit row a shown one gets, in
+/// <c>mutation_audit_log</c>, which is read under its own permission and not clamped.
+/// </para>
 /// Its callers are pinned by <c>HistoryClampLiftAllowlistTests</c>.
 /// <para>
 /// The transaction it opens is retried with no <c>verifySucceeded</c>: a commit that reported failure

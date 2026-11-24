@@ -71,7 +71,6 @@ public enum ConnectorPropertyKey
 
     // MyFitnessPal-specific
     LookbackDays,
-    LastFullWalkAt,
 
     // Write-back
     WriteBackEnabled,
@@ -94,6 +93,7 @@ public enum ConnectorPropertyKey
     PumpSerialNumber,
     FetchAllEventTypes,
     IgnoreZeroUnitBasal,
+    TimeZoneId,
 
     // Glooko-specific
     AutoClockCorrection,

@@ -13,6 +13,7 @@ import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 const definitions: TrackerDefinitionDto[] = [
   { id: "pod", name: "Pod" },
   { id: "sensor", name: "Sensor" },
+  { id: "battery", name: "Battery" },
 ];
 const active: TrackerInstanceDto[] = [
   { id: "a1", definitionId: "pod", definitionName: "Pod active", isActive: true },
@@ -67,6 +68,7 @@ describe("trackers settings page", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     pageState.data = { user: { id: "u" }, effectivePermissions: ["*"] };
+    pageState.state = {};
     server.deleteAnswer = () => Promise.resolve();
   });
 
@@ -103,5 +105,21 @@ describe("trackers settings page", () => {
     await tab("Presets").click();
     await expect.element(page.getByText("Pod preset")).toBeVisible();
     expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("asks when the tracker the wizard created started", async () => {
+    pageState.state = { startTrackerId: "battery" };
+    render(TrackersPage, {});
+
+    await expect.element(page.getByRole("dialog")).toHaveTextContent("Battery");
+    await expect.element(tab("Definitions")).toHaveAttribute("data-state", "active");
+  });
+
+  it("does not ask again for a tracker that runs", async () => {
+    pageState.state = { startTrackerId: "sensor" };
+    render(TrackersPage, {});
+
+    await expect.element(page.getByText("Sensor active")).toBeVisible();
+    expect(page.getByRole("dialog").elements()).toHaveLength(0);
   });
 });

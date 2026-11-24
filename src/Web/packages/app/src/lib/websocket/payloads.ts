@@ -1,4 +1,4 @@
-import { SyncPhase, TrackerRealtimeAction, type InAppNotificationDto } from "#lib/api/generated/nocturne-api-client.js";
+import { SyncPhase, TrackerRealtimeAction, type InAppNotificationDto } from "@nocturne/api-client";
 import { isOneOf, isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
 import { isoNow } from "#lib/utils/now.js";
 import { toIsoString } from "#lib/utils/api-date.js";

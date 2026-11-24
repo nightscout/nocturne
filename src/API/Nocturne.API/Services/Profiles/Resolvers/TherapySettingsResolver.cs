@@ -24,7 +24,6 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
     private bool? _hasData;
 
-    private const double DefaultDia = 3.0;
     private const double DefaultCarbsHr = 20.0;
 
     public TherapySettingsResolver(
@@ -84,7 +83,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
 
         return settings is { Dia: > 0 }
             ? (InsulinActionTimeSource.Profile, settings.Dia, primaryBolus)
-            : (InsulinActionTimeSource.Default, DefaultDia, primaryBolus);
+            : (InsulinActionTimeSource.Default, TherapySnapshot.DefaultDia, primaryBolus);
     }
 
     /// <summary>
@@ -138,7 +137,7 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
     public async Task<bool> HasDataAsync(CancellationToken ct = default)
     {
         // Scoped resolver: the memo lives for one request and never crosses tenants.
-        return _hasData ??= await _repo.CountAsync(null, null, ct) > 0;
+        return _hasData ??= await _repo.CountAsync(null, null, null, null, ct) > 0;
     }
 
     private Task<Core.Models.V4.TherapySettings?> GetCachedSettingsAsync(

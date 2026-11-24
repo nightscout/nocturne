@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
+import { AidAlgorithm, type ApsSnapshot } from "@nocturne/api-client";
 import type { DeviceStatus } from "#lib/api/pills-processor.js";
+import type { Bolus, CarbIntake, ProfileSummary } from "#lib/api/index.js";
 
 // The module graph for #lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
@@ -166,6 +167,79 @@ describe("processPillsData – COB from APS snapshot", () => {
 	});
 });
 
+describe("processPillsData – calculated COB", () => {
+	const carbs = { mills: NOW - 60 * MIN, carbs: 60 } as CarbIntake;
+
+	it("shows the calculated COB when no device reported COB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob).not.toBeNull();
+		expect(result.cob!.cob).toBe(47);
+		expect(result.cob!.display).toBe("47g");
+		expect(result.cob!.source).toBe("Calculated");
+		expect(result.cob!.lastCarbs).toEqual({ mills: NOW - 60 * MIN, carbs: 60, food: undefined });
+	});
+
+	it("shows the calculated COB when the only device status is older than the threshold", () => {
+		const staleStatus: DeviceStatus[] = [{
+			mills: NOW - 90 * MIN,
+			loop: { cob: { cob: 8, timestamp: new Date(NOW - 90 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(staleStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 12,
+		});
+		expect(result.cob!.cob).toBe(12);
+		expect(result.cob!.source).toBe("Calculated");
+	});
+
+	it("prefers a recent device status COB over the calculated COB", () => {
+		const status: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			loop: { cob: { cob: 8, timestamp: new Date(NOW - 3 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(status, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob!.cob).toBe(8);
+		expect(result.cob!.source).toBe("Loop");
+	});
+
+	it("prefers a recent APS snapshot COB over the calculated COB", () => {
+		const snap = makeSnapshot({ cob: 15 }, NOW, 3);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedCob: 47,
+		});
+		expect(result.cob!.cob).toBe(15);
+	});
+
+	it("returns null COB with recent carbs but no device COB and no calculated COB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, { now: NOW });
+		expect(result.cob).toBeNull();
+	});
+
+	it("shows a real calculated COB of 0 as 0g", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: 0,
+		});
+		expect(result.cob!.display).toBe("0g");
+		expect(result.cob!.source).toBe("Calculated");
+	});
+
+	it("returns null COB when the server has no COB to report", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, [carbs], null, {
+			now: NOW,
+			calculatedCob: undefined,
+		});
+		expect(result.cob).toBeNull();
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Loop
 // ---------------------------------------------------------------------------
@@ -321,6 +395,65 @@ describe("processPillsData – Basal from APS snapshot", () => {
 	});
 });
 
+describe("processPillsData – Basal on injections", () => {
+	const lastDose = { units: 18, mills: NOW - 9 * 60 * MIN, insulinName: "Tresiba", estimatedRate: 0.75 };
+	const profile = {
+		therapySettings: [{ profileName: "Default", isDefault: true }],
+		basalSchedules: [{ profileName: "Default", entries: [{ time: "00:00", value: 0.9 }] }],
+	} as unknown as ProfileSummary;
+
+	it("shows the last dose and the server's estimated rate with no profile and no device", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal).not.toBeNull();
+		expect(result.basal!.display).toBe("18 U");
+		expect(result.basal!.isTempBasal).toBe(false);
+		expect(result.basal!.totalBasal).toBe(0.75);
+		expect(result.basal!.injection).toEqual(lastDose);
+	});
+
+	it("shows the dose rather than the profile's scheduled rate", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, profile, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.display).toBe("18 U");
+		expect(result.basal!.totalBasal).toBe(0.75);
+	});
+
+	it("yields to a temp basal an APS snapshot enacted", () => {
+		const snap = makeSnapshot({ enacted: true, enactedRate: 1.2, enactedDuration: 30 }, NOW, 5);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.isTempBasal).toBe(true);
+		expect(result.basal!.injection).toBeUndefined();
+	});
+
+	it("yields to a temp basal a device status enacted", () => {
+		const status: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			openaps: { enacted: { rate: 1.1, duration: 30, timestamp: new Date(NOW - 3 * MIN).toISOString() } },
+		}];
+		const result = processPillsData(status, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			basalInjection: lastDose,
+		});
+		expect(result.basal!.isTempBasal).toBe(true);
+		expect(result.basal!.injection).toBeUndefined();
+	});
+
+	it("labels a pump's rate per hour", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, profile, { now: NOW });
+		expect(result.basal!.display).toBe("0.900U/h");
+		const snap = makeSnapshot({ enacted: true, enactedRate: 1.2, enactedDuration: 30 }, NOW, 5);
+		expect(processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, { now: NOW }).basal!.display).toBe("1.200U/h");
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Fallback: empty snapshots fall through to legacy DeviceStatus path
 // ---------------------------------------------------------------------------
@@ -367,6 +500,76 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 		expect(result.iob).not.toBeNull();
 		expect(result.iob!.basalIob).toBeUndefined();
 		expect(result.iob!.activity).toBeUndefined();
+	});
+
+	it("shows the calculated IOB when no device reported IOB", () => {
+		const bolus = { mills: NOW - 40 * MIN, insulin: 3 } as Bolus;
+		const result = processPillsData(EMPTY, EMPTY, [bolus], EMPTY, null, {
+			now: NOW,
+			calculatedIob: 1.234,
+		});
+		expect(result.iob).not.toBeNull();
+		expect(result.iob!.iob).toBe(1.234);
+		expect(result.iob!.display).toBe("1.23U");
+		expect(result.iob!.source).toBe("Calculated");
+		expect(result.iob!.lastBolus).toEqual({ mills: NOW - 40 * MIN, insulin: 3 });
+	});
+
+	it("shows the calculated IOB when the only device status is older than the threshold", () => {
+		const staleStatus: DeviceStatus[] = [{
+			mills: NOW - 90 * MIN,
+			pump: { iob: { iob: 4 } }
+		}];
+		const result = processPillsData(staleStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(0.5);
+		expect(result.iob!.source).toBe("Calculated");
+	});
+
+	it("prefers a recent device IOB over the calculated IOB", () => {
+		const legacyStatus: DeviceStatus[] = [{
+			mills: NOW - 3 * MIN,
+			openaps: { iob: { iob: 1.5 } }
+		}];
+		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(1.5);
+		expect(result.iob!.source).toBe("OpenAPS");
+	});
+
+	it("prefers a recent APS snapshot over the calculated IOB", () => {
+		const snap = makeSnapshot({ iob: 2.72 }, NOW, 3);
+		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0.5,
+		});
+		expect(result.iob!.iob).toBe(2.72);
+	});
+
+	it("returns null IOB when no device reported IOB and there is no calculated IOB", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
+		expect(result.iob).toBeNull();
+	});
+
+	it("shows a real calculated IOB of 0 as 0.00U", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: 0,
+		});
+		expect(result.iob!.display).toBe("0.00U");
+		expect(result.iob!.source).toBe("Calculated");
+	});
+
+	it("returns null IOB when the server has no IOB to report", () => {
+		const result = processPillsData(EMPTY, EMPTY, EMPTY, EMPTY, null, {
+			now: NOW,
+			calculatedIob: undefined,
+		});
+		expect(result.iob).toBeNull();
 	});
 
 	it("drops a null legacy Loop iob and cob rather than carrying them into pill data", () => {

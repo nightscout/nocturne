@@ -1,6 +1,18 @@
 <script lang="ts">
-  import { importOuraExport } from "#lib/api/generated/ouras.generated.remote.js";
-  import type { OuraImportResult } from "#lib/api/generated/nocturne-api-client.js";
+  import { onMount } from "svelte";
+  import {
+    getOuraImport,
+    importOuraExport,
+  } from "#lib/api/generated/ouras.generated.remote.js";
+  import {
+    OuraImportPhase,
+    OuraImportState,
+    type OuraImportStatus,
+  } from "@nocturne/api-client";
+  import { getAllConnectorStatus } from "#lib/api/generated/configurations.generated.remote.js";
+  import { getConnectorDataSummary } from "#lib/api/generated/services.generated.remote.js";
+  import { fresh } from "#lib/api/fresh-query.js";
+  import { followStatus } from "#lib/api/follow-status.js";
   import {
     Card,
     CardContent,
@@ -16,24 +28,37 @@
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Upload from "@lucide/svelte/icons/upload";
-  import { describeSubmitError, errorMessage } from "#lib/forms/submit-error.js";
+  import {
+    describeSubmitError,
+    errorMessage,
+    errorStatus,
+  } from "#lib/forms/submit-error.js";
   import { isRecord } from "#lib/utils/type-guards.js";
 
   // @wc-ignore
   const EXPORT_URL = "https://membership.ouraring.com/data-export";
   const MAX_SIZE_MB = 40;
+  const POLL_INTERVAL_MS = 2000;
 
-  let { imported = $bindable(null) }: { imported?: OuraImportResult | null } = $props();
+  /** The id the connector page loads its data summary and status under, which an ended import refreshes. */
+  let { connectorId }: { connectorId: string } = $props();
 
   let formElement: HTMLFormElement | undefined;
   let selectedSize = $state<number | null>(null);
-  let isImporting = $state(false);
+  let isUploading = $state(false);
   let error = $state<string | null>(null);
-  const hasFile = $derived(selectedSize !== null);
+  let job = $state<OuraImportStatus | null>(null);
+  /** The import this page followed is no longer on the server, which restarted while it ran. */
+  let stopped = $state(false);
+  let stopFollowing: (() => void) | undefined;
 
-  /** The codes are `OuraExportException`'s; the server sends the code and the sentence lives here. */
-  function describeImportError(err: unknown): string {
-    switch (errorMessage(err)) {
+  const hasFile = $derived(selectedSize !== null);
+  const isRunning = $derived(job?.state === OuraImportState.Running);
+  const isBusy = $derived(isUploading || isRunning);
+
+  /** The codes are `OuraExportException`'s and the API's; the server sends the code and the sentence lives here. */
+  function describeCode(code: string | undefined): string | null {
+    switch (code) {
       case "not_a_zip":
         return "This file is not a ZIP file. Select the ZIP file that you downloaded from Oura.";
       case "not_an_oura_export":
@@ -44,13 +69,52 @@
         return "This export contains more data than Nocturne can import.";
       case "history_clamped":
         return "Your access shows only the last 24 hours. A member with full access must import the export.";
+      case "import_running":
+        return "An import is in progress. Wait until it is complete.";
+      case "delete_running":
+        return "Nocturne is deleting the Oura data. Wait until the delete is complete, then import the export.";
       default:
-        return describeSubmitError(err, "The import did not complete. Try again.");
+        return null;
     }
   }
 
+  function follow() {
+    stopFollowing?.();
+    stopFollowing = followStatus({
+      read: () => fresh(getOuraImport()),
+      isLive: (status) => status.state === OuraImportState.Running,
+      update: (status) => (job = status),
+      ended: (status) => {
+        const sawItRun = job?.state === OuraImportState.Running;
+        job = status;
+        if (sawItRun && status.state !== OuraImportState.Failed) {
+          void getConnectorDataSummary(connectorId).refresh();
+          void getAllConnectorStatus().refresh();
+        }
+      },
+      gone: (refused) => {
+        if (job?.state === OuraImportState.Running) {
+          if (refused) stopped = true;
+          else error = "Nocturne could not get the status of the import. Refresh the page.";
+        }
+        if (refused) job = null;
+      },
+      intervalMs: POLL_INTERVAL_MS,
+    });
+  }
+
+  onMount(() => {
+    follow();
+    return () => stopFollowing?.();
+  });
+
   const count = (value: number | undefined) => (value ?? 0).toLocaleString();
 </script>
+
+{#snippet counts(status: OuraImportStatus)}
+  Sleep sessions: {count(status.sleepSessions)}. Heart rate readings: {count(status.heartRates)}.
+  Days of steps: {count(status.stepDays)}.
+{/snippet}
 
 <Card data-testid="oura-import">
   <CardHeader>
@@ -69,26 +133,30 @@
       bind:this={formElement}
       {...importOuraExport.enhance(async ({ submit }) => {
         error = null;
-        imported = null;
+        stopped = false;
         if ((selectedSize ?? 0) > MAX_SIZE_MB * 1024 * 1024) {
           error = `The file is larger than ${MAX_SIZE_MB} MB.`;
           return;
         }
-        isImporting = true;
+        isUploading = true;
         const previous: unknown = importOuraExport.result;
         try {
           await submit();
           const result: unknown = importOuraExport.result;
           // A redirect (an expired session) resolves submit() without a new result.
           if (isRecord(result) && result !== previous) {
-            imported = result;
+            job = result;
             formElement?.reset();
             selectedSize = null;
+            follow();
           }
         } catch (err) {
-          error = describeImportError(err);
+          if (errorStatus(err) === 409 && errorMessage(err) === "import_running") follow();
+          error =
+            describeCode(errorMessage(err)) ??
+            describeSubmitError(err, "The import did not start. Try again.");
         } finally {
-          isImporting = false;
+          isUploading = false;
         }
       })}
     >
@@ -99,7 +167,7 @@
           type="file"
           name={importOuraExport.fields.file.as("file").name}
           accept=".zip,application/zip"
-          disabled={isImporting}
+          disabled={isBusy}
           onchange={(event: Event) => {
             selectedSize =
               event.target instanceof HTMLInputElement
@@ -108,10 +176,10 @@
           }}
         />
       </div>
-      <Button type="submit" disabled={!hasFile || isImporting}>
-        {#if isImporting}
+      <Button type="submit" disabled={!hasFile || isBusy}>
+        {#if isUploading}
           <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-          Importing...
+          Uploading...
         {:else}
           <Upload class="mr-2 h-4 w-4" />
           Import
@@ -119,9 +187,9 @@
       </Button>
     </form>
 
-    {#if isImporting}
+    {#if isUploading}
       <p class="text-sm text-muted-foreground">
-        A large export can take some minutes. Keep this page open.
+        Nocturne examines the export before the import starts. A large export can take one minute.
       </p>
     {/if}
 
@@ -132,13 +200,55 @@
       </Alert.Root>
     {/if}
 
-    {#if imported}
+    {#if stopped}
+      <Alert.Root variant="destructive" data-testid="oura-import-stopped">
+        <AlertTriangle class="h-4 w-4" />
+        <Alert.Title>The import stopped before it was complete</Alert.Title>
+        <Alert.Description>
+          Nocturne kept the records that it imported. To import the remaining records, import the same export again.
+        </Alert.Description>
+      </Alert.Root>
+    {:else if job?.state === OuraImportState.Running}
+      <Alert.Root data-testid="oura-import-progress">
+        <Loader2 class="h-4 w-4 animate-spin" />
+        <Alert.Title>
+          {#if job.phase === OuraImportPhase.HeartRate}
+            Importing heart rate readings
+          {:else if job.phase === OuraImportPhase.Steps}
+            Importing steps
+          {:else}
+            Importing sleep sessions
+          {/if}
+        </Alert.Title>
+        <Alert.Description>
+          <p>{@render counts(job)}</p>
+          <p>The import continues if you close this page.</p>
+        </Alert.Description>
+      </Alert.Root>
+    {:else if job?.state === OuraImportState.Completed}
       <Alert.Root data-testid="oura-import-result">
         <CheckCircle class="h-4 w-4" />
         <Alert.Title>Import complete</Alert.Title>
+        <Alert.Description>{@render counts(job)}</Alert.Description>
+      </Alert.Root>
+    {:else if job?.state === OuraImportState.Partial}
+      <Alert.Root variant="destructive" data-testid="oura-import-partial">
+        <AlertTriangle class="h-4 w-4" />
+        <Alert.Title>The import stopped before it was complete</Alert.Title>
         <Alert.Description>
-          Sleep sessions: {count(imported.sleepSessions)}. Heart rate readings: {count(imported.heartRates)}.
-          Days of steps: {count(imported.stepDays)}.
+          {#if describeCode(job.errorCode)}
+            <p>{describeCode(job.errorCode)}</p>
+          {/if}
+          <p>Nocturne imported these records. {@render counts(job)}</p>
+          <p>To import the remaining records, import the same export again.</p>
+        </Alert.Description>
+      </Alert.Root>
+    {:else if job?.state === OuraImportState.Failed}
+      <Alert.Root variant="destructive" data-testid="oura-import-failed">
+        <AlertTriangle class="h-4 w-4" />
+        <Alert.Title>The import did not complete</Alert.Title>
+        <Alert.Description>
+          {describeCode(job.errorCode) ?? "Nocturne did not import records from this export. Try again."}
         </Alert.Description>
       </Alert.Root>
     {/if}

@@ -37,7 +37,7 @@ public class AuthorizationServicePermissionCatalogTests : IDisposable
             new Mock<IDirectGrantService>().Object,
             new OAuthGrantRepository(_dbContext.AsFactory()),
             new Mock<IJwtService>().Object,
-            new SubjectRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             new Nocturne.Infrastructure.Data.Services.CategoryReadContext(),
             TimeProvider.System
         );

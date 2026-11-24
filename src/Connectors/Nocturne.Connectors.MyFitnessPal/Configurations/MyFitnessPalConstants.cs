@@ -58,7 +58,7 @@ public static class MyFitnessPalConstants
     ///     unknown field in one response.
     /// </remarks>
     public const string SyncFoodDiaryEntriesDocument =
-        "query SyncFoodDiaryEntries($input: BatchSyncInput!) { batchSync(input: $input) { foodDiaryEntries { edges { node { __typename id createdAt ... on ActiveFoodDiaryEntry { date consumedAt loggedAt quantity servingSize { amount nutritionMultiplier isFraction unit } consumedNutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } food { __typename ... on IndividualFood { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } } ... on MealIngredient { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } mealFoodId mealIngredientId } } } } syncEdgeInfo { operation lastModifiedAt } } pageInfo { hasPreviousPage hasNextPage startCursor endCursor } syncConnectionInfo { startSyncCursor endSyncCursor totalEdges } } } }";
+        "query SyncFoodDiaryEntries($input: BatchSyncInput!) { batchSync(input: $input) { foodDiaryEntries { edges { node { __typename id createdAt ... on ActiveFoodDiaryEntry { date consumedAt loggedAt quantity servingSize { amount nutritionMultiplier isFraction unit } consumedNutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } food { __typename ... on IndividualFood { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } } ... on MealIngredient { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } mealFoodId } } } } syncEdgeInfo { operation lastModifiedAt } } pageInfo { hasPreviousPage hasNextPage startCursor endCursor } syncConnectionInfo { startSyncCursor endSyncCursor totalEdges } } } }";
 
     public const string SyncFoodDiaryEntriesOperationName = "SyncFoodDiaryEntries";
 
@@ -79,6 +79,9 @@ public static class MyFitnessPalConstants
     ///     seen; it costs one request per hundred entries of history.
     /// </summary>
     public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
+
+    /// <summary>The resume-state key under which the last completed full walk is recorded.</summary>
+    public const string FullWalkStamp = "full-walk";
 
     /// <summary>
     ///     How many consecutive pages lying entirely before the window are read before the walk

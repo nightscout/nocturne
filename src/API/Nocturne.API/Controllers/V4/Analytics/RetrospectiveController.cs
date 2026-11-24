@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -5,6 +6,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Clinical.Statistics;
@@ -18,8 +20,8 @@ using Nocturne.Core.Models.V4;
 using System.Linq;
 namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
-/// Controller providing retrospective (day-in-review) diabetes data.
-/// Combines IOB, COB, interpolated glucose, and basal rate at any historical point in time.
+/// Day-in-review data: IOB, COB, interpolated glucose and basal rate at a point in time, or across
+/// a day as a timeline.
 /// </summary>
 /// <remarks>
 /// Three endpoints are exposed:
@@ -130,7 +132,7 @@ public class RetrospectiveController : ControllerBase
             {
                 Id = b.Id.ToString(),
                 Mills = b.Mills,
-                EventType = "Bolus",
+                EventType = TreatmentTypes.Bolus,
                 Insulin = b.Insulin,
             });
         }
@@ -140,7 +142,7 @@ public class RetrospectiveController : ControllerBase
             {
                 Id = c.Id.ToString(),
                 Mills = c.Mills,
-                EventType = "Carb Correction",
+                EventType = TreatmentTypes.CarbCorrection,
                 Carbs = c.Carbs,
             });
         }
@@ -148,7 +150,7 @@ public class RetrospectiveController : ControllerBase
         var response = new RetrospectiveDataResponse
         {
             Time = time,
-            TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss"),
+            TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             Glucose = glucoseData,
             Iob = new IobData
             {
@@ -237,7 +239,7 @@ public class RetrospectiveController : ControllerBase
                 Time = pointTime,
                 Hour = timestamp.Hour,
                 Minute = timestamp.Minute,
-                TimeLabel = timestamp.ToString("HH:mm"),
+                TimeLabel = timestamp.ToString("HH:mm", CultureInfo.InvariantCulture),
                 Glucose = glucose?.Value,
                 GlucoseDirection = glucose?.Direction,
                 Iob = ScaledRounding.Round(tick.Iob, 3),
@@ -310,7 +312,7 @@ public class RetrospectiveController : ControllerBase
                 Time = pointTime,
                 Hour = timestamp.Hour,
                 Minute = timestamp.Minute,
-                TimeLabel = timestamp.ToString("HH:mm"),
+                TimeLabel = timestamp.ToString("HH:mm", CultureInfo.InvariantCulture),
                 Rate = basal.Rate,
                 IsTemp = basal.IsTemp
             });

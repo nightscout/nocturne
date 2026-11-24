@@ -123,8 +123,9 @@ public class HomeAssistantHubMessageShapeTests
         });
 
         PropertyNames(json).Should().BeEquivalentTo(
-            "alertType", "ruleName", "glucoseValue", "trend", "trendRate", "readingTimestamp",
+            "kind", "alertType", "ruleName", "glucoseValue", "trend", "trendRate", "readingTimestamp",
             "excursionId", "instanceId", "tenantId", "subjectName", "activeExcursionCount", "severity");
+        json.GetProperty("kind").GetString().Should().Be("excursion");
         json.GetProperty("alertType").GetString().Should().Be("threshold");
         json.GetProperty("severity").GetString().Should().Be("critical");
     }

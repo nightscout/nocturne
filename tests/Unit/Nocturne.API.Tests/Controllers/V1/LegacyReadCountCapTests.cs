@@ -103,7 +103,6 @@ public class LegacyReadCountCapTests
         var controller = new EntriesController(
             entryService.Object,
             Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<ICanonicalAlertEvaluator>(),
             TimeProvider.System,
             Mock.Of<ILogger<EntriesController>>()
         )
@@ -232,11 +231,11 @@ public class LegacyReadCountCapTests
                     It.IsAny<string?>(),
                     It.IsAny<int?>(),
                     It.IsAny<int?>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (string? _, int? count, int? _, CancellationToken _) => observedCount = count
+                (string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observedCount = count
             )
             .ReturnsAsync(Array.Empty<Activity>());
 
@@ -253,8 +252,8 @@ public class LegacyReadCountCapTests
         var observed = new List<int?>();
         var activityService = new Mock<IActivityService>();
         activityService
-            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
-            .Callback((string? _, int? count, int? _, CancellationToken _) => observed.Add(count))
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Callback((string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observed.Add(count))
             .ReturnsAsync(Array.Empty<Activity>());
         var controller = NewActivityController(activityService.Object);
 
@@ -300,11 +299,11 @@ public class LegacyReadCountCapTests
                     It.IsAny<string?>(),
                     It.IsAny<int?>(),
                     It.IsAny<int?>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (string? _, int? count, int? _, CancellationToken _) => observedCount = count
+                (string? _, int? count, int? _, DateTime? _, DateTime? _, CancellationToken _) => observedCount = count
             )
             .ReturnsAsync(Array.Empty<Activity>());
 

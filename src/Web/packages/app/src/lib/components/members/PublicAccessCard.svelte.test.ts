@@ -3,7 +3,9 @@ import { page as browser } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tick } from "svelte";
 import { page } from "$app/state";
-import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { createQueryResource, remoteQuery, remoteQueryError } from "#lib/test-stubs/remote-resource.js";
+import { formatMediumDate } from "#lib/utils/formatting.js";
+import { accessEndDate, accessEndInstant } from "./access-end.js";
 
 // The framework registers a query instance from an `$effect.pre` created wherever the query was
 // constructed, and a command's single-flight refresh reaches only the instances still registered.
@@ -27,6 +29,7 @@ interface ShareState {
   scopes: string[];
   shareableScopes: string[];
   lastAccessedAt: string | null;
+  callerAccessEndsAt: string | null;
 }
 
 const SHAREABLE_SCOPES = [
@@ -49,6 +52,7 @@ const enabledShare: ShareState = {
   scopes: ["glucose.read"],
   shareableScopes: SHAREABLE_SCOPES,
   lastAccessedAt: null,
+  callerAccessEndsAt: null,
 };
 const disabledShare: ShareState = {
   enabled: false,
@@ -59,15 +63,19 @@ const disabledShare: ShareState = {
   scopes: [],
   shareableScopes: SHAREABLE_SCOPES,
   lastAccessedAt: null,
+  callerAccessEndsAt: null,
 };
 
 let share = $state.raw<ShareState>(enabledShare);
+let readState: "answered" | "loading" | "failed" = "answered";
 
 function registerShareQuery() {
   registered += 1;
   $effect.pre(() => () => {
     registered -= 1;
   });
+  if (readState === "loading") return createQueryResource(() => new Promise<ShareState>(() => {}));
+  if (readState === "failed") return remoteQueryError<ShareState>(new Error("unreachable"));
   return remoteQuery(() => share);
 }
 
@@ -103,6 +111,7 @@ describe("PublicAccessCard", () => {
     registered = 0;
     disableCall = null;
     share = enabledShare;
+    readState = "answered";
     revealResult = { ...enabledShare, url: PLAIN_URL, canReveal: true };
     page.data = { effectivePermissions: ["*"] };
   });
@@ -216,5 +225,96 @@ describe("PublicAccessCard", () => {
     expect(document.body.textContent?.replace(/\s+/g, " ")).toContain(
       "Nocturne can no longer show you what the link is"
     );
+  });
+  describe("for a caller whose access ends on a date", () => {
+    const lastDay = "2030-06-15";
+    const reason = () =>
+      `Your access ends on ${formatMediumDate(accessEndDate(accessEndInstant(lastDay)))}, so you cannot change public sharing.`;
+
+    it("disables every control that changes sharing, and says why with the date", async () => {
+      share = { ...enabledShare, callerAccessEndsAt: accessEndInstant(lastDay) };
+      render(PublicAccessCard);
+
+      const line = browser.getByTestId("public-access-locked");
+      await expect.element(line).toHaveTextContent(reason());
+
+      await expect.element(browser.getByTestId("public-access-toggle")).toBeDisabled();
+      await expect.element(browser.getByRole("button", { name: "Regenerate" })).toBeDisabled();
+      const switches = browser.getByRole("switch").elements();
+      expect(switches.length).toBeGreaterThan(SHAREABLE_SCOPES.length);
+      for (const control of switches) {
+        expect(control.hasAttribute("disabled") || control.getAttribute("aria-disabled") === "true").toBe(true);
+        expect(control.getAttribute("aria-describedby")).toBe("public-access-locked");
+      }
+      const windowItems = browser.getByTestId("public-access-window").getByRole("radio").elements();
+      expect(windowItems.length).toBe(2);
+      for (const item of windowItems) {
+        expect(item.hasAttribute("disabled") || item.getAttribute("data-disabled") !== null).toBe(true);
+        expect(item.getAttribute("aria-describedby")).toBe("public-access-locked");
+      }
+      await expect
+        .element(browser.getByRole("button", { name: "Regenerate" }))
+        .toHaveAttribute("aria-describedby", "public-access-locked");
+    });
+
+    it("still shows the link", async () => {
+      share = { ...enabledShare, callerAccessEndsAt: accessEndInstant(lastDay) };
+      render(PublicAccessCard);
+
+      await expect.element(browser.getByTestId("public-access-locked")).toBeVisible();
+      await browser.getByTestId("public-access-reveal").click();
+
+      await expect.element(browser.getByTestId("public-access-url")).toHaveTextContent(PLAIN_URL);
+      expect(revealShareLink).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables the switch that turns sharing on when it is off", async () => {
+      share = { ...disabledShare, callerAccessEndsAt: accessEndInstant(lastDay) };
+      render(PublicAccessCard);
+
+      await expect.element(browser.getByTestId("public-access-locked")).toBeVisible();
+      await expect.element(browser.getByTestId("public-access-toggle")).toBeDisabled();
+    });
+  });
+
+  it("disables nothing and shows no reason for a caller whose access does not end", async () => {
+    render(PublicAccessCard);
+
+    await expect.element(browser.getByTestId("public-access-window")).toBeVisible();
+
+    await expect.element(browser.getByTestId("public-access-toggle")).toBeEnabled();
+    await expect.element(browser.getByRole("button", { name: "Regenerate" })).toBeEnabled();
+    for (const control of browser.getByRole("switch").elements()) {
+      expect(control.hasAttribute("disabled")).toBe(false);
+    }
+    expect(document.querySelector('[data-testid="public-access-locked"]')).toBeNull();
+  });
+  describe.each([
+    ["a caller whose access ends", { ...enabledShare, callerAccessEndsAt: accessEndInstant("2030-06-15") }],
+    ["a caller whose access does not end", enabledShare],
+  ])("before the read answers, for %s", (_name, answer) => {
+    it("keeps the main switch disabled while the read loads, and says nothing is off", async () => {
+      share = answer;
+      readState = "loading";
+      render(PublicAccessCard);
+
+      await expect.element(browser.getByText("Public access", { exact: true })).toBeVisible();
+      await expect.element(browser.getByTestId("public-access-toggle")).toBeDisabled();
+      expect(document.body.textContent).not.toContain("Public access is off.");
+      expect(document.body.textContent).not.toContain("did not load");
+    });
+
+    it("states that the read failed, offers to try again, and keeps the switch disabled", async () => {
+      share = answer;
+      readState = "failed";
+      render(PublicAccessCard);
+
+      await expect
+        .element(browser.getByText("The public access settings did not load."))
+        .toBeVisible();
+      await expect.element(browser.getByRole("button", { name: "Try again" })).toBeVisible();
+      await expect.element(browser.getByTestId("public-access-toggle")).toBeDisabled();
+      expect(document.body.textContent).not.toContain("Public access is off.");
+    });
   });
 });

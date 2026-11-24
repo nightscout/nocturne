@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -38,12 +40,24 @@ public class AuthAuditService : IAuthAuditService
     }
 
     /// <inheritdoc />
-    public async Task LogAsync(string eventType, Guid? targetSubjectId, bool success,
+    public Task LogAsync(string eventType, Guid? targetSubjectId, bool success,
         string? ipAddress = null, string? userAgent = null,
         string? errorMessage = null, string? detailsJson = null,
         Guid? refreshTokenId = null,
         AuthAuditActor? actor = null,
-        Guid? tenantId = null)
+        Guid? tenantId = null) =>
+        WriteAsync(eventType, targetSubjectId, success, ipAddress, userAgent, errorMessage, detailsJson,
+            refreshTokenId, actor, tenantId, instanceWide: false);
+
+    /// <inheritdoc />
+    public Task LogGlobalRoleChangeAsync(string eventType, Guid subjectId, string role, AuthAuditActor? actor = null) =>
+        WriteAsync(eventType, subjectId, success: true, ipAddress: null, userAgent: null, errorMessage: null,
+            JsonSerializer.Serialize(new Dictionary<string, string> { ["role"] = role, [AuthAuditKind.Key] = AuthAuditKind.Global }),
+            refreshTokenId: null, actor, tenantId: null, instanceWide: true);
+
+    private async Task WriteAsync(string eventType, Guid? targetSubjectId, bool success,
+        string? ipAddress, string? userAgent, string? errorMessage, string? detailsJson,
+        Guid? refreshTokenId, AuthAuditActor? actor, Guid? tenantId, bool instanceWide)
     {
         actor ??= AuthAuditActor.FromCallerOtherThan(
             _httpContextAccessor.HttpContext?.GetAuthContext(), targetSubjectId);
@@ -59,7 +73,7 @@ public class AuthAuditService : IAuthAuditService
                 // No actor to distinguish means the subject acted for themselves.
                 ActorSubjectId = actor is null ? targetSubjectId : actor.SubjectId,
                 ActorCredential = actor?.Credential,
-                TenantId = tenantId ?? db.TenantIdOrNull,
+                TenantId = instanceWide ? null : tenantId ?? db.TenantIdOrNull,
                 Success = success,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,

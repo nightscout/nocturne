@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.API.Tests.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
 
@@ -63,8 +64,8 @@ public class OverviewHubAuthorizeTests
         // chain, and stubbing it would stop them seeing the grant-revocation check the hub used to
         // skip. Unrevoked is the default so existing cases read unchanged.
         grants
-            .Setup(g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(false);
+            .Setup(g => g.IsGrantLiveAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(true);
 
         var validator = new JwtCredentialValidator(
             jwt.Object, grants.Object, revocation.Object,
@@ -276,7 +277,6 @@ public class OverviewHubAuthorizeTests
 
     [Theory]
     [InlineData(AuthType.SessionCookie)]
-    [InlineData(AuthType.OidcToken)]
     [InlineData(AuthType.LegacyJwt)]
     public async Task Authorize_with_subject_scoped_credential_type_on_a_tenant_host_is_accepted(
         AuthType authType)
@@ -469,5 +469,68 @@ public class OverviewHubAuthorizeTests
         groups.Verify(
             g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    private static void SignInAsSession(DefaultHttpContext httpContext)
+    {
+        httpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = Subject,
+            AuthType = AuthType.SessionCookie,
+        };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task Authorize_answers_a_failed_membership_read_with_a_failed_response(Exception failure)
+    {
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
+        SignInAsSession(httpContext);
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+        var result = await hub.Authorize(new OverviewAuthorizeRequest());
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Authorization failed.");
+        result.TenantIds.Should().BeEmpty();
+        groups.Verify(
+            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [MemberData(nameof(StoreFailureTests.StoreFailures), MemberType = typeof(StoreFailureTests))]
+    public async Task Authorize_answers_a_failed_token_check_with_a_failed_response(Exception failure)
+    {
+        var (hub, _, overview, jwt, revocation, _, _) = CreateHub();
+        jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
+        revocation.Setup(r => r.IsRevokedAsync("jti-1")).ThrowsAsync(failure);
+
+        var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Authorization failed.");
+        overview.Verify(
+            o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Authorize_does_not_swallow_a_failure_it_has_no_answer_for()
+    {
+        var (hub, _, overview, _, _, _, httpContext) = CreateHub();
+        SignInAsSession(httpContext);
+        overview
+            .Setup(o => o.GetGlucoseReadTenantsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidCastException("defect"));
+
+        var attempt = () => hub.Authorize(new OverviewAuthorizeRequest());
+
+        await attempt.Should().ThrowAsync<InvalidCastException>();
     }
 }

@@ -1,9 +1,10 @@
+using System.Globalization;
 using Nocturne.API.Multitenancy;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
@@ -19,7 +20,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -97,7 +97,7 @@ public class SampleDataSeeder
     private readonly ILogger<SampleDataSeeder> _logger;
 
     private const int BatchSize = 500;
-    private const int MaxDays = 90;
+    private const int MaxDays = 365;
 
     /// <summary>A fixed seed, so seeding the same range again writes the same history.</summary>
     private const int RandomSeed = 1;
@@ -316,7 +316,7 @@ public class SampleDataSeeder
                 foreach (var treatment in records.Treatments)
                 {
                     treatmentBatch.Add(treatment);
-                    if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
+                    if (treatment.EventType == TreatmentTypes.Carbs && treatment.FoodType is { Length: > 0 })
                         mealCarbLinks.Add((treatment.Mills.ToUtcDateTime(), treatment.FoodType));
                 }
 
@@ -564,24 +564,28 @@ public class SampleDataSeeder
 
             if (definition is null)
             {
-                definition = await _trackerRepository.CreateDefinitionAsync(new TrackerDefinitionEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = db.TenantId,
-                    CreatedBy = userId,
-                    Name = spec.Name,
-                    Category = spec.Category,
-                    Icon = spec.Icon,
-                    LifespanHours = spec.LifespanHours,
-                    TriggerEventTypes = JsonSerializer.Serialize(new[] { spec.TriggerEventType }),
-                    StartEventType = spec.TriggerEventType,
-                    Mode = TrackerMode.Duration,
-                }, ct);
+                var seeded = TrackerDefinition.Create(
+                    new TrackerDefinitionDraft
+                    {
+                        Name = spec.Name,
+                        Category = spec.Category,
+                        Icon = spec.Icon,
+                        LifespanHours = spec.LifespanHours,
+                        TriggerEventTypes = [spec.TriggerEventType],
+                        StartEventType = spec.TriggerEventType,
+                        Mode = TrackerMode.Duration,
+                    },
+                    userId,
+                    _time.GetUtcNow().UtcDateTime);
+                definition = await _trackerRepository.CreateDefinitionAsync(
+                    seeded.Definition
+                        ?? throw new InvalidOperationException($"The sample {spec.Name} tracker is not a valid definition: {seeded.Error!.Message}"),
+                    ct);
                 definitionsCreated++;
             }
 
             // Rebuild instances from the schedule (idempotent re-seed).
-            await db.TrackerInstances.PurgeAsync(i => i.DefinitionId == definition.Id, ct);
+            await _trackerRepository.PurgeInstancesAsync(definition.Id, ct);
 
             var changes = schedule
                 .Where(e => e.EventType == spec.TriggerEventType)
@@ -625,7 +629,7 @@ public class SampleDataSeeder
         CancellationToken ct)
     {
         IReadOnlyList<AlertRuleChannelWrite> channels = ownerSubjectId is { } owner
-            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString())]
+            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString(), AddedBySubjectId: null, StopsAt: null, RecipientSubjectId: null)]
             : [];
         var seeded = await _alertRules.CreateMissingByNameAsync(
             DemoAlertSeeds.Defaults
@@ -1068,7 +1072,7 @@ public class SampleDataSeeder
             if (day.DayOfWeek != DayOfWeek.Sunday)
                 continue;
 
-            var syncId = $"demo-weight-{day:yyyy-MM-dd}";
+            var syncId = $"demo-weight-{day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
             if (existing.Contains(syncId))
                 continue;
 

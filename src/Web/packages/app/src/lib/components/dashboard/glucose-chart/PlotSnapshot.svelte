@@ -1,14 +1,13 @@
 <script lang="ts">
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
-  import ThresholdRules from "./tracks/ThresholdRules.svelte";
-  import GlucoseTrack from "./tracks/GlucoseTrack.svelte";
-  import { createChartDataView } from "./engine/chart-data-view.svelte";
+  import { ThresholdRules, GlucoseTrack } from "@nocturne/charts";
+  import { createChartDataView } from "@nocturne/charts";
   import { mergeRealtimeGlucose } from "./engine/merge-glucose";
-  import type { LegendState } from "./chart-context.svelte";
-  import type { AreaMode, LineColorMode } from "./utils/glucose-gradient-stops";
-  import { plotPadding } from "./plot-padding";
-  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
-  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import type { LegendState } from "@nocturne/charts";
+  import type { AreaMode, LineColorMode } from "@nocturne/charts/core";
+  import { plotPadding } from "@nocturne/charts/core";
+  import type { TransformedChartData } from "@nocturne/charts/core";
+  import { GLUCOSE_CHART_FETCH_HOURS, type GlucoseRangePalette, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   /**
    * The dashboard's main plot as the live chart first draws it, for the server to render to markup
@@ -34,6 +33,7 @@
       areaMode: AreaMode;
       areaOpacity: number;
       units: GlucoseUnits;
+      rangePalette: GlucoseRangePalette;
     };
   }
 
@@ -92,6 +92,7 @@
   {engine}
   {legend}
   glucoseUnits={style.units}
+  rangePalette={style.rangePalette}
   padding={plotPadding(compact, false)}
   showTimeAxis={false}
   {size}
@@ -106,6 +107,7 @@
       showPoints={style.showPoints}
       areaMode={style.areaMode}
       areaOpacity={style.areaOpacity}
+      rangePalette={style.rangePalette}
       visibleOnly
     />
   {/snippet}

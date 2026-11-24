@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -30,11 +31,11 @@ public class DemoDataPurgeParityTests : IDisposable
     private static readonly TenantContext Tenant = new(TenantId, "demo", "Nocturne Demo", true, true);
 
     /// <summary>Number of rows <see cref="SeedOneDemoRowOfEveryType"/> writes.</summary>
-    private const int SeededRows = 17;
+    private const int SeededRows = 18;
 
     private readonly SqliteTestDatabase _db;
     private readonly List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> _tenantReports = [];
-    private readonly Mock<ILegacyReadCacheInvalidation> _scopeReads = new();
+    private readonly Mock<IRecordChangePublisher> _scopeReads = new();
     private readonly List<Type> _scopeReported = [];
 
     public DemoDataPurgeParityTests()
@@ -46,8 +47,9 @@ public class DemoDataPurgeParityTests : IDisposable
         db.SaveChanges();
 
         _scopeReads
-            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
-            .Callback((IReadOnlyCollection<Type> models) => _scopeReported.AddRange(models))
+            .Setup(r => r.PublishAsync(It.IsAny<RecordsChanged>(), It.IsAny<CancellationToken>()))
+            .Callback((RecordsChanged batch, CancellationToken _) =>
+                _scopeReported.AddRange(batch.Changes.Select(c => c.RecordType)))
             .Returns(Task.CompletedTask);
     }
 
@@ -71,8 +73,8 @@ public class DemoDataPurgeParityTests : IDisposable
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, ScopeTenantAccessor>();
         services.AddScoped(_ => Mock.Of<ICategoryReadContext>());
-        services.AddScoped<ILegacyReadCacheInvalidation>(
-            sp => new TenantRecordingLegacyReads(sp.GetRequiredService<ITenantAccessor>(), _tenantReports));
+        services.AddScoped<IRecordChangePublisher>(
+            sp => new TenantRecordingChanges(sp.GetRequiredService<ITenantAccessor>(), _tenantReports));
 
         return new DemoDataPurgeRepository(
             TenantlessScopeFactory(), TimeProvider.System,
@@ -187,6 +189,12 @@ public class DemoDataPurgeParityTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
             Timestamp = timestamp, DeletedAt = deletedAt,
         });
+        db.SensorStateReports.Add(new SensorStateReportEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Timestamp = timestamp, State = "Ok", ReportedField = SensorStateReport.CareLinkField,
+            ReportedValue = "NO_ERROR_MESSAGE", DeletedAt = deletedAt,
+        });
         db.SaveChanges();
     }
 
@@ -208,7 +216,8 @@ public class DemoDataPurgeParityTests : IDisposable
             + await db.ApsSnapshots.IgnoreQueryFilters().LongCountAsync()
             + await db.BasalInjections.IgnoreQueryFilters().LongCountAsync()
             + await db.PumpSnapshots.IgnoreQueryFilters().LongCountAsync()
-            + await db.UploaderSnapshots.IgnoreQueryFilters().LongCountAsync();
+            + await db.UploaderSnapshots.IgnoreQueryFilters().LongCountAsync()
+            + await db.SensorStateReports.IgnoreQueryFilters().LongCountAsync();
     }
 
     private async Task<long> TenantPurgeAsync()
@@ -251,6 +260,33 @@ public class DemoDataPurgeParityTests : IDisposable
     }
 
     [Fact]
+    public async Task HoldsData_IsTrueWhileThePurgeHasARowToDeleteAndFalseAfterIt()
+    {
+        SeedOneDemoRowOfEveryType();
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeTrue();
+
+        await ScopePurge().PurgeAsync(default);
+
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HoldsData_IgnoresDemoRowsInATableThePurgeDoesNotReach()
+    {
+        await using (var db = NewContext())
+        {
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+                Timestamp = DateTime.UtcNow, Bpm = 70,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        (await ScopePurge().HoldsDataAsync(default)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ScopePurge_CountsEachGroupSeparately()
     {
         SeedOneDemoRowOfEveryType();
@@ -259,7 +295,7 @@ public class DemoDataPurgeParityTests : IDisposable
 
         counts.Glucose.Should().Be(3);
         counts.Treatments.Should().Be(11);
-        counts.DeviceStatus.Should().Be(3);
+        counts.DeviceStatus.Should().Be(4);
     }
 
     [Fact]
@@ -273,7 +309,7 @@ public class DemoDataPurgeParityTests : IDisposable
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),
             typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
             typeof(BolusCalculation), typeof(TempBasal), typeof(StateSpan), typeof(ApsSnapshot),
-            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot), typeof(SensorStateReport),
         ]);
     }
 
@@ -336,7 +372,7 @@ public class DemoDataPurgeParityTests : IDisposable
             typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(Note), typeof(DeviceEvent),
             typeof(BolusCalculation), typeof(TempBasal), typeof(ProfileActivation), typeof(StateSpan),
             typeof(CompressionLowSuggestion), typeof(LabHbA1cResult), typeof(ApsSnapshot),
-            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot),
+            typeof(BasalInjection), typeof(PumpSnapshot), typeof(UploaderSnapshot), typeof(SensorStateReport),
         ]);
     }
 
@@ -480,13 +516,13 @@ public class DemoDataPurgeParityTests : IDisposable
         public void SetTenant(TenantContext context) => Context = context;
     }
 
-    private sealed class TenantRecordingLegacyReads(
+    private sealed class TenantRecordingChanges(
         ITenantAccessor tenant, List<(Guid? Tenant, IReadOnlyCollection<Type> Models)> reports)
-        : ILegacyReadCacheInvalidation
+        : IRecordChangePublisher
     {
-        public Task WrittenAsync(IReadOnlyCollection<Type> models)
+        public Task PublishAsync(RecordsChanged batch, CancellationToken ct)
         {
-            reports.Add((tenant.Context?.TenantId, models));
+            reports.Add((tenant.Context?.TenantId, [.. batch.Changes.Select(c => c.RecordType)]));
             return Task.CompletedTask;
         }
     }

@@ -392,4 +392,31 @@ describe("propagateAuthCookies and the last-used sign-in hint", () => {
       },
     ]);
   });
+
+  it("propagates a newly trusted device's cookie, httpOnly, from the authenticator step", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.trustedDevice}=device-token; Path=/; Domain=.nocturne.run; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+      ],
+      cookies
+    );
+
+    expect(calls).toEqual([
+      {
+        op: "set",
+        name: AUTH_COOKIE_NAMES.trustedDevice,
+        value: "device-token",
+        opts: {
+          path: "/",
+          httpOnly: true,
+          domain: ".nocturne.run",
+          secure: true,
+          sameSite: "lax",
+          maxAge: 2592000,
+        },
+      },
+    ]);
+  });
 });

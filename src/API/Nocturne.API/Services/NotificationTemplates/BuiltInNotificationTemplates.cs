@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.API.Services.Platform.Releases;
@@ -112,6 +113,15 @@ public static class BuiltInNotificationTemplates
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "link",
             Source = "sharing"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = TeamRenameAnnouncer.NotificationType,
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "users",
+            Source = TeamRenameAnnouncer.Source
         });
 
         registry.Register(new NotificationTemplate

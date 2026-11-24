@@ -23,12 +23,31 @@ public interface IConnectorFoodEntryRepository
         CancellationToken ct = default);
 
     /// <summary>
-    /// Update the status and matched treatment for a food entry.
+    /// Dismisses a pending food entry as <see cref="ConnectorFoodEntryStatus.Standalone"/> with one
+    /// update conditional on it still being pending, the claim <see cref="AcceptMatchAsync"/> makes, so
+    /// an entry an accept has linked is left as it is.
     /// </summary>
-    /// <param name="status">The new <see cref="ConnectorFoodEntryStatus"/>.</param>
-    Task UpdateStatusAsync(
-        Guid id,
-        ConnectorFoodEntryStatus status,
+    /// <remarks>
+    /// An entry already dismissed is <see cref="DismissMatchOutcome.AlreadyDismissed"/>. One matched or
+    /// withdrawn is <see cref="DismissMatchOutcome.AlreadyResolved"/>.
+    /// </remarks>
+    Task<DismissMatchOutcome> DismissAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Links a pending food entry to a carb intake: claims the entry and writes its
+    /// <see cref="TreatmentFood"/> row in one transaction, so two accepts racing for one entry write
+    /// one row and only the winner reports <see cref="AcceptMatchOutcome.Linked"/>.
+    /// </summary>
+    /// <remarks>
+    /// An entry already matched to <see cref="TreatmentFood.CarbIntakeId"/> is
+    /// <see cref="AcceptMatchOutcome.AlreadyLinked"/>. One matched to another carb intake or to none
+    /// on record, dismissed or withdrawn is <see cref="AcceptMatchOutcome.AlreadyResolved"/>.
+    /// </remarks>
+    /// <param name="foodEntryId">The food entry to link.</param>
+    /// <param name="treatmentFood">The row to write when this call wins the claim. Its id must be set.</param>
+    Task<AcceptMatchOutcome> AcceptMatchAsync(
+        Guid foodEntryId,
+        TreatmentFood treatmentFood,
         CancellationToken ct = default);
 
     /// <summary>
@@ -40,6 +59,8 @@ public interface IConnectorFoodEntryRepository
     /// and its entries are not linked to it; one a system sweep deleted is restored on its own row.
     /// Foods are reported to <c>ILegacyReadCacheInvalidation</c> after the commit when an existing
     /// one changed, since a legacy treatment is served with the name of its food.
+    /// Imports of one connector source and trimmed external entry id are one entry, written from the
+    /// first of them; the others, and the food they carry, are ignored.
     /// </remarks>
     /// <param name="imports">Imports with no connector source or no external entry id are skipped.</param>
     Task<ConnectorFoodEntryUpsert> UpsertAsync(
@@ -49,7 +70,8 @@ public interface IConnectorFoodEntryRepository
     /// <summary>
     /// Marks the pending entries of <paramref name="connectorSource"/> consumed in the window and
     /// absent from <paramref name="presentExternalEntryIds"/> as <see cref="ConnectorFoodEntryStatus.Deleted"/>.
-    /// Matched and dismissed entries are left alone.
+    /// Each is claimed with an update conditional on it still being pending, so an entry matched or
+    /// dismissed since the read is left alone and is not returned.
     /// </summary>
     /// <param name="from">Start of the window, inclusive.</param>
     /// <param name="to">End of the window, inclusive.</param>

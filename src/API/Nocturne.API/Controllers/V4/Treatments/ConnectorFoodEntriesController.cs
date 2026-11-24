@@ -1,14 +1,17 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for connector food entry imports.
+/// Food entries imported from connected third-party health apps. Import a batch of food entries
+/// into the tenant. Meal match suggestions from the import go to the signed-in user.
 /// </summary>
 /// <remarks>
 /// Connector food entries are raw nutritional records imported from third-party health apps
@@ -39,6 +42,7 @@ public class ConnectorFoodEntriesController : ControllerBase
     /// </summary>
     [HttpPost("import")]
     [Authorize]
+    [RequireScope(Scope.FoodReadWrite)]
     [ProducesResponseType(typeof(ConnectorFoodEntry[]), 200)]
     public async Task<ActionResult<ConnectorFoodEntry[]>> ImportEntries(
         [FromBody] ConnectorFoodEntryImport[] imports

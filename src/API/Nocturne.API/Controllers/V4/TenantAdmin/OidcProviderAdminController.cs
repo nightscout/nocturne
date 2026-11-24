@@ -11,7 +11,7 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
-/// Platform-admin controller for managing OIDC identity providers configured on the instance.
+/// OIDC sign-in providers for the instance. Create, read, update, delete, enable, disable and test providers.
 /// </summary>
 /// <remarks>
 /// Allows platform administrators to register, update, and remove OIDC providers (Google,
@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// a provider before any passkeys exist.
 /// </remarks>
 [ApiController]
+[System.ComponentModel.DisplayName("OIDC Providers")]
 [Tags("TenantAdmin")]
 [Route("api/v4/admin/oidc-providers")]
 [Produces("application/json")]
@@ -259,9 +260,9 @@ public class OidcProviderAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Refuses with 409 when deleting or disabling the provider would leave any account with no
-    /// sign-in method (<c>OrphanedSubjectFilter</c>): one whose only passkey-free way in is
-    /// this provider. Returns <see langword="null"/> when the operation strands nobody.
+    /// Refuses with 409 when deleting or disabling the provider would leave any account unable to
+    /// sign in (<see cref="ISubjectRepository.CountStrandedByProviderAsync"/>). Returns
+    /// <see langword="null"/> when the operation strands nobody.
     /// </summary>
     /// <remarks>
     /// The caller can pass <c>force</c> to go ahead anyway, e.g. to switch off a compromised

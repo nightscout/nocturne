@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page as browser } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page } from "$app/state";
-import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+import type { SyncResult } from "@nocturne/api-client";
 
 let sentPayload: unknown;
 let resetImpl: () => Promise<SyncResult>;

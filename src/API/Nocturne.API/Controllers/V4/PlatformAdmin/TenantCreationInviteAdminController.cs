@@ -36,6 +36,9 @@ public class TenantCreationInviteAdminController(ITenantCreationInviteService in
     public async Task<IActionResult> Create(
         [FromBody] CreateTenantCreationInviteRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Problem(detail: "Sign in as a person to make an invite link.", statusCode: 400, title: "Bad Request");
 
@@ -65,12 +68,12 @@ public class PlatformPolicyController(IPlatformPolicyRepository policies) : Cont
     [ProducesResponseType(typeof(PlatformPolicy), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPolicy(CancellationToken ct) => Ok(await policies.GetAsync(ct));
 
+    /// <summary>
+    /// Sets the switches the body names; a switch the body leaves out keeps its saved value.
+    /// </summary>
     [HttpPut]
     [RemoteCommand(Invalidates = ["GetPolicy"])]
     [ProducesResponseType(typeof(PlatformPolicy), StatusCodes.Status200OK)]
-    public async Task<IActionResult> SetPolicy([FromBody] PlatformPolicy policy, CancellationToken ct)
-    {
-        await policies.SaveAsync(policy, ct);
-        return Ok(policy);
-    }
+    public async Task<IActionResult> SetPolicy([FromBody] PlatformPolicyUpdate policy, CancellationToken ct) =>
+        Ok(await policies.UpdateAsync(policy, ct));
 }

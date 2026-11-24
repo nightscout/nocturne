@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -10,10 +11,10 @@ namespace Nocturne.API.Services.Connectors;
 /// when corrected/missing historical data must be re-pushed to affected tenants.
 /// </summary>
 /// <remarks>
-/// Nocturne does not persist a sync cursor — each data type resumes from the latest record already
-/// stored. A "cursor reset" is therefore an explicit-range sync with an upper bound of "now", which
-/// bypasses the per-type catch-up cursors and forces a genuine re-pull of history. Re-ingested
-/// records dedupe on their idempotency keys, so re-running is safe.
+/// Each connector's reset is a <see cref="SyncRequest.Reset"/> run up to now that re-pulls the
+/// window. What the run forgets once it has signed in is stated on
+/// <c>BaseConnectorService.ResetClears</c>. Re-ingested records dedupe on their idempotency keys, so
+/// re-running is safe.
 /// </remarks>
 /// <seealso cref="IConnectorSyncService"/>
 public interface IConnectorCursorResetService
@@ -158,14 +159,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
         var results = new List<ConnectorCursorResetResult>(configs.Count);
 
-        // Loop-invariant: setting To forces "explicit range" mode in the connectors, bypassing the
-        // per-type catch-up cursors so history is genuinely re-pulled. A null From means no lower bound.
-        var request = new SyncRequest
-        {
-            From = from,
-            To = _time.GetUtcNow().UtcDateTime,
-            DataTypes = dataTypes ?? [],
-        };
+        var request = SyncRequest.Reset(from, _time.GetUtcNow().UtcDateTime, dataTypes);
 
         foreach (var config in configs)
         {
@@ -173,7 +167,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
             _logger.LogInformation(
                 "Resetting cursor for connector {ConnectorName} in tenant {TenantSlug} (from {From})",
-                config.ConnectorName, tenant.Slug, from?.ToString("o") ?? "beginning");
+                config.ConnectorName, tenant.Slug, from?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
             progress?.ConnectorStarted(config.ConnectorName);
 

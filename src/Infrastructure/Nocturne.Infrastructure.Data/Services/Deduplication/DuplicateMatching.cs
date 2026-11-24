@@ -79,10 +79,21 @@ internal static class DuplicateMatching
     internal const int DedupChunkSize = 500;
 
     /// <summary>
-    /// A record's match criteria paired with its soft-deleted status, and for a state span its
-    /// <see cref="SpanEnd"/>, keyed by record id when returned from <see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>.
+    /// A record's match criteria paired with its soft-deleted status, for a state span its
+    /// <see cref="SpanEnd"/>, and the ids its source keys it by, keyed by record id when returned from
+    /// <see cref="LinkedRecordTypes.LoadRecordInfoAsync"/>.
     /// </summary>
-    internal sealed record RecordInfo(MatchCriteria Criteria, bool IsDeleted, SpanEnd Span = default);
+    internal sealed record RecordInfo(
+        MatchCriteria Criteria, bool IsDeleted, SpanEnd Span = default, string? LegacyId = null, string? SyncIdentifier = null)
+    {
+        /// <summary>
+        /// Whether <paramref name="other"/> is this record written again: the two share a legacy id or a
+        /// sync identifier.
+        /// </summary>
+        internal bool IsWrittenAgainAs(RecordInfo other) =>
+            (LegacyId is not null && string.Equals(LegacyId, other.LegacyId, StringComparison.Ordinal))
+            || (SyncIdentifier is not null && string.Equals(SyncIdentifier, other.SyncIdentifier, StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// How a state span ended, as <see cref="PickSurvivor(IEnumerable{LinkedRecordEntity}, Func{Guid, bool}, Func{Guid, SpanEnd})"/>

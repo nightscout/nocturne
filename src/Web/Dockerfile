@@ -14,6 +14,7 @@ COPY src/Web/patches patches/
 COPY src/Web/packages/app/package.json packages/app/
 COPY src/Web/packages/bridge/package.json packages/bridge/
 COPY src/Web/packages/bot/package.json packages/bot/
+COPY src/Web/packages/api-client/package.json packages/api-client/
 COPY src/Web/packages/portal/package.json packages/portal/
 COPY src/Web/vendor/water-ui/packages/water-ui/package.json vendor/water-ui/packages/water-ui/
 RUN pnpm install --frozen-lockfile
@@ -23,10 +24,11 @@ COPY src/Web/ .
 RUN pnpm install --frozen-lockfile
 
 # Copy pre-generated API client (NSwag output from dotnet build)
+COPY src/Web/packages/api-client/src/ packages/api-client/src/
 COPY src/Web/packages/app/src/lib/api/generated/ packages/app/src/lib/api/generated/
 
 RUN pnpm --filter @nocturne/bridge build 2>/dev/null || true
-RUN pnpm --filter @nocturne/bot build 2>/dev/null || true
+RUN pnpm --filter @nocturne/bot build
 # Extract first; see Dockerfile.web.
 RUN pnpm run translations:sync
 RUN NODE_OPTIONS="--max-old-space-size=7168" pnpm --filter @nocturne/app run build:sveltekit
@@ -54,7 +56,7 @@ COPY --from=build /app/packages/bot/package.json packages/bot/
 COPY --from=build /app/packages/portal/package.json packages/portal/
 RUN pnpm install --frozen-lockfile --prod
 # Fail the build, not the container start, when server.js imports a module that was not copied.
-RUN cd packages/app && node -e "import('./server-origin-warning.js')"
+RUN cd packages/app && node -e "import('./server-origin-warning.js'); import('@napi-rs/canvas').then((c) => c.createCanvas(2, 2).toBuffer('image/png')); import('./build/report-image-worker/worker.mjs')"
 
 EXPOSE 3000
 ENV PORT=3000

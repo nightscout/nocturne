@@ -7,14 +7,18 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Versions controller that provides 1:1 compatibility with Nightscout versions endpoint.
+/// Nightscout versions: the server version information. A client can read it without signing in.
 /// </summary>
+/// <remarks>
+/// Provides 1:1 compatibility with Nightscout versions endpoint.
+/// </remarks>
 /// <seealso cref="IVersionService"/>
 /// <seealso cref="ApiVersionEntry"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/[controller]")]
 [AllowAnonymous]
+[ErrorEnvelope]
 public class VersionsController : ControllerBase
 {
     private readonly IVersionService _versionService;
@@ -40,11 +44,6 @@ public class VersionsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ApiVersionEntry>), 200)]
     public async Task<ActionResult<IReadOnlyList<ApiVersionEntry>>> GetVersions()
     {
-        _logger.LogDebug(
-            "Versions endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
         return Ok(await _versionService.GetSupportedVersionsAsync());
     }
 }

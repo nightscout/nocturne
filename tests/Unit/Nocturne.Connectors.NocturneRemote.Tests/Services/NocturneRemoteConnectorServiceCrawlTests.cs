@@ -12,6 +12,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.NocturneRemote.Tests.Services;
@@ -573,6 +574,24 @@ public class NocturneRemoteConnectorServiceCrawlTests
             .Contain($"find[created_at][$gte]={latestStatus.AddMinutes(-5):o}");
     }
 
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunCrawlsGlucoseOnlyFromTheFirstRunsNewestReading()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.GlucosePage(total: 2, "2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
+        var fixture = new ServiceFixture(handler, glucoseWatermarkFollowsPublishes: true);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should().NotContain("from=",
+            "nothing was stored, so the first run reads the whole history");
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        var newest = new DateTime(2026, 1, 3, 8, 5, 0, DateTimeKind.Utc);
+        fixture.PublishedGlucose.Max(g => g.Timestamp).Should().Be(newest);
+        handler.LastCrawlOf(NocturneRemoteConstants.SensorGlucose).Should().Contain($"from={newest.AddMinutes(-5):o}");
+    }
+
     /// <summary>
     /// A run cut off mid-crawl — the per-tenant timeout — keeps the pages it published, and the next
     /// run crawls only the range it still owes: between the catch-up's floor and those pages.
@@ -583,6 +602,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         var latestStatus = new DateTime(2026, 1, 3, 7, 0, 0, DateTimeKind.Utc);
         var floor = latestStatus.AddMinutes(-5);
         var oldestPublished = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+        var newestPublished = new DateTime(2026, 1, 3, 8, 5, 0, DateTimeKind.Utc);
         var handler = new RemoteFakeHandler()
             .Serve(RemoteFakeHandler.V1DeviceStatus,
                 RemoteFakeHandler.DeviceStatusPage("2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"));
@@ -598,7 +618,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
         {
             ["DeviceStatus.GapFrom"] = floor,
             ["DeviceStatus.GapTo"] = oldestPublished,
-        }, "a bounded catch-up owes a bounded range, not the history below it");
+            ["DeviceStatus.Through"] = newestPublished,
+        }, "a bounded catch-up owes a bounded range, not the history below it, and records how far it reached");
 
         handler.Requests.Clear();
         await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
@@ -606,7 +627,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.Requests.Should().Contain(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)
             && u.Contains($"find[created_at][$gte]={floor:o}")
             && u.Contains($"find[created_at][$lte]={oldestPublished:o}"));
-        fixture.Marks.Should().BeEmpty("the owed range was crawled to its floor");
+        fixture.Marks.Should().Equal(
+            new Dictionary<string, DateTime> { ["DeviceStatus.Through"] = newestPublished },
+            "the owed range was crawled to its floor");
     }
 
     /// <summary>
@@ -633,13 +656,15 @@ public class NocturneRemoteConnectorServiceCrawlTests
             ["Boluses"] = deepMark,
             ["Boluses.GapFrom"] = latestBolus.AddMinutes(-5),
             ["Boluses.GapTo"] = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc),
+            ["Boluses.Through"] = new DateTime(2026, 1, 3, 8, 5, 0, DateTimeKind.Utc),
         });
     }
 
     /// <summary>
     /// A catch-up whose first page is full records what it owes before it asks for the next, so a
     /// process killed during that fetch does not strand the range below what it published. A
-    /// catch-up of one short page, the common case, writes nothing.
+    /// catch-up of one short page, the common case, owes nothing and writes once, to record how far
+    /// it reached.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_ACatchUpRecordsItsRangeBeforeFetchingPastAFullPage()
@@ -661,7 +686,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
             new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] }, fixture.Config, CancellationToken.None);
 
         atSecondFetch.Should().ContainKey("DeviceStatus.GapTo");
-        fixture.Marks.Should().BeEmpty();
+        fixture.Marks.Should().Equal(new Dictionary<string, DateTime>
+        {
+            ["DeviceStatus.Through"] = new(2026, 1, 3, 8, 5, 0, DateTimeKind.Utc),
+        });
 
         var single = new ServiceFixture(
             new RemoteFakeHandler().Serve(RemoteFakeHandler.V1DeviceStatus,
@@ -670,7 +698,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
         await single.Service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.DeviceStatus] }, single.Config, CancellationToken.None);
 
-        single.MarkWrites.Should().Be(0);
+        single.MarkWrites.Should().Be(1);
+        single.Marks.Keys.Should().Equal("DeviceStatus.Through");
     }
 
     /// <summary>
@@ -688,6 +717,408 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         handler.Requests.First(u => u.Contains(RemoteFakeHandler.V1DeviceStatus)).Should().NotContain("$gte");
         handler.LastCrawlOf(NocturneRemoteConstants.Activity).Should().NotContain("from=");
+    }
+
+    /// <summary>
+    /// A background run with activity stored up to a moment asks the remote for the window from just
+    /// before it, and reads that one page, instead of walking the remote's whole activity history.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenActivityIsStored_CrawlsOnlyTheWindowFromItsNewestRecord()
+    {
+        var latestActivity = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.Activity,
+                RemoteFakeHandler.ActivityPage(total: 1, "2026-01-03T08:02:00Z"));
+        var fixture = new ServiceFixture(handler, latestActivity: latestActivity);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.CrawlOf(NocturneRemoteConstants.Activity).Should()
+            .Contain($"from={latestActivity.AddMinutes(-5):o}");
+        handler.Requests.Count(u => u.Contains(NocturneRemoteConstants.Activity)).Should().Be(1);
+        fixture.PublishedActivities.Should().ContainSingle();
+        result.ItemsSynced.Should().Contain(SyncDataType.Activity, 1);
+    }
+
+    /// <summary>
+    /// A remote that predates the activity window ignores its bounds and answers newest first from its
+    /// whole history. The page that reaches below the window holds the last record the window asked
+    /// for, so the read ends there in success and the older pages are not fetched.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteIgnoresTheActivityWindow_StopsAtThePageThatPassesTheWindow()
+    {
+        var latestActivity = new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.Activity,
+                RemoteFakeHandler.ActivityPage(total: 3, "2026-01-03T08:02:00Z", "2026-01-03T07:00:00Z"),
+                RemoteFakeHandler.ActivityPage(total: 3, "2026-01-01T07:00:00Z"));
+        var fixture = new ServiceFixture(handler, latestActivity: latestActivity);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Should().HaveCount(2);
+        handler.Requests.Count(u => u.Contains(NocturneRemoteConstants.Activity)).Should().Be(1);
+        fixture.Marks.Keys.Should().Equal($"{SyncDataType.Activity}.Through");
+    }
+
+    /// <summary>
+    /// The activity crawl publishes page by page, so a run the budget or a failure cuts off keeps what
+    /// it published. A crawl that read everything before publishing would publish one batch.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenActivityTakesTwoPages_PublishesEachPageAsItsOwnBatch()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.Activity,
+                RemoteFakeHandler.ActivityPage(total: 3, "2026-01-03T08:02:00Z", "2026-01-03T07:00:00Z"),
+                RemoteFakeHandler.ActivityPage(total: 3, "2026-01-01T07:00:00Z"));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivityBatchSizes.Should().Equal(2, 1);
+    }
+
+    /// <summary>
+    /// A crawl cut off after a page marks where it reached under the activity type, so the next run
+    /// does not claim the range below it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAnActivityPageIsRejected_MarksWhereTheCrawlStopped()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.Activity,
+                RemoteFakeHandler.ActivityPage(total: 6, "2026-01-03T08:05:00Z", "2026-01-03T08:00:00Z"),
+                RemoteFakeHandler.Status(HttpStatusCode.BadGateway));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        fixture.PublishedActivityBatchSizes.Should().Equal(2);
+        fixture.Marks.Should().Contain(nameof(SyncDataType.Activity), new DateTime(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>
+    /// A merged read stops serving at its window, so a range holding more than that is read again
+    /// from its first page under the oldest time served. Every record arrives, none past the cap is
+    /// lost, and the crawl records the range as covered only because it read all of it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheActivityWindowHoldsMoreThanTheRemoteServes_ContinuesBelowTheOldestServed()
+    {
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 5);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Distinct().Should().BeEquivalentTo(store.Ids);
+        fixture.Marks.Should().NotContainKey(nameof(SyncDataType.Activity), "the crawl reached the oldest record");
+    }
+
+    /// <summary>
+    /// Records sharing the instant a read stepped to are served by the next read too, because the
+    /// bound is inclusive. The one past the cap is imported rather than dropped, and the one served
+    /// twice arrives twice, which the idempotent publish absorbs.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenRecordsShareTheInstantTheActivityReadSteppedTo_ImportsThemAll()
+    {
+        var tiedAt = V4ApiLimits.MaxMergedPageWindow - 1;
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 3, tiedAt: tiedAt);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Distinct().Should().BeEquivalentTo(store.Ids);
+        fixture.PublishedActivities.Count(a => a.Id == store.Ids[tiedAt])
+            .Should().Be(2, "the record the read stepped to is served again at the new bound");
+    }
+
+    /// <summary>
+    /// A remote that ignores the window and holds more than it serves answers the same top page after
+    /// the step. The crawl fails instead of ending as though the range were read, and keeps only the
+    /// mark of what it read, so no later run takes the range below it as covered.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteIgnoresTheWindowAndHoldsMoreThanItServes_FailsWithoutClaimingCoverage()
+    {
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 5, honoursWindow: false);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().StartWith($"Failed to sync {SyncDataType.Activity}");
+        fixture.PublishedActivities.Should().HaveCount(V4ApiLimits.MaxMergedPageWindow);
+        fixture.Marks.Should().Contain(
+            nameof(SyncDataType.Activity), fixture.PublishedActivities.Min(a => a.Mills).ToUtcDateTime());
+        handler.Requests.Count(u => u.Contains(NocturneRemoteConstants.Activity))
+            .Should().Be(V4ApiLimits.MaxMergedPageWindow / RemoteFakeHandler.PageSize + 2,
+                "the pages under the cap, the empty page at it, and the read after the step");
+    }
+
+    /// <summary>
+    /// A remote older than the cap on merged pages serves past it, and is paged on rather than
+    /// stepped, so a first import reads its whole history although it ignores the window.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteServesPastTheCap_PagesOnAndReadsItInFull()
+    {
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 5, honoursWindow: false, capped: false);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Should().BeEquivalentTo(store.Ids);
+        fixture.Marks.Should().NotContainKey(nameof(SyncDataType.Activity));
+    }
+
+    /// <summary>
+    /// A first import from a remote that takes the window and holds fewer records than its list
+    /// serves reads them all and leaves nothing marked.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteTakesTheWindowAndHoldsLessThanItServes_ReadsItInFull()
+    {
+        var store = new ActivityStore(count: 7);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Should().BeEquivalentTo(store.Ids);
+        fixture.Marks.Keys.Should().Equal($"{SyncDataType.Activity}.Through");
+    }
+
+    /// <summary>
+    /// A catch-up whose window holds more than the remote's list serves steps below the cap and reads
+    /// the whole window, so it succeeds and owes nothing.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCatchUpWindowHoldsMoreThanTheRemoteServes_ReadsTheWholeWindow()
+    {
+        var from = ActivityStore.At(V4ApiLimits.MaxMergedPageWindow + 5);
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 20);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler, latestActivity: from.AddMinutes(5));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Distinct().Should().BeEquivalentTo(store.IdsFrom(from));
+        fixture.Marks.Keys.Should().Equal($"{SyncDataType.Activity}.Through");
+    }
+
+    /// <summary>
+    /// A catch-up from a remote that holds more than its list serves, but fewer inside the window,
+    /// reads the window and stops there, whether or not the remote takes the window. A remote that
+    /// ignores it has served everything above the lower bound before the first record below it, so
+    /// the window was read in full and the run succeeds.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SyncDataAsync_WhenTheRemoteHoldsMoreThanItServesButTheCatchUpWindowFewer_ReadsTheWindowAndSucceeds(
+        bool honoursWindow)
+    {
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 5, honoursWindow: honoursWindow);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler, latestActivity: ActivityStore.Newest);
+        var window = store.IdsFrom(ActivityStore.Newest.AddMinutes(-5));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+        fixture.PublishedActivities.Select(a => a.Id).Should().Contain(window);
+        fixture.PublishedActivities.Should().HaveCountLessThanOrEqualTo(window.Count + 1);
+        handler.Requests.Count(u => u.Contains(NocturneRemoteConstants.Activity))
+            .Should().BeLessThanOrEqualTo(window.Count / RemoteFakeHandler.PageSize + 1);
+        fixture.Marks.Keys.Should().Equal($"{SyncDataType.Activity}.Through");
+    }
+
+    /// <summary>
+    /// A catch-up from a remote that ignores the window, after an outage longer than its list serves,
+    /// cannot reach the window's oldest records. It publishes the newest the remote serves, fails, and
+    /// owes the range from its lower bound up to the oldest record it published.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteIgnoresTheWindowAndTheCatchUpWindowHoldsMoreThanItServes_FailsAndOwesTheRest()
+    {
+        var from = ActivityStore.At(V4ApiLimits.MaxMergedPageWindow + 5);
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 20, honoursWindow: false);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler, latestActivity: from.AddMinutes(5));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().StartWith($"Failed to sync {SyncDataType.Activity}");
+        fixture.PublishedActivities.Select(a => a.Id).Should()
+            .BeEquivalentTo(store.Ids.Take(V4ApiLimits.MaxMergedPageWindow));
+        fixture.Marks.Should().BeEquivalentTo(new Dictionary<string, DateTime>
+        {
+            [$"{SyncDataType.Activity}.GapFrom"] = from,
+            [$"{SyncDataType.Activity}.GapTo"] = ActivityStore.At(V4ApiLimits.MaxMergedPageWindow - 1),
+            [$"{SyncDataType.Activity}.Through"] = ActivityStore.Newest,
+        });
+    }
+
+    /// <summary>
+    /// After a first import that could not reach past what a remote that ignores the window serves,
+    /// a later run catches up the recent window and then fails on the range below the mark, which
+    /// stays where it was: the remote cannot serve that range until it takes the window.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteIgnoresTheWindowAndAMarkIsHeldBelowWhatItServes_FailsAndKeepsTheMark()
+    {
+        var mark = ActivityStore.At(V4ApiLimits.MaxMergedPageWindow - 1);
+        var store = new ActivityStore(count: V4ApiLimits.MaxMergedPageWindow + 5, honoursWindow: false);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler, latestActivity: ActivityStore.Newest);
+        fixture.Marks[nameof(SyncDataType.Activity)] = mark;
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().StartWith($"Failed to sync {SyncDataType.Activity}");
+        fixture.PublishedActivities.Select(a => a.Id).Should()
+            .Contain(store.IdsFrom(ActivityStore.Newest.AddMinutes(-5)));
+        fixture.Marks.Should().Contain(nameof(SyncDataType.Activity), mark)
+            .And.ContainKey($"{SyncDataType.Activity}.Through", "the catch-up of the recent window succeeded")
+            .And.HaveCount(2);
+    }
+
+    /// <summary>
+    /// The remote stores times finer than the millisecond a record carries, so a record past the cap
+    /// that shares the oldest served record's millisecond, but lies later in it, is still inside the
+    /// stepped bound and is imported.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenARecordPastTheCapLiesLaterInTheOldestServedMillisecond_ImportsIt()
+    {
+        var tiedAt = V4ApiLimits.MaxMergedPageWindow - 1;
+        var store = new ActivityStore(
+            count: V4ApiLimits.MaxMergedPageWindow + 3, tiedAt: tiedAt, tieOffset: TimeSpan.FromMicroseconds(700));
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Select(a => a.Id).Distinct().Should().BeEquivalentTo(store.Ids);
+    }
+
+    /// <summary>
+    /// A list the remote serves in full is read once and never stepped, whether or not the remote
+    /// takes the window, and leaves nothing marked.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteIgnoresTheWindowAndHoldsLessThanItServes_ReadsItInFull()
+    {
+        var store = new ActivityStore(count: 7, honoursWindow: false);
+        var handler = new RemoteFakeHandler().ServeComputed(NocturneRemoteConstants.Activity, store.Respond);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Activity] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        fixture.PublishedActivities.Should().HaveCount(7);
+        fixture.Marks.Should().NotContainKey(nameof(SyncDataType.Activity));
+    }
+
+    /// <summary>
+    /// A remote's stored activity, newest first, served the way its merged list serves it: each source
+    /// compares the inclusive bounds with the time it stores, to the tick here, and each record carries
+    /// its time truncated to the millisecond.
+    /// </summary>
+    private sealed class ActivityStore
+    {
+        internal static readonly DateTime Newest = new(2026, 1, 3, 8, 0, 0, DateTimeKind.Utc);
+
+        private readonly List<(string Id, DateTime At)> _records;
+        private readonly bool _honoursWindow;
+        private readonly bool _capped;
+
+        internal IReadOnlyList<string> Ids => _records.Select(r => r.Id).ToList();
+
+        internal IReadOnlyList<string> IdsFrom(DateTime from) =>
+            _records.Where(r => r.At >= from).Select(r => r.Id).ToList();
+
+        /// <summary>The time of the record at <paramref name="index"/>, one second below the one above it.</summary>
+        internal static DateTime At(int index) => Newest.AddSeconds(-index);
+
+        /// <param name="tiedAt">An index whose record shares its millisecond with the one below it.</param>
+        /// <param name="tieOffset">How far into that millisecond the record below it lies.</param>
+        /// <param name="capped">Whether the list serves nothing past <see cref="V4ApiLimits.MaxMergedPageWindow"/>, as a remote since the cap does.</param>
+        internal ActivityStore(
+            int count, int? tiedAt = null, bool honoursWindow = true, TimeSpan tieOffset = default, bool capped = true)
+        {
+            _honoursWindow = honoursWindow;
+            _capped = capped;
+            _records = Enumerable.Range(0, count)
+                .Select(i => ($"activity-{i}", tiedAt is { } tie && i > tie
+                    ? At(i - 1) + (i == tie + 1 ? tieOffset : TimeSpan.Zero)
+                    : At(i)))
+                .ToList();
+        }
+
+        internal HttpResponseMessage Respond(Uri uri)
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var offset = int.Parse(query["offset"]!);
+            var limit = int.Parse(query["limit"]!);
+            var from = Bound(query["from"]);
+            var to = Bound(query["to"]);
+
+            var inWindow = _records
+                .Where(r => !_honoursWindow || ((from is null || r.At >= from) && (to is null || r.At <= to)))
+                .ToList();
+            var served = inWindow
+                .Skip(offset)
+                .Take(_capped
+                    ? Math.Clamp(limit, 0, V4ApiLimits.MaxMergedPageWindow - Math.Min(offset, V4ApiLimits.MaxMergedPageWindow))
+                    : limit);
+
+            var records = string.Join(",", served.Select(r =>
+                $$"""{"_id":"{{r.Id}}","mills":{{new DateTimeOffset(r.At).ToUnixTimeMilliseconds()}},"type":"Walking"}"""));
+            return RemoteFakeHandler.Json(
+                $$$"""{"data":[{{{records}}}],"pagination":{"limit":{{{limit}}},"offset":{{{offset}}},"total":{{{inWindow.Count}}}}}""");
+        }
+
+        private static DateTime? Bound(string? value) =>
+            value is null
+                ? null
+                : DateTimeOffset.Parse(value, null, System.Globalization.DateTimeStyles.AssumeUniversal).UtcDateTime;
     }
 
     /// <summary>
@@ -1143,7 +1574,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
         internal List<Bolus> PublishedBoluses { get; } = [];
         internal List<ProfileActivation> PublishedActivations { get; } = [];
         internal List<DeviceStatus> PublishedStatuses { get; } = [];
-        internal Dictionary<string, DateTime> Marks { get; } = [];
+        internal List<Activity> PublishedActivities { get; } = [];
+        internal List<int> PublishedActivityBatchSizes { get; } = [];
+        internal InMemoryConnectorStateStore State { get; }
+        internal Dictionary<string, DateTime> Marks => State.Resume;
         internal int MarkWrites { get; private set; }
 
         internal ServiceFixture(
@@ -1155,8 +1589,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
             DateTime? latestStateSpan = null,
             DateTime? latestGlucose = null,
             DateTime? latestDeviceStatus = null,
+            DateTime? latestActivity = null,
             Action? onDeviceStatusPublished = null,
-            TimeProvider? time = null)
+            TimeProvider? time = null,
+            bool glucoseWatermarkFollowsPublishes = false)
         {
             Config = config ?? NewConfig();
 
@@ -1170,7 +1606,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 .ReturnsAsync(true);
             glucose
                 .Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(latestGlucose);
+                .ReturnsAsync(() => glucoseWatermarkFollowsPublishes && PublishedGlucose.Count > 0
+                    ? PublishedGlucose.Max(g => g.Timestamp)
+                    : latestGlucose);
 
             var device = new Mock<IDevicePublisher>();
             device
@@ -1207,20 +1645,22 @@ public class NocturneRemoteConnectorServiceCrawlTests
             }
 
             var metadata = new Mock<IMetadataPublisher>();
+            State = new InMemoryConnectorStateStore { BeforeWrite = _ => MarkWrites++ };
             metadata
-                .Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Dictionary<string, DateTime>(Marks));
+                .Setup(p => p.GetLatestActivityTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(latestActivity);
             metadata
-                .Setup(p => p.SetBackfillLowWaterMarksAsync(
-                    It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
-                .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
-                {
-                    MarkWrites++;
-                    foreach (var (key, mark) in changes)
-                        if (mark is { } at) Marks[key] = at;
-                        else Marks.Remove(key);
-                })
-                .Returns(Task.CompletedTask);
+                .Setup(p => p.PublishActivityAsync(
+                    It.IsAny<IEnumerable<Activity>>(), It.IsAny<string>(),
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<Activity>, string, WriteOrigin, CancellationToken>(
+                    (batch, _, _, _) =>
+                    {
+                        var records = batch.ToList();
+                        PublishedActivities.AddRange(records);
+                        PublishedActivityBatchSizes.Add(records.Count);
+                    })
+                .ReturnsAsync(true);
             metadata
                 .Setup(p => p.GetLatestStateSpanTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(latestStateSpan);
@@ -1251,6 +1691,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
             publisher.Setup(p => p.Treatments).Returns(treatments.Object);
             publisher.Setup(p => p.Device).Returns(device.Object);
             publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+            publisher.Setup(p => p.State).Returns(State);
 
             Service = new NocturneRemoteConnectorService(
                 new HttpClient(handler),
@@ -1296,6 +1737,15 @@ public class NocturneRemoteConnectorServiceCrawlTests
         /// <see cref="Requests"/>.
         /// </summary>
         internal List<string?> Tokens { get; } = [];
+
+        private readonly Dictionary<string, Func<Uri, HttpResponseMessage>> _computed = new(StringComparer.Ordinal);
+
+        /// <summary>Answers every request to <paramref name="path"/> from its query, as a stored remote would.</summary>
+        internal RemoteFakeHandler ServeComputed(string path, Func<Uri, HttpResponseMessage> respond)
+        {
+            _computed[path] = respond;
+            return this;
+        }
 
         internal RemoteFakeHandler Serve(string path, params HttpResponseMessage[] responses)
         {
@@ -1345,6 +1795,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
             Page(total, timestamps.Select(t =>
                 $$"""{"id":"{{Guid.NewGuid()}}","timestamp":"{{t}}","insulin":1.5}"""));
 
+        internal static HttpResponseMessage ActivityPage(int total, params string[] timestamps) =>
+            Page(total, timestamps.Select(t =>
+                $$"""{"_id":"{{Guid.NewGuid()}}","mills":{{DateTimeOffset.Parse(t).ToUnixTimeMilliseconds()}},"type":"Walking"}"""));
+
         internal static HttpResponseMessage DeviceStatusPage(params string[] createdAt) =>
             Json("[" + string.Join(",", createdAt.Select(t =>
                 $$"""{"_id":"{{Guid.NewGuid()}}","created_at":"{{t}}"}""")) + "]");
@@ -1375,6 +1829,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
             if (IsAuthCheck(request))
                 return Task.FromResult(GlucosePage(total: 0));
+
+            if (_computed.TryGetValue(path, out var respond))
+                return Task.FromResult(respond(request.RequestUri));
 
             if (_pages.TryGetValue(path, out var queue) && queue.Count > 0)
                 return Task.FromResult(queue.Dequeue());

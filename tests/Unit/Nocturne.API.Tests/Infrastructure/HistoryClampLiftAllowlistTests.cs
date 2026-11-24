@@ -22,14 +22,35 @@ public class HistoryClampLiftAllowlistTests
     private static readonly string[] Allowed =
     [
         "src/Infrastructure/Nocturne.Infrastructure.Data/NocturneDbContext.cs: NocturneDbContext.SaveChangesAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/AuditedBulkDeleteExtensions.cs: AuditedBulkDeleteExtensions.SoftDeleteRowsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.DeriveFlagsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.HiddenRowsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.LiveIdsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.LiveSpanEndsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.SaveHiddenAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/DuplicateGroupPrimaries.cs: DuplicateGroupPrimaries.TouchAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.AfterRowsChangedAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/GlucoseStreamFlags.cs: GlucoseStreamFlags.RecomputeAsync",
-        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ClearSupersededByAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/SoftDeleteRestoreExtensions.cs: SoftDeleteRestoreExtensions.FindLiveKeyClashesAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.ReopenSupersededAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Extensions/StateSpanSupersessionExtensions.cs: StateSpanSupersessionExtensions.SupersedeByArrivedAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.ClearedBeforeTheClampAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.CreateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
+        // A keyed upsert finds the row its key holds even when the clamp hides it, since the unique index spans
+        // the tenant, and overwrites it with the writer's record. The answer carries only what the writer sent.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/ActivityRecordRepository.cs: ActivityRecordRepository.WriteHealthSeriesAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/ActivityRecordRepository.cs: ActivityRecordRepository.ResolveAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/Health/HealthSeriesRepository.cs: HealthSeriesRepository.UpsertAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SleepSessionRepository.cs: SleepSessionRepository.SaveAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SleepSessionRepository.cs: SleepSessionRepository.UpsertSessionAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/StateSpanRepository.cs: StateSpanRepository.LoadHiddenGoverningSpansAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/StateSpanRepository.cs: StateSpanRepository.UpsertBatchAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SystemEventRepository.cs: SystemEventRepository.HiddenRowsAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SystemEventRepository.cs: SystemEventRepository.SaveBatchAsync",
+        // Each glucose stream's first arrival feeds only replay's internal classification of readings as
+        // live arrivals or imported history; no row of it reaches the caller.
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/SensorGlucoseRepository.cs: SensorGlucoseRepository.GetStreamFirstArrivalsAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.LoadRecordInfoAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Services/Deduplication/LinkedRecordTypes.cs: LinkedRecordTypes.UnlinkedAsync",
     ];

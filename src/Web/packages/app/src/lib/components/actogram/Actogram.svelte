@@ -7,7 +7,7 @@
     ActogramRowContext,
     GlucosePoint,
   } from './actogram';
-  import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
+  import type { ChartThresholds } from '@nocturne/charts/core';
   import {
     sliceIntoRows,
     sliceBgIntoRows,

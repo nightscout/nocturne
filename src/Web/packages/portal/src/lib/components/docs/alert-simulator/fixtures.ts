@@ -275,7 +275,7 @@ function iso(ms: number): string {
 	return new Date(ms).toISOString().replace(".000Z", "Z");
 }
 
-/** The 5-minute instants a scenario is replayed at, from its start up to its end. */
+/** The 5-minute instants the chart's insulin and carb series are drawn at, from start to end. */
 export function tickTimes(scenario: Scenario): number[] {
 	const times: number[] = [];
 	for (let t = scenario.start; t < scenario.end; t += STEP) times.push(t);
@@ -283,37 +283,50 @@ export function tickTimes(scenario: Scenario): number[] {
 }
 
 /**
- * The context each 5-minute tick is evaluated against, built as the API's replay does
- * (AlertReplayService): the newest reading at or before the tick, however old, and a tick before
- * the first reading reading as fresh rather than as no reading ever.
+ * The ticks a scenario is replayed at and their contexts, built as the API's replay does
+ * (AlertReplayService): the scenario's start and each reading, and every 5 minutes in a gap
+ * between readings a sample of the other facts. A tick reads the newest reading at or before it,
+ * however old, and a tick before the first reading reads as fresh rather than as no reading ever.
  */
 export function ticksFor(scenario: Scenario): ReplayTick[] {
+	const ticks: ReplayTick[] = [];
 	let next = 0;
 	let current: Reading | undefined;
-	return tickTimes(scenario).map((t) => {
+	let reading = true;
+	let t = scenario.start;
+	while (t < scenario.end) {
 		while (next < scenario.readings.length && scenario.readings[next].at <= t) {
 			current = scenario.readings[next++];
 		}
-		const lastCarb = latestAtOrBefore(scenario.carbs, t);
-		const lastBolus = latestAtOrBefore(scenario.boluses, t);
-		const treatments = {
-			iob_units: Math.round(insulinOnBoard(scenario, t) * 100) / 100,
-			cob_grams: Math.round(carbsOnBoard(scenario, t) * 10) / 10,
-			...(lastCarb === undefined ? {} : { last_carb_at: iso(lastCarb) }),
-			...(lastBolus === undefined ? {} : { last_bolus_at: iso(lastBolus) }),
-		};
-		return {
-			at: iso(t),
-			context: current
-				? {
-						latest_value: current.mgdl,
-						latest_timestamp: iso(current.at),
-						trend_rate: current.trendRate,
-						last_reading_at: iso(current.at),
-						...treatments,
-						tenant_time_zone_id: TIME_ZONE,
-					}
-				: { last_reading_at: iso(t), ...treatments, tenant_time_zone_id: TIME_ZONE },
-		};
-	});
+		ticks.push(tickAt(scenario, t, current, reading));
+		const upcoming = scenario.readings[next]?.at;
+		reading = upcoming !== undefined && upcoming <= t + STEP;
+		t = upcoming !== undefined && reading ? upcoming : t + STEP;
+	}
+	return ticks;
+}
+
+function tickAt(scenario: Scenario, t: number, current: Reading | undefined, reading: boolean): ReplayTick {
+	const lastCarb = latestAtOrBefore(scenario.carbs, t);
+	const lastBolus = latestAtOrBefore(scenario.boluses, t);
+	const treatments = {
+		iob_units: Math.round(insulinOnBoard(scenario, t) * 100) / 100,
+		cob_grams: Math.round(carbsOnBoard(scenario, t) * 10) / 10,
+		...(lastCarb === undefined ? {} : { last_carb_at: iso(lastCarb) }),
+		...(lastBolus === undefined ? {} : { last_bolus_at: iso(lastBolus) }),
+	};
+	return {
+		at: iso(t),
+		reading,
+		context: current
+			? {
+					latest_value: current.mgdl,
+					latest_timestamp: iso(current.at),
+					trend_rate: current.trendRate,
+					last_reading_at: iso(current.at),
+					...treatments,
+					tenant_time_zone_id: TIME_ZONE,
+				}
+			: { last_reading_at: iso(t), ...treatments, tenant_time_zone_id: TIME_ZONE },
+	};
 }

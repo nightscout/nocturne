@@ -65,6 +65,36 @@ describe("ConnectorConfigForm", () => {
 		await expect.element(toggle).toBeVisible();
 	});
 
+	it("disables a switch the API locks and says why", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
+				configuration: { syncGlucose: false },
+				lockedKeys: ["syncGlucose"],
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("switch")).toBeDisabled();
+		await expect
+			.element(page.getByTestId("locked-syncGlucose"))
+			.toHaveTextContent("Only members who can manage this site's settings can turn this on.");
+	});
+
+	it("leaves a switch the API does not lock enabled, with no reason", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { syncGlucose: { type: "boolean", default: false } }, secrets: [] },
+				configuration: { syncGlucose: false },
+				lockedKeys: [],
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("switch")).toBeEnabled();
+		expect(page.getByTestId("locked-syncGlucose").elements()).toHaveLength(0);
+	});
+
 	it("renders number fields with constraints info", async () => {
 		render(ConnectorConfigForm, {
 			props: {
@@ -245,5 +275,84 @@ describe("ConnectorConfigForm", () => {
 
 		await start.click();
 		await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+	});
+
+	describe("in setup", () => {
+		const setupSchema = {
+			type: "object",
+			properties: {
+				url: { type: "string", format: "uri", "x-envVar": "CONNECT_NIGHTSCOUT_URL" },
+				timezoneOffset: { type: "number", default: 0, "x-envVar": "CONNECT_NIGHTSCOUT_TIMEZONE_OFFSET" },
+				glucoseProcessing: { type: "string", enum: ["Smoothed", "Unsmoothed"] },
+				syncGlucose: { type: "boolean", default: true },
+				maxCount: { type: "integer", default: 1000 },
+				apiSecret: { type: "string", "x-secret": true },
+			},
+			secrets: ["apiSecret"],
+		};
+
+		it("shows only what connecting needs, with no environment names", async () => {
+			render(ConnectorConfigForm, {
+				props: {
+					schema: setupSchema,
+					configuration: { url: "https://ns.example" },
+					effectiveConfig: { timezoneOffset: 2 },
+					variant: "setup",
+					onSave: vi.fn(),
+				},
+			});
+
+			await expect.element(page.getByText("URL", { exact: true })).toBeVisible();
+			await expect.element(page.getByText("API secret")).toBeVisible();
+			await expect.element(page.getByText("(optional)")).toBeVisible();
+			await expect.element(page.getByText("Timezone offset")).not.toBeInTheDocument();
+			await expect.element(page.getByText("Glucose processing")).not.toBeInTheDocument();
+			await expect.element(page.getByText("Sync glucose")).not.toBeInTheDocument();
+			await expect.element(page.getByText(/CONNECT_NIGHTSCOUT/)).not.toBeInTheDocument();
+			expect(page.getByTestId("connector-credentials").elements()).toHaveLength(0);
+		});
+
+		it("does not call a required secret optional", async () => {
+			render(ConnectorConfigForm, {
+				props: {
+					schema: { ...setupSchema, required: ["apiSecret"] },
+					configuration: {},
+					variant: "setup",
+					onSave: vi.fn(),
+				},
+			});
+
+			await expect.element(page.getByText("API secret")).toBeVisible();
+			await expect.element(page.getByText("(optional)")).not.toBeInTheDocument();
+		});
+
+		it("shows a required field of any category", async () => {
+			render(ConnectorConfigForm, {
+				props: {
+					schema: { ...setupSchema, required: ["maxCount"] },
+					configuration: {},
+					variant: "setup",
+					onSave: vi.fn(),
+				},
+			});
+
+			await expect.element(page.getByText("Max count")).toBeVisible();
+		});
+
+		it("offers the save before anything changes", async () => {
+			const onSave = vi.fn().mockResolvedValue(undefined);
+			render(ConnectorConfigForm, {
+				props: {
+					schema: setupSchema,
+					configuration: { url: "https://ns.example" },
+					variant: "setup",
+					saveLabel: "Start import",
+					onSave,
+				},
+			});
+
+			await page.getByRole("button", { name: "Start import" }).click();
+			await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+		});
 	});
 });

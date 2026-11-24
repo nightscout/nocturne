@@ -6,8 +6,9 @@
   import Link from "@lucide/svelte/icons/link";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
-  import type { MemberInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
+  import type { MemberInviteInfo } from "@nocturne/api-client";
 
   interface Props {
     invites: MemberInviteInfo[];
@@ -28,8 +29,16 @@
   </Card.Header>
   <Card.Content class="space-y-3">
     {#each invites as invite (invite.id)}
+      {@const inviteName = invite.label ?? "Invite link"}
+      {@const accessEnd = invite.accessEndsAt
+        ? formatMediumDate(accessEndDate(invite.accessEndsAt))
+        : null}
+      {@const outlastsReasonId = `invite-outlasts-${invite.id}`}
       <div
         class="flex items-center justify-between gap-4 rounded-md border p-3"
+        role="group"
+        aria-label={inviteName}
+        aria-describedby={invite.outlastsCaller ? outlastsReasonId : undefined}
       >
         <div class="space-y-1 flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
@@ -43,6 +52,9 @@
             {/each}
           </div>
           <p class="text-xs text-muted-foreground">
+            {#if invite.createdByName}
+              Made by {invite.createdByName} &middot;
+            {/if}
             Expires {formatMediumDateTime(invite.expiresAt)}
             {#if invite.maxUses}
               &middot; {invite.useCount}/{invite.maxUses} uses
@@ -53,7 +65,15 @@
             {#if invite.limitTo24Hours}
               &middot; Last 24 hours only
             {/if}
+            {#if accessEnd}
+              &middot; Access ends {accessEnd}
+            {/if}
           </p>
+          {#if invite.outlastsCaller}
+            <p id={outlastsReasonId} class="text-xs text-muted-foreground">
+              This invite gives access that lasts longer than yours.
+            </p>
+          {/if}
           {#if invite.usedBy && invite.usedBy.length > 0}
             <div class="mt-2 pt-2 border-t space-y-1">
               <p
@@ -73,11 +93,13 @@
             </div>
           {/if}
         </div>
+        {#if !invite.outlastsCaller}
         <Button
           type="button"
           variant="ghost-destructive"
           size="sm"
           class="shrink-0"
+          aria-label="Revoke {inviteName}"
           disabled={isRevoking && !!invite.id}
           onclick={() => onRevoke(invite.id!)}
         >
@@ -87,6 +109,7 @@
             <Trash2 class="h-3.5 w-3.5" />
           {/if}
         </Button>
+        {/if}
       </div>
     {/each}
   </Card.Content>

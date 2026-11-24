@@ -130,18 +130,22 @@ internal static class DuplicateGroupPrimaries
     /// <param name="entity">The row to delete.</param>
     /// <param name="recordType">The record type its links are under; null deletes the row alone.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>What the save wrote, and the other copies deleted with the row.</returns>
-    public static Task<(int Saved, IReadOnlyList<TEntity> Copies)> SoftDeleteAsync<TEntity>(
+    /// <returns>
+    /// What the saves wrote, the other copies deleted with the row that the caller's history clamp
+    /// shows it, and the ids of every other copy deleted, those the clamp hides included.
+    /// </returns>
+    public static Task<(int Saved, IReadOnlyList<TEntity> Copies, IReadOnlyList<Guid> CopyIds)> SoftDeleteAsync<TEntity>(
         NocturneDbContext ctx, TEntity entity, RecordType? recordType, CancellationToken ct)
         where TEntity : class, IIdentified, ISoftDeletable =>
-        ctx.ExecuteInTransactionAsync<(int, IReadOnlyList<TEntity>)>(async token =>
+        ctx.ExecuteInTransactionAsync<(int, IReadOnlyList<TEntity>, IReadOnlyList<Guid>)>(async token =>
         {
             var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
             entity.DeletedAt = deletedAt;
             List<TEntity> copies = [];
+            Guid[] copyIds = [];
             if (recordType is { } type)
             {
-                var copyIds = await GroupMatesAsync(ctx, type, [entity.Id], token);
+                copyIds = await GroupMatesAsync(ctx, type, [entity.Id], token);
                 if (copyIds.Length > 0)
                     copies = await ctx.Set<TEntity>().Where(e => copyIds.Contains(e.Id)).ToListAsync(token);
                 foreach (var copy in copies)
@@ -149,31 +153,94 @@ internal static class DuplicateGroupPrimaries
             }
 
             var saved = await ctx.SaveChangesAsync(token);
+            var hidden = await HiddenRowsAsync(ctx, ctx.Set<TEntity>(), copyIds, copies.Select(c => c.Id), token);
+            saved += await SaveHiddenAsync(ctx, hidden, e => e.DeletedAt = deletedAt, token);
+            IReadOnlyList<Guid> deletedCopyIds = [.. copies.Select(c => c.Id), .. hidden.Select(h => h.Id)];
             if (recordType == RecordType.SensorGlucose)
-                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [entity.Id, .. copies.Select(c => c.Id)], token);
-            return (saved, copies);
+                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [entity.Id, .. deletedCopyIds], token);
+            return (saved, copies, deletedCopyIds);
         }, ct: ct);
+
+    /// <summary>
+    /// The rows of <paramref name="rows"/> among <paramref name="ids"/> other than
+    /// <paramref name="shown"/>, read tracked with the history clamp lifted
+    /// (<see cref="HistoryClampLiftExtensions"/>): the copies in a group of a record the caller can
+    /// see that its clamp hides from it. Read only for a clamped caller, as no other is missing a row.
+    /// The rows go only to <see cref="SaveHiddenAsync{TEntity}"/> and to the delete audit of a bulk delete
+    /// (<see cref="AuditedBulkDeleteExtensions"/>), never back to the caller.
+    /// </summary>
+    internal static async Task<List<TEntity>> HiddenRowsAsync<TEntity>(
+        NocturneDbContext ctx, IQueryable<TEntity> rows, IReadOnlyCollection<Guid> ids, IEnumerable<Guid> shown,
+        CancellationToken ct)
+        where TEntity : class
+    {
+        var missing = ids.Except(shown).ToArray();
+        if (!ctx.HistoryClamped || missing.Length == 0)
+            return [];
+
+        return await ctx.WriteWithHistoryClampLiftedAsync(
+            token => rows.Where(e => missing.Contains(EF.Property<Guid>(e, "Id"))).ToListAsync(token), ct);
+    }
+
+    /// <summary>
+    /// Applies <paramref name="change"/> to the rows <see cref="HiddenRowsAsync{TEntity}"/> read, saves
+    /// them with the history clamp lifted, then detaches them, so nothing later reads them off the
+    /// context. The caller has saved every other pending change first: the lifted save writes only these
+    /// rows, by key, and the audit rows the save adds for them.
+    /// </summary>
+    /// <returns>What the save wrote.</returns>
+    /// <exception cref="InvalidOperationException">The context has another change pending.</exception>
+    internal static async Task<int> SaveHiddenAsync<TEntity>(
+        NocturneDbContext ctx, IReadOnlyList<TEntity> hidden, Action<TEntity> change, CancellationToken ct)
+        where TEntity : class
+    {
+        if (hidden.Count == 0)
+            return 0;
+
+        foreach (var row in hidden)
+            change(row);
+        ctx.ChangeTracker.DetectChanges();
+        var rows = hidden.ToHashSet(ReferenceEqualityComparer.Instance);
+        if (ctx.ChangeTracker.Entries().Any(e => e.State != EntityState.Unchanged && !rows.Contains(e.Entity)))
+            throw new InvalidOperationException("A lifted save of hidden copies would write other pending changes.");
+        var saved = await ctx.WriteWithHistoryClampLiftedAsync(token => ctx.SaveChangesAsync(token), ct);
+        foreach (var row in hidden)
+            ctx.Entry(row).State = EntityState.Detached;
+        return saved;
+    }
 
     /// <summary>
     /// <paramref name="query"/> widened to every live copy in the duplicate groups of the rows it
     /// matches, for a bulk delete made with <see cref="DuplicateDelete.EveryCopy"/>. Unchanged when
     /// <typeparamref name="T"/> takes no part in deduplication or no matched row is linked.
     /// </summary>
-    public static async Task<IQueryable<T>> WithGroupMatesAsync<T>(
+    /// <returns>
+    /// The widened query, which the caller's history clamp still narrows, and the ids of the live
+    /// copies the clamp hides from it, read with the clamp lifted (<see cref="LiveIdsAsync"/>), for the
+    /// delete to write by id and give back to no one.
+    /// </returns>
+    public static async Task<(IQueryable<T> Rows, IReadOnlyList<Guid> Hidden)> WithGroupMatesAsync<T>(
         NocturneDbContext ctx, IQueryable<T> query, CancellationToken ct)
         where T : class, ISoftDeletable
     {
         if (RecordTypeOf<T>() is not { } recordType)
-            return query;
+            return (query, []);
 
         var ids = await query.Where(e => e.DeletedAt == null)
             .Select(e => EF.Property<Guid>(e, "Id")).ToArrayAsync(ct);
         var mates = await GroupMatesAsync(ctx, recordType, ids, ct);
         if (mates.Length == 0)
-            return query;
+            return (query, []);
 
         Guid[] all = [.. ids, .. mates];
-        return ctx.Set<T>().Where(e => all.Contains(EF.Property<Guid>(e, "Id")));
+        var rows = ctx.Set<T>().Where(e => all.Contains(EF.Property<Guid>(e, "Id")));
+        if (!ctx.HistoryClamped)
+            return (rows, []);
+
+        var shown = await ctx.Set<T>().Where(e => mates.Contains(EF.Property<Guid>(e, "Id")))
+            .Select(e => EF.Property<Guid>(e, "Id")).ToArrayAsync(ct);
+        var hidden = await LiveIdsAsync(ctx, recordType, [.. mates.Except(shown)], ct);
+        return (rows, [.. hidden]);
     }
 
     /// <summary>The other records linked into the duplicate groups of <paramref name="ids"/>.</summary>
@@ -347,6 +414,7 @@ internal static class DuplicateGroupPrimaries
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
         RequireTransaction(ctx);
+        await ctx.PlanForEachArrayAsync(recordIds.Count, ct);
         await LockStreamsAsync(ctx, recordType, ct);
         var key = RecordTypeKeys.Key(recordType);
         var repaired = 0;
@@ -414,6 +482,15 @@ internal static class DuplicateGroupPrimaries
     /// lock would invert the order the other glucose writers take them in (<see cref="GlucoseStreamFlags"/>
     /// says why, and why a deferred delete locks).
     /// </summary>
+    /// <remarks>
+    /// The groups are read in one statement and their links locked in the next, each joining its id
+    /// array to the links. With the read folded into the lock as a subquery, a planner without
+    /// statistics for the tenant can nest one scan of the tenant's links inside another. Planned for
+    /// its array, which the callers' transactions ask for (<see cref="ArrayFilterPlans"/>), a join to
+    /// the array is a hash join on the link column or a probe of an index of it, which
+    /// <c>SourceDeleteGroupLockPlanTests</c> pins; neither bounds the cost by the ids, since a hash
+    /// join reads every link of the tenant.
+    /// </remarks>
     public static async Task LockGroupsOfAsync(
         NocturneDbContext ctx, RecordType recordType, IReadOnlyCollection<Guid> recordIds, CancellationToken ct)
     {
@@ -424,14 +501,22 @@ internal static class DuplicateGroupPrimaries
 
         var key = RecordTypeKeys.Key(recordType);
         var ids = recordIds.ToArray();
+        var canonicals = await ctx.Database.SqlQuery<Guid>($"""
+            SELECT DISTINCT l.canonical_id AS "Value"
+            FROM unnest({ids}) AS r(id)
+            JOIN linked_records l ON l.record_id = r.id
+            WHERE l.tenant_id = {ctx.TenantId} AND l.record_type = {key}
+            """).ToArrayAsync(ct);
+        if (canonicals.Length == 0)
+            return;
+
         await ctx.Database.ExecuteSqlAsync($"""
-            SELECT id FROM linked_records
-            WHERE tenant_id = {ctx.TenantId} AND record_type = {key}
-              AND canonical_id IN (
-                  SELECT canonical_id FROM linked_records
-                  WHERE tenant_id = {ctx.TenantId} AND record_type = {key} AND record_id = ANY ({ids}))
-            ORDER BY record_id
-            FOR UPDATE
+            SELECT l.id
+            FROM unnest({canonicals}) AS g(id)
+            JOIN linked_records l ON l.canonical_id = g.id
+            WHERE l.tenant_id = {ctx.TenantId} AND l.record_type = {key}
+            ORDER BY l.record_id
+            FOR UPDATE OF l
             """, ct);
     }
 

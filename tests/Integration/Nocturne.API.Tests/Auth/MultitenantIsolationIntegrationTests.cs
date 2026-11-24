@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -438,6 +439,53 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound,
             "apex domain with multiple tenants must return 404");
+    }
+
+    [Fact]
+    public async Task ApexDomain_MultipleTenants_AdmitsTheBotHeartbeatWithTheInstanceKey()
+    {
+        using var client = ApexBotClient(withInstanceKey: true);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v4/system/heartbeat", new { platforms = new[] { "discord" }, service = "bot" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "the bot posts its heartbeat to the apex, which resolves no tenant on a multi-tenant install");
+    }
+
+    [Fact]
+    public async Task ApexDomain_MultipleTenants_RefusesTheHeartbeatWithoutTheInstanceKey()
+    {
+        using var client = ApexBotClient(withInstanceKey: false);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v4/system/heartbeat", new { platforms = new[] { "discord" }, service = "bot" });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ApexDomain_MultipleTenants_StillNeedsATenantForTheChannelStatuses()
+    {
+        using var client = ApexBotClient(withInstanceKey: true);
+
+        var response = await client.GetAsync("/api/v4/system/channels");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "the channel statuses are read per tenant, so the apex of a multi-tenant install cannot answer");
+    }
+
+    private HttpClient ApexBotClient(bool withInstanceKey)
+    {
+        var client = Fixture.CreateHttpClient("nocturne-api", "http");
+        client.DefaultRequestHeaders.Host = _baseDomain;
+        if (withInstanceKey)
+        {
+            client.DefaultRequestHeaders.Add("X-Instance-Key", HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey));
+            client.DefaultRequestHeaders.Add("X-Instance-Service", "nocturne-web");
+        }
+
+        return client;
     }
 
     [Fact]

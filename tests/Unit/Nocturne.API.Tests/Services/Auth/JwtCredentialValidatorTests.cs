@@ -29,8 +29,8 @@ public class JwtCredentialValidatorTests
     private JwtCredentialValidator CreateValidator()
     {
         _grants
-            .Setup(g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(false);
+            .Setup(g => g.IsGrantLiveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         _revocation
             .Setup(r => r.IsRevokedAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
@@ -86,7 +86,7 @@ public class JwtCredentialValidatorTests
     {
         TokenValidatesAs(TenantId, GrantId);
         var validator = CreateValidator();
-        _grants.Setup(g => g.IsGrantRevokedAsync(GrantId, TenantId)).ReturnsAsync(true);
+        _grants.Setup(g => g.IsGrantLiveAsync(GrantId, TenantId)).ReturnsAsync(false);
 
         var result = await validator.ValidateAsync(Token);
 
@@ -118,7 +118,7 @@ public class JwtCredentialValidatorTests
         await validator.ValidateAsync(Token);
 
         _grants.Verify(
-            g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()),
+            g => g.IsGrantLiveAsync(It.IsAny<Guid>(), It.IsAny<Guid>()),
             Times.Never,
             "there is no tenant to look the grant up on");
     }
@@ -150,7 +150,7 @@ public class JwtCredentialValidatorTests
 
         result.IsValid.Should().BeTrue();
         _grants.Verify(
-            g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
+            g => g.IsGrantLiveAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
     }
 
     /// <summary>
@@ -196,7 +196,7 @@ public class JwtCredentialValidatorTests
         await validator.ValidateAsync(Token, cts.Token);
 
         _grants.Verify(
-            g => g.IsGrantRevokedAsync(GrantId, TenantId, cts.Token), Times.Once);
+            g => g.IsGrantLiveAsync(GrantId, TenantId, cts.Token), Times.Once);
         _revocation.Verify(
             r => r.IsRevokedAsync("jti-1", cts.Token), Times.Once);
     }

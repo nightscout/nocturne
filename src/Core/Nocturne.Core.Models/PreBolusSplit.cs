@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Core.Models;
 
@@ -40,8 +41,8 @@ public static class PreBolusSplit
         Split(treatment, t =>
         {
             identify(t);
-            return t.Id is { Length: > 0 } id ? CarbsId(id) : null;
-        });
+            return t.Id is { Length: > 0 } id ? id : null;
+        }, CarbsId);
 
     /// <summary>
     /// What Nightscout write-back sends for a stored treatment: <see cref="Split"/> of a copy of it,
@@ -53,7 +54,7 @@ public static class PreBolusSplit
     /// </summary>
     public static IReadOnlyList<Treatment> ForWriteBack(Treatment treatment) =>
         treatment.LegacyId is { Length: > 0 } legacyId
-        && Split(treatment.ShallowCopy(), _ => WriteBackCarbsId(legacyId)) is [_, _] halves
+        && Split(treatment.ShallowCopy(), _ => legacyId, WriteBackCarbsId) is [_, _] halves
             ? halves
             : [treatment];
 
@@ -61,9 +62,9 @@ public static class PreBolusSplit
     public static long OffsetMillis(double preBolus) => (long)Math.Round(preBolus * 60_000);
 
     public static bool IsMealEventType(string? eventType) =>
-        string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
+        string.Equals(eventType, TreatmentTypes.MealBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.SnackBolus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, TreatmentTypes.ComboBolus, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether <see cref="Split"/> changes <paramref name="treatment"/> once it has an id.</summary>
     public static bool Applies(Treatment treatment) => CarbsAt(treatment) is not null;
@@ -81,9 +82,10 @@ public static class PreBolusSplit
         return carbsAt <= 0 || carbsAt > MaxMills ? null : carbsAt;
     }
 
-    private static IReadOnlyList<Treatment> Split(Treatment treatment, Func<Treatment, string?> carbsIdOf)
+    private static IReadOnlyList<Treatment> Split(
+        Treatment treatment, Func<Treatment, string?> mealIdOf, Func<string, string> carbsIdOf)
     {
-        if (CarbsAt(treatment) is not { } carbsAt || carbsIdOf(treatment) is not { } carbsId)
+        if (CarbsAt(treatment) is not { } carbsAt || mealIdOf(treatment) is not { } mealId)
             return [treatment];
 
         if (treatment.Insulin is not > 0)
@@ -102,7 +104,8 @@ public static class PreBolusSplit
 
         var carbs = new Treatment
         {
-            Id = carbsId,
+            Id = carbsIdOf(mealId),
+            PreBolusMealId = mealId,
             EventType = treatment.EventType,
             Mills = carbsAt,
             Carbs = treatment.Carbs,
@@ -134,6 +137,23 @@ public static class PreBolusSplit
     /// removes when the meal stops splitting is only ever its own document.
     /// </summary>
     public static string WriteBackCarbsId(string legacyId) => Derived(WriteBackCarbsIdPrefix, legacyId);
+
+    /// <summary>
+    /// The key a carb intake keeps <see cref="Treatment.PreBolusMealId"/> under in its additional
+    /// properties, so the carbs record is announced with it when read back.
+    /// </summary>
+    public const string MealIdField = "preBolusMealId";
+
+    /// <summary>
+    /// <paramref name="record"/> with the <see cref="Treatment.PreBolusMealId"/> of
+    /// <paramref name="treatment"/> added, or unchanged when it carries none.
+    /// </summary>
+    public static Dictionary<string, object?>? AddMealId(Dictionary<string, object?>? record, Treatment treatment) =>
+        KeptField.Add(record, MealIdField, treatment.PreBolusMealId is { Length: > 0 } mealId ? mealId : null);
+
+    /// <summary>The meal's legacy id a record's additional properties hold, or null.</summary>
+    public static string? MealIdOf(IReadOnlyDictionary<string, object?>? record) =>
+        KeptField.String(record, MealIdField);
 
     private static string Derived(string prefix, string id) =>
         prefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)))[..48];

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -11,14 +12,18 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Manages the tenant's timezone timeline — the ordered record of which IANA zone the person was in
-/// over time. Connectors that store local-wall-clock-stamped-as-UTC data (e.g. Glooko) use it to
-/// convert timestamps to true UTC, honouring daylight saving and travel/relocation.
+/// The timezones the person lived in, over time. Read the timeline, add or replace entries, delete an entry,
+/// and re-import data for a changed period. Read the device clock diagnostics.
 /// </summary>
+/// <remarks>
+/// The ordered record of which IANA zone the person was in over time. Connectors that store
+/// local-wall-clock-stamped-as-UTC data (e.g. Glooko) use it to convert timestamps to true UTC,
+/// honouring daylight saving and travel/relocation.
+/// </remarks>
 /// <seealso cref="ITimezoneTimelineService"/>
 [ApiController]
 [Route("api/v4/timezone-timeline")]
-[Tags("Timezone Timeline")]
+[Tags("Profiles")]
 [Authorize]
 public class TimezoneTimelineController : ControllerBase, IWriteScopedController
 {
@@ -118,7 +123,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
         };
 
         _logger.LogInformation(
-            "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o") ?? "default");
+            "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "default");
 
         var result = await _syncService.TriggerSyncAsync(GlookoConnectorId, syncRequest, cancellationToken);
 

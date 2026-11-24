@@ -1,6 +1,7 @@
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Connectors.Core.Services;
@@ -42,7 +43,7 @@ public static class ConnectorMetadataService
         EnsureInitialized();
 
         return ConnectorsByDataSourceId.Values.FirstOrDefault(c =>
-            c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
+            ConnectorNames.Canonical(c.ConnectorName) == ConnectorNames.Canonical(connectorId)
         );
     }
 
@@ -56,7 +57,7 @@ public static class ConnectorMetadataService
 
         EnsureInitialized();
 
-        RegistrationsByConnectorId.TryGetValue(connectorId.ToLowerInvariant(), out var registration);
+        RegistrationsByConnectorId.TryGetValue(ConnectorNames.Canonical(connectorId), out var registration);
         return registration;
     }
 
@@ -125,7 +126,9 @@ public static class ConnectorMetadataService
                         ServiceName = attr.ServiceName,
                         DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
                         DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes,
-                        DocumentationUrl = attr.DocumentationUrl
+                        DocumentationUrl = attr.DocumentationUrl,
+                        IsImport = attr.IsImport,
+                        KeptOutPurgeClears = attr.KeptOutPurgeClears,
                     };
 
                     ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -157,6 +160,12 @@ public static class ConnectorMetadataService
 
         /// <inheritdoc cref="ConnectorRegistrationAttribute.DocumentationUrl"/>
         public string? DocumentationUrl { get; init; }
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.IsImport"/>
+        public bool IsImport { get; init; }
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.KeptOutPurgeClears"/>
+        public ConnectorStateSlots KeptOutPurgeClears { get; init; } = ConnectorStateSlots.Resume;
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

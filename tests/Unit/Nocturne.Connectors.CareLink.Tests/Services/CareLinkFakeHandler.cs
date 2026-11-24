@@ -45,6 +45,14 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
     /// <summary>Body for the monitor endpoint; when null that endpoint is left unmodelled like the others.</summary>
     internal string? MonitorDataJson { get; init; }
 
+    internal const string PeriodicDataUrl = "https://clcloud.example/connect/carepartner/v6/display/message";
+
+    /// <summary>
+    /// Body for the periodic data endpoint. When set, country settings are served and point at
+    /// <see cref="PeriodicDataUrl"/>; when null both stay unmodelled.
+    /// </summary>
+    internal string? PeriodicDataJson { get; init; }
+
     /// <summary>Body for the Auth0 authorize endpoint; when null that endpoint stays unmodelled (404).</summary>
     internal string? AuthorizeBody { get; init; }
 
@@ -104,6 +112,14 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
         if (MonitorDataJson is not null
             && url.EndsWith(CareLinkConstants.Endpoints.MonitorData, StringComparison.Ordinal))
             return Json(MonitorDataJson);
+
+        if (PeriodicDataJson is not null)
+        {
+            if (url.Contains(CareLinkConstants.Endpoints.CountrySettings, StringComparison.Ordinal))
+                return Json($$"""{"blePereodicDataEndpoint":"{{PeriodicDataUrl}}"}""");
+            if (request.Method == HttpMethod.Post && url == PeriodicDataUrl)
+                return Json(PeriodicDataJson);
+        }
 
         return new HttpResponseMessage(UnmodelledStatus);
     }

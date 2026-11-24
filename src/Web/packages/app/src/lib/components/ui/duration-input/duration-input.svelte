@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { TrackerMode } from "#lib/api/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -36,8 +37,7 @@
     lifespanHours,
   }: Props = $props();
 
-  // Internal state for the text input
-  let inputValue = $state("");
+  let inputValue = $state(untrack(() => (value === undefined ? "" : String(value))));
   // Lifespans and thresholds are stored as whole hours.
   let parseError = $state<"format" | "fraction" | null>(null);
   let inputRef = $state<HTMLInputElement | null>(null);
@@ -55,11 +55,16 @@
     inputRef?.setCustomValidity(parseErrorMessage ?? "");
   });
 
-  // Initialize inputValue from value prop
+  // The text is the person's own while it reads as the value: "10d" stays "10d". A value set from
+  // outside replaces it. A text that does not parse stays, since `value` is then the last one that did.
   $effect(() => {
-    if (value !== undefined && inputValue === "") {
-      inputValue = String(value);
-    }
+    const current = value;
+    untrack(() => {
+      if (parseError !== null) return;
+      const parsed = parseExpression(inputValue);
+      const entered = parsed === null ? undefined : Math.round(parsed);
+      if (entered !== current) inputValue = current === undefined ? "" : String(current);
+    });
   });
 
   /**

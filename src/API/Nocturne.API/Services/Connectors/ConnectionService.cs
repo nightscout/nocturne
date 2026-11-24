@@ -1,8 +1,11 @@
 using Nocturne.API.Models;
+using Nocturne.API.Services.Identity;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Services;
@@ -25,24 +28,41 @@ public class ConnectionService(
     IOAuthGrantRepository grants,
     IConnectorHealthService connectorHealth,
     IClientDeviceService devices,
+    IDataSourceService dataSources,
+    ITenantMembershipRepository members,
+    ISubjectRepository subjects,
+    ITenantAccessor tenant,
+    IConnectorStateStore connectorState,
     TimeProvider time) : IConnectionService
 {
     private const int SenderActiveMinutes = 15;
     private static readonly TimeSpan ReaderActiveWindow = TimeSpan.FromHours(24);
 
     /// <inheritdoc />
-    public async Task<ConnectionsOverview> GetConnectionsAsync(Guid? viewerSubjectId, CancellationToken ct = default)
+    public async Task<ConnectionsOverview> GetConnectionsAsync(
+        Guid? viewerSubjectId, bool viewerMayKeep, CancellationToken ct = default)
     {
         var now = time.GetUtcNow();
-        var buckets = await sourceData.WriterBucketsAsync(
-            now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime, now.AddHours(-24).UtcDateTime, ct);
+        var windowStart = now.AddDays(-DataSourceService.DiscoveryWindowDays).UtcDateTime;
+        var buckets = await sourceData.WriterBucketsAsync(windowStart, now.AddHours(-24).UtcDateTime, ct);
+        var androidApsDevices = (await sourceData.ApsSnapshotDevicesAsync(windowStart, ct))
+            .Where(d => DataSourceService.IsAndroidAps(d.AidAlgorithm))
+            .Select(d => d.Device)
+            .ToHashSet();
 
         var writerIds = buckets.Where(b => b.WriterGrantId.HasValue).Select(b => b.WriterGrantId!.Value).ToHashSet();
         var grantRecords = (await grants.ListForConnectionsAsync(viewerSubjectId, writerIds, ct))
-            .Where(g => g.GrantType is OAuthGrantTypes.App or OAuthGrantTypes.Direct)
+            .Where(ConnectionKeys.NamesConnection)
             .ToList();
         var grantsById = grantRecords.ToDictionary(g => g.Id);
         var deviceCounts = await devices.GetDeviceCountsByGrantAsync([.. grantsById.Keys], ct);
+        var stopping = new DeviceCredentialStops(
+            await PeopleNames.OfAsync(
+                members, subjects, tenant.TenantId,
+                [.. grantRecords.Where(IsStoppingDeviceCredential).Select(g => g.CreatedBySubjectId!.Value).Distinct()],
+                ct),
+            viewerMayKeep,
+            now.UtcDateTime);
 
         var connectorBuckets = new Dictionary<string, List<WriterBucket>>(StringComparer.OrdinalIgnoreCase);
         var otherBuckets = new List<WriterBucket>();
@@ -50,33 +70,51 @@ public class ConnectionService(
 
         foreach (var bucket in buckets)
         {
-            if (bucket.WriterGrantId is { } writer && grantsById.TryGetValue(writer, out var grant))
-            {
+            var owner = ConnectionKeys.OwnerOf(bucket.WriterGrantId, bucket.DataSource, bucket.Device, grantsById);
+            if (owner.Grant is { } grant)
                 Add(writtenBuckets, KeyOf(grant), bucket);
-            }
-            else if (ConnectorMetadataService.GetByDataSourceId(bucket.DataSource ?? bucket.Device) is { } connector)
-            {
+            else if (owner.Connector is { } connector)
                 Add(connectorBuckets, connector.ConnectorId, bucket);
-            }
-            else if ((bucket.DataSource ?? bucket.Device) is { Length: > 0 })
-            {
+            else if (owner.Source is not null)
                 otherBuckets.Add(bucket);
-            }
         }
 
+        var folded = await FoldedGrantsAsync(grantRecords, ct);
         var connections = grantRecords
             .GroupBy(KeyOf)
-            .Select(group => FromGrants(
-                group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts, viewerSubjectId, now))
+            .Select(group =>
+            {
+                var connection = FromGrants(
+                    group.Key, [.. group], writtenBuckets.GetValueOrDefault(group.Key) ?? [], deviceCounts,
+                    viewerSubjectId, now, androidApsDevices, stopping);
+                connection.CanDeleteRecords =
+                    viewerSubjectId is { } viewer && AllOwnedBy(folded[group.Key], viewer);
+                return connection;
+            })
             .ToList();
 
         foreach (var status in await connectorHealth.GetConnectorStatusesAsync(ct))
         {
-            var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
-            if (!status.IsEnabled && !status.HasDatabaseConfig && owned.Count == 0)
+            if (ConnectorMetadataService.GetByConnectorId(status.Id)?.IsImport == true)
                 continue;
 
-            connections.Add(FromConnector(status, owned));
+            var owned = connectorBuckets.GetValueOrDefault(status.Id) ?? [];
+            if (owned.Count == 0 && !status.IsEnabled && !status.HasDatabaseConfig)
+                continue;
+
+            var connection = FromConnector(status, owned, androidApsDevices);
+            connection.TimeZone = await ReadTimeZoneAsync(status, ct);
+            connections.Add(connection);
+        }
+
+        foreach (var import in ConnectorMetadataService.GetAll().Where(c => c.IsImport))
+        {
+            if (!await dataSources.ConnectorHoldsDataAsync(import.ConnectorName, ct))
+                continue;
+
+            var summary = await dataSources.GetConnectorDataSummaryAsync(import.ConnectorName, ct);
+            if (summary.Total > 0)
+                connections.Add(FromImport(import, summary));
         }
 
         return new ConnectionsOverview
@@ -89,9 +127,63 @@ public class ConnectionService(
                     .ThenByDescending(c => c.LastRecordAt ?? c.LastSyncAt ?? c.LastUsedAt)
                     .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
             ],
-            OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)]),
+            OtherSources = OtherSourcesOf(otherBuckets, [.. writtenBuckets.Values.SelectMany(b => b)], androidApsDevices),
             WindowDays = DataSourceService.DiscoveryWindowDays,
+            ActiveWithinMinutes = SenderActiveMinutes,
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteRecordsAsync(
+        Guid viewerSubjectId, IReadOnlyCollection<Guid> grantIds, bool allowReimport, CancellationToken ct = default)
+    {
+        var named = new List<OAuthGrantRecord>();
+        foreach (var grantId in grantIds.Distinct())
+        {
+            if (await grants.FindOfSubjectAsync(grantId, viewerSubjectId, ct) is not
+                { GrantType: OAuthGrantTypes.App or OAuthGrantTypes.Direct } grant)
+                return NotOwn(grantIds);
+            named.Add(grant);
+        }
+
+        if (named.Select(KeyOf).Distinct().ToList() is not [var key])
+            return NotOwn(grantIds);
+
+        var connection = (await FoldedGrantsAsync(named, ct))[key];
+        if (!AllOwnedBy(connection, viewerSubjectId))
+            return NotOwn(grantIds);
+
+        return await dataSources.DeleteWrittenDataAsync([.. connection.Select(g => g.Id)], allowReimport, ct);
+    }
+
+    private static DataSourceDeleteResult NotOwn(IReadOnlyCollection<Guid> grantIds) =>
+        DataSourceDeleteResult.Failed(
+            string.Join(',', grantIds), DataSourceDeleteError.NotFound,
+            "A credential of the connection is not yours, or it is gone.");
+
+    private static bool AllOwnedBy(IEnumerable<OAuthGrantRecord> credentials, Guid subjectId) =>
+        credentials.All(g => g.SubjectId == subjectId);
+
+    /// <summary>
+    /// Every grant folded under the <see cref="KeyOf"/> key of each of <paramref name="grantsOfKeys"/>, in
+    /// any state and of any subject, by key. The connections list shows only the unrevoked ones and those
+    /// that wrote inside its window; a token's key holds that token alone.
+    /// </summary>
+    private async Task<Dictionary<string, List<OAuthGrantRecord>>> FoldedGrantsAsync(
+        IReadOnlyCollection<OAuthGrantRecord> grantsOfKeys, CancellationToken ct)
+    {
+        var apps = grantsOfKeys.Where(g => g.GrantType == OAuthGrantTypes.App).ToList();
+        IReadOnlyList<OAuthGrantRecord> clients = apps.Count == 0
+            ? []
+            : await grants.ListAppGrantsOfClientsAsync(
+                [.. apps.Where(g => g.ClientEntityId.HasValue).Select(g => g.ClientEntityId!.Value).Distinct()],
+                [.. apps.Select(g => g.Client?.SoftwareId).OfType<string>().Distinct()],
+                ct);
+        var keys = grantsOfKeys.Select(KeyOf).ToHashSet();
+        return grantsOfKeys
+            .UnionBy(clients.Where(g => keys.Contains(KeyOf(g))), g => g.Id)
+            .GroupBy(KeyOf)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     private static void Add(Dictionary<string, List<WriterBucket>> map, string key, WriterBucket bucket)
@@ -101,11 +193,7 @@ public class ConnectionService(
         list.Add(bucket);
     }
 
-    private static string KeyOf(OAuthGrantRecord grant) =>
-        grant.GrantType == OAuthGrantTypes.App
-            ? $"app:{(grant.ClientIdentity == OAuthClientIdentity.Verified ? grant.Client?.SoftwareId : null)
-                ?? grant.ClientEntityId?.ToString() ?? grant.Id.ToString()}"
-            : $"token:{grant.Id}";
+    private static string KeyOf(OAuthGrantRecord grant) => ConnectionKeys.Of(grant);
 
     private static Connection FromGrants(
         string id,
@@ -113,7 +201,9 @@ public class ConnectionService(
         List<WriterBucket> buckets,
         IReadOnlyDictionary<Guid, int> deviceCounts,
         Guid? viewerSubjectId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IReadOnlySet<string> androidApsDevices,
+        DeviceCredentialStops stopping)
     {
         var newest = credentials[0];
         var isApp = newest.GrantType == OAuthGrantTypes.App;
@@ -134,7 +224,7 @@ public class ConnectionService(
             LastUsedAt = lastUsed is { } used ? new DateTimeOffset(used, TimeSpan.Zero) : null,
             Credentials =
             [
-                .. credentials.Select(g => g.SubjectId == viewerSubjectId
+                .. credentials.Select(g => stopping.Describe(g, g.SubjectId == viewerSubjectId
                     ? new ConnectionCredential
                     {
                         GrantId = g.Id,
@@ -154,13 +244,40 @@ public class ConnectionService(
                         Label = g.Label,
                         CreatedAt = g.CreatedAt,
                         IsRevoked = g.IsRevoked,
-                    }),
+                    })),
             ],
         };
-        ApplyRecords(connection, buckets);
+        ApplyRecords(connection, buckets, androidApsDevices);
 
         connection.Status = StatusOf(connection, credentials, now);
         return connection;
+    }
+
+    /// <summary>
+    /// An unrevoked device credential that a member set up and that stops when their access ends: a
+    /// direct grant made for another subject, with an expiry.
+    /// </summary>
+    private static bool IsStoppingDeviceCredential(OAuthGrantRecord grant) =>
+        grant is { GrantType: OAuthGrantTypes.Direct, RevokedAt: null, ExpiresAt: not null, CreatedBySubjectId: { } maker }
+        && maker != grant.SubjectId;
+
+    /// <summary>
+    /// When each device credential of the list stops, who set it up, and whether the viewer may keep it.
+    /// </summary>
+    private sealed record DeviceCredentialStops(
+        IReadOnlyDictionary<Guid, string?> MakerNames, bool ViewerMayKeep, DateTime Now)
+    {
+        public ConnectionCredential Describe(OAuthGrantRecord grant, ConnectionCredential credential)
+        {
+            if (!IsStoppingDeviceCredential(grant))
+                return credential;
+
+            credential.StopsAt = grant.ExpiresAt;
+            credential.HasStopped = grant.ExpiresAt <= Now;
+            credential.SetUpByName = MakerNames.GetValueOrDefault(grant.CreatedBySubjectId!.Value);
+            credential.CanKeep = ViewerMayKeep;
+            return credential;
+        }
     }
 
     /// <summary>The data types an uploader sends continuously, so their absence means it stopped.</summary>
@@ -186,7 +303,20 @@ public class ConnectionService(
             ? now - connection.LastRecordAt < TimeSpan.FromMinutes(SenderActiveMinutes)
             : now - connection.LastUsedAt < ReaderActiveWindow;
 
-    private static Connection FromConnector(ConnectorStatusDto status, List<WriterBucket> buckets)
+    private async Task<ConnectorTimeZone?> ReadTimeZoneAsync(ConnectorStatusDto status, CancellationToken ct)
+    {
+        if (!status.HasDatabaseConfig)
+            return null;
+
+        if (ConnectorMetadataService.GetByConnectorId(status.Id)?.DataSourceId is not { Length: > 0 } source)
+            return null;
+
+        var stored = await connectorState.VendorAsync(source, ConnectorTimeZone.VendorStateKey, ct);
+        return ConnectorTimeZone.FromStored(stored);
+    }
+
+    private static Connection FromConnector(
+        ConnectorStatusDto status, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)
     {
         var metadata = ConnectorMetadataService.GetByConnectorId(status.Id);
         var connection = new Connection
@@ -209,9 +339,34 @@ public class ConnectionService(
         if (connection.Status == ConnectionStatus.Error)
             connection.ErrorMessage = status.StateMessage;
 
-        ApplyRecords(connection, buckets);
+        ApplyRecords(connection, buckets, androidApsDevices);
         foreach (var stream in connection.Streams)
             stream.CanDelete = true;
+        return connection;
+    }
+
+    /// <summary>
+    /// An import connector is its records alone, of any age, counted as the detail dialog counts them
+    /// (<see cref="IDataSourceService.GetConnectorDataSummaryAsync"/>): a configuration row or a health
+    /// status is not a connection.
+    /// </summary>
+    private static Connection FromImport(
+        ConnectorMetadataService.ConnectorDisplayInfo import, ConnectorDataSummary summary)
+    {
+        var id = import.ConnectorName.ToLowerInvariant();
+        var connection = new Connection
+        {
+            Id = $"connector:{id}",
+            Kind = ConnectionKind.Connector,
+            Direction = ConnectionDirection.Imports,
+            Status = ConnectionStatus.Imported,
+            Name = import.DisplayName,
+            Icon = import.Icon,
+            ConnectorId = id,
+            TotalRecords = summary.Total,
+        };
+        foreach (var (type, count) in summary.RecordCounts)
+            connection.RecordCounts[type] = count;
         return connection;
     }
 
@@ -219,22 +374,24 @@ public class ConnectionService(
     /// The sources no connection wrote. One that shares an origin handle with a credential's records
     /// cannot be deleted by that handle without taking the credential's records with it.
     /// </summary>
-    private static List<ConnectionStream> OtherSourcesOf(List<WriterBucket> unwritten, List<WriterBucket> written)
+    private static List<ConnectionStream> OtherSourcesOf(
+        List<WriterBucket> unwritten, List<WriterBucket> written, IReadOnlySet<string> androidApsDevices)
     {
         var writtenHandles = written
             .SelectMany(b => new[] { b.DataSource, b.Device })
             .Where(handle => !string.IsNullOrEmpty(handle))
             .ToHashSet();
 
-        var sources = StreamsOf(unwritten);
+        var sources = StreamsOf(unwritten, androidApsDevices);
         foreach (var source in sources)
             source.CanDelete = !writtenHandles.Contains(source.Key);
         return sources;
     }
 
-    private static void ApplyRecords(Connection connection, List<WriterBucket> buckets)
+    private static void ApplyRecords(
+        Connection connection, List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices)
     {
-        connection.Streams = StreamsOf(buckets);
+        connection.Streams = StreamsOf(buckets, androidApsDevices);
         connection.TotalRecords = connection.Streams.Sum(s => s.TotalRecords);
         connection.RecordsLast24Hours = connection.Streams.Sum(s => s.RecordsLast24Hours);
         connection.LastRecordAt = connection.Streams.Max(s => s.LastRecordAt);
@@ -242,7 +399,7 @@ public class ConnectionService(
             connection.RecordCounts[type] = connection.RecordCounts.GetValueOrDefault(type) + count;
     }
 
-    private static List<ConnectionStream> StreamsOf(List<WriterBucket> buckets) =>
+    private static List<ConnectionStream> StreamsOf(List<WriterBucket> buckets, IReadOnlySet<string> androidApsDevices) =>
     [
         .. buckets
             .GroupBy(b => (b.DataSource, b.Device))
@@ -251,6 +408,8 @@ public class ConnectionService(
                 var key = group.Key.DataSource ?? group.Key.Device ?? string.Empty;
                 var described = DataSourceService.CreateDataSourceInfo(
                     group.Key.Device ?? key, group.Key.DataSource, SourceHandle.Unknown);
+                if (group.Key.Device is { } device && androidApsDevices.Contains(device))
+                    DataSourceService.DescribeAsAndroidAps(described);
                 var stream = new ConnectionStream
                 {
                     Key = key,

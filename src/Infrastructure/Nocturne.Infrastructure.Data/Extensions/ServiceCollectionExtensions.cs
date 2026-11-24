@@ -17,13 +17,21 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Uploads;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Reports;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.Health;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Services.Deduplication;
@@ -59,6 +67,21 @@ public static class ServiceCollectionExtensions
     )
         => services.AddPostgreSqlInfrastructure(
             PostgreSqlConfiguration.Resolve(connectionString, configuration, configure));
+
+    /// <summary>
+    /// Register the resolved options so the host's resolution is observable from DI. Separate from
+    /// <see cref="AddPostgreSqlInfrastructure(IServiceCollection, PostgreSqlConfiguration)"/>
+    /// because a host that skips the pool (the test host runs as Testing) still exposes them.
+    /// </summary>
+    /// <returns>Service collection for chaining</returns>
+    public static IServiceCollection AddPostgreSqlConfiguration(
+        this IServiceCollection services,
+        PostgreSqlConfiguration config
+    )
+    {
+        services.AddSingleton(config);
+        return services;
+    }
 
     /// <summary>
     /// Add PostgreSQL data services from already-resolved options. The single registration path:
@@ -158,6 +181,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();
 
         services.AddScoped<IDuplicateLinker, DuplicateLinker>();
+        services.AddScoped<IRecordChangePublisher, Repositories.V4.RecordChangePublisher>();
         services.AddScoped<DuplicateReconciler>();
         services.AddScoped<IDuplicateReconciler>(sp => sp.GetRequiredService<DuplicateReconciler>());
         services.AddScoped<IDeduplicationAdmin, DeduplicationAdmin>();
@@ -172,16 +196,21 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
         services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
         services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
+        services.AddTransient<ITeamRepository, TeamRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();
+        services.AddTransient<IMembershipReasonLapses, MembershipReasonLapses>();
         services.AddTransient<IOidcProviderRepository, OidcProviderRepository>();
         services.AddTransient<IRoleRepository, RoleRepository>();
         services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ISpentPasskeyChallengeRepository, SpentPasskeyChallengeRepository>();
         services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
+        services.AddTransient<ITrustedDeviceRepository, TrustedDeviceRepository>();
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddTransient<IGoogleHealthGrantHolderRepository, GoogleHealthGrantHolderRepository>();
+        services.AddTransient<IGoogleHealthWorkStore, GoogleHealthWorkRepository>();
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
@@ -211,26 +240,117 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add alert-related repository services
+    /// Add the V4 record repositories: glucose, treatment, device, snapshot, profile, patient record,
+    /// lab HbA1c and report spec.
     /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <returns>Service collection for chaining</returns>
+    public static IServiceCollection AddV4Repositories(this IServiceCollection services)
+    {
+        services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
+        services.AddScoped<IMeterGlucoseRepository, MeterGlucoseRepository>();
+        services.AddScoped<ICalibrationRepository, CalibrationRepository>();
+        services.AddScoped<IBolusRepository, BolusRepository>();
+        services.AddScoped<IBasalInjectionRepository, BasalInjectionRepository>();
+        services.AddScoped<ITempBasalRepository, TempBasalRepository>();
+        services.AddScoped<IProfileActivationRepository, ProfileActivationRepository>();
+        services.AddScoped<ICarbIntakeRepository, CarbIntakeRepository>();
+        services.AddScoped<IBGCheckRepository, BGCheckRepository>();
+        services.AddScoped<INoteRepository, NoteRepository>();
+        services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
+        services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
+        services.AddScoped<IDecomposedTreatmentKeys, DecomposedTreatmentKeys>();
+        services.AddScoped<IDeviceRepository, DeviceRepository>();
+
+        services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
+        services.AddScoped<IReportSpecRepository, ReportSpecRepository>();
+
+        services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
+        services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
+        services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
+        services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
+        services.AddScoped<ISensorStateReportRepository, SensorStateReportRepository>();
+        services.AddScoped<IDeviceStatusGroupRepository, DeviceStatusGroupRepository>();
+
+        services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();
+        services.AddScoped<IBasalScheduleRepository, BasalScheduleRepository>();
+        services.AddScoped<ICarbRatioScheduleRepository, CarbRatioScheduleRepository>();
+        services.AddScoped<ISensitivityScheduleRepository, SensitivityScheduleRepository>();
+        services.AddScoped<ITargetRangeScheduleRepository, TargetRangeScheduleRepository>();
+
+        services.AddScoped<IPatientRecordRepository, PatientRecordRepository>();
+        services.AddScoped<IPatientDeviceRepository, PatientDeviceRepository>();
+        services.AddScoped<IPatientInsulinRepository, PatientInsulinRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add the alert and tracker repositories.
+    /// </summary>
     public static IServiceCollection AddAlertRepositories(this IServiceCollection services)
     {
+        services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
+        services.AddScoped<IEvaluatedReadingStore, AlertEvaluatedReadingRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
+        services.AddScoped<IDndWindowRepository, DndWindowRepository>();
+        services.AddScoped<ITenantAlertSettingsRepository, TenantAlertSettingsRepository>();
         services.AddScoped<ITrackerRepository, TrackerRepository>();
+        services.AddScoped<ITrackerConsumableLock, TrackerRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add the repositories of health and activity data: state spans, sleep, activity, heart rate,
+    /// steps and body weight.
+    /// </summary>
+    public static IServiceCollection AddHealthRepositories(this IServiceCollection services)
+    {
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();
         services.AddScoped<IActivityDedupRepository, ActivityDedupRepository>();
         services.AddScoped<IActivityRecordRepository, ActivityRecordRepository>();
         services.AddScoped<IHeartRateRepository, HeartRateRepository>();
         services.AddScoped<IObservedHealthSeriesRepository<StepCount>, StepCountRepository>();
-        services.AddScoped<IHealthSeriesRepository<BodyWeight>, BodyWeightRepository>();
+        services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
+        services.AddScoped<IHealthSeriesRepository<BodyWeight>>(sp => sp.GetRequiredService<IBodyWeightRepository>());
         services.AddScoped<IHealthRecordTransactions, HealthRecordTransactions>();
-        services.AddScoped<ISystemEventRepository, SystemEventRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add the food repositories that <see cref="AddDataServices"/> does not: user favorites,
+    /// treatment foods and connector food entries.
+    /// </summary>
+    public static IServiceCollection AddFoodRepositories(this IServiceCollection services)
+    {
         services.AddScoped<IUserFoodFavoriteRepository, UserFoodFavoriteRepository>();
         services.AddScoped<ITreatmentFoodRepository, TreatmentFoodRepository>();
+        services.AddScoped<IConnectorFoodEntryRepository, ConnectorFoodEntryRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add the repositories for first-party tokens, in-app notifications, compression low
+    /// suggestions and system events.
+    /// </summary>
+    public static IServiceCollection AddNotificationAndEventRepositories(this IServiceCollection services)
+    {
+        services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
+        services.AddScoped<IInAppNotificationRepository, InAppNotificationRepository>();
+        services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
+        services.AddScoped<ISystemEventRepository, SystemEventRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add the audit repositories: rejected uploads, audit configuration, the audit log and the
+    /// member history reader.
+    /// </summary>
+    public static IServiceCollection AddAuditRepositories(this IServiceCollection services)
+    {
+        services.AddScoped<IRejectedUploadStore, RejectedUploadRepository>();
+        services.AddScoped<IAuditConfigStore, AuditConfigRepository>();
+        services.AddScoped<IAuditLogReader, AuditLogReader>();
+        services.AddScoped<IMemberHistoryReader, MemberHistoryReader>();
         return services;
     }
 

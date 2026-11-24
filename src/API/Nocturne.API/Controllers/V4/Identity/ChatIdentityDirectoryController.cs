@@ -7,14 +7,18 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// Cross-tenant directory endpoints for chat platform identity routing.
-/// Called server-to-server by the Discord bot from the apex host (no subdomain).
-/// Instance-key authenticated only.
+/// Routing lookups that connect chat platform accounts to tenants. Only the instance key can call
+/// these endpoints. A caller can resolve a chat account to its tenant, create a pending link,
+/// delete a link and acknowledge alert excursions for a chat account.
 /// </summary>
+/// <remarks>
+/// Called server-to-server by the Discord bot from the apex host (no subdomain).
+/// </remarks>
 /// <seealso cref="ChatIdentityDirectoryService"/>
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 [ApiController]
@@ -159,12 +163,14 @@ public class ChatIdentityDirectoryController : ControllerBase
             return Forbid();
         if (!_tenantAccessor.IsResolved || _tenantAccessor.TenantId != row.TenantId)
             return NotFound();
+        if (!await _directory.HasActiveSubjectAsync(row.Id, ct))
+            return NotFound();
 
         await using var db = await _contextFactory.CreateAsync(ct);
         List<Guid> excursionIds;
         if (body.ExcursionId is { } requested)
         {
-            if (!await db.AlertExcursions.AsNoTracking().AnyAsync(e => e.Id == requested, ct))
+            if (!await db.AlertExcursions.AsNoTracking().OfCondition(includeTest: true).AnyAsync(e => e.Id == requested, ct))
                 return NotFound();
             excursionIds = [requested];
         }
@@ -172,6 +178,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         {
             var now = DateTime.UtcNow;
             excursionIds = await db.AlertExcursions.AsNoTracking()
+                .OfCondition(includeTest: true)
                 .Where(e => e.EndedAt == null || e.EndedAt > now)
                 .Select(e => e.Id)
                 .ToListAsync(ct);
@@ -202,6 +209,7 @@ public class ChatIdentityDirectoryController : ControllerBase
             return Ok(new ChatAcknowledgeResponse { Outcome = AlertAcknowledgementOutcome.Closed });
 
         var recorded = await db.AlertExcursions.AsNoTracking()
+            .OfCondition(includeTest: true)
             .Where(e => acknowledgedIds.Contains(e.Id))
             .Select(e => new { e.AcknowledgedAt, e.AcknowledgedBy })
             .ToListAsync(ct);

@@ -95,7 +95,6 @@ public class GlookoBodyWeightMapper(string connectorSource, GlookoTimeMapper tim
             BodyFatPercent = bodyFat,
             Device = _connectorSource,
             EnteredBy = _connectorSource,
-            DataSource = _connectorSource,
         };
     }
 }

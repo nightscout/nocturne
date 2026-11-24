@@ -181,8 +181,8 @@ public class OAuthAccessTokenHandlerTests
     {
         var grantId = Guid.CreateVersion7();
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .Setup(g => g.IsGrantLiveAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var context = Request(MintGrantBoundToken(grantId), Tenant());
 
@@ -196,8 +196,8 @@ public class OAuthAccessTokenHandlerTests
     {
         var grantId = Guid.CreateVersion7();
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .Setup(g => g.IsGrantLiveAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var context = Request(MintGrantBoundToken(grantId), Tenant());
 
@@ -214,8 +214,8 @@ public class OAuthAccessTokenHandlerTests
         // stop working on its next request rather than at natural expiry.
         var grantId = Guid.CreateVersion7();
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .Setup(g => g.IsGrantLiveAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
         var context = Request(MintGrantBoundToken(grantId), Tenant());
 

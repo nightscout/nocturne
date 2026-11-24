@@ -1,6 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Models.Net;
+using Nocturne.Infrastructure.Outbound;
 
 namespace Nocturne.Connectors.Core.Services;
 

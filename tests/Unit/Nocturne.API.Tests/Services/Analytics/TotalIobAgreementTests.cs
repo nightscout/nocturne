@@ -23,6 +23,7 @@ using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -165,7 +166,7 @@ public class TotalIobAgreementTests
             MockStateSpans.Empty().Object, _aps.Object, _pump.Object, TestTenantCache.Create(), NullLogger<IobCobReader>.Instance);
 
     private IobController V1(IobCobReader reader) =>
-        new(_calculator, reader, reader, new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+        new(_calculator, reader, reader, new FakeTimeProvider(Reading));
 
     private IBolusRepository Boluses(long reading)
     {
@@ -333,6 +334,8 @@ public class TotalIobAgreementTests
             Mock.Of<IUploaderSnapshotRepository>(),
             Mock.Of<IStateSpanService>(),
             Mock.Of<IAlertRepository>(),
+            Mock.Of<ITenantAlertSettingsRepository>(),
+            Mock.Of<IDndWindowRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IProfileActivationResolver>(),
@@ -340,6 +343,7 @@ public class TotalIobAgreementTests
             Mock.Of<ISleepService>(),
             Mock.Of<ITrackerRepository>(),
             Mock.Of<IReservoirEstimationService>(),
+            Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(r => r.GetReportedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()) == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.SensorStateReport>>(Array.Empty<Nocturne.Core.Models.V4.SensorStateReport>())),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             deps, new ServiceCollection().BuildServiceProvider(), new FakeTimeProvider(Reading),
@@ -366,7 +370,7 @@ public class TotalIobAgreementTests
         var trackers = new Mock<ITrackerRepository>();
         trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WidgetSummaryService(
-            entries.Object, Reader(now),
+            entries.Object, Reader(now), InsulinDeliveryReaders.Over(),
             _aps.Object, trackers.Object, Mock.Of<INotificationV1Service>(),
             Mock.Of<IGlucoseStatusClassifier>(), Mock.Of<IAlertRepository>(),
             Mock.Of<ICategoryReadContext>(),
@@ -563,7 +567,7 @@ public class TotalIobAgreementTests
             .Setup(r => r.ReadSeriesAsync(It.IsAny<IobCobSeriesWindow>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobCobSeriesReading([], [], [], [], await _timelines.Object.BuildAsync(0, 1), new ScheduledBasal([], [])));
         var controller = new IobController(
-            _calculator, Reader(ReadingMills), series.Object, new FakeTimeProvider(Reading), NullLogger<IobController>.Instance);
+            _calculator, Reader(ReadingMills), series.Object, new FakeTimeProvider(Reading));
         using var cts = new CancellationTokenSource();
 
         await controller.GetHourlyIob(intervalMinutes: 5, hours: 1, startTime: ReadingMills - 55 * Minute, cts.Token);

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
@@ -30,21 +31,22 @@ public class SourceOwnedDataTableListTests : IDisposable
     private readonly Guid _tenant = Guid.CreateVersion7();
     private readonly SqliteTestDatabase _db;
     private readonly List<IReadOnlyCollection<Type>> _reports = [];
-    private readonly Mock<ILegacyReadCacheInvalidation> _legacyReads = new();
+    private readonly Mock<IRecordChangePublisher> _changes = new();
 
     public SourceOwnedDataTableListTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(_tenant, SqliteNpgsqlJson.Translate);
-        _legacyReads
-            .Setup(r => r.WrittenAsync(It.IsAny<IReadOnlyCollection<Type>>()))
-            .Callback((IReadOnlyCollection<Type> models) => _reports.Add(models))
+        _changes
+            .Setup(r => r.PublishAsync(It.IsAny<RecordsChanged>(), It.IsAny<CancellationToken>()))
+            .Callback((RecordsChanged batch, CancellationToken _) =>
+                _reports.Add([.. batch.Changes.Select(c => c.RecordType)]))
             .Returns(Task.CompletedTask);
     }
 
     public void Dispose() => _db.Dispose();
 
     private SourceOwnedDataRepository Repository() =>
-        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), new UserAuditContext(), _legacyReads.Object);
+        new(new TestNocturneDbContextFactory(_db.CreateContext(_tenant)), new UserAuditContext(), _changes.Object);
 
     private NocturneDbContext Context() => _db.CreateContext(_tenant);
 
@@ -218,7 +220,7 @@ public class SourceOwnedDataTableListTests : IDisposable
     {
         Seed(Now);
 
-        var result = await Repository().SoftDeleteBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        var result = await Repository().SoftDeleteAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         result.DeletedCounts.Select(c => (c.Key, c.Value)).Should().Equal(
             (SourceDataTypes.Boluses, 1L),
@@ -254,7 +256,7 @@ public class SourceOwnedDataTableListTests : IDisposable
     {
         Seed(Now, tombstone: true);
 
-        await Repository().AllowReimportBySourceAsync(Source, $"data_source={Source}", CancellationToken.None);
+        await Repository().AllowReimportAsync(RecordSelector.ForSource(Source), CancellationToken.None);
 
         _reports.Should().ContainSingle().Which.Should().BeEquivalentTo([
             typeof(SensorGlucose), typeof(MeterGlucose), typeof(Calibration),

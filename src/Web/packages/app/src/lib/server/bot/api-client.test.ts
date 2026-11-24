@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "#lib/api/index.js";
-import { AlertAcknowledgementOutcome } from "#lib/api/generated/nocturne-api-client.js";
+import { AlertAcknowledgementOutcome } from "@nocturne/api-client";
 
 vi.mock("#lib/server/api-client-factory.js", () => ({
   createServerApiClient: vi.fn(),
@@ -32,7 +32,7 @@ function adapterOver(
   };
 }
 
-const request = (excursionId: string | null) => ({
+const request = (excursionId: string | undefined) => ({
   platform: "discord",
   platformUserId: "chat-user-1",
   excursionId,
@@ -80,11 +80,11 @@ describe("buildBotApiClient acknowledgeAsLinkedMember", () => {
       AlertAcknowledgementOutcome.Muted,
     );
 
-    await bot.alerts.acknowledgeAsLinkedMember(LINK, request(null));
+    await bot.alerts.acknowledgeAsLinkedMember(LINK, request(undefined));
 
     expect(acknowledgeAsLinkedMember).toHaveBeenCalledExactlyOnceWith(
       LINK,
-      { ...request(null), excursionId: undefined },
+      request(undefined),
       undefined,
     );
   });

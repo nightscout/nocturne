@@ -1,6 +1,7 @@
 using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
@@ -533,8 +534,15 @@ public class TreatmentReadServiceTests
         _decomposer.Verify(d => d.DecomposeAsync(It.IsAny<Treatment>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored()
+    public static TheoryData<Exception> ReadBackFailures => new()
+    {
+        new TimeoutException(),
+        new RetryLimitExceededException("retries exhausted", new NpgsqlException("connection refused")),
+    };
+
+    [Theory]
+    [MemberData(nameof(ReadBackFailures))]
+    public async Task CreateAsync_WhenAStoredTreatmentCannotBeReadBack_CarriesItAsStored(Exception readFailure)
     {
         var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
         var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
@@ -547,7 +555,7 @@ public class TreatmentReadServiceTests
             .ReturnsAsync(spanResult);
         _projection
             .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t2", It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
+            .ThrowsAsync(readFailure);
 
         var act = () => _service.CreateAsync([first, span, last], WriteOrigin.Live);
 
@@ -591,6 +599,37 @@ public class TreatmentReadServiceTests
         stored.Should().HaveCount(3);
         stored[0].Should().BeOfType<StoredTreatment.Named>().Which.Created.Id.Should().Be(noteId.ToString());
         stored.Skip(1).Should().AllBeOfType<StoredTreatment.Unnamed>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTheStoreFailsPastItsRetries_EndsTheBatchAsFailed()
+    {
+        var treatment = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition>()))
+            .ThrowsAsync(new RetryLimitExceededException(
+                "retries exhausted", new NpgsqlException("connection refused")));
+
+        var act = () => _service.CreateAsync([treatment], WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenACancellationIsNotTheCallers_EndsTheBatchAsFailed()
+    {
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _service.CreateAsync(
+            [new Treatment { Id = "t1", Mills = 1000, EventType = "Note" }], WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
     }
 
     /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>

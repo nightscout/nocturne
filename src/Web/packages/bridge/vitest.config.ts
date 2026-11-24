@@ -10,7 +10,7 @@ export default defineConfig({
       reporter: ['text-summary', 'json-summary', 'cobertura'],
       reportsDirectory: 'coverage',
       include: ['src/**/*.{ts,js}'],
-      exclude: ['src/**/*.test.ts', 'src/**/*.test.svelte', 'src/**/test-stubs/**', 'src/lib/api/generated/**', '**/*.d.ts'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.test.svelte', 'src/**/test-stubs/**', '**/*.d.ts'],
     },
   },
 });

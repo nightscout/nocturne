@@ -11,6 +11,18 @@ public interface IRecoveryCodeService
     Task<List<string>> GenerateCodesAsync(Guid subjectId);
 
     /// <summary>
+    /// Generates the subject's first set of codes, or returns <see langword="null"/> when the
+    /// subject holds a code of any state: live, used or invalidated.
+    /// </summary>
+    /// <remarks>
+    /// A subject with no codes has never been shown any. Every flow that answers with codes beside a
+    /// session generates them only once the session is issued, so a failure before that leaves no
+    /// codes and the subject's next passkey sign-in issues them. Codes used up or invalidated keep
+    /// their rows, and only <see cref="GenerateCodesAsync"/> renews them.
+    /// </remarks>
+    Task<List<string>?> GenerateFirstCodesAsync(Guid subjectId);
+
+    /// <summary>
     /// Verifies a recovery code and consumes it so it cannot be reused. A null subject id is
     /// padded to the same hashing cost as a known one and always fails.
     /// </summary>

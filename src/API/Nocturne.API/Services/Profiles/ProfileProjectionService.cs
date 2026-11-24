@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Profiles;
@@ -287,9 +288,9 @@ public class ProfileProjectionService : IProfileProjectionService
             DefaultProfile = defaultProfile,
             StartDate = UploaderTimestamp.ParseUtcDateTime(head.StartDate) == head.Timestamp
                 ? head.StartDate
-                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                : head.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = head.Mills,
-            CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = head.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             SrvModified = srvModified,
             Units = head.Units ?? "mg/dL",
             EnteredBy = head.EnteredBy,

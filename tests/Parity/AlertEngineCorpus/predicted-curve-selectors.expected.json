@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "scenario": "predicted-curve-selectors",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "zt",
+              "offset_minutes": 20,
+              "value": 69
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "uam",
+              "offset_minutes": 15,
+              "value": 68
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 2
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "zt",
+              "offset_minutes": 20,
+              "value": 69
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 3
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "cob",
+              "offset_minutes": 30,
+              "value": 160
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 4
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "zt",
+              "offset_minutes": 20,
+              "value": 69
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 1
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000004",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "hysteresis_started",
+          "tracker": {
+            "state": "hysteresis",
+            "excursion": 2,
+            "hysteresis_started_at": "2026-01-05T12:05:00Z"
+          },
+          "next_change_at": "2026-01-05T12:05:00.000000100Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000005",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "zt",
+              "offset_minutes": 20,
+              "value": 69
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 3
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000006",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "met_by": [
+            {
+              "leaf_id": 0,
+              "kind": "predicted",
+              "curve": "cob",
+              "offset_minutes": 30,
+              "value": 160
+            }
+          ],
+          "transition": "continues",
+          "tracker": {
+            "state": "active",
+            "excursion": 4
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000007",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
+        }
+      ]
+    }
+  ]
+}

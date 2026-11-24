@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// The injection is identified by the route-level ID parameter.
 /// </summary>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BasalInjectionController"/>
-public class UpdateBasalInjectionRequest
+public class UpdateBasalInjectionRequest : IV4RecordHeader
 {
     /// <summary>
     /// When the basal insulin was injected. Cannot be more than 5 minutes in the future.

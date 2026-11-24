@@ -65,7 +65,6 @@ public class SyncTerminalPhaseTests
 
         public string? AuthenticationFailureReason { get; init; }
 
-        public int AuthenticateCalls { get; private set; }
         public int EnsureAuthenticatedCalls { get; private set; }
 
         protected override string ConnectorSource => "test";
@@ -73,13 +72,6 @@ public class SyncTerminalPhaseTests
 
         public Task<string?> RetryAsync(Func<Task<string?>> operation, CancellationToken cancellationToken)
             => ExecuteWithRetryAsync(operation, maxRetries: 3, cancellationToken: cancellationToken);
-
-        public override Task<bool> AuthenticateAsync()
-        {
-            AuthenticateCalls++;
-            RecordAuthenticationFailure();
-            return Task.FromResult(AuthenticationSucceeds);
-        }
 
         protected override Task<bool> EnsureAuthenticatedAsync(
             TestConfig config,
@@ -471,22 +463,19 @@ public class SyncTerminalPhaseTests
 
         // Assert
         service.EnsureAuthenticatedCalls.Should().Be(1);
-        service.AuthenticateCalls.Should().Be(0);
     }
 
     [Fact]
-    public async Task BackgroundSync_AuthenticatesOnceAndNotThroughTheGuard()
+    public async Task BackgroundSync_AuthenticatesOnceThroughTheGuard()
     {
-        // Arrange: the background entry point owns its own hand-shake, so a connector overriding
-        // both hooks must not authenticate twice for one run.
+        // Arrange
         var service = new TestConnectorService(_ => Task.CompletedTask);
 
         // Act
         await service.SyncDataAsync(new TestConfig(), CancellationToken.None);
 
         // Assert
-        service.AuthenticateCalls.Should().Be(1);
-        service.EnsureAuthenticatedCalls.Should().Be(0);
+        service.EnsureAuthenticatedCalls.Should().Be(1);
     }
 
     [Fact]

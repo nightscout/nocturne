@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -10,9 +11,8 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Nocturne-native status controller providing detailed system status.
-/// This is the V4 endpoint that returns full JSON status information.
-/// For Nightscout-compatible HTML status, use /api/v1/status.
+/// System status as JSON, plus a health check. The Nightscout-compatible status is at
+/// <c>/api/v1/status</c>.
 /// </summary>
 /// <seealso cref="IStatusService"/>
 [ApiController]
@@ -53,7 +53,7 @@ public class StatusController : ControllerBase
     {
         _logger.LogDebug(
             "V4 Status endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
+            HttpContext.GetClientAddress()
         );
 
         try

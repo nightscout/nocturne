@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { WidgetId } from "@nocturne/api-client";
 import { DEFAULT_TOP_WIDGETS, type TopWidgetId } from "./widget-registry";
 
 const { store } = vi.hoisted(() => {
@@ -24,7 +24,7 @@ const { store } = vi.hoisted(() => {
 });
 
 vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
-  const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
+  const { resolveChartThresholds } = await import("@nocturne/charts/core");
   return {
     getRealtimeStore: () => store,
     tryGetRealtimeStore: () => store,

@@ -187,7 +187,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         var pump = new Mock<IPumpSnapshotRepository>();
         var uploader = new Mock<IUploaderSnapshotRepository>();
         var decomposer = new DeviceStatusDecomposer(
-            aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<IStateSpanService>(),
+            aps.Object, pump.Object, uploader.Object, extras.Object, Mock.Of<ISensorStateReportRepository>(), Mock.Of<IStateSpanService>(),
             new UnresolvedDevices(), Mock.Of<IAuditContext>(), Mock.Of<ILoopClosedLoopStamper>(), TimeProvider.System, NullLogger<DeviceStatusDecomposer>.Instance);
         var publisher = DevicePublisher(WritingDeviceStatusService.Over(decomposer), aps.Object, pump.Object, uploader.Object);
 
@@ -227,6 +227,6 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ICanonicalAlertEvaluator>(), audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, new PublishSkipTally(), Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
     }
 }

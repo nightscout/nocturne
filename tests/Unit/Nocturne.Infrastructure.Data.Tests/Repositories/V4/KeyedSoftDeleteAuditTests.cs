@@ -235,7 +235,7 @@ public class TherapySettingsRepositoryPrefixDeleteTests
 /// is audited individually instead of collapsing into a <c>bulk_delete</c> summary.
 /// </summary>
 public abstract class SyncIdentifierDeleteAuditTests<TModel, TEntity> : KeyedSoftDeleteAuditTests<TEntity>
-    where TModel : class
+    where TModel : class, IV4Record
     where TEntity : class, ISoftDeletable
 {
     protected const string DataSource = "dexcom";

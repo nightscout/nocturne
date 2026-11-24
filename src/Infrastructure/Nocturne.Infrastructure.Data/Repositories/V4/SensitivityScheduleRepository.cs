@@ -21,8 +21,8 @@ public class SensitivityScheduleRepository : ProfileScopedRepositoryBase<Sensiti
     /// Initializes a new instance of the <see cref="SensitivityScheduleRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public SensitivityScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IV4RecordBroadcaster<SensitivitySchedule>? broadcaster = null, ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, legacyReads)
+    public SensitivityScheduleRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IRecordChangePublisher? changes = null)
+        : base(contextFactory, auditContext, logger, changes)
     {
     }
 

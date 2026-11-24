@@ -179,9 +179,9 @@ public class DedupDeltaGoldenTests
 
         // Each pair links into one canonical group, and every dedup participant's base CountAsync
         // excludes the non-primary copy through ReadVisibilityFilter.
-        (await carb.CountAsync(null, null)).Should().Be(1, "CarbIntake.CountAsync excludes non-primary (D7)");
-        (await bolus.CountAsync(null, null)).Should().Be(1, "Bolus.CountAsync now excludes non-primary (D7)");
-        (await sg.CountAsync(null, null)).Should().Be(1, "SensorGlucose.CountAsync now excludes non-primary (D7)");
+        (await carb.CountAsync(null, null, null, null)).Should().Be(1, "CarbIntake.CountAsync excludes non-primary (D7)");
+        (await bolus.CountAsync(null, null, null, null)).Should().Be(1, "Bolus.CountAsync now excludes non-primary (D7)");
+        (await sg.CountAsync(null, null, null, null)).Should().Be(1, "SensorGlucose.CountAsync now excludes non-primary (D7)");
     }
 
     // ── D2: new-insert-plus-upserted-sibling collapse ──────────────────────────────────────────────

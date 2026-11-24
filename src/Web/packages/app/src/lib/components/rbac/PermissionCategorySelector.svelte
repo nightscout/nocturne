@@ -10,10 +10,16 @@
     selected = $bindable<string[]>([]),
     readonly = false,
     grantedByRoles = [],
+    refusedAtoms = [],
+    coveredAtoms,
   }: {
     selected: string[];
     readonly?: boolean;
     grantedByRoles?: string[];
+    /** A level holding any of these atoms cannot be chosen. */
+    refusedAtoms?: string[];
+    /** When set, a level holding an atom outside this list cannot be chosen. */
+    coveredAtoms?: string[];
   } = $props();
 
   const groups = $derived(permissionGroups());
@@ -40,6 +46,13 @@
     const level = cat.levels.find((l) => l.value === levelValue);
     if (!level || level.atoms.length === 0) return false;
     return level.atoms.every((a) => grantedByRoles.includes(a));
+  }
+
+  function addsOutside(level: PermissionCategory["levels"][number]): boolean {
+    return (
+      level.atoms.some((a) => refusedAtoms.includes(a)) ||
+      (coveredAtoms !== undefined && level.atoms.some((a) => !coveredAtoms.includes(a)))
+    );
   }
 
   /** Get the display label for the current level. */
@@ -91,7 +104,7 @@
           </Select.Trigger>
           <Select.Content>
             {#each cat.levels as opt (opt.value)}
-              <Select.Item value={opt.value} label={opt.label} />
+              <Select.Item value={opt.value} label={opt.label} disabled={addsOutside(opt)} />
             {/each}
           </Select.Content>
         </Select.Root>

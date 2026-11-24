@@ -20,12 +20,10 @@ public class AccessRequestService(
     INocturneDbContextFactory contexts,
     ITenantRoleService tenantRoleService,
     IInAppNotificationService notificationService,
-    ILogger<AccessRequestService> logger) : IAccessRequestService
+    TimeProvider time,
+    ILogger<AccessRequestService> logger,
+    IAccountLinkRoute linkRoute) : IAccessRequestService
 {
-    private const string PendingStatus = "Pending";
-
-    private static readonly SubjectEdit Approval = new(IsActive: true, ApprovalStatus: "Approved");
-
     /// <inheritdoc />
     public async Task<ApproveAccessRequestResult> ApproveAsync(
         Guid subjectId,
@@ -34,10 +32,11 @@ public class AccessRequestService(
         List<string>? directPermissions,
         bool limitTo24Hours,
         IReadOnlyCollection<string> granterScopes,
+        Guid? decidedBySubjectId,
         CancellationToken ct = default)
     {
         var subject = await subjects.GetAsync(subjectId, ct);
-        if (subject is not { ApprovalStatus: PendingStatus })
+        if (subject is not { ApprovalStatus: nameof(ApprovalStatus.Pending) })
             return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.NotFound);
 
         if (roleIds.Count == 0 && directPermissions is not { Count: > 0 })
@@ -45,7 +44,7 @@ public class AccessRequestService(
 
         if (tenantId is not { } tenant)
         {
-            await subjects.UpdateAsync(subjectId, Approval, ct);
+            await subjects.UpdateAsync(subjectId, SubjectEdit.AccessApproved, ct);
             LogApproved(subjectId, subject.Name, roleIds.Count);
             return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.Approved);
         }
@@ -56,18 +55,35 @@ public class AccessRequestService(
 
         await using (var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, tenant, ct))
         {
-            if (await new SubjectRepository(unit).UpdateAsync(subjectId, Approval, ct) is SubjectChange.NotFound)
+            if (await new SubjectRepository(unit, linkRoute).UpdateAsync(subjectId, SubjectEdit.AccessApproved, ct) is SubjectChange.NotFound)
                 return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.NotFound);
 
-            if (!await new TenantMembershipRepository(unit).AddMemberAsync(
-                    new NewTenantMember(
-                        tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours),
-                    ct))
-                return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
-
+            var tenantMembers = new TenantMembershipRepository(unit, linkRoute);
             try
             {
-                await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+                var added = await unit.CommitAsync(async token =>
+                {
+                    if (!await tenantMembers.AddDirectMemberAsync(
+                            new NewTenantMember(
+                                tenant, subjectId, roleIds, directPermissions, LimitTo24Hours: limitTo24Hours)
+                                { How = MembershipJoinHow.Request, By = decidedBySubjectId },
+                            time.GetUtcNow().UtcDateTime,
+                            token))
+                        return false;
+
+                    if (await tenantMembers.FindLatestRequestAsync(tenant, subjectId, token) is { Status: MembershipRequestRecord.Pending } request)
+                    {
+                        await tenantMembers.DecideRequestAsync(
+                            tenant, request.Id,
+                            new MembershipRequestDecision(MembershipRequestRecord.Approved, decidedBySubjectId, time.GetUtcNow().UtcDateTime, roleIds),
+                            token);
+                    }
+
+                    await unit.Context.SaveChangesAsync(token);
+                    return true;
+                }, ct: ct);
+                if (!added)
+                    return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
             }
             catch (DbUpdateConcurrencyException)
             {

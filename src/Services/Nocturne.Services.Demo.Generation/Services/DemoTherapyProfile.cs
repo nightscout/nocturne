@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Configuration;
 
@@ -102,9 +103,9 @@ public static class DemoTherapyProfile
         return new Profile
         {
             DefaultProfile = ProfileName,
-            StartDate = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Mills = nowUtc.ToMills(),
-            CreatedAt = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            CreatedAt = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dL",
             EnteredBy = DemoDeviceStatusGenerator.DeviceName,
             Store = new Dictionary<string, ProfileData> { [ProfileName] = profileData },

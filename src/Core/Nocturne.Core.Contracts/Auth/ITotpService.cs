@@ -40,16 +40,47 @@ public interface ITotpService
     /// Verifies a TOTP code for the subject a step-up token was minted for and returns that subject,
     /// or null if the token or the code is not valid. Both halves are single-use: the token is
     /// consumed, so it yields at most one session, and the code's time step is consumed, so it
-    /// cannot be reused for the remainder of its acceptance window.
+    /// cannot be reused for the remainder of its acceptance window. Wrong codes are bounded per
+    /// token, which a few of them spend, and per subject across every token minted for it.
     /// </summary>
+    /// <exception cref="TotpStepUpLockedException">The subject has no wrong codes left until a
+    /// window ends; the code was not checked.</exception>
     Task<TotpLoginResult?> VerifyStepUpAsync(string stepUpToken, string code);
 
     Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
-    Task RemoveCredentialAsync(Guid credentialId, Guid subjectId);
+    /// <summary>
+    /// Removes one of the subject's authenticators and ends the trust of every device the subject
+    /// trusted. Returns how many devices that was.
+    /// </summary>
+    Task<int> RemoveCredentialAsync(Guid credentialId, Guid subjectId);
 
-    /// <summary>Returns the number of TOTP credentials registered to the specified subject.</summary>
-    Task<int> GetCredentialCountAsync(Guid subjectId);
+    /// <summary>
+    /// What a sign-in still owes after its primary factor passed for <paramref name="subjectId"/>.
+    /// Both primary factors ask here, so this is the one place a trusted device stands in for a code.
+    /// </summary>
+    /// <param name="subjectId">The subject the primary factor just verified.</param>
+    /// <param name="trustedDeviceToken">The trusted-device cookie the request carries, if any.</param>
+    Task<SecondFactorRequirement> GetSecondFactorRequirementAsync(Guid subjectId, string? trustedDeviceToken);
+}
+
+/// <summary>
+/// What a sign-in owes once its primary factor has passed. The default value is the one that
+/// withholds the session, so an answer nobody gave never signs anyone in.
+/// </summary>
+public enum SecondFactorRequirement
+{
+    /// <summary>The subject has an authenticator and must present a code.</summary>
+    CodeRequired,
+
+    /// <summary>The subject has no authenticator, so the primary factor completes the sign-in.</summary>
+    NotEnrolled,
+
+    /// <summary>
+    /// The subject has an authenticator, and the request came from a device the subject trusted
+    /// after an earlier code, so no code is asked for.
+    /// </summary>
+    SatisfiedByTrustedDevice,
 }
 
 /// <param name="ProvisioningUri">otpauth:// URI for scanning by an authenticator app.</param>
@@ -125,4 +156,27 @@ public class TotpSetupException : Exception
 
     /// <summary>Which check refused the attempt.</summary>
     public TotpSetupFailure Failure { get; }
+}
+
+/// <summary>
+/// Thrown when <see cref="ITotpService.VerifyStepUpAsync"/> refuses to check a code because the
+/// subject the step-up token names has had too many wrong codes recently. Only a caller who
+/// completed that subject's first factor holds such a token.
+/// </summary>
+public class TotpStepUpLockedException : Exception
+{
+    /// <param name="subjectId">The subject the step-up token names.</param>
+    /// <param name="retryAfter">How long until the subject's codes are checked again.</param>
+    public TotpStepUpLockedException(Guid subjectId, TimeSpan retryAfter)
+        : base("Too many wrong authenticator codes for this account.")
+    {
+        SubjectId = subjectId;
+        RetryAfter = retryAfter;
+    }
+
+    /// <summary>The subject the step-up token names.</summary>
+    public Guid SubjectId { get; }
+
+    /// <summary>How long until the subject's codes are checked again.</summary>
+    public TimeSpan RetryAfter { get; }
 }

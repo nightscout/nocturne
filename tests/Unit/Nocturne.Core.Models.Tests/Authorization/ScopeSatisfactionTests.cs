@@ -31,6 +31,7 @@ public class ScopeSatisfactionTests
     [InlineData(Scope.StepCountReadWrite, Scope.StepCountRead)]
     [InlineData(Scope.SleepReadWrite, Scope.SleepRead)]
     [InlineData(Scope.FoodReadWrite, Scope.FoodRead)]
+    [InlineData(Scope.ConnectorsReadWrite, Scope.ConnectorsRead)]
     public void Satisfies_ReadWriteSatisfiesItsOwnReadTier(string readWrite, string read)
     {
         Scope.Satisfies(readWrite, read)
@@ -49,12 +50,35 @@ public class ScopeSatisfactionTests
     [InlineData(Scope.StepCountRead, Scope.StepCountReadWrite)]
     [InlineData(Scope.SleepRead, Scope.SleepReadWrite)]
     [InlineData(Scope.FoodRead, Scope.FoodReadWrite)]
+    [InlineData(Scope.ConnectorsRead, Scope.ConnectorsReadWrite)]
     public void Satisfies_ReadDoesNotSatisfyItsOwnReadWriteTier(string read, string readWrite)
     {
         Scope.Satisfies(read, readWrite)
             .Should().BeFalse($"'{read}' is the narrower tier and must never reach '{readWrite}'");
         Scope.Satisfies([read], readWrite)
             .Should().BeFalse($"the set overload should agree with the single-atom overload for '{read}'");
+    }
+
+    [Theory]
+    [InlineData(Scope.ConnectorsRead)]
+    [InlineData(Scope.ConnectorsReadWrite)]
+    public void Satisfies_TenantSettingsSatisfiesBothConnectorTiers(string connectorScope)
+    {
+        Scope.Satisfies(Scope.TenantSettings, connectorScope).Should().BeTrue();
+        Scope.Satisfies([Scope.TenantSettings], connectorScope).Should().BeTrue();
+
+        Scope.Satisfies(connectorScope, Scope.TenantSettings)
+            .Should().BeFalse("connector management is narrower than administering the tenant");
+        Scope.Satisfies([connectorScope], Scope.TenantSettings).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(Scope.HealthRead, Scope.ConnectorsRead)]
+    [InlineData(Scope.HealthReadWrite, Scope.ConnectorsReadWrite)]
+    public void Satisfies_TheHealthAliasesDoNotReachTheConnectorScopes(string alias, string connectorScope)
+    {
+        Scope.Satisfies(Scope.Normalize([alias]), connectorScope)
+            .Should().BeFalse("data source connections are not health data");
     }
 
     // ---- the one resolved divergence ----

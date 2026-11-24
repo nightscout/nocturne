@@ -47,3 +47,13 @@ export function visibleTrackerInstances(
     return urgencyRank(reachedUrgency(instance, now)) >= urgencyRank(shownFrom);
   });
 }
+
+/** Whether a tracker or legacy age among these has reached a warning or a more urgent step at `now`. */
+export function anyReachedWarning(
+  scheduled: readonly (TrackerInstanceDto | LegacyFallbackDto)[],
+  now: number
+): boolean {
+  return scheduled.some(
+    (item) => urgencyRank(reachedUrgency(item, now)) >= urgencyRank(NotificationUrgency.Warn)
+  );
+}

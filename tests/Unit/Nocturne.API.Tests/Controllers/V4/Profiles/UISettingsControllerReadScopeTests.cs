@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Profiles;
@@ -59,7 +60,7 @@ public class UISettingsControllerReadScopeTests
 
         var result = (await controller.GetSectionSettings(section)).Result;
 
-        result.Should().BeOfType<ObjectResult>()
+        result.Should().BeOfType<ScopeForbiddenResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         ((ProblemDetails)((ObjectResult)result!).Value!).Detail.Should().Contain(scope);
     }

@@ -192,6 +192,44 @@ public class TreatmentCreateBroadcastTests
     }
 
     /// <summary>
+    /// An upload with <c>isValid: false</c> under the id of a live treatment deletes it. The delete is
+    /// announced as the treatment reads served before it, as a user's delete is, and nothing is
+    /// announced as created.
+    /// </summary>
+    [Fact]
+    public async Task AnUploadThatInvalidatesALiveTreatmentIsAnnouncedAsItsDelete()
+    {
+        var mills = new DateTimeOffset(At).ToUnixTimeMilliseconds();
+        var served = new Treatment { Id = "65f0a1b2c3d4e5f6abcdef01", EventType = "Temporary Override", Mills = mills, Duration = 60 };
+        _projection.Setup(p => p.GetProjectedStateSpanTreatmentAsync(ClientId, It.IsAny<CancellationToken>())).ReturnsAsync(served);
+        var deletes = new List<StorageDeleteEvent>();
+        _broadcast
+            .Setup(b => b.BroadcastStorageDeleteAsync("treatments", It.IsAny<object>()))
+            .Callback<string, object>((_, data) => deletes.Add((StorageDeleteEvent)data))
+            .Returns(Task.CompletedTask);
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(
+                It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
+                It.IsAny<TreatmentDecomposition?>()))
+            .Returns((IReadOnlyList<Treatment> _, WriteOrigin _, CancellationToken _, TreatmentDecomposition? into) =>
+            {
+                into!.Begin([Guid.CreateVersion7()]);
+                into.WritesNothing(0);
+                into.Invalidate(0);
+                return Task.FromResult(into);
+            });
+
+        await _service.CreateTreatmentsAsync(
+            [new Treatment { Id = ClientId, EventType = "Temporary Override", Mills = mills, Duration = 60, IsValid = false }]);
+
+        var deleted = deletes.Should().ContainSingle().Subject;
+        deleted.Identifier.Should().Be(served.Id);
+        deleted.Doc.Should().BeSameAs(served);
+        served.IsValid.Should().BeFalse();
+        _creates.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// The Nightscout write-back sink skips a treatment by its data source, so a connector's own
     /// temp target or profile switch announced without one would be posted back upstream.
     /// </summary>

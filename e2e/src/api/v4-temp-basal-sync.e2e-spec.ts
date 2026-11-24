@@ -54,11 +54,11 @@ describe("temp basal sync-key upsert", () => {
 
   it("updates the stored span in place when the same record is resent singly", async () => {
     const at = slot(2);
-    const created = await tenant.api.post<TempBasal[]>(PATH, [tempBasal({ at, source: "e2e-tb-single", sync: "tb-1", rate: 1.2 })]);
+    const created = await tenant.api.post<TempBasal[]>(`${PATH}/bulk`, [tempBasal({ at, source: "e2e-tb-single", sync: "tb-1", rate: 1.2 })]);
     expect(created.status).toBe(201);
     const [first] = created.body;
 
-    const resent = await tenant.api.post<TempBasal[]>(PATH, [tempBasal({ at, source: "e2e-tb-single", sync: "tb-1", rate: 0.8 })]);
+    const resent = await tenant.api.post<TempBasal[]>(`${PATH}/bulk`, [tempBasal({ at, source: "e2e-tb-single", sync: "tb-1", rate: 0.8 })]);
     expect(resent.status).toBe(201);
     expect(resent.body).toHaveLength(1);
     expect(resent.body[0]).toMatchObject({ id: first!.id, rate: 0.8, syncIdentifier: "tb-1" });
@@ -72,9 +72,9 @@ describe("temp basal sync-key upsert", () => {
   it("updates the stored span when it is resent in a multi-item POST next to a new one", async () => {
     const at = slot(4);
     const later = slot(3);
-    const [first] = await tenant.api.ok<TempBasal[]>("POST", PATH, [tempBasal({ at, source: "e2e-tb-batch", sync: "tb-1", rate: 1.0 })]);
+    const [first] = await tenant.api.ok<TempBasal[]>("POST", `${PATH}/bulk`, [tempBasal({ at, source: "e2e-tb-batch", sync: "tb-1", rate: 1.0 })]);
 
-    const batch = await tenant.api.post<TempBasal[]>(PATH, [
+    const batch = await tenant.api.post<TempBasal[]>(`${PATH}/bulk`, [
       tempBasal({ at: later, source: "e2e-tb-batch", sync: "tb-2", rate: 2.0 }),
       tempBasal({ at, source: "e2e-tb-batch", sync: "tb-1", rate: 1.5 }),
     ]);
@@ -91,13 +91,13 @@ describe("temp basal sync-key upsert", () => {
 
   it("does not re-create a span the owner deleted, answering 201 with it left out", async () => {
     const at = slot(6);
-    const [created] = await tenant.api.ok<TempBasal[]>("POST", PATH, [tempBasal({ at, source: "e2e-tb-deleted", sync: "tb-1", rate: 0.9 })]);
+    const [created] = await tenant.api.ok<TempBasal[]>("POST", `${PATH}/bulk`, [tempBasal({ at, source: "e2e-tb-deleted", sync: "tb-1", rate: 0.9 })]);
 
     const del = await tenant.api.delete(`/api/v1/treatments/${created!.id}`);
     expect(del.status).toBeLessThan(300);
     expect(await bySource("e2e-tb-deleted")).toHaveLength(0);
 
-    const resent = await tenant.api.post<TempBasal[]>(PATH, [tempBasal({ at, source: "e2e-tb-deleted", sync: "tb-1", rate: 0.9 })]);
+    const resent = await tenant.api.post<TempBasal[]>(`${PATH}/bulk`, [tempBasal({ at, source: "e2e-tb-deleted", sync: "tb-1", rate: 0.9 })]);
     expect(resent.status).toBe(201);
     expect(resent.body).toEqual([]);
 
@@ -107,11 +107,11 @@ describe("temp basal sync-key upsert", () => {
   it("skips a deleted span inside a multi-item POST and still writes the spans around it", async () => {
     const source = "e2e-tb-deleted-batch";
     const deletedAt = slot(14);
-    const [created] = await tenant.api.ok<TempBasal[]>("POST", PATH, [tempBasal({ at: deletedAt, source, sync: "tb-deleted", rate: 0.9 })]);
+    const [created] = await tenant.api.ok<TempBasal[]>("POST", `${PATH}/bulk`, [tempBasal({ at: deletedAt, source, sync: "tb-deleted", rate: 0.9 })]);
     const del = await tenant.api.delete(`/api/v1/treatments/${created!.id}`);
     expect(del.status).toBeLessThan(300);
 
-    const batch = await tenant.api.post<TempBasal[]>(PATH, [
+    const batch = await tenant.api.post<TempBasal[]>(`${PATH}/bulk`, [
       tempBasal({ at: slot(16), source, sync: "tb-a", rate: 1.1 }),
       tempBasal({ at: deletedAt, source, sync: "tb-deleted", rate: 0.9 }),
       tempBasal({ at: slot(12), source, sync: "tb-b", rate: 1.3 }),

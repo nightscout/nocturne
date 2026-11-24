@@ -111,9 +111,8 @@ public sealed class DemoApiClient
         {
             var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
 
-            if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
+            if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
             {
-                // The temp-basal endpoint is array-only (uploaders batch).
                 var payload = new[]
                 {
                     new
@@ -126,7 +125,7 @@ public sealed class DemoApiClient
                         dataSource = treatment.DataSource,
                     },
                 };
-                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals", payload, SerializerOptions, ct);
+                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals/bulk", payload, SerializerOptions, ct);
                 response.EnsureSuccessStatusCode();
             }
             else if (treatment.Insulin is > 0)
@@ -135,8 +134,8 @@ public sealed class DemoApiClient
                 {
                     timestamp,
                     insulin = treatment.Insulin.Value,
-                    kind = (int)(treatment.EventType == "SMB" ? BolusKind.Algorithm : BolusKind.Manual),
-                    automatic = treatment.EventType == "SMB",
+                    kind = (int)(treatment.EventType == TreatmentTypes.Smb ? BolusKind.Algorithm : BolusKind.Manual),
+                    automatic = treatment.EventType == TreatmentTypes.Smb,
                     device = DemoDeviceStatusGenerator.DeviceName,
                     dataSource = treatment.DataSource,
                 }, SerializerOptions, ct);
@@ -247,26 +246,27 @@ public sealed class DemoApiClient
     }
 
     /// <summary>
-    /// The most recent sensor-glucose value, used to continue the realtime
-    /// stream from where the seeded history ended.
+    /// The demo tenant's oldest and newest sensor-glucose readings. Throws when the API cannot
+    /// answer, so a failed read is never taken for an empty tenant.
     /// </summary>
-    public async Task<double?> GetLatestGlucoseAsync(CancellationToken ct)
+    public async Task<GlucoseHistory> GetGlucoseHistoryAsync(CancellationToken ct)
+    {
+        var newest = await GetEdgeReadingAsync("timestamp_desc", ct);
+        return newest is null
+            ? GlucoseHistory.Empty
+            : new GlucoseHistory(await GetEdgeReadingAsync("timestamp_asc", ct), newest);
+    }
+
+    private async Task<GlucoseReading?> GetEdgeReadingAsync(string sort, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("DemoTenant");
-        try
-        {
-            var response = await client.GetAsync("api/v4/glucose/sensor?limit=1", ct);
-            if (!response.IsSuccessStatusCode)
-                return null;
+        var response = await client.GetAsync($"api/v4/glucose/sensor?limit=1&sort={sort}", ct);
+        response.EnsureSuccessStatusCode();
 
-            var page = await response.Content.ReadFromJsonAsync<SensorGlucosePage>(SerializerOptions, ct);
-            return page?.Data is [{ Mgdl: > 0 } latest, ..] ? latest.Mgdl : null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to read latest glucose for realtime continuity");
-            return null;
-        }
+        var page = await response.Content.ReadFromJsonAsync<SensorGlucosePage>(SerializerOptions, ct);
+        return page?.Data is [{ Mgdl: > 0 } reading, ..]
+            ? new GlucoseReading(reading.Mgdl, reading.Timestamp.UtcDateTime)
+            : null;
     }
 
     /// <summary>
@@ -320,6 +320,18 @@ internal sealed class SensorGlucosePage
 internal sealed class SensorGlucoseItem
 {
     public double Mgdl { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
+}
+
+/// <summary>A stored sensor-glucose reading of the demo tenant.</summary>
+public sealed record GlucoseReading(double Mgdl, DateTime TimestampUtc);
+
+/// <summary>
+/// The two ends of the demo tenant's stored sensor-glucose history. Both are null when it has none.
+/// </summary>
+public sealed record GlucoseHistory(GlucoseReading? Oldest, GlucoseReading? Newest)
+{
+    public static GlucoseHistory Empty { get; } = new(null, null);
 }
 
 /// <summary>

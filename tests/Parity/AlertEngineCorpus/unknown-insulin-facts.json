@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "name": "unknown-insulin-facts",
+  "description": "iob unknown without iob_units; temp_basal percent_of_scheduled unknown when the scheduled rate is absent; temp_basal rate with no active temp is false, not unknown (no temp is the state)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "iob",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 1
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "temp_basal",
+      "condition_params": {
+        "metric": "percent_of_scheduled",
+        "operator": "\u003E=",
+        "value": 150
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "temp_basal",
+      "condition_params": {
+        "metric": "rate",
+        "operator": "\u003E=",
+        "value": 1
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "iob_units": 2,
+        "active_temp_basal": {
+          "rate": 2,
+          "scheduled_rate": 1,
+          "started_at": "2026-01-05T12:00:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "active_temp_basal": {
+          "rate": 2,
+          "started_at": "2026-01-05T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

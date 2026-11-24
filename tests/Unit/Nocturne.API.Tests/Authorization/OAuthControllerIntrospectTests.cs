@@ -49,9 +49,9 @@ public class OAuthControllerIntrospectTests
             .Setup(c => c.IsRevokedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(
+            .Setup(g => g.IsGrantLiveAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync(true);
     }
 
     private OAuthController CreateController(AuthContext? authContext)
@@ -214,9 +214,9 @@ public class OAuthControllerIntrospectTests
             .Setup(c => c.IsRevokedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _grantService
-            .Setup(g => g.IsGrantRevokedAsync(
+            .Setup(g => g.IsGrantLiveAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync(true);
 
         var result = await AuthenticatedAs(_callerSubjectId).Introspect(Token);
 

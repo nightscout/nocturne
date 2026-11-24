@@ -119,8 +119,8 @@
         <Brackets class="h-3.5 w-3.5" />
       </span>
       <span class="flex flex-col">
-        <span class="text-sm font-medium">+ Group (AND)</span>
-        <span class="text-xs text-muted-foreground leading-tight">All sub-conditions must hold</span>
+        <span class="text-sm font-medium">Group: all of</span>
+        <span class="text-xs text-muted-foreground leading-tight">Every condition in the group must be true</span>
       </span>
     </DropdownMenu.Item>
     <DropdownMenu.Item class="items-start" onSelect={() => onAddGroup("or")}>
@@ -128,8 +128,8 @@
         <Brackets class="h-3.5 w-3.5" />
       </span>
       <span class="flex flex-col">
-        <span class="text-sm font-medium">+ Group (OR)</span>
-        <span class="text-xs text-muted-foreground leading-tight">Any sub-condition is enough</span>
+        <span class="text-sm font-medium">Group: any of</span>
+        <span class="text-xs text-muted-foreground leading-tight">One condition in the group is enough</span>
       </span>
     </DropdownMenu.Item>
   </DropdownMenu.Content>

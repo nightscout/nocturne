@@ -125,6 +125,36 @@ public class ScopeVocabularyTests
         ScopeTranslator.ToPermissions(AdministrationAtoms).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(Scope.ConnectorsRead)]
+    [InlineData(Scope.ConnectorsReadWrite)]
+    public void ConnectorScopes_AreRequestableAndConferrableButNeverGuestOrPublic(string scope)
+    {
+        Scope.IsValid(scope).Should().BeTrue();
+        Scope.AllScopes.Should().Contain(scope, "full access must include connector management");
+        Scope.PermissionAtoms.Should().Contain(scope);
+
+        Scope.HealthReadExpansion.Should().NotContain(scope);
+        Scope.HealthReadWriteExpansion.Should().NotContain(scope);
+        Scope.AllowedGuestScopes.Should().NotContain(scope);
+        Scope.PublicShareScopes.Should().NotContain(scope);
+        Scope.NormalizeGuest([Scope.FullAccess]).Should().NotContain(scope);
+    }
+
+    [Fact]
+    public void NarrowerScopes_NarrowsTenantSettingsToBothConnectorTiers()
+    {
+        Scope.NarrowerScopes(Scope.TenantSettings)
+            .Should().BeEquivalentTo([Scope.ConnectorsReadWrite, Scope.ConnectorsRead]);
+    }
+
+    [Fact]
+    public void ScopeTranslator_TranslatesTenantSettingsToNoConnectorTriePermission()
+    {
+        ScopeTranslator.ToPermissions([Scope.TenantSettings, Scope.GlucoseRead])
+            .Should().BeEquivalentTo(["api:entries:read"]);
+    }
+
     [Fact]
     public void MemberGrantableScopes_IsDerivedFromTheTenantPermissionVocabulary()
     {
@@ -144,6 +174,7 @@ public class ScopeVocabularyTests
     [InlineData(Scope.StepCountReadWrite, Scope.StepCountRead)]
     [InlineData(Scope.SleepReadWrite, Scope.SleepRead)]
     [InlineData(Scope.FoodReadWrite, Scope.FoodRead)]
+    [InlineData(Scope.ConnectorsReadWrite, Scope.ConnectorsRead)]
     public void NarrowerScopes_NarrowsEveryTieredScopeToItsRead(string readWrite, string expectedRead)
     {
         Scope.NarrowerScopes(readWrite).Should().Contain(expectedRead);

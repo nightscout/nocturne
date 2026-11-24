@@ -9,7 +9,8 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Controller for managing point-in-time system events (alarms, warnings, info).
+/// Point-in-time system events, such as alarms, warnings and info notices. List, read, create and
+/// delete events. A create with an <c>originalId</c> that already exists updates that event.
 /// </summary>
 /// <seealso cref="ISystemEventRepository"/>
 [ApiController]
@@ -76,6 +77,7 @@ public class SystemEventsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ISystemEventRepository.UpsertSystemEventAsync"/>
     [HttpPost]
+    [RequireScope(Scope.DevicesReadWrite)]
     [ProducesResponseType(typeof(SystemEvent), StatusCodes.Status201Created)]
     public async Task<ActionResult<SystemEvent>> CreateSystemEvent(
         [FromBody] CreateSystemEventRequest request,
@@ -102,6 +104,7 @@ public class SystemEventsController : ControllerBase
     /// </summary>
     /// <inheritdoc cref="ISystemEventRepository.DeleteSystemEventAsync"/>
     [HttpDelete("{id}")]
+    [RequireScope(Scope.DevicesReadWrite)]
     public async Task<IActionResult> DeleteSystemEvent(
         string id,
         CancellationToken cancellationToken = default)

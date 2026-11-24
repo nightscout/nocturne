@@ -15,8 +15,9 @@ namespace Nocturne.API.Authorization;
 /// otherwise let an anonymous visitor act as a platform user, and act as the <em>same</em>
 /// platform user as every other visitor.
 /// <para>
-/// Applied to the tenantless, subject-scoped endpoints, where a tenant's own permission
-/// checks cannot help because there is no tenant in the request to check against.
+/// Applied to the actions a platform user takes for themselves, which have no tenant whose
+/// permission checks could refuse them, and to tenant administration actions, where the demo
+/// member holds the scope but must not act.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]

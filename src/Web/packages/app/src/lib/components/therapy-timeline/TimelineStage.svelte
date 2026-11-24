@@ -24,7 +24,7 @@
     formatShortDate,
     hourLabel,
   } from "#lib/utils/formatting.js";
-  import type { GlucoseThresholds } from "#lib/utils/chart-colors.js";
+  import type { GlucoseThresholds } from "@nocturne/charts/core";
   import TimelineLane, { type LaneBandPoint, type LanePoint } from "./TimelineLane.svelte";
   import SpanLane from "./SpanLane.svelte";
   import { DAY_MS, attributeUnit, attributeValue, fractionOf, isSwitch } from "./timeline-format.js";

@@ -11,8 +11,11 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
+using GlookoSsv2Cursor = Nocturne.Connectors.Glooko.Models.GlookoSsv2Cursor;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
@@ -29,7 +32,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_PaginatesUntilLastPage_AndPersistsFinalCursor()
     {
         var publishedGlucose = new List<SensorGlucose>();
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
         {
             if (path.Contains("/api/v2/cgm/egvs"))
@@ -54,14 +57,58 @@ public class GlookoSsv2SyncTests
         handler.EgvsCursors.Should().Equal(Epoch, "2026-06-01T00:00:00.000Z", "2026-06-02T00:00:00.000Z");
         publishedGlucose.Should().HaveCount(5, "all records across all pages should be ingested");
         // Final advanced cursor persisted exactly once.
-        cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs")
-            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-03T00:00:00.000Z", "g3"));
+        cursorStore.Vendor.Should().ContainKey("/api/v2/cgm/egvs")
+            .WhoseValue.Deserialize<GlookoSsv2Cursor>().Should().Be(new GlookoSsv2Cursor("2026-06-03T00:00:00.000Z", "g3"));
+    }
+
+    /// <summary>
+    /// A purge that allows re-import clears both state slots, so the next sync reads the feed from
+    /// the start rather than from the cursor the purged records were read to.
+    /// </summary>
+    [Fact]
+    public async Task Ssv2_AfterAPurgeAllowingReimport_ReadsEachFeedFromTheEpoch()
+    {
+        var state = new InMemoryConnectorStateStore();
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? EgvPage(["e1"], "2026-06-03T00:00:00.000Z", "g3", lastPage: true)
+            : Json("{\"lastPage\":true}"));
+
+        (await BuildService(handler, new StoringConnectorPublisher(state)).SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None))
+            .Success.Should().BeTrue();
+        state.Vendor.Should().ContainKey("/api/v2/cgm/egvs");
+        await state.ClearAsync("glooko-connector", ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor);
+        (await BuildService(handler, new StoringConnectorPublisher(state)).SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None))
+            .Success.Should().BeTrue();
+
+        handler.EgvsCursors.Should().Equal(Epoch, Epoch);
+    }
+
+    [Fact]
+    public async Task Ssv2_SecondSyncOfTheSameFeedAfterTheCursorIsLost_StoresNoNewRow()
+    {
+        var store = new StoringConnectorPublisher();
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? EgvPage(["e1", "e2", "e3"], "2026-06-03T00:00:00.000Z", "g3", lastPage: true)
+            : Json("{\"lastPage\":true}"));
+
+        (await BuildService(handler, store)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None)).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        ((InMemoryConnectorStateStore)store.State).Vendor.Clear();
+        (await BuildService(handler, store)
+            .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None)).Success.Should().BeTrue();
+
+        stored.Should().HaveCount(3).And.OnlyContain(k => k.Type == nameof(SensorGlucose));
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
     }
 
     [Fact]
     public async Task Ssv2_WhenCursorDoesNotAdvance_StopsInsteadOfLooping()
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         // Always returns a full, non-last page whose cursor equals the request cursor → must not loop.
         var handler = new RoutingHandler(path =>
             path.Contains("/api/v2/cgm/egvs")
@@ -73,7 +120,7 @@ public class GlookoSsv2SyncTests
 
         result.Success.Should().BeTrue();
         handler.EgvsCursors.Should().ContainSingle("the loop guard must stop after one non-advancing page");
-        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs", "a cursor that never moved must not be persisted");
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/cgm/egvs", "a cursor that never moved must not be persisted");
     }
 
     [Fact]
@@ -89,7 +136,7 @@ public class GlookoSsv2SyncTests
             return Json("{\"lastPage\":true}");
         });
 
-        var service = BuildService(handler, new FakeCursorStore(), CapturePublisher(publishedGlucose));
+        var service = BuildService(handler, new InMemoryConnectorStateStore(), CapturePublisher(publishedGlucose));
         var result = await service.SyncDataAsync(AllTypesRequest(), Config(), CancellationToken.None);
 
         result.Success.Should().BeFalse("a skipped feed is a failed fetch, as it is on the windowed path");
@@ -103,7 +150,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_FeedTimesOutOnEveryAttempt_IsReportedAndKeepsItsCursorAndTheRestOfThePass()
     {
         var publishedGlucose = new List<SensorGlucose>();
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
         {
             if (path.Contains("/api/v2/cgm/egvs"))
@@ -120,8 +167,8 @@ public class GlookoSsv2SyncTests
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch Notes");
         publishedGlucose.Should().HaveCount(2);
-        cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs");
-        cursorStore.Saved.Should().NotContainKey("/api/v2/notes");
+        cursorStore.Vendor.Should().ContainKey("/api/v2/cgm/egvs");
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/notes");
     }
 
     [Fact]
@@ -134,7 +181,7 @@ public class GlookoSsv2SyncTests
             return Json("{\"lastPage\":true}");
         });
 
-        var result = await BuildService(handler, new FakeCursorStore(), CapturePublisher(new List<SensorGlucose>()))
+        var result = await BuildService(handler, new InMemoryConnectorStateStore(), CapturePublisher(new List<SensorGlucose>()))
             .SyncDataAsync(new SyncRequest { DataTypes = [SyncDataType.Boluses] }, Config(), CancellationToken.None);
 
         handler.RequestedPaths.Should().Contain(p => p.Contains("/api/v2/pumps/injection_basals"),
@@ -148,7 +195,7 @@ public class GlookoSsv2SyncTests
     [InlineData(false)]
     public async Task Ssv2_WhenPublishDoesNotLand_KeepsTheCursorAndRefetchesTheSameRecords(bool publishThrows)
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
             path.Contains("/api/v2/cgm/egvs")
                 ? EgvPage(["e1", "e2"], "2026-06-03T00:00:00.000Z", "g1", lastPage: true)
@@ -168,7 +215,7 @@ public class GlookoSsv2SyncTests
             .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
 
         firstRun.Success.Should().BeFalse();
-        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs",
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/cgm/egvs",
             "records that were fetched but never published must not be skipped by the next sync");
 
         var publishedGlucose = new List<SensorGlucose>();
@@ -178,14 +225,14 @@ public class GlookoSsv2SyncTests
         secondRun.Success.Should().BeTrue();
         handler.EgvsCursors.Should().Equal(Epoch, Epoch);
         publishedGlucose.Should().HaveCount(2);
-        cursorStore.Saved.Should().ContainKey("/api/v2/cgm/egvs")
-            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-03T00:00:00.000Z", "g1"));
+        cursorStore.Vendor.Should().ContainKey("/api/v2/cgm/egvs")
+            .WhoseValue.Deserialize<GlookoSsv2Cursor>().Should().Be(new GlookoSsv2Cursor("2026-06-03T00:00:00.000Z", "g1"));
     }
 
     [Fact]
     public async Task Ssv2_OneResourcePublishFailing_DoesNotHoldBackAnotherResourcesCursor()
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
         {
             if (path.Contains("/api/v2/cgm/egvs"))
@@ -211,15 +258,15 @@ public class GlookoSsv2SyncTests
             new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Notes] },
             Config(), CancellationToken.None);
 
-        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs");
-        cursorStore.Saved.Should().ContainKey("/api/v2/notes")
-            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-04T00:00:00.000Z", "n1"));
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/cgm/egvs");
+        cursorStore.Vendor.Should().ContainKey("/api/v2/notes")
+            .WhoseValue.Deserialize<GlookoSsv2Cursor>().Should().Be(new GlookoSsv2Cursor("2026-06-04T00:00:00.000Z", "n1"));
     }
 
     [Fact]
     public async Task Ssv2_CursorPendingFromARejectedPass_IsNotCommittedByTheForbiddenRetry()
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var egvsRequests = 0;
         var bolusRequests = 0;
         var handler = new RoutingHandler(path =>
@@ -244,14 +291,14 @@ public class GlookoSsv2SyncTests
             .SyncDataAsync(GlucoseRequest(), Config(), CancellationToken.None);
 
         egvsRequests.Should().BeGreaterThan(1, "the forbidden response must have forced a second pass");
-        cursorStore.Saved.Should().NotContainKey("/api/v2/cgm/egvs",
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/cgm/egvs",
             "a cursor whose records the first pass failed to publish must not be committed by the retry");
     }
 
     [Fact]
     public async Task Ssv2_BatchFeeds_StoreTheirCursorsOnlyWhenEveryBatchPublishLands()
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
         {
             if (path.Contains("/api/v2/pumps/normal_boluses"))
@@ -268,17 +315,17 @@ public class GlookoSsv2SyncTests
         var rejecting = BatchPublisher(manualBgLands: false);
         await BuildService(handler, cursorStore, rejecting).SyncDataAsync(request, Config(), CancellationToken.None);
 
-        cursorStore.Saved.Should().NotContainKey("/api/v2/pumps/normal_boluses");
-        cursorStore.Saved.Should().NotContainKey("/api/v2/readings",
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/pumps/normal_boluses");
+        cursorStore.Vendor.Should().NotContainKey("/api/v2/readings",
             "one rejected publish in the batch holds back every feed that fed it");
 
         await BuildService(handler, cursorStore, BatchPublisher(manualBgLands: true))
             .SyncDataAsync(request, Config(), CancellationToken.None);
 
-        cursorStore.Saved.Should().ContainKey("/api/v2/pumps/normal_boluses")
-            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-05T00:00:00.000Z", "b1"));
-        cursorStore.Saved.Should().ContainKey("/api/v2/readings")
-            .WhoseValue.Should().BeEquivalentTo(new ConnectorSyncCursor("2026-06-06T00:00:00.000Z", "r1"));
+        cursorStore.Vendor.Should().ContainKey("/api/v2/pumps/normal_boluses")
+            .WhoseValue.Deserialize<GlookoSsv2Cursor>().Should().Be(new GlookoSsv2Cursor("2026-06-05T00:00:00.000Z", "b1"));
+        cursorStore.Vendor.Should().ContainKey("/api/v2/readings")
+            .WhoseValue.Deserialize<GlookoSsv2Cursor>().Should().Be(new GlookoSsv2Cursor("2026-06-06T00:00:00.000Z", "r1"));
     }
 
     // Regression guard for the SupportedDataTypes gap: Notes/Activity (and the health feeds gated
@@ -289,7 +336,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_NotesRequest_FetchesNotesFeed()
     {
         var handler = new RoutingHandler(_ => Json("{\"lastPage\":true}"));
-        var service = BuildService(handler, new FakeCursorStore(), CapturePublisher(new List<SensorGlucose>()));
+        var service = BuildService(handler, new InMemoryConnectorStateStore(), CapturePublisher(new List<SensorGlucose>()));
 
         await service.SyncDataAsync(new SyncRequest { DataTypes = [SyncDataType.Notes] }, Config(), CancellationToken.None);
 
@@ -301,7 +348,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_ActivityRequest_FetchesExerciseAndStepFeeds()
     {
         var handler = new RoutingHandler(_ => Json("{\"lastPage\":true}"));
-        var service = BuildService(handler, new FakeCursorStore(), CapturePublisher(new List<SensorGlucose>()));
+        var service = BuildService(handler, new InMemoryConnectorStateStore(), CapturePublisher(new List<SensorGlucose>()));
 
         await service.SyncDataAsync(new SyncRequest { DataTypes = [SyncDataType.Activity] }, Config(), CancellationToken.None);
 
@@ -316,7 +363,7 @@ public class GlookoSsv2SyncTests
     public async Task Ssv2_PatientDeviceCursors_AreCommittedOnlyWhenThePublishLands(
         bool publishLands, bool publisherAvailable, bool cursorsCommitted)
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var published = new List<PatientDevice>();
         var publisher = DevicePublisher(publishLands, publisherAvailable, published);
 
@@ -327,16 +374,16 @@ public class GlookoSsv2SyncTests
         foreach (var feed in new[] { "/api/v2/pumps", "/api/v2/cgm_devices" })
         {
             if (cursorsCommitted)
-                cursorStore.Saved.Should().ContainKey(feed);
+                cursorStore.Vendor.Should().ContainKey(feed);
             else
-                cursorStore.Saved.Should().NotContainKey(feed);
+                cursorStore.Vendor.Should().NotContainKey(feed);
         }
     }
 
     [Fact]
     public async Task Ssv2_WhenThereAreNoPatientDevices_NothingIsPublishedAndTheFeedCursorsAreStillCommitted()
     {
-        var cursorStore = new FakeCursorStore();
+        var cursorStore = new InMemoryConnectorStateStore();
         var published = new List<PatientDevice>();
         var publisher = DevicePublisher(publishLands: false, available: true, published);
 
@@ -347,8 +394,8 @@ public class GlookoSsv2SyncTests
         publisher.Verify(p => p.Device.PublishPatientDevicesAsync(
             It.IsAny<IEnumerable<PatientDevice>>(), It.IsAny<string>(),
             It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
-        cursorStore.Saved.Should().ContainKey("/api/v2/pumps");
-        cursorStore.Saved.Should().ContainKey("/api/v2/cgm_devices");
+        cursorStore.Vendor.Should().ContainKey("/api/v2/pumps");
+        cursorStore.Vendor.Should().ContainKey("/api/v2/cgm_devices");
     }
 
     private static SyncRequest DeviceEventsRequest() => new() { DataTypes = [SyncDataType.DeviceEvents] };
@@ -390,12 +437,12 @@ public class GlookoSsv2SyncTests
 
     /// <summary>
     /// SSV2 resumes every resource from its own cursor, so the scheduled run is not put on the
-    /// windowed path's walk schedule: the cursor store holds only the resource cursors afterwards.
+    /// windowed path's walk schedule: no walk stamp is recorded afterwards.
     /// </summary>
     [Fact]
     public async Task Ssv2_ScheduledRun_IsNotPutOnTheFullWalkSchedule()
     {
-        var store = new FakeCursorStore();
+        var store = new InMemoryConnectorStateStore();
         var handler = new RoutingHandler(path =>
             path.Contains("/api/v2/cgm/egvs") ? EgvPage(["g1"], "2026-06-02T00:00:00Z", "g1", lastPage: true)
             : Json("{\"lastPage\":true}"));
@@ -403,8 +450,8 @@ public class GlookoSsv2SyncTests
 
         await service.SyncDataAsync(Config(), CancellationToken.None);
 
-        store.Saved.Keys.Should().NotContain(GlookoConstants.FullWalkCursorResource);
-        store.Saved.Keys.Should().NotContain(GlookoConstants.FullWalkAttemptCursorResource);
+        store.Resume.Keys.Should().NotContain(GlookoConstants.FullWalkStamp);
+        store.Resume.Keys.Should().NotContain(GlookoConstants.FullWalkAttemptStamp);
     }
 
     private static GlookoConnectorConfiguration Config() => new()
@@ -420,17 +467,22 @@ public class GlookoSsv2SyncTests
     };
 
     private static GlookoConnectorService BuildService(
-        RoutingHandler handler, IConnectorSyncCursorStore cursorStore, Mock<IConnectorPublisher> publisher) =>
+        RoutingHandler handler, IConnectorStateStore state, Mock<IConnectorPublisher> publisher)
+    {
+        publisher.SetupGet(p => p.State).Returns(state);
+        return BuildService(handler, publisher.Object);
+    }
+
+    private static GlookoConnectorService BuildService(RoutingHandler handler, IConnectorPublisher publisher) =>
         new(
             new HttpClient(handler),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             NullLogger<GlookoConnectorService>.Instance,
             Mock.Of<IRetryDelayStrategy>(),
             new FixedGlookoTokenProvider(),
-            publisher.Object,
-            mealMatchingService: null,
+            publisher,
+            mealMatchLinker: null,
             timezoneTimelineService: null,
-            cursorStore: cursorStore,
             endpointPause: TimeSpan.Zero);
 
     private static Mock<IConnectorPublisher> CapturePublisher(List<SensorGlucose> sink)

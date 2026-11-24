@@ -64,7 +64,7 @@ public class V4BroadcastMapTests
         { typeof(MeterGlucose), typeof(MeterGlucoseController) },
         { typeof(Calibration), typeof(CalibrationController) },
         { typeof(Bolus), typeof(BolusController) },
-        { typeof(CarbIntake), typeof(NutritionController) },
+        { typeof(CarbIntake), typeof(CarbIntakeController) },
         { typeof(BGCheck), typeof(BGCheckController) },
         { typeof(BolusCalculation), typeof(BolusCalculationController) },
         { typeof(BasalInjection), typeof(BasalInjectionController) },

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data.Extensions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -860,6 +861,7 @@ public class TenantIsolationTests
             services.AddDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>(options =>
                 options.UseInMemoryDatabase($"TenantTest_{Guid.NewGuid()}"));
             services.AddDataServices();
+            services.AddSingleton(AccountLinkRoutes.Off);
         }
 
         context.RequestServices = services.BuildServiceProvider();

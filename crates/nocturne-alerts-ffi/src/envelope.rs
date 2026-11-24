@@ -13,15 +13,17 @@ use uuid::Uuid;
 use nocturne_alerts_core::classify::classify;
 use nocturne_alerts_core::context::{SensorContext, check_timestamp};
 use nocturne_alerts_core::engine::{
-    EngineState, Rule, WireRule, evaluate_parsed_rule, format_instant, parse_auto_resolve,
+    EngineState, OnUnknown, Rule, WireRule, evaluate_parsed_rule, format_instant,
+    parse_auto_resolve,
 };
 use nocturne_alerts_core::enums::WireEnum;
 use nocturne_alerts_core::eval::{Env, eval_node};
 use nocturne_alerts_core::excursion::{ExcursionTracker, TrackerState, TrackerStateKind};
 use nocturne_alerts_core::facts::{self, ContextFact, RuleConditions};
+use nocturne_alerts_core::leaf_identity::nodes_with_paths;
 use nocturne_alerts_core::model::{ConditionKind, Container, Node, parse_payload};
 use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, node_child_path};
-use nocturne_alerts_core::sustained::{TimerOp, TimerStore};
+use nocturne_alerts_core::sustained::{TimerOp, TimerState, TimerStore};
 use nocturne_alerts_core::wall_clock::references_wall_clock;
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
@@ -61,24 +63,41 @@ pub(crate) fn ok(fields: Value) -> Value {
     Value::Object(o)
 }
 
-/// Persisted sustained-timer state for one rule: `path -> first_true`.
+/// Persisted `sustained` state for one rule, one map per [`TimerState`]:
+/// `timers` is `path -> first_true`, `not_true` is `path -> not_true_at`. A
+/// path in neither has no recorded state.
 type WireTimers = BTreeMap<String, DateTime<Utc>>;
 
-/// Checks and loads persisted timers.
-fn seed_timers(timers: &mut TimerStore, rule_id: Uuid, wire: &WireTimers) -> Result<(), String> {
-    for (path, &at) in wire {
-        timers.seed(rule_id, path, check_timestamp(at, "timers")?);
+/// Checks and loads persisted timers. A path in both maps is running.
+fn seed_timers(
+    timers: &mut TimerStore,
+    rule_id: Uuid,
+    running: &WireTimers,
+    not_true: &WireTimers,
+) -> Result<(), String> {
+    for (path, &at) in not_true {
+        let at = check_timestamp(at, "not_true")?;
+        timers.seed(rule_id, path, TimerState::NotTrue(at));
+    }
+    for (path, &at) in running {
+        let at = check_timestamp(at, "timers")?;
+        timers.seed(rule_id, path, TimerState::Running(at));
     }
     Ok(())
 }
 
-/// A rule's timers after evaluation: `path -> first_true`.
-fn timers_json(timers: &TimerStore, rule_id: Uuid) -> Value {
-    timers
-        .snapshot_for_rule(rule_id)
-        .map(|(path, at)| (path.to_owned(), format_instant(at).into()))
-        .collect::<Map<_, _>>()
-        .into()
+/// A rule's state after evaluation as the `timers` and `not_true` maps.
+fn timers_json(timers: &TimerStore, rule_id: Uuid, into: &mut Map<String, Value>) {
+    let (mut running, mut not_true) = (Map::new(), Map::new());
+    for (path, state) in timers.snapshot_for_rule(rule_id) {
+        let (map, at) = match state {
+            TimerState::Running(at) => (&mut running, at),
+            TimerState::NotTrue(at) => (&mut not_true, at),
+        };
+        map.insert(path.to_owned(), format_instant(at).into());
+    }
+    into.insert("timers".into(), running.into());
+    into.insert("not_true".into(), not_true.into());
 }
 
 #[derive(Deserialize)]
@@ -89,30 +108,25 @@ struct EvaluateRequest {
     now: DateTime<Utc>,
     #[serde(default)]
     timers: WireTimers,
+    #[serde(default)]
+    not_true: WireTimers,
     /// Absent or null: never evaluated.
     #[serde(default)]
     tracker: Option<WireTracker>,
-    #[serde(default = "yes")]
+    #[serde(default)]
     include_leaves: bool,
-}
-
-fn yes() -> bool {
-    true
-}
-
-pub(crate) fn one<T: From<u8>>() -> T {
-    T::from(1)
 }
 
 #[derive(Deserialize)]
 pub(crate) struct WireTracker {
-    /// Absent or null: no per-rule state yet, only the shared ordinal.
+    /// Absent or null: no per-rule state yet.
     #[serde(default)]
     state: Option<String>,
     #[serde(default)]
-    confirmation_count: i32,
-    #[serde(default)]
     active_excursion_ordinal: Option<u32>,
+    /// Absent: the active ordinal, or 0 without one.
+    #[serde(default)]
+    last_excursion_ordinal: u32,
     /// Required whenever `state` is present.
     #[serde(default)]
     updated_at: Option<DateTime<Utc>>,
@@ -121,8 +135,11 @@ pub(crate) struct WireTracker {
     hysteresis_started_at: Option<DateTime<Utc>>,
     #[serde(default)]
     awaiting_rearm: bool,
-    #[serde(default = "one")]
-    next_excursion_ordinal: u32,
+    /// When the current hold began; absent when the rule is not held, or for
+    /// state stored before it was recorded, whose hold then counts from the
+    /// next held evaluation.
+    #[serde(default)]
+    held_since: Option<DateTime<Utc>>,
 }
 
 impl WireTracker {
@@ -131,7 +148,6 @@ impl WireTracker {
         tracker: &mut ExcursionTracker,
         rule_id: Uuid,
     ) -> Result<(), String> {
-        tracker.set_next_excursion_ordinal(self.next_excursion_ordinal);
         let Some(s) = &self.state else {
             return Ok(());
         };
@@ -142,16 +158,27 @@ impl WireTracker {
         if let Some(at) = self.hysteresis_started_at {
             check_timestamp(at, "tracker.hysteresis_started_at")?;
         }
+        if let Some(at) = self.held_since {
+            check_timestamp(at, "tracker.held_since")?;
+        }
         let restored = match TrackerStateKind::from_wire(s) {
             Some(state) => TrackerState {
                 state,
-                confirmation_count: self.confirmation_count,
                 active_excursion: self.active_excursion_ordinal,
+                last_excursion: self.last_excursion_ordinal,
                 updated_at,
                 hysteresis_started_at: self.hysteresis_started_at,
                 awaiting_rearm: self.awaiting_rearm,
+                held_since: self.held_since,
             },
-            None => TrackerState::recovered(self.active_excursion_ordinal, updated_at),
+            None => TrackerState {
+                held_since: self.held_since,
+                ..TrackerState::recovered(
+                    self.active_excursion_ordinal,
+                    self.last_excursion_ordinal,
+                    updated_at,
+                )
+            },
         };
         tracker.restore_state(rule_id, restored);
         Ok(())
@@ -173,7 +200,7 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
     check_timestamp(req.now, "now")?;
 
     let mut state = EngineState::new();
-    seed_timers(&mut state.timers, rule.id, &req.timers)?;
+    seed_timers(&mut state.timers, rule.id, &req.timers, &req.not_true)?;
     if let Some(tracker) = &req.tracker {
         tracker.restore(&mut state.tracker, rule.id)?;
     }
@@ -186,22 +213,24 @@ pub(crate) fn evaluate(request_json: &str) -> Result<Value, String> {
         &mut state,
         req.include_leaves,
     );
-    Ok(ok(json!({
-        "result": outcome.to_json(),
-        "timers": timers_json(&state.timers, rule.id),
-        "tracker": tracker_json(&state.tracker, rule.id),
-    })))
+    let mut response = Map::new();
+    response.insert("result".into(), outcome.to_json());
+    timers_json(&state.timers, rule.id, &mut response);
+    response.insert("tracker".into(), tracker_json(&state.tracker, rule.id));
+    Ok(ok(Value::Object(response)))
 }
 
-/// The tracker after evaluation. The per-rule fields are present once the
-/// rule has state; `next_excursion_ordinal` always is.
+/// The tracker after evaluation: empty until the rule has state.
+/// `last_excursion_ordinal` is present once the rule has opened an excursion.
 pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
     let mut t = Map::new();
     if let Some(s) = tracker.state(rule_id) {
         t.insert("state".into(), s.state.wire().into());
-        t.insert("confirmation_count".into(), s.confirmation_count.into());
         if let Some(excursion) = s.active_excursion {
             t.insert("active_excursion_ordinal".into(), excursion.into());
+        }
+        if s.last_excursion > 0 {
+            t.insert("last_excursion_ordinal".into(), s.last_excursion.into());
         }
         t.insert("updated_at".into(), format_instant(s.updated_at).into());
         if let Some(at) = s.hysteresis_started_at {
@@ -210,11 +239,10 @@ pub(crate) fn tracker_json(tracker: &ExcursionTracker, rule_id: Uuid) -> Value {
         if s.awaiting_rearm {
             t.insert("awaiting_rearm".into(), true.into());
         }
+        if let Some(at) = s.held_since {
+            t.insert("held_since".into(), format_instant(at).into());
+        }
     }
-    t.insert(
-        "next_excursion_ordinal".into(),
-        tracker.next_excursion_ordinal().into(),
-    );
     Value::Object(t)
 }
 
@@ -233,6 +261,8 @@ struct EvaluateNodeRequest {
     now: DateTime<Utc>,
     #[serde(default)]
     timers: WireTimers,
+    #[serde(default)]
+    not_true: WireTimers,
 }
 
 /// A node that cannot be evaluated (engine-semantics.md §1.4) is an error.
@@ -241,7 +271,7 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
         read_request(request_json, |r: &EvaluateNodeRequest| r.schema_version)?;
     check_timestamp(req.now, "now")?;
     let mut timers = TimerStore::new();
-    seed_timers(&mut timers, req.rule_id, &req.timers)?;
+    seed_timers(&mut timers, req.rule_id, &req.timers, &req.not_true)?;
 
     let node = match &req.root {
         Some(root) => Node::parse_rooted(&req.node, root),
@@ -252,12 +282,17 @@ pub(crate) fn evaluate_node(request_json: &str) -> Result<Value, String> {
 
     let mut env = Env::new(req.now, req.rule_id, &req.context, &mut timers);
     let value = eval_node(&node, &root, &mut env);
+    let clock_anomaly = env.clock_anomaly().clone();
     let ops = timers.drain_ops();
-    Ok(ok(json!({
-        "value": value,
-        "timers": timers_json(&timers, req.rule_id),
-        "timer_ops": ops.iter().map(TimerOp::to_json).collect::<Vec<_>>(),
-    })))
+    let mut response = Map::new();
+    value.write(&mut response, "value");
+    clock_anomaly.write(&mut response);
+    timers_json(&timers, req.rule_id, &mut response);
+    response.insert(
+        "timer_ops".into(),
+        ops.iter().map(TimerOp::to_json).collect(),
+    );
+    Ok(ok(Value::Object(response)))
 }
 
 /// A rule body as stored: its root `condition_type` and payload-only
@@ -294,6 +329,9 @@ struct RuleConditionsRequest {
     auto_resolve_enabled: bool,
     #[serde(default)]
     auto_resolve_params: Option<Value>,
+    /// Exactly a word of [`OnUnknown`]; absent is `hold`.
+    #[serde(default)]
+    on_unknown: Option<String>,
 }
 
 impl RuleConditionsRequest {
@@ -301,13 +339,21 @@ impl RuleConditionsRequest {
         read_request(request_json, |r: &Self| r.schema_version)
     }
 
-    fn rule(&self) -> RuleConditions<'_> {
-        RuleConditions {
+    /// # Errors
+    /// `on_unknown` names no word.
+    fn rule(&self) -> Result<RuleConditions<'_>, String> {
+        let on_unknown = match self.on_unknown.as_deref() {
+            None => OnUnknown::Hold,
+            Some(word) => OnUnknown::from_name(word)
+                .ok_or_else(|| format!("unknown on_unknown '{}'", word.escape_default()))?,
+        };
+        Ok(RuleConditions {
             condition_type: &self.condition_type,
             condition_params: &self.condition_params,
             auto_resolve_enabled: self.auto_resolve_enabled,
             auto_resolve_params: self.auto_resolve_params.as_ref(),
-        }
+            on_unknown,
+        })
     }
 }
 
@@ -316,7 +362,7 @@ impl RuleConditionsRequest {
 /// `false`, not an error.
 pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
     let req = RuleConditionsRequest::read(request_json)?;
-    let wall_clock = references_wall_clock(&req.rule());
+    let wall_clock = references_wall_clock(&req.rule()?);
     Ok(ok(json!({ "references_wall_clock": wall_clock })))
 }
 
@@ -324,7 +370,7 @@ pub(crate) fn wall_clock(request_json: &str) -> Result<Value, String> {
 /// An unknown type or unevaluable body reads none, not an error.
 pub(crate) fn rule_reads(request_json: &str) -> Result<Value, String> {
     let req = RuleConditionsRequest::read(request_json)?;
-    let names: Vec<&str> = facts::rule_reads(&req.rule())
+    let names: Vec<&str> = facts::rule_reads(&req.rule()?)
         .into_iter()
         .map(ContextFact::name)
         .collect();
@@ -354,7 +400,7 @@ pub(crate) fn references_any(request_json: &str) -> Result<Value, String> {
                 .ok_or_else(|| format!("unknown fact '{}'", name.escape_default()))
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let matched = facts::references_any(&req.rule.rule(), &facts);
+    let matched = facts::references_any(&req.rule.rule()?, &facts);
     Ok(ok(json!({ "references_any": matched })))
 }
 
@@ -381,10 +427,13 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
     }
     .map_err(|e| format!("malformed condition node: {e}"))?;
     let root = root_override.unwrap_or_else(|| node.kind().name().to_owned());
-    let mut paths = Vec::new();
-    let mut leaves = Vec::new();
-    walk_paths(&node, root.clone(), &mut paths, &mut leaves);
-    let leaves = leaves.iter().enumerate();
+    let nodes = nodes_with_paths(&node, root.clone());
+    let leaves = nodes
+        .iter()
+        .filter(|(node, _)| node.container().is_none())
+        .map(|(_, path)| path)
+        .enumerate();
+    let paths: Vec<&String> = nodes.iter().map(|(_, path)| path).collect();
     Ok(ok(json!({
         "root": root,
         "paths": paths,
@@ -392,19 +441,6 @@ pub(crate) fn leaf_paths(input_json: &str) -> Result<Value, String> {
             .map(|(leaf_id, path)| json!({ "leaf_id": leaf_id, "path": path }))
             .collect::<Vec<_>>(),
     })))
-}
-
-/// Pre-order; leaves are pushed in leaf-id order.
-fn walk_paths(node: &Node, path: String, paths: &mut Vec<String>, leaves: &mut Vec<String>) {
-    paths.push(path.clone());
-    match node.container() {
-        Some(container) => {
-            for (i, child) in container.children().enumerate() {
-                walk_paths(child, node_child_path(&path, i, child), paths, leaves);
-            }
-        }
-        None => leaves.push(path),
-    }
 }
 
 /// [`RuleBodyRequest`] plus, optionally, an auto-resolve tree to describe.

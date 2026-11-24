@@ -109,7 +109,7 @@ public class AlertRuleConditionAuditServiceTests
             .Returns(async (Guid tenantId, CancellationToken ct) =>
             {
                 var read = await real.ReadEnabledRulesAsync(tenantId, ct);
-                return tenantId == ActiveTenant ? read with { UnreadableRuleIds = [unreadable] } : read;
+                return tenantId == ActiveTenant ? read with { Unreadable = [new UnreadableAlertRule(unreadable, "Stale", "threshold_low", "{}", "warning", AlertRuleSeverity.Warning, "undirected", RuleScopeClass.Undirected, false)] } : read;
             });
 
         await RunAsync(alerts.Object);

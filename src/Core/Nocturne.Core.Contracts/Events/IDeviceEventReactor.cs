@@ -20,7 +20,7 @@ namespace Nocturne.Core.Contracts.Events;
 /// Implementations run after the write has committed and must not throw; the chokepoint does not
 /// roll the write back for them.
 /// </remarks>
-/// <seealso cref="IV4RecordBroadcaster{TModel}"/>
+/// <seealso cref="IRecordChangePublisher"/>
 public interface IDeviceEventReactor
 {
     /// <summary>Reacts to device events that were just created.</summary>

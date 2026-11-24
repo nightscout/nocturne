@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -24,10 +25,9 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService
     : TokenConnectorService<GlookoConnectorConfiguration, GlookoAuthTokenProvider>
 {
-    private readonly IMealMatchingService? _mealMatchingService;
+    private readonly IMealMatchLinker? _mealMatchLinker;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
-    private readonly IConnectorSyncCursorStore? _cursorStore;
     private readonly ILogger<GlookoConnectorService> _glookoLogger;
     private readonly TimeSpan _endpointPause;
 
@@ -42,19 +42,17 @@ public class GlookoConnectorService
         IRetryDelayStrategy retryDelayStrategy,
         GlookoAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
-        IMealMatchingService? mealMatchingService = null,
+        IMealMatchLinker? mealMatchLinker = null,
         ITimezoneTimelineService? timezoneTimelineService = null,
         IDeviceClockService? deviceClockService = null,
-        IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? timeProvider = null,
         TimeSpan? endpointPause = null
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, tokenProvider, publisher, timeProvider)
     {
-        _mealMatchingService = mealMatchingService;
+        _mealMatchLinker = mealMatchLinker;
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
-        _cursorStore = cursorStore;
         _endpointPause = endpointPause ?? DefaultEndpointPause;
         _glookoLogger = logger;
     }
@@ -63,14 +61,14 @@ public class GlookoConnectorService
 
     private const string SyncSucceededMessage = "Sync completed successfully";
 
-    private async Task<bool> AuthenticateWithConfigAsync(GlookoSyncContext context)
-    {
-        var token = await ValidTokenAsync(context.Config, context.CancellationToken);
-        if (token is null)
-            return false;
+    protected override Task PrepareSignInAsync(
+        GlookoConnectorConfiguration config, CancellationToken cancellationToken) =>
+        ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
 
+    private async Task ApplySessionAsync(GlookoSyncContext context, TokenSession session)
+    {
         // The token IS the session cookie for Glooko
-        context.SessionCookie = token;
+        context.SessionCookie = session.Token;
 
         // Retrieve user data from cache metadata via the token provider's public accessor
         var cached = await TokenProvider.GetCachedSessionAsync();
@@ -80,7 +78,6 @@ public class GlookoConnectorService
         }
 
         TrackSuccessfulRequest();
-        return true;
     }
 
     /// <summary>
@@ -241,10 +238,10 @@ public class GlookoConnectorService
         var maxCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalMinutes / 5));
 
         return $"{endpoint}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&lastGuid={GlookoConstants.LegacyLastGuid}"
-             + $"&lastUpdatedAt={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&lastUpdatedAt={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&limit={maxCount}";
     }
 
@@ -261,8 +258,8 @@ public class GlookoConnectorService
         var seriesParams = string.Join("&", series.Select(s => $"series[]={s}"));
 
         return $"{GlookoConstants.V3GraphDataPath}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&{seriesParams}"
              + "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
     }
@@ -280,8 +277,8 @@ public class GlookoConnectorService
         var seriesParams = string.Join("&", GlookoConstants.V3PumpModeSeries.Select(s => $"series[]={s}"));
 
         return $"{GlookoConstants.V3GraphDataPath}?patient={patientCode}"
-             + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-             + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+             + $"&startDate={startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+             + $"&endDate={endDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
              + $"&{seriesParams}"
              + "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
     }
@@ -314,9 +311,10 @@ public class GlookoConnectorService
         }
     }
 
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         GlookoConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult
@@ -333,10 +331,7 @@ public class GlookoConnectorService
                 CancellationToken = cancellationToken
             };
 
-            await ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
-
-            if (!await AuthenticateWithConfigAsync(context))
-                return AuthenticationFailedResult();
+            await ApplySessionAsync(context, session);
 
             var activeTypes = ResolveActiveTypes(request, config);
 
@@ -351,7 +346,7 @@ public class GlookoConnectorService
             // the overlap). A range naming no lower bound reaches back the full history floor.
             var now = Clock.GetUtcNow().UtcDateTime;
             var from = context.TimeMapper.ToGlookoTime(
-                request.From ?? now.AddMonths(-GlookoConstants.FullWalkMonths)).AddDays(-1);
+                WindowStart(request, ResumeFamily.Glucose) ?? now.AddMonths(-GlookoConstants.FullWalkMonths)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
@@ -381,10 +376,9 @@ public class GlookoConnectorService
                         + "Invalidating it and re-authenticating.",
                         ConnectorSource, context.PatientCode);
 
-                    TokenProvider.InvalidateToken();
                     context.ClearSessionAndProfile();
 
-                    if (!await AuthenticateWithConfigAsync(context))
+                    if (!await session.ReauthenticateAsync())
                     {
                         result.Success = false;
                         result.Message = "Re-authentication failed after Glooko denied data access";
@@ -392,6 +386,7 @@ public class GlookoConnectorService
                         break;
                     }
 
+                    await ApplySessionAsync(context, session);
                     await ConfigureTimezoneTimelineAsync(context, cancellationToken);
 
                     // Drop partial results from the aborted pass; the retry re-syncs from scratch
@@ -419,114 +414,128 @@ public class GlookoConnectorService
         }
     }
 
+    /// <remarks>The schedule's stamps choose the window of every type a scheduled run reads.</remarks>
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps =>
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>>
+        {
+            [GlookoConstants.FullWalkStamp] = SupportedDataTypes,
+            [GlookoConstants.FullWalkAttemptStamp] = SupportedDataTypes,
+            [GlookoConstants.LookbackReadStamp] = SupportedDataTypes,
+        };
+
     /// <summary>
-    ///     Entry point for the scheduled sync.
+    ///     What the scheduled run's window reads: SSV2's glucose point. A tiered window and a caller's
+    ///     bound read none.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, GlookoConnectorConfiguration config) =>
+        !request.Resume.Scheduled ? []
+        : config.UseSsv2Sync ? WindowResumesFrom(request, ResumeFamily.Glucose)
+        : [];
+
+    /// <summary>
+    ///     The scheduled sync's window policy.
     /// </summary>
     /// <remarks>
-    ///     The base derives the window from the tenant's newest glucose reading. Most Glooko accounts
+    ///     The base resumes each family from its own newest stored record. Most Glooko accounts
     ///     never store one (CGM backfill is off by default), so that resolves to the six-month
     ///     <see cref="BaseConnectorService{TConfig}.InitialSyncFloor"/> on every run; and where one
     ///     exists it says nothing about what is still to come, because Glooko posts pump data in
-    ///     batches days after the fact. The connector therefore reads a fixed
-    ///     <see cref="GlookoConnectorConfiguration.LookbackDays"/> each run, and the floor once per
-    ///     <see cref="GlookoConstants.FullWalkInterval"/>. The walk is recorded only once it has
+    ///     batches days after the fact. The connector therefore reads <see cref="GlookoConstants.ShortWindow"/>
+    ///     on most runs, the fixed <see cref="GlookoConnectorConfiguration.LookbackDays"/> once per
+    ///     <see cref="GlookoConstants.LookbackReadInterval"/>, and the floor once per
+    ///     <see cref="GlookoConstants.FullWalkInterval"/>. A lookback read is recorded only once it
+    ///     succeeded, so a failed one is read again next cycle. The walk is recorded only once it has
     ///     succeeded, so a run that stopped at a failed chunk is walked again — after
     ///     <see cref="GlookoConstants.FullWalkRetryInterval"/>, not on every cycle, so a persistently
     ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
     ///     <para>
     ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
-    ///     and a caller naming its own <paramref name="since"/> has already chosen; both take the base
-    ///     window. A service without a cursor store has nowhere to remember a walk, so it resumes
-    ///     instead, from the oldest of the glucose and treatment resume points: every family is
-    ///     fetched inside the one window, and the base's glucose watermark alone would leave
-    ///     treatments that a failed chunk never published below every later run's bound.
+    ///     so it takes the base's points.
     ///     </para>
     /// </remarks>
-    public override async Task<SyncResult> SyncDataAsync(
+    protected override async Task<SyncResult> RunScheduledAsync(
+        ResumePoints resume,
+        Func<ResumePoints, Task<SyncResult>> run,
         GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
-        if (since.HasValue || config.UseSsv2Sync)
-            return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
-
-        if (_cursorStore is null)
-        {
-            var resumeFrom = ResumeFrom(
-                await CalculateSinceTimestampAsync(config),
-                await CalculateTreatmentSinceTimestampAsync(config));
-            return await base.SyncDataAsync(config, cancellationToken, resumeFrom, progressReporter);
-        }
+        if (config.UseSsv2Sync)
+            return await run(resume);
 
         var now = Clock.GetUtcNow().UtcDateTime;
-        var fullWalk = await IsFullWalkDueAsync(now, cancellationToken);
-        var from = fullWalk
-            ? now.AddMonths(-GlookoConstants.FullWalkMonths)
-            : now.AddDays(-config.LookbackDays);
+        var tier = await ResolveWindowTierAsync(now, cancellationToken);
+        var from = tier switch
+        {
+            WindowTier.FullWalk => now.AddMonths(-GlookoConstants.FullWalkMonths),
+            WindowTier.Lookback => now.AddDays(-config.LookbackDays),
+            _ => now - GlookoConstants.ShortWindow,
+        };
 
         _logger.LogInformation(
             "[{ConnectorSource}] Scheduled sync reaches back to {From:yyyy-MM-dd} ({Mode})",
-            ConnectorSource, from, fullWalk ? "full walk" : "incremental");
+            ConnectorSource, from, tier);
 
-        if (fullWalk)
-            await RecordFullWalkAsync(GlookoConstants.FullWalkAttemptCursorResource, now, cancellationToken);
+        if (tier == WindowTier.FullWalk)
+            await RecordStampAsync(GlookoConstants.FullWalkAttemptStamp, now, cancellationToken);
 
-        var result = await base.SyncDataAsync(config, cancellationToken, from, progressReporter);
+        var result = await run(resume.StartingAt(from));
 
-        if (fullWalk && result.Success)
-            await RecordFullWalkAsync(GlookoConstants.FullWalkCursorResource, now, cancellationToken);
+        if (result.Success)
+        {
+            if (tier == WindowTier.FullWalk)
+                await RecordStampAsync(GlookoConstants.FullWalkStamp, now, cancellationToken);
+            if (tier != WindowTier.Short)
+                await RecordStampAsync(GlookoConstants.LookbackReadStamp, now, cancellationToken);
+        }
 
         return result;
     }
 
-    /// <summary>
-    ///     Whether the scheduled run should walk the full history: the last completed walk is older
-    ///     than the interval and the last attempt older than the retry interval. A store that cannot
-    ///     be read walks, so a transient fault costs one extra walk rather than a missed one.
-    /// </summary>
-    private async Task<bool> IsFullWalkDueAsync(DateTime now, CancellationToken cancellationToken)
+    private enum WindowTier
     {
-        try
-        {
-            var completed = await _cursorStore!.GetAsync(
-                ServiceName, GlookoConstants.FullWalkCursorResource, cancellationToken);
-            if (!FullWalkSchedule.IsDue(completed?.LastUpdatedAt, GlookoConstants.FullWalkInterval, now))
-                return false;
-
-            var attempted = await _cursorStore.GetAsync(
-                ServiceName, GlookoConstants.FullWalkAttemptCursorResource, cancellationToken);
-            return FullWalkSchedule.IsDue(
-                attempted?.LastUpdatedAt, GlookoConstants.FullWalkRetryInterval, now);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not read the full-walk schedule; walking", ConnectorSource);
-            return true;
-        }
+        Short,
+        Lookback,
+        FullWalk,
     }
 
     /// <summary>
-    ///     Stamps <paramref name="resource"/> with <paramref name="at"/>. A store that cannot be
-    ///     written does not fail the sync; while it stays unwritable the schedule cannot remember a
-    ///     walk and every scheduled run walks, which is what the warning is for.
+    ///     Which window the scheduled run reads. A full walk is due when the last completed walk is
+    ///     older than its interval and the last attempt older than its retry interval; otherwise the
+    ///     lookback is due when the last completed lookback read is older than
+    ///     <see cref="GlookoConstants.LookbackReadInterval"/>. A store that cannot be read walks, so a
+    ///     transient fault costs one extra walk rather than a missed one.
     /// </summary>
-    private async Task RecordFullWalkAsync(string resource, DateTime at, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _cursorStore!.SetAsync(
-                ServiceName, resource,
-                new ConnectorSyncCursor(FullWalkSchedule.Stamp(new DateTimeOffset(at, TimeSpan.Zero)), null),
-                cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not record the full walk ({Resource})", ConnectorSource, resource);
-        }
-    }
+    private Task<WindowTier> ResolveWindowTierAsync(DateTime now, CancellationToken cancellationToken) =>
+        ReadStateBestEffortAsync(
+            "read the sync schedule; walking",
+            WindowTier.FullWalk,
+            async () =>
+            {
+                var completed = await ResumeStampAsync(GlookoConstants.FullWalkStamp, cancellationToken);
+                if (FullWalkSchedule.IsDue(completed, GlookoConstants.FullWalkInterval, now))
+                {
+                    var attempted = await ResumeStampAsync(GlookoConstants.FullWalkAttemptStamp, cancellationToken);
+                    if (FullWalkSchedule.IsDue(attempted, GlookoConstants.FullWalkRetryInterval, now))
+                        return WindowTier.FullWalk;
+                }
+
+                var lookback = await ResumeStampAsync(GlookoConstants.LookbackReadStamp, cancellationToken);
+                return FullWalkSchedule.IsDue(lookback, GlookoConstants.LookbackReadInterval, now)
+                    ? WindowTier.Lookback
+                    : WindowTier.Short;
+            },
+            cancellationToken);
+
+    /// <summary>
+    ///     Stamps <paramref name="stamp"/> with <paramref name="at"/>. A store that cannot be
+    ///     written does not fail the sync; while it stays unwritable the schedule cannot remember the
+    ///     read it stamps and every scheduled run repeats it, which is what the warning is for.
+    /// </summary>
+    private Task RecordStampAsync(string stamp, DateTime at, CancellationToken cancellationToken) =>
+        WriteStateBestEffortAsync(
+            $"record the sync stamp ({stamp})",
+            () => SetResumeStampAsync(stamp, at, cancellationToken),
+            cancellationToken);
 
     /// <summary>
     ///     Runs one full sync pass: every date chunk followed by the profile/device-settings fetch,
@@ -558,8 +567,8 @@ public class GlookoConnectorService
             await ReportSyncMessageAsync(SyncMessageType.FetchingData,
                 new()
                 {
-                    ["from"] = chunkFrom.ToString("MMM dd"),
-                    ["to"] = chunkTo.ToString("MMM dd"),
+                    ["from"] = chunkFrom.ToString("MMM dd", CultureInfo.InvariantCulture),
+                    ["to"] = chunkTo.ToString("MMM dd", CultureInfo.InvariantCulture),
                     ["chunk"] = $"{i + 1}/{chunks.Count}",
                 },
                 cancellationToken);
@@ -675,12 +684,11 @@ public class GlookoConnectorService
             await PublishRecordTypeAsync(result, activeTypes,
                 carbs, config, cancellationToken));
 
-        // Food attribution resolves against the carbs published above.
+        // After the carbs above, so a carb intake this batch inserts is stored when its foods are attributed.
         var foodEntryImports = batchData.Foods is { Length: > 0 }
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
-        Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
         landed &= await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, config, result, activeTypes, cancellationToken);
+            foodEntryImports, config, result, activeTypes, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
         landed &= Landed(activeTypes, SyncDataType.StateSpans, stateSpans,
@@ -757,7 +765,7 @@ public class GlookoConnectorService
         await PublishRecordTypeAsync(result, activeTypes,
             manualBasalInjections, config, cancellationToken);
 
-        // Food attribution resolves against the carbs published above.
+        // After the carbs above, so a carb intake this batch inserts is stored when its foods are attributed.
         if (v3Histories is null)
         {
             RecordFetchFailure(result, SyncDataType.Food, activeTypes);
@@ -777,27 +785,8 @@ public class GlookoConnectorService
             var foodEntryImports = historyMealCarbs.Count > 0 && v3Histories.Histories != null
                 ? context.V4TreatmentMapper.MapV3HistoryMealsToConnectorEntries(v3Histories, v2Foods) : [];
 
-            Func<string, string?>? foodResolver = null;
-            if (historyMealCarbs.Count > 0 && v3Histories.Histories != null)
-            {
-                var foodGuidToMealGuid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var meal in GlookoV4TreatmentMapper.ExtractMeals(v3Histories))
-                {
-                    if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
-                    foreach (var food in meal.Foods)
-                    {
-                        if (food is { SoftDeleted: not true, Guid.Length: > 0 })
-                            foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
-                    }
-                }
-
-                foodResolver = externalEntryId =>
-                    foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
-                        ? $"glooko_v3meal_{mealGuid}" : null;
-            }
-
             await PublishFoodEntriesAndAttributeAsync(
-                foodEntryImports, allCarbs, foodResolver, config, result, activeTypes, cancellationToken);
+                foodEntryImports, config, result, activeTypes, cancellationToken);
         }
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
@@ -825,16 +814,15 @@ public class GlookoConnectorService
     }
 
     /// <summary>
-    ///     Publishes food catalog entries and attributes them to carb intakes via the meal matching service.
+    ///     Publishes food catalog entries and attributes them to the carb intakes the store holds under
+    ///     their legacy ids, through the meal matching service.
     /// </summary>
     /// <returns>
     ///     Whether the catalog import reached the tenant, or there was nothing to import. A failed
     ///     attribution does not count: the entries are already in the catalog.
     /// </returns>
     private async Task<bool> PublishFoodEntriesAndAttributeAsync(
-        List<ConnectorFoodEntryImport> foodEntryImports,
-        List<CarbIntake> carbIntakes,
-        Func<string, string?>? foodEntryToCarbLegacyId,
+        List<GlookoFoodEntryImport> foodEntryImports,
         GlookoConnectorConfiguration config,
         SyncResult result,
         HashSet<SyncDataType> activeTypes,
@@ -852,7 +840,7 @@ public class GlookoConnectorService
         // The publisher returns null only from its own catch (or the route found it unavailable); an
         // import that reached the catalog returns a list, empty when nothing was accepted.
         var importedEntries = await PublishByRouteForResultAsync<ConnectorFoodEntryImport, IReadOnlyList<ConnectorFoodEntry>>(
-            foodEntryImports, config, cancellationToken);
+            [.. foodEntryImports.Select(i => i.Entry)], config, cancellationToken);
 
         RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, importedEntries is not null);
 
@@ -860,7 +848,8 @@ public class GlookoConnectorService
             return false;
 
         if (importedEntries.Count == 0
-            || _mealMatchingService == null || carbIntakes.Count == 0 || foodEntryToCarbLegacyId == null)
+            || _mealMatchLinker == null
+            || Publisher is not { IsAvailable: true } publisher)
             return true;
 
         var pendingEntries = importedEntries
@@ -869,29 +858,51 @@ public class GlookoConnectorService
 
         if (pendingEntries.Count == 0) return true;
 
-        var carbsByLegacyId = carbIntakes
-            .Where(ci => ci.LegacyId != null)
-            .ToDictionary(ci => ci.LegacyId!, StringComparer.OrdinalIgnoreCase);
+        var carbLegacyIdByExternalEntryId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var import in foodEntryImports)
+            carbLegacyIdByExternalEntryId.TryAdd(import.Entry.ExternalEntryId.Trim(), import.CarbIntakeLegacyId);
+
+        var carbLegacyIdByEntry = pendingEntries
+            .Select(e => (Entry: e, LegacyId: carbLegacyIdByExternalEntryId.GetValueOrDefault(e.ExternalEntryId)))
+            .Where(e => e.LegacyId != null)
+            .ToList();
+
+        if (carbLegacyIdByEntry.Count == 0) return true;
+
+        IReadOnlyDictionary<string, Guid> storedCarbIds;
+        try
+        {
+            storedCarbIds = await publisher.Treatments.GetStoredCarbIntakeIdsAsync(
+                [.. carbLegacyIdByEntry.Select(e => e.LegacyId!).Distinct(StringComparer.Ordinal)],
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex,
+                "[{ConnectorSource}] Failed to read the stored carb intakes, so {Count} food entries are not attributed",
+                ConnectorSource, carbLegacyIdByEntry.Count);
+            return true;
+        }
 
         var attributedCount = 0;
 
-        foreach (var entry in pendingEntries)
+        foreach (var (entry, legacyId) in carbLegacyIdByEntry)
         {
-            var legacyKey = foodEntryToCarbLegacyId(entry.ExternalEntryId);
-            if (legacyKey == null || !carbsByLegacyId.TryGetValue(legacyKey, out var carbIntake))
+            if (!storedCarbIds.TryGetValue(legacyId!, out var carbIntakeId))
                 continue;
 
             try
             {
-                await _mealMatchingService.AcceptMatchAsync(
-                    entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
-                attributedCount++;
+                if (await _mealMatchLinker.LinkAsync(
+                        entry.Id, carbIntakeId, entry.Carbs, timeOffsetMinutes: 0, cancellationToken)
+                    == AcceptMatchOutcome.Linked)
+                    attributedCount++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
             {
                 _logger.LogWarning(ex,
                     "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
-                    ConnectorSource, entry.Id, carbIntake.Id);
+                    ConnectorSource, entry.Id, carbIntakeId);
             }
         }
 
@@ -1067,8 +1078,8 @@ public class GlookoConnectorService
     {
         EnsureAuthenticatedAndGetCode(context);
 
-        var stored = incremental && _cursorStore != null
-            ? await _cursorStore.GetAsync(ServiceName, resource)
+        var stored = incremental
+            ? await VendorStateAsync<GlookoSsv2Cursor>(resource, context.CancellationToken)
             : null;
 
         var initialUpdatedAt = stored?.LastUpdatedAt ?? GlookoConstants.Ssv2InitialLastUpdatedAt;
@@ -1115,9 +1126,8 @@ public class GlookoConnectorService
 
         // Held for incremental scans only, and only when the cursor actually advanced from where this
         // run started (so a no-op pass never rewrites the stored watermark or the epoch default).
-        if (incremental && _cursorStore != null
-            && (lastUpdatedAt != initialUpdatedAt || lastGuid != initialGuid))
-            context.PendingSsv2Cursors[resource] = new ConnectorSyncCursor(lastUpdatedAt, lastGuid);
+        if (incremental && (lastUpdatedAt != initialUpdatedAt || lastGuid != initialGuid))
+            context.PendingSsv2Cursors[resource] = new GlookoSsv2Cursor(lastUpdatedAt, lastGuid);
 
         _logger.LogInformation("[{ConnectorSource}] SSV2 {Resource} fetched {Count} records (incremental={Incremental})",
             ConnectorSource, resource, all.Count, incremental);
@@ -1132,12 +1142,12 @@ public class GlookoConnectorService
     private async Task CommitSsv2CursorsAsync(
         GlookoSyncContext context, bool landed, params string[] resources)
     {
-        if (!landed || _cursorStore is null) return;
+        if (!landed) return;
 
         foreach (var resource in resources)
         {
             if (context.PendingSsv2Cursors.Remove(resource, out var cursor))
-                await _cursorStore.SetAsync(ServiceName, resource, cursor);
+                await SetVendorStateAsync(resource, cursor, context.CancellationToken);
         }
     }
 
@@ -1668,7 +1678,7 @@ public class GlookoConnectorService
                 + "&sendSoftDeleted=false&allDevicesFlag=true";
 
         if (startDate.HasValue)
-            url += $"&startDate={startDate.Value:yyyy-MM-ddTHH:mm:ss.fffZ}";
+            url += $"&startDate={startDate.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}";
 
         return url;
     }
@@ -1841,7 +1851,7 @@ public class GlookoConnectorService
         return JsonSerializer.Deserialize<T>(result.Value.GetRawText());
     }
 
-    private static string FormatSsv2Cursor(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+    private static string FormatSsv2Cursor(DateTime utc) => utc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     /// <summary>Page budget for the one-time historical scan: 12 × 500 boluses ≈ years of pump use.</summary>
     private const int HistoricalScanMaxPages = 12;
@@ -1988,8 +1998,8 @@ public class GlookoConnectorService
             if (patientCode == null) return null;
 
             var url = $"{GlookoConstants.V3HistoriesPath}?patient={patientCode}"
-                    + $"&startDate={fromDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
-                    + $"&endDate={toDate:yyyy-MM-ddTHH:mm:ss.fffZ}";
+                    + $"&startDate={fromDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}"
+                    + $"&endDate={toDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)}";
 
             _logger.LogInformation("[{ConnectorSource}] Fetching v3 histories from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
                 ConnectorSource, fromDate, toDate);

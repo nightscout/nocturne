@@ -34,8 +34,6 @@
     "src/**/*.svelte"
   ],
   "exclude": [
-    "src/lib/api/generated/nocturne-api-client.ts",
-    "src/lib/api/generated/schemas.ts",
     "src/lib/components/ui/**",
     "../../locales",
     "../../locales/**",

@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "name": "sustained-lease-records-again-once-expired",
+  "description": "false at 12:00 (recorded), 12:03 (inside the lease), 12:06 (the lease has run out: recorded) and 12:08 (inside the new lease), then a suspension from 12:09 seen at 12:12: the run starts where the 12:06 lease ends, 12:11",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 30,
+        "child": {
+          "type": "pump_suspended",
+          "pump_suspended": {
+            "is_active": true
+          }
+        }
+      },
+      "hysteresis_minutes": 0
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-11-02T12:00:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true
+      }
+    },
+    {
+      "at": "2026-11-02T12:03:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true
+      }
+    },
+    {
+      "at": "2026-11-02T12:06:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true
+      }
+    },
+    {
+      "at": "2026-11-02T12:08:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true
+      }
+    },
+    {
+      "at": "2026-11-02T12:12:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:09:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:40:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:09:00Z"
+        }
+      }
+    },
+    {
+      "at": "2026-11-02T12:41:00Z",
+      "context": {
+        "has_ever_pump_snapshot": true,
+        "active_pump_suspension": {
+          "started_at": "2026-11-02T12:09:00Z"
+        }
+      }
+    }
+  ]
+}

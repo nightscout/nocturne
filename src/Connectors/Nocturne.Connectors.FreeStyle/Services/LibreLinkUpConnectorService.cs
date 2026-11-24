@@ -65,13 +65,10 @@ public class LibreConnectorService(
 
     public override string ServiceName => "LibreLinkUp";
 
-    private async Task<bool> AuthenticateWithConfigAsync(
-        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
+    private async Task ApplyTokenAsync(
+        LibreLinkUpConnectorConfiguration config, string token, CancellationToken cancellationToken)
     {
-        var token = await ValidTokenAsync(config, cancellationToken);
         _accountIdHash = string.Empty;
-        if (token is null)
-            return false;
 
         try
         {
@@ -96,7 +93,6 @@ public class LibreConnectorService(
         await LoadConnectionsAsync(config, cancellationToken);
 
         TrackSuccessfulRequest();
-        return true;
     }
 
     /// <summary>
@@ -105,7 +101,7 @@ public class LibreConnectorService(
     ///     nothing new.
     /// </summary>
     private async Task<List<SensorGlucose>?> FetchSensorGlucoseAsync(
-        LibreLinkUpConnectorConfiguration config, DateTime? since, CancellationToken cancellationToken)
+        LibreLinkUpConnectorConfiguration config, TokenSession session, DateTime? since, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_selectedConnection?.PatientId))
         {
@@ -121,9 +117,12 @@ public class LibreConnectorService(
             async () => await FetchSensorGlucoseCoreAsync(url, since, cancellationToken),
             async () =>
             {
-                TokenProvider.InvalidateToken();
                 _selectedConnection = null;
-                return await AuthenticateWithConfigAsync(config, cancellationToken);
+                if (!await session.ReauthenticateAsync())
+                    return false;
+
+                await ApplyTokenAsync(config, session.Token, cancellationToken);
+                return true;
             },
             maxRetries: config.MaxRetryAttempts,
             operationName: "FetchSensorGlucoseData",
@@ -133,36 +132,44 @@ public class LibreConnectorService(
         return result;
     }
 
+    /// <inheritdoc />
+    protected override bool NeedsSignIn(SyncRequest request, LibreLinkUpConnectorConfiguration config) =>
+        WantsSensorGraph(ResolveActiveTypes(request, config));
+
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, LibreLinkUpConnectorConfiguration config) =>
+        WindowResumesFrom(request, ResumeFamily.Glucose);
+
+    // The sensor arrives with the glucose graph, so a run wanting only device events still fetches it.
+    private static bool WantsSensorGraph(HashSet<SyncDataType> activeTypes) =>
+        activeTypes.Contains(SyncDataType.Glucose) || activeTypes.Contains(SyncDataType.DeviceEvents);
+
     /// <summary>
     ///     Performs sync, publishing SensorGlucose records directly to the V4 data store.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         LibreLinkUpConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
-        // The sensor arrives with the glucose graph, so a run wanting only device events still fetches it.
-        if (!activeTypes.Contains(SyncDataType.Glucose) && !activeTypes.Contains(SyncDataType.DeviceEvents))
+        if (!WantsSensorGraph(activeTypes))
         {
             return result;
         }
 
-        if (TokenProvider.IsTokenExpired || _selectedConnection == null)
+        if (session.Token != _bearerToken || _selectedConnection == null)
         {
-            _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
-            if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-            {
-                _logger.LogError("Failed to authenticate with LibreLinkUp");
-                return AuthenticationFailedResult();
-            }
+            _logger.LogInformation("Token renewed or missing connection, loading the account's connections");
+            await ApplyTokenAsync(config, session.Token, cancellationToken);
         }
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From, cancellationToken);
+            var sensorGlucose = await FetchSensorGlucoseAsync(
+                config, session, WindowStart(request, ResumeFamily.Glucose), cancellationToken);
 
             if (sensorGlucose == null)
             {
@@ -174,7 +181,7 @@ public class LibreConnectorService(
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorGlucose, config, cancellationToken);
 
-            List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor, Clock.GetUtcNow().UtcDateTime) is { } start ? [start] : [];
+            List<DeviceEvent> sensorStarts = LibreSensorSessionMapper.ToSensorStart(_currentSensor) is { } start ? [start] : [];
             await PublishRecordTypeAsync(result, activeTypes,
                 sensorStarts, config, cancellationToken);
         }
@@ -265,10 +272,9 @@ public class LibreConnectorService(
                 existing.TrendArrow = latestMeasurement.TrendArrow;
         }
 
-        var now = Clock.GetUtcNow().UtcDateTime;
         var glucoseRecords = measurements
             .Where(m => m.ValueInMgPerDl > 0)
-            .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m, now))
+            .Select(m => _sensorGlucoseMapper.ConvertMeasurement(m))
             .Where(sg => sg != null)
             .Cast<SensorGlucose>()
             .Where(sg => !since.HasValue || sg.Mills.ToUtcDateTime() > since.Value)

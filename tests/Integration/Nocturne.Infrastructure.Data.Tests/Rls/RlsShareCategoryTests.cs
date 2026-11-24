@@ -331,6 +331,49 @@ public class RlsShareCategoryTests
         (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
     }
 
+    [Fact]
+    public async Task SensorStateReports_AreIsolatedPerTenant()
+    {
+        var tenant = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        await SeedSensorStateReportsAsync(tenant);
+        await SeedSensorStateReportsAsync(other);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+
+        (await CountAsync(conn, "sensor_state_reports", other)).Should().Be(0, "one tenant never reads another's sensor state");
+        (await CountAsync(conn, "sensor_state_reports", tenant)).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("devices.read", false, 1)]
+    [InlineData("devices.read", true, 2)]
+    [InlineData("glucose.read,treatments.read,stepcount.read", true, 0)]
+    public async Task Share_SeesSensorStateReportsOnlyWithDevicesRead_ClampedTo24Hours(
+        string visibleCategories, bool fullHistory, long expected)
+    {
+        var tenant = Guid.NewGuid();
+        await SeedSensorStateReportsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: visibleCategories, fullHistory: fullHistory);
+
+        (await CountAsync(conn, "sensor_state_reports", tenant)).Should().Be(expected);
+    }
+
+    private async Task SeedSensorStateReportsAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await InsertTenantAsync(conn, tenantId);
+        await SetCurrentTenantAsync(conn, tenantId);
+        await ExecuteAsync(conn,
+            "INSERT INTO sensor_state_reports (id, tenant_id, timestamp, state, reported_field, reported_value, data_source, device) VALUES " +
+            "(gen_random_uuid(), @tid, now() - interval '5 minutes', 'WarmingUp', 'cgm.sensorState', 'WARM_UP', 'carelink-connector', 'CareLink MiniMed 780G'), " +
+            "(gen_random_uuid(), @tid, now() - interval '3 days', 'Ok', 'cgm.sensorState', 'NO_ERROR_MESSAGE', 'carelink-connector', 'CareLink MiniMed 780G')",
+            tenantId);
+    }
+
     private async Task SeedProfileActivationsAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();

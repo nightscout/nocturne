@@ -13,7 +13,8 @@ namespace Nocturne.API.Services.Auth;
 /// Priority order:
 /// <list type="number">
 ///   <item>If <c>Platform:AdminSubjectIds</c> is configured, those subjects are granted platform admin status.</item>
-///   <item>Otherwise, if no platform admin exists, the owner of the oldest tenant is granted it.</item>
+///   <item>Otherwise, if no platform admin exists, the oldest owner of the oldest tenant who can sign in is granted it.</item>
+///   <item>Otherwise, if every platform admin is stranded (<see cref="ISubjectRepository.ReplaceStrandedPlatformAdminsAsync"/>) and such an owner exists, the flag moves from them to that owner.</item>
 /// </list>
 /// </para>
 /// <para>
@@ -72,38 +73,54 @@ public class PlatformAdminBootstrapService
             return;
         }
 
-        // No-op if a platform admin already exists
         if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
+        {
+            if (await _subjects.EveryPlatformAdminIsStrandedAsync(cancellationToken)
+                && await FindOldestTenantOwnerWhoCanSignInAsync(cancellationToken) is { } successor)
+                await ReplaceStrandedAdminsAsync(successor, "the owner of the oldest tenant who can sign in", cancellationToken);
             return;
+        }
 
-        // Option 2: grant to the owner of the oldest tenant that has one. Resolved by walking
-        // tenants oldest-first and looking the owner up under each tenant's own pin, because a
-        // single query over every tenant's memberships has no tenant to be pinned to.
-        var firstOwnerSubjectId = await FindOldestTenantOwnerAsync(cancellationToken);
-
+        var firstOwnerSubjectId = await FindOldestTenantOwnerWhoCanSignInAsync(cancellationToken);
         if (firstOwnerSubjectId is null)
         {
-            // Expected on a fresh install, where setup has not created an owner yet.
             _logger.LogInformation(
-                "No platform admin exists and no tenant owner was found, so none was granted");
+                "No platform admin exists and no tenant owner who can sign in was found, so none was granted");
             return;
         }
 
         await _subjects.GrantPlatformAdminAsync([firstOwnerSubjectId.Value], cancellationToken);
 
         _logger.LogInformation(
-            "Granted platform admin to subject {SubjectId}, the owner of the oldest tenant",
+            "Granted platform admin to subject {SubjectId}, the owner of the oldest tenant who can sign in",
             firstOwnerSubjectId);
     }
 
+    private async Task<bool> ReplaceStrandedAdminsAsync(
+        Guid successorId, string successorRole, CancellationToken cancellationToken)
+    {
+        var cleared = await _subjects.ReplaceStrandedPlatformAdminsAsync(successorId, cancellationToken);
+        if (cleared.Count == 0)
+            return false;
+
+        _logger.LogWarning(
+            "Every platform admin ({ClearedSubjectIds}) could not sign in, so the flag was cleared from " +
+            "them and granted to subject {SuccessorId}, {SuccessorRole}",
+            cleared, successorId, successorRole);
+        return true;
+    }
+
     /// <summary>
-    /// The owner of the oldest tenant that has one, or <see langword="null"/> when no tenant does.
+    /// The oldest owner of the oldest tenant that has one who can sign in, or <see langword="null"/>
+    /// when no tenant does. Resolved by walking tenants oldest-first and looking the owners up under
+    /// each tenant's own pin, because a single query over every tenant's memberships has no tenant to
+    /// be pinned to.
     /// </summary>
-    private async Task<Guid?> FindOldestTenantOwnerAsync(CancellationToken cancellationToken)
+    private async Task<Guid?> FindOldestTenantOwnerWhoCanSignInAsync(CancellationToken cancellationToken)
     {
         foreach (var tenantId in await _tenants.ListIdsAsync(activeOnly: false, cancellationToken))
         {
-            var owners = await _members.GetOwnerSubjectIdsAsync(tenantId, cancellationToken);
+            var owners = await _members.GetOwnerSubjectIdsWhoCanSignInAsync(tenantId, cancellationToken);
             if (owners.Count > 0) return owners[0];
         }
 
@@ -116,9 +133,11 @@ public class PlatformAdminBootstrapService
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Declines when the operator pinned the choice through <c>Platform:AdminSubjectIds</c>,
-    /// and when the instance already has a platform admin — an established instance must not
-    /// hand the flag to whoever runs setup.
+    /// Declines when the operator pinned the choice through <c>Platform:AdminSubjectIds</c>.
+    /// When the instance already has a platform admin, the flag moves to this owner only if every
+    /// admin is stranded (<see cref="ISubjectRepository.ReplaceStrandedPlatformAdminsAsync"/>), as
+    /// a setup step abandoned before an earlier restart leaves one: an established instance must
+    /// not hand the flag to whoever runs setup.
     /// </para>
     /// <para>
     /// The caller names the subject, but this method re-derives whether that subject is
@@ -141,9 +160,6 @@ public class PlatformAdminBootstrapService
         if (_options.AdminSubjectIds.Count > 0)
             return false;
 
-        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
-            return false;
-
         // More than one tenant means this is not a fresh install, whatever the caller thinks.
         var tenants = await _tenants.ListNonDemoAsync(2, cancellationToken);
         if (tenants.Count != 1)
@@ -161,6 +177,9 @@ public class PlatformAdminBootstrapService
                 "owner role on the sole tenant", subjectId);
             return false;
         }
+
+        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
+            return await ReplaceStrandedAdminsAsync(subjectId, "the owner completing setup", cancellationToken);
 
         var granted = await _subjects.GrantPlatformAdminAsync([subjectId], cancellationToken) > 0;
 

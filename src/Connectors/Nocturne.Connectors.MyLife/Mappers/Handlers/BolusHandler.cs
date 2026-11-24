@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
@@ -12,6 +14,8 @@ namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 /// </summary>
 internal sealed class BolusHandler : IMyLifeHandler
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<MyLifeConnectorConfiguration>();
+
     public bool CanHandle(MyLifeEvent ev)
     {
         return ev.EventTypeId
@@ -56,9 +60,8 @@ internal sealed class BolusHandler : IMyLifeHandler
             var batch = new DecompositionBatch
             {
                 Id = Guid.CreateVersion7(),
-                Source = "mylife",
+                Source = LegacyIds.Prefix,
                 SourceRecordId = MyLifeMapperHelpers.BuildEventKey(ev),
-                CreatedAt = context.Now,
             };
             correlationId = batch.Id;
             context.DecompositionBatches.Add(batch);
@@ -86,21 +89,21 @@ internal sealed class BolusHandler : IMyLifeHandler
         // Create Bolus record if there's insulin
         if (hasInsulin)
         {
-            var bolus = MyLifeFactory.CreateBolus(ev, context.Now, insulin, bolusType, duration, correlationId);
+            var bolus = MyLifeFactory.CreateBolus(ev, insulin, bolusType, duration, correlationId);
             results.Add(bolus);
         }
 
         // Create CarbIntake record if there are carbs
         if (hasCarbs)
         {
-            var carbIntake = MyLifeFactory.CreateCarbIntake(ev, context.Now, carbs!.Value, correlationId);
+            var carbIntake = MyLifeFactory.CreateCarbIntake(ev, carbs!.Value, correlationId);
             results.Add(carbIntake);
         }
 
         // Create BolusCalculation record if this was a calculated bolus
         if (isCalculated && info.HasValue)
         {
-            var bolusCalc = CreateBolusCalculation(ev, context.Now, info.Value, correlationId);
+            var bolusCalc = CreateBolusCalculation(ev, info.Value, correlationId);
             if (bolusCalc != null)
                 results.Add(bolusCalc);
         }
@@ -110,7 +113,6 @@ internal sealed class BolusHandler : IMyLifeHandler
 
     private static BolusCalculation? CreateBolusCalculation(
         MyLifeEvent ev,
-        DateTime now,
         JsonElement info,
         Guid? correlationId
     )
@@ -145,7 +147,6 @@ internal sealed class BolusHandler : IMyLifeHandler
 
         return MyLifeFactory.CreateBolusCalculation(
             ev,
-            now,
             bgInput,
             carbInput,
             iob,

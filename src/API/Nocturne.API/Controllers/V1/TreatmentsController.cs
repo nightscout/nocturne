@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -15,15 +17,18 @@ using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Treatments controller that provides 1:1 compatibility with Nightscout treatments endpoints.
-/// Implements the /api/v1/treatments/* endpoints from the legacy JavaScript implementation.
+/// Nightscout treatments: treatment records. A client can list, read, create, update and delete treatments.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/treatments/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="IDocumentProcessingService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class TreatmentsController : ControllerBase
 {
     private readonly ITreatmentService _treatmentService;
@@ -81,45 +86,37 @@ public class TreatmentsController : ControllerBase
             count,
             skip,
             findQuery,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        count = LegacyReadLimits.ZeroAsAbsent(count);
+        if (count < 0)
         {
-            count = LegacyReadLimits.ZeroAsAbsent(count);
-            if (count < 0)
-            {
-                _logger.LogDebug("Returning empty array for count={Count}", count);
-                return Ok(Array.Empty<Treatment>());
-            }
-
-            // Validate skip parameter (negative is not valid)
-            if (skip < 0)
-            {
-                skip = 0; // Normalize to 0 for Nightscout compatibility
-            }
-
-            var treatments = await _treatmentService.GetTreatmentsAsync(
-                find: LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow()),
-                count: count is { } requested ? LegacyReadLimits.ClampCount(requested) : null,
-                skip: skip,
-                cancellationToken: cancellationToken
-            );
-            var treatmentArray = treatments.ToArray();
-
-            _logger.LogDebug("Successfully retrieved {Count} treatments", treatmentArray.Length);
-
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(treatmentArray);
+            _logger.LogDebug("Returning empty array for count={Count}", count);
+            return Ok(Array.Empty<Treatment>());
         }
-        catch (Exception ex)
+
+        // Validate skip parameter (negative is not valid)
+        if (skip < 0)
         {
-            _logger.LogError(ex, "Error retrieving treatments");
-            return StatusCode(500, "Internal server error while retrieving treatments");
+            skip = 0; // Normalize to 0 for Nightscout compatibility
         }
+
+        var treatments = await _treatmentService.GetTreatmentsAsync(
+            find: LegacyFindDateWindow.Apply(findQuery, _timeProvider.GetUtcNow()),
+            count: count is { } requested ? LegacyReadLimits.ClampCount(requested) : null,
+            skip: skip,
+            cancellationToken: cancellationToken
+        );
+        var treatmentArray = treatments.ToArray();
+
+        _logger.LogDebug("Successfully retrieved {Count} treatments", treatmentArray.Length);
+
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
+
+        return Ok(treatmentArray);
     }
 
     /// <summary>
@@ -143,38 +140,30 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Treatment by ID endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid treatment ID: {Id}", id);
-                return BadRequest("Treatment ID cannot be null or empty");
-            }
-
-            var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
-
-            if (treatment == null)
-            {
-                _logger.LogDebug("Treatment not found with ID: {Id}", id);
-                return NotFound($"Treatment with ID '{id}' not found");
-            }
-
-            _logger.LogDebug("Successfully retrieved treatment with ID: {Id}", id);
-
-            // Set response headers for caching
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
-
-            return Ok(treatment);
+            _logger.LogWarning("Invalid treatment ID: {Id}", id);
+            return BadRequest("Treatment ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
+
+        if (treatment == null)
         {
-            _logger.LogError(ex, "Error retrieving treatment with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while retrieving treatment {id}");
+            _logger.LogDebug("Treatment not found with ID: {Id}", id);
+            return NotFound($"Treatment with ID '{id}' not found");
         }
+
+        _logger.LogDebug("Successfully retrieved treatment with ID: {Id}", id);
+
+        // Set response headers for caching
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R", CultureInfo.InvariantCulture);
+
+        return Ok(treatment);
     }
 
     /// <summary>
@@ -195,11 +184,6 @@ public class TreatmentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Create treatments endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         List<Treatment>? treatmentsToCreate;
         try
         {
@@ -238,11 +222,6 @@ public class TreatmentsController : ControllerBase
         {
             // cgm-remote-monitor answers a failed insert with sendJSONStatus(res, 500, 'Mongo Error', err).
             return StatusCode(500, new { status = 500, message = "Mongo Error", description = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating treatments");
-            return StatusCode(500, "Internal server error while creating treatments");
         }
     }
 
@@ -306,31 +285,23 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Update treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid treatment ID: {Id}", id);
-                return BadRequest("Treatment ID cannot be null or empty");
-            }
-
-            if (treatment == null)
-            {
-                _logger.LogWarning("Treatment data is null for update");
-                return BadRequest("Treatment data cannot be null");
-            }
-
-            treatment.Id = id;
-            return await SaveAsync(treatment, cancellationToken);
+            _logger.LogWarning("Invalid treatment ID: {Id}", id);
+            return BadRequest("Treatment ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        if (treatment == null)
         {
-            _logger.LogError(ex, "Error updating treatment with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while updating treatment {id}");
+            _logger.LogWarning("Treatment data is null for update");
+            return BadRequest("Treatment data cannot be null");
         }
+
+        treatment.Id = id;
+        return await SaveAsync(treatment, cancellationToken);
     }
 
     /// <summary>
@@ -342,6 +313,7 @@ public class TreatmentsController : ControllerBase
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
+    [ScopeDecidedBy(typeof(LegacyDeleteStatus), nameof(LegacyDeleteStatus.AnyId))]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
@@ -355,35 +327,27 @@ public class TreatmentsController : ControllerBase
         _logger.LogDebug(
             "Delete treatment endpoint requested for ID: {Id} from {RemoteIpAddress}",
             id,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        if (string.IsNullOrWhiteSpace(id))
         {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                _logger.LogWarning("Invalid treatment ID: {Id}", id);
-                return BadRequest("Treatment ID cannot be null or empty");
-            }
-
-            if (id == LegacyDeleteStatus.AnyId)
-            {
-                return HttpContext?.HasScope(Scope.FullAccess) == true
-                    ? await BulkDeleteTreatments(cancellationToken)
-                    : Forbid();
-            }
-
-            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
-
-            _logger.LogDebug("Deleted treatment with ID {Id}: {Deleted}", id, deleted);
-
-            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
+            _logger.LogWarning("Invalid treatment ID: {Id}", id);
+            return BadRequest("Treatment ID cannot be null or empty");
         }
-        catch (Exception ex)
+
+        if (id == LegacyDeleteStatus.AnyId)
         {
-            _logger.LogError(ex, "Error deleting treatment with ID: {Id}", id);
-            return StatusCode(500, $"Internal server error while deleting treatment {id}");
+            return HttpContext?.HasScope(Scope.FullAccess) == true
+                ? await BulkDeleteTreatments(cancellationToken)
+                : Forbid();
         }
+
+        var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
+
+        _logger.LogDebug("Deleted treatment with ID {Id}: {Deleted}", id, deleted);
+
+        return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
     }
 
     /// <summary>
@@ -402,37 +366,24 @@ public class TreatmentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Bulk delete treatments endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+        var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+
+        if (!LegacyFindQueryString.HasConditions(find))
+        {
+            _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
+            return BadRequest(
+                "Find query parameter is required for bulk delete to prevent accidental data loss"
+            );
+        }
+
+        var deletedCount = await _treatmentService.DeleteTreatmentsAsync(
+            LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()),
+            cancellationToken
         );
 
-        try
-        {
-            var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+        _logger.LogDebug("Successfully deleted {Count} treatments", deletedCount);
 
-            if (!LegacyFindQueryString.HasConditions(find))
-            {
-                _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
-                return BadRequest(
-                    "Find query parameter is required for bulk delete to prevent accidental data loss"
-                );
-            }
-
-            var deletedCount = await _treatmentService.DeleteTreatmentsAsync(
-                LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow()),
-                cancellationToken
-            );
-
-            _logger.LogDebug("Successfully deleted {Count} treatments", deletedCount);
-
-            return Ok(LegacyDeleteStatus.For(deletedCount));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error bulk deleting treatments");
-            return StatusCode(500, "Internal server error while bulk deleting treatments");
-        }
+        return Ok(LegacyDeleteStatus.For(deletedCount));
     }
 
     /// <summary>
@@ -481,7 +432,7 @@ public class TreatmentsController : ControllerBase
         }
 
         if (string.IsNullOrWhiteSpace(prepared.Id)
-            && await _treatmentService.FindSameEventIdAsync(prepared, cancellationToken) is { } sameEventId
+            && await SameEventIdAsync(prepared, cancellationToken) is { } sameEventId
             && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, prepared, cancellationToken) is { } replaced)
             return Ok(replaced);
 
@@ -538,7 +489,7 @@ public class TreatmentsController : ControllerBase
 
             await FlushAsync();
 
-            if (await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken) is { } sameEventId
+            if (await SameEventIdAsync(treatment, cancellationToken) is { } sameEventId
                 && await _treatmentService.UpdateV1TreatmentAsync(sameEventId, treatment, cancellationToken) is { } replaced)
             {
                 results.Add(replaced);
@@ -552,6 +503,18 @@ public class TreatmentsController : ControllerBase
         await FlushAsync();
         return results.ToArray();
     }
+
+    /// <summary>
+    /// The stored treatment a document without an identity replaces: the one at its <c>created_at</c>
+    /// with its <c>eventType</c>, which Nightscout's upsert matches.
+    /// </summary>
+    private async Task<string?> SameEventIdAsync(Treatment treatment, CancellationToken cancellationToken) =>
+        // NIGHTSCOUT-COMPAT: Nightscout replaces that document with one sent with isValid: false,
+        // which deletes it. A time and an event type do not name a treatment, and a dose deleted by
+        // another record's upload leaves IOB and COB, so such a document replaces nothing.
+        treatment.IsValid == false
+            ? null
+            : await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken);
 
     private static Treatment? ReadTreatment(JsonElement document)
     {
@@ -599,10 +562,10 @@ public class TreatmentsController : ControllerBase
         {
             treatment.EventType = (treatment.Insulin.HasValue, treatment.Carbs.HasValue) switch
             {
-                (true, true) => "Meal Bolus",
-                (true, false) => "Correction Bolus",
-                (false, true) => "Carb Correction",
-                _ => "Note",
+                (true, true) => TreatmentTypes.MealBolus,
+                (true, false) => TreatmentTypes.CorrectionBolus,
+                (false, true) => TreatmentTypes.CarbCorrection,
+                _ => TreatmentTypes.Note,
             };
         }
 

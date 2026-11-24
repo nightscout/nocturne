@@ -14,17 +14,29 @@ import { z } from "zod";
 import { query, command, form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 
-import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
+import type { OidcProviderInfo } from "@nocturne/api-client";
 import { clearAuthCookies } from "#lib/config/auth-cookies.js";
 import { errorStatus } from "#lib/forms/submit-error.js";
 import { rateLimitedError } from "#lib/forms/submit-messages.svelte.js";
 import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
+import {
+  classifyAuthenticatorError,
+  type AuthenticatorFailure,
+} from "./authenticator-error";
 
 const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, () => string> = {
   // The API deliberately doesn't say which of the two was wrong.
   rejected: () => "That username and recovery code don't match.",
   "rate-limited": rateLimitedError,
+};
+
+const AUTHENTICATOR_FAILURE_MESSAGES: Record<AuthenticatorFailure, () => string> = {
+  "not-a-member": () =>
+    "Your account isn't a member here. Go back to sign in, or request membership.",
+  "rate-limited": rateLimitedError,
+  rejected: () =>
+    "The code was not accepted. Type the current code from your app. If this does not work, go back and sign in again.",
 };
 
 // ============================================================================
@@ -101,31 +113,31 @@ export const getOidcProviders = query(async () => {
 
 /**
  * Get current authentication state
- * Used to check if user is already logged in
+ * Used to check if user is already logged in. `unreadable` is set when the API could not be asked,
+ * so "not signed in" is then not an answer.
  */
 export const getAuthState = query(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return { isAuthenticated: false, user: null };
+    return { isAuthenticated: false, unreadable: true, user: null };
   }
 
   return {
     isAuthenticated: event.locals.isAuthenticated ?? false,
+    unreadable: event.locals.sessionUnreadable === true,
     user: event.locals.user ?? null,
   };
 });
 
 /**
  * Get current session info
- * Used by client-side store to check authentication state
+ * Used by client-side store to check authentication state. `unavailable` is set when the API could
+ * not answer, so an error is never read as "signed out".
  */
 export const getSessionInfo = query(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return {
-      isAuthenticated: false,
-      user: null,
-    };
+    return { isAuthenticated: false, unavailable: true, user: null };
   }
 
   const api = getApiClient();
@@ -134,6 +146,7 @@ export const getSessionInfo = query(async () => {
     const session = await api.oidc.getSession();
     return {
       isAuthenticated: session?.isAuthenticated ?? false,
+      unavailable: false,
       subjectId: session?.subjectId,
       name: session?.name,
       email: session?.email,
@@ -144,10 +157,7 @@ export const getSessionInfo = query(async () => {
     };
   } catch (error) {
     console.error("Failed to get session:", error);
-    return {
-      isAuthenticated: false,
-      user: null,
-    };
+    return { isAuthenticated: false, unavailable: true, user: null };
   }
 });
 
@@ -175,12 +185,14 @@ export const getProvidersInfo = query(async () => {
 });
 
 /**
- * Refresh the current session tokens
+ * Refresh the current session tokens. `refused` is true only when the API refused the refresh token
+ * (401); any other failure (an outage, a timeout) leaves it false. A refusal alone does not say the
+ * session is gone: another tab can have rotated the token first.
  */
 export const refreshSession = command(async () => {
   const event = getRequestEvent();
   if (!event) {
-    return { success: false };
+    return { success: false as const, refused: false };
   }
 
   const api = getApiClient();
@@ -196,12 +208,12 @@ export const refreshSession = command(async () => {
     // being sent on subsequent requests.
 
     return {
-      success: true,
+      success: true as const,
       expiresAt: result.expiresAt,
     };
   } catch (error) {
     console.error("Failed to refresh session:", error);
-    return { success: false };
+    return { success: false as const, refused: errorStatus(error) === 401 };
   }
 });
 
@@ -237,15 +249,10 @@ export const logoutSession = command(z.string().optional(), async (_providerId) 
 // Form Functions
 // ============================================================================
 
-/**
- * Recovery-code sign-in fields. `returnUrl` is a hidden field so a submission
- * without JavaScript lands where the user started; it's reduced to a same-origin
- * path before being used.
- */
+/** Recovery-code sign-in fields. */
 const recoveryCodeSchema = z.object({
   username: z.string().trim().min(1, "Enter your username"),
   code: z.string().trim().min(1, "Enter your code"),
-  returnUrl: z.string().optional(),
 });
 
 /**
@@ -259,6 +266,7 @@ const authenticatorSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
+  trustDevice: z.boolean().optional(),
   returnUrl: z.string().optional(),
 });
 
@@ -269,10 +277,9 @@ const authenticatorSchema = z.object({
  * browser posts the form, the handler redirects on success, and a rejected code
  * comes back as a field-level issue on the re-rendered page.
  *
- * A spent code buys a recovery session, which authorizes one passkey enrolment and no
- * session, so the destination is the enrolment page and not the page the visitor asked
- * for — that one needs a session, which their new passkey gets them. `returnUrl` rides
- * along so it still decides where they land at the end.
+ * A spent code buys a recovery session, which authorizes one enrolment and no session, so
+ * the destination is the enrolment page and not the page the visitor asked for: that one
+ * needs a session, which the new sign-in method gets them.
  */
 export const signInWithRecoveryCode = form(
   recoveryCodeSchema,
@@ -297,11 +304,7 @@ export const signInWithRecoveryCode = form(
 
     if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]()));
 
-    const destination = new URLSearchParams({
-      username: data.username,
-      returnUrl: safeReturnUrl(data.returnUrl),
-    });
-    redirect(303, `/auth/recovery/passkey?${destination}`);
+    redirect(303, `/auth/recovery/passkey?${new URLSearchParams({ username: data.username })}`);
   }
 );
 
@@ -315,38 +318,23 @@ export const signInWithAuthenticator = form(
   async (data, issue) => {
     const api = getApiClient();
 
-    let verified = false;
-    let notAMember = false;
+    let failure: AuthenticatorFailure | null = null;
     try {
       const result = await api.totp.login({
         stepUpToken: data.stepUpToken,
         code: data.code,
+        trustDevice: data.trustDevice === true,
       });
-      verified = result?.success === true;
+      if (result?.success !== true) failure = "rejected";
     } catch (err) {
-      // 403: both factors passed, but this address does not admit the account.
-      notAMember = errorStatus(err) === 403;
+      failure = classifyAuthenticatorError(err);
       console.error(
         "Authenticator sign-in failed with status:",
         errorStatus(err) ?? "none"
       );
     }
 
-    if (notAMember) {
-      invalid(
-        issue.code(
-          "Your account isn't a member here. Go back to sign in, or request membership."
-        )
-      );
-    }
-
-    if (!verified) {
-      invalid(
-        issue.code(
-          "That code wasn't accepted. Each code works once and expires after 30 seconds — try the current one."
-        )
-      );
-    }
+    if (failure) invalid(issue.code(AUTHENTICATOR_FAILURE_MESSAGES[failure]()));
 
     redirect(303, safeReturnUrl(data.returnUrl));
   }

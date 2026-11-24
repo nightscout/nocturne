@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TitleFaviconService } from "./title-favicon-service.svelte";
 import type { TitleFaviconSettings } from "#lib/stores/serverSettings.js";
 import type { AlarmVisualSettings } from "#lib/types/alarm-profile.js";
-import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { GlucoseStatus } from "@nocturne/api-client";
 import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
 import { renderGlucoseIcon } from "@nocturne/ui/glucose-icon";
 

@@ -2,14 +2,14 @@ using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 using Nocturne.API.Services.Glucose;
@@ -28,6 +28,7 @@ public class WidgetSummaryService : IWidgetSummaryService
 {
     private readonly IEntryService _entryService;
     private readonly IIobCobReader _iobCobReader;
+    private readonly InsulinDeliveryReader _insulinDelivery;
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
@@ -42,9 +43,15 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// </summary>
     private const long CgmIntervalMills = 5 * 60 * 1000;
 
+    /// <summary>
+    /// How far back a temp basal still marks the tenant as a pump user.
+    /// </summary>
+    private static readonly TimeSpan PumpLookback = TimeSpan.FromHours(24);
+
     public WidgetSummaryService(
         IEntryService entryService,
         IIobCobReader iobCobReader,
+        InsulinDeliveryReader insulinDelivery,
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
@@ -58,6 +65,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         _time = timeProvider;
         _entryService = entryService;
         _iobCobReader = iobCobReader;
+        _insulinDelivery = insulinDelivery;
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
@@ -93,8 +101,10 @@ public class WidgetSummaryService : IWidgetSummaryService
         // Calculate IOB and COB using v4 types
         await CalculateIobCobAsync(response, cancellationToken);
 
+        await ReadBasalInjectionAsync(response, currentTime, cancellationToken);
+
         // Process tracker statuses
-        ProcessTrackers(response, trackerInstances);
+        response.Trackers = TrackerStatusCondenser.Condense(trackerInstances, _time.GetUtcNow().UtcDateTime);
 
         // Get alarm state
         await ProcessAlarmStateAsync(response, cancellationToken);
@@ -201,171 +211,61 @@ public class WidgetSummaryService : IWidgetSummaryService
             var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
-            response.Iob = Math.Round(reading.Iob.Iob * 100) / 100;
-            response.Cob = reading.Cob is null ? 0 : Math.Round(reading.Cob.Cob);
+            response.IobKnown = reading.HasIob;
+            response.Iob = reading.HasIob ? OnBoardRounding.Iob(reading.Iob.Iob) : 0;
+            response.CobKnown = reading.HasCob;
+            response.Cob = reading.HasCob ? OnBoardRounding.Cob(reading.Cob!.Cob) : 0;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error calculating IOB/COB for widget summary");
             response.Iob = 0;
+            response.IobKnown = false;
             response.Cob = 0;
+            response.CobKnown = false;
         }
     }
 
     /// <summary>
-    /// Process active tracker instances into widget format
+    /// Sets <see cref="V4SummaryResponse.BasalInjection"/> for a tenant with basal injections and no
+    /// temp basals in <see cref="PumpLookback"/>, the test
+    /// <c>StatisticsController.AddScheduledBasalFallbackAsync</c> applies. The rate is the piece of
+    /// <see cref="StatisticsService.BasalInjectionPieces"/> that covers now.
     /// </summary>
-    private void ProcessTrackers(
+    private async Task ReadBasalInjectionAsync(
         V4SummaryResponse response,
-        TrackerInstanceEntity[] trackerInstances
+        long now,
+        CancellationToken cancellationToken
     )
     {
-        var trackerStatuses = new List<V4TrackerStatus>();
-
-        foreach (var instance in trackerInstances)
-        {
-            // Skip if definition is not loaded or dashboard visibility is Off
-            if (instance.Definition == null)
-            {
-                continue;
-            }
-
-            var definition = instance.Definition;
-
-            // Calculate current urgency based on thresholds
-            var urgency = CalculateTrackerUrgency(instance, definition);
-
-            // Check if tracker should be shown based on DashboardVisibility
-            if (!ShouldShowTracker(definition.DashboardVisibility, urgency))
-            {
-                continue;
-            }
-
-            var status = new V4TrackerStatus
-            {
-                Id = instance.Id,
-                DefinitionId = definition.Id,
-                Name = definition.Name,
-                Icon = definition.Icon,
-                Category = definition.Category,
-                Mode = definition.Mode,
-                Urgency = urgency,
-                LifespanHours = definition.LifespanHours,
-            };
-
-            // Set mode-specific fields
-            if (definition.Mode == TrackerMode.Duration)
-            {
-                status.AgeHours = Math.Round(instance.AgeHours * 10) / 10; // Round to 1 decimal
-
-                if (definition.LifespanHours.HasValue && definition.LifespanHours.Value > 0)
-                {
-                    status.PercentElapsed = Math.Round(
-                        (instance.AgeHours / definition.LifespanHours.Value) * 100
-                    );
-                }
-            }
-            else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
-            {
-                var hoursUntil = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
-                status.HoursUntilEvent = Math.Round(hoursUntil * 10) / 10;
-            }
-
-            trackerStatuses.Add(status);
-        }
-
-        response.Trackers = trackerStatuses;
-    }
-
-    /// <summary>
-    /// Calculate the current urgency level for a tracker instance based on notification thresholds
-    /// </summary>
-    private NotificationUrgency CalculateTrackerUrgency(
-        TrackerInstanceEntity instance,
-        TrackerDefinitionEntity definition
-    )
-    {
-        var thresholds = definition.NotificationThresholds
-            .OrderByDescending(t => t.Urgency) // Higher urgency first
+        var nowUtc = now.ToUtcDateTime();
+        var given = (await _insulinDelivery.ReadBasalInjectionsAsync(nowUtc, nowUtc, cancellationToken))
+            .Where(bi => bi.Units > 0 && bi.Mills <= now)
             .ToList();
-
-        if (!thresholds.Any())
+        if (given.Count == 0)
         {
-            return NotificationUrgency.Info;
+            return;
         }
 
-        // For Duration mode, check against hours since start
-        if (definition.Mode == TrackerMode.Duration)
+        var pumpFrom = nowUtc - PumpLookback;
+        var temps = await _insulinDelivery.ReadTempBasalsAsync(pumpFrom, nowUtc, cancellationToken);
+        if (StatisticsService.DeliveredWithin(temps, pumpFrom, now).Count > 0)
         {
-            var ageHours = instance.AgeHours;
-            var lifespanHours = definition.LifespanHours ?? 0;
-
-            foreach (var threshold in thresholds)
-            {
-                double effectiveThresholdHours;
-
-                if (threshold.Hours < 0)
-                {
-                    // Relative threshold: negative hours means "X hours before end of lifespan"
-                    effectiveThresholdHours = lifespanHours + threshold.Hours;
-                }
-                else
-                {
-                    // Absolute threshold: positive hours means "X hours after start"
-                    effectiveThresholdHours = threshold.Hours;
-                }
-
-                if (ageHours >= effectiveThresholdHours)
-                {
-                    return threshold.Urgency;
-                }
-            }
-        }
-        // For Event mode, check against hours until scheduled time
-        else if (definition.Mode == TrackerMode.Event && instance.ScheduledAt.HasValue)
-        {
-            var hoursUntilEvent = (instance.ScheduledAt.Value - _time.GetUtcNow().UtcDateTime).TotalHours;
-
-            foreach (var threshold in thresholds)
-            {
-                // For events, negative hours = before event, positive hours = after event
-                // Threshold hours represent: negative = X hours before event, positive = X hours after event
-                if (threshold.Hours < 0)
-                {
-                    // Threshold triggers when we're within X hours of the event (approaching)
-                    if (hoursUntilEvent <= Math.Abs(threshold.Hours) && hoursUntilEvent >= 0)
-                    {
-                        return threshold.Urgency;
-                    }
-                }
-                else
-                {
-                    // Threshold triggers when we're X hours past the event (overdue)
-                    if (hoursUntilEvent < 0 && Math.Abs(hoursUntilEvent) >= threshold.Hours)
-                    {
-                        return threshold.Urgency;
-                    }
-                }
-            }
+            return;
         }
 
-        return NotificationUrgency.Info;
-    }
+        var lastDose = given.GroupBy(bi => bi.Mills).MaxBy(g => g.Key)!.ToList();
+        var covering = StatisticsService.BasalInjectionPieces(given)
+            .FirstOrDefault(p => p.StartMills <= now && p.EndMills > now);
 
-    /// <summary>
-    /// Determine if a tracker should be shown based on dashboard visibility settings
-    /// </summary>
-    private static bool ShouldShowTracker(DashboardVisibility visibility, NotificationUrgency currentUrgency)
-    {
-        return visibility switch
+        response.BasalInjection = new V4BasalInjectionStatus
         {
-            DashboardVisibility.Off => false,
-            DashboardVisibility.Always => true,
-            DashboardVisibility.Info => currentUrgency >= NotificationUrgency.Info,
-            DashboardVisibility.Warn => currentUrgency >= NotificationUrgency.Warn,
-            DashboardVisibility.Hazard => currentUrgency >= NotificationUrgency.Hazard,
-            DashboardVisibility.Urgent => currentUrgency >= NotificationUrgency.Urgent,
-            _ => true,
+            Units = ScaledRounding.Round(lastDose.Sum(bi => bi.Units), 2),
+            Mills = lastDose[0].Mills,
+            InsulinName = lastDose
+                .Select(bi => bi.InsulinContext?.InsulinName)
+                .FirstOrDefault(name => !string.IsNullOrEmpty(name)),
+            EstimatedRate = covering?.Rate is double rate ? ScaledRounding.Round(rate, 2) : null,
         };
     }
 

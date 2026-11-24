@@ -14,17 +14,19 @@ using Nocturne.API.Extensions;
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Platform-admin controller for reviewing and actioning user access requests.
+/// Access requests from users who want to join the instance. List pending requests, then approve or
+/// deny them. Denying a request deletes the account that made it.
 /// </summary>
 /// <remarks>
 /// Access requests are created when an unauthenticated user completes the
 /// <c>POST /api/auth/passkey/access-request/complete</c> ceremony. Admins with the
 /// <c>platform_admin</c> role can list pending requests, approve them (activating the subject
-/// and adding them as a tenant member), or reject them (deactivating the subject record).
+/// and adding them as a tenant member), or reject them (deleting the subject record).
 /// </remarks>
-/// <seealso cref="ISubjectService"/>
+/// <seealso cref="ISubjectDeletion"/>
 /// <seealso cref="IAccessRequestService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Access Requests")]
 [Tags("PlatformAdmin")]
 [Route("api/v4/admin/access-requests")]
 [Authorize(Roles = "platform_admin")]
@@ -32,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 public class AccessRequestController(
     ITenantMembershipRepository members,
     ISubjectRepository subjects,
-    ISubjectService subjectService,
+    ISubjectDeletion subjectDeletion,
     IAccessRequestService accessRequests,
     ITenantAccessor tenantAccessor,
     IInAppNotificationService notificationService,
@@ -65,6 +67,9 @@ public class AccessRequestController(
         [FromBody] ApproveAccessRequestRequest request,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+
         var result = await accessRequests.ApproveAsync(
             subjectId,
             tenantAccessor.Context?.TenantId,
@@ -72,6 +77,7 @@ public class AccessRequestController(
             request.DirectPermissions,
             request.LimitTo24Hours,
             HttpContext.GetGrantedScopes(),
+            HttpContext.GetSubjectId(),
             ct);
 
         switch (result.Outcome)
@@ -95,7 +101,10 @@ public class AccessRequestController(
         }
     }
 
-    /// <inheritdoc cref="ISubjectService.DeleteSubjectAsync"/>
+    /// <summary>
+    /// Denies a pending access request by deleting its subject, with what they made
+    /// (<see cref="ISubjectDeletion"/>).
+    /// </summary>
     [HttpPost("{subjectId:guid}/deny")]
     [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -105,16 +114,19 @@ public class AccessRequestController(
     {
         var subject = await subjects.GetAsync(subjectId, ct);
 
-        if (subject is not { ApprovalStatus: "Pending" })
+        if (subject is not { ApprovalStatus: nameof(ApprovalStatus.Pending) })
             return NotFound();
 
-        if (await subjectService.DeleteSubjectAsync(subjectId) is SubjectChange.LastOwnerOf lastOwnerOf)
+        var refusal = (await subjectDeletion.DeleteAsync(subjectId, evenLastOwner: false, ct)).Change switch
         {
-            return Problem(
-                detail: $"The subject is the last owner of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
-                statusCode: StatusCodes.Status409Conflict,
-                title: "Conflict");
-        }
+            SubjectChange.LastOwnerOf lastOwnerOf =>
+                $"The subject is the only owner, or the last owner who can sign in, of: {string.Join(", ", lastOwnerOf.OwnedTenants.Select(t => t.Slug))}.",
+            SubjectChange.LastManagerOf lastManagerOf =>
+                $"The subject is the only manager, or the last manager who can sign in, of the team: {string.Join(", ", lastManagerOf.ManagedTeams.Select(t => t.Name))}.",
+            _ => null,
+        };
+        if (refusal is not null)
+            return Problem(detail: refusal, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
 
         var denyTenantContext = tenantAccessor.Context;
         if (denyTenantContext != null)

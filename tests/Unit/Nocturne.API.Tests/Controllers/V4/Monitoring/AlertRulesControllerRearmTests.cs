@@ -19,8 +19,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 
 /// <summary>
-/// A rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) is dropped by an edit of its
-/// conditions or enablement, and kept by any other edit.
+/// A rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) and its recorded next change
+/// (§5.3) are dropped by an edit of its conditions or enablement, and kept by any other edit.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertRulesControllerRearmTests
@@ -31,8 +31,10 @@ public class AlertRulesControllerRearmTests
     private const string Body = """{"direction":"below","value":70}""";
     private const string Resolve = """{"type":"threshold","threshold":{"direction":"above","value":80}}""";
 
+    private static readonly DateTime NextChange = new(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc);
+
     private static async Task<(AlertRulesController Controller, NocturneDbContext Db)> CreateAsync(
-        AlertRuleEvaluationGate? gate = null)
+        AlertRuleEvaluationGate? gate = null, int? glucoseFreshnessMinutes = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -48,6 +50,7 @@ public class AlertRulesControllerRearmTests
             IsEnabled = true,
             AutoResolveEnabled = true,
             AutoResolveParams = Resolve,
+            GlucoseFreshnessMinutes = glucoseFreshnessMinutes,
         });
         db.AlertTrackerState.Add(new AlertTrackerStateEntity
         {
@@ -55,6 +58,8 @@ public class AlertRulesControllerRearmTests
             TenantId = Tenant,
             State = "idle",
             AwaitingRearm = true,
+            NextChangeAt = NextChange,
+            NextChangeKnown = true,
         });
         await db.SaveChangesAsync();
 
@@ -65,7 +70,8 @@ public class AlertRulesControllerRearmTests
             .Returns([]);
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(db)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
             MockTenantAccessor.Create(db.TenantId).Object,
@@ -74,9 +80,9 @@ public class AlertRulesControllerRearmTests
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Rearms.Unannounced(gate),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
         return (controller, db);
     }
 
@@ -99,6 +105,8 @@ public class AlertRulesControllerRearmTests
         { "auto-resolve tree", r => { r.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>("""{"type":"threshold","threshold":{"direction":"above","value":90}}"""); return r; } },
         { "auto-resolve off", r => { r.AutoResolveEnabled = false; return r; } },
         { "disabled", r => { r.IsEnabled = false; return r; } },
+        { "on_unknown", r => { r.OnUnknown = AlertRuleOnUnknown.Met; return r; } },
+        { "glucose freshness", r => { r.GlucoseFreshnessMinutes = 30; return r; } },
     };
 
     [Theory]
@@ -113,6 +121,49 @@ public class AlertRulesControllerRearmTests
         (await AwaitingRearm(db)).Should().BeFalse(edit);
     }
 
+    [Theory]
+    [MemberData(nameof(ConditionEdits))]
+    public async Task An_edit_of_the_conditions_or_enablement_drops_the_next_change(
+        string edit, Func<UpdateAlertRuleRequest, UpdateAlertRuleRequest> change)
+    {
+        var (controller, db) = await CreateAsync();
+
+        await controller.UpdateRule(RuleId, change(Unchanged()), CancellationToken.None);
+
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { NextChangeKnown = false, NextChangeAt = (DateTime?)null }, edit);
+    }
+
+    /// <summary>
+    /// A client that does not know the bound (the rule editor) sends none: the stored bound, the
+    /// hold and the recorded next change all stand.
+    /// </summary>
+    [Fact]
+    public async Task An_update_that_omits_the_glucose_freshness_bound_keeps_it_and_the_hold()
+    {
+        var (controller, db) = await CreateAsync(glucoseFreshnessMinutes: 30);
+
+        await controller.UpdateRule(RuleId, Unchanged(), CancellationToken.None);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).GlucoseFreshnessMinutes.Should().Be(30);
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { AwaitingRearm = true, NextChangeKnown = true, NextChangeAt = (DateTime?)NextChange });
+    }
+
+    [Fact]
+    public async Task Clearing_the_glucose_freshness_bound_removes_it_and_rearms_the_rule()
+    {
+        var (controller, db) = await CreateAsync(glucoseFreshnessMinutes: 30);
+        var request = Unchanged();
+        request.ClearGlucoseFreshness = true;
+
+        await controller.UpdateRule(RuleId, request, CancellationToken.None);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).GlucoseFreshnessMinutes.Should().BeNull();
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { AwaitingRearm = false, NextChangeKnown = false, NextChangeAt = (DateTime?)null });
+    }
+
     [Fact]
     public async Task Another_edit_keeps_the_hold()
     {
@@ -121,6 +172,8 @@ public class AlertRulesControllerRearmTests
         await controller.UpdateRule(RuleId, Unchanged(name: "Low glucose"), CancellationToken.None);
 
         (await AwaitingRearm(db)).Should().BeTrue();
+        var state = await db.AlertTrackerState.AsNoTracking().SingleAsync(s => s.AlertRuleId == RuleId);
+        state.Should().BeEquivalentTo(new { NextChangeKnown = true, NextChangeAt = (DateTime?)NextChange });
     }
 
     [Fact]

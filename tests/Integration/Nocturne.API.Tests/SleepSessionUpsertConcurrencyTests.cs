@@ -147,9 +147,9 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             var firstResult = await held.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             {
                 await using var transaction = await held.Database.BeginTransactionAsync();
-                var result = await first(Repository(new Pinned(held)));
+                var result = await first(Repository(new SuppliedContextFactory(() => held)));
 
-                secondTask = second(Repository(new Pinned(racer)));
+                secondTask = second(Repository(new SuppliedContextFactory(() => racer)));
                 await WaitUntilBlockedOnALockAsync(racerPid, secondTask);
 
                 await transaction.CommitAsync();
@@ -222,13 +222,4 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
         SleepScore = score,
     };
 
-    /// <summary>
-    /// Hands the repository one of the race's contexts on every call. Those come from
-    /// <see cref="TestNocturneDbContextFactory.CreateUndisposed"/>, so the repository's
-    /// <c>await using</c> leaves the held transaction and the racer's connection open.
-    /// </summary>
-    private sealed class Pinned(NocturneDbContext context) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(context);
-    }
 }

@@ -11,15 +11,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -57,19 +55,22 @@ public class TrackersControllerStartTests
 
     private TrackersController CreateController(string subjectId = OwnerId)
     {
+        var time = new FakeTimeProvider(Now);
         var controller = new TrackersController(
-            _repository.Object,
-            _broadcast.Object,
-            Mock.Of<ITrackerAlertRuleSyncService>(),
-            Mock.Of<IAlertRepository>(),
-            Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAlertAcknowledgementService>(),
-            new TrackerDeviceEventWriter(
-                _deviceEvents.Object,
-                Mock.Of<IPatientDeviceStamper>(),
-                NullLogger<TrackerDeviceEventWriter>.Instance),
-            Mock.Of<ILogger<TrackersController>>(),
-            new FakeTimeProvider(Now)
+            new TrackerService(
+                _repository.Object,
+                _broadcast.Object,
+                Mock.Of<ITrackerAlertRuleSyncService>(),
+                Mock.Of<IAlertRepository>(),
+                Mock.Of<ITenantAccessor>(),
+                Mock.Of<IAlertAcknowledgementService>(),
+                new TrackerDeviceEventWriter(
+                    _deviceEvents.Object,
+                    Mock.Of<IPatientDeviceStamper>(),
+                    NullLogger<TrackerDeviceEventWriter>.Instance),
+                time,
+                Mock.Of<ILogger<TrackerService>>()),
+            time
         );
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -81,43 +82,60 @@ public class TrackersControllerStartTests
         return controller;
     }
 
-    private TrackerDefinitionEntity ArrangeDefinition(TrackerMode mode, params TrackerInstanceEntity[] running)
+    /// <summary>A run to arrange as running, before its definition is known.</summary>
+    private sealed record Run(Guid Id, DateTime StartedAt, string CreatedBy = OwnerId);
+
+    private static Run Running(DateTime startedAt, string createdBy = OwnerId) => new(Guid.NewGuid(), startedAt, createdBy);
+
+    private static TrackerInstance Instance(TrackerDefinition definition, Run run) => new()
     {
-        var definition = new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            CreatedBy = OwnerId,
-            Name = "Sensor",
-            Mode = mode,
-            LifespanHours = mode == TrackerMode.Duration ? 240 : null,
-        };
-        foreach (var instance in running)
-        {
-            instance.DefinitionId = definition.Id;
-            instance.Definition = definition;
-        }
+        Id = run.Id,
+        CreatedBy = run.CreatedBy,
+        StartedAt = run.StartedAt,
+        Definition = definition,
+    };
+
+    private TrackerDefinition ArrangeDefinition(
+        TrackerMode mode,
+        Run[]? running = null,
+        string? startEventType = null,
+        string? completionEventType = null)
+    {
+        var definition = TrackerDefinition.Restore(
+            Guid.NewGuid(),
+            "Sensor",
+            mode: mode,
+            createdBy: OwnerId,
+            lifespanHours: mode == TrackerMode.Duration ? 240 : null,
+            startEventType: startEventType,
+            completionEventType: completionEventType);
+        var instances = (running ?? []).Select(run => Instance(definition, run)).ToList();
 
         _repository
             .Setup(r => r.GetDefinitionByIdAsync(definition.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(definition);
         _repository
             .Setup(r => r.GetActiveInstancesForDefinitionAsync(definition.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(running.ToList());
-        _repository
-            .Setup(r => r.CompleteInstanceAsync(
-                It.IsAny<Guid>(), It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id, CompletionReason _, string? _, string? _, DateTime? _, CancellationToken _) =>
-                running.First(i => i.Id == id));
+            .ReturnsAsync(instances);
+        foreach (var instance in instances)
+        {
+            _repository
+                .Setup(r => r.GetInstanceByIdAsync(instance.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(instance);
+            _repository
+                .Setup(r => r.CompleteInstanceAsync(
+                    instance.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(instance);
+        }
         _repository
             .Setup(r => r.StartInstanceAsync(
                 definition.Id, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, string userId, string? _, string? _, DateTime? startedAt, DateTime? scheduledAt, CancellationToken _) =>
-                new TrackerInstanceEntity
+                new TrackerInstance
                 {
                     Id = Guid.NewGuid(),
-                    DefinitionId = definition.Id,
                     Definition = definition,
                     CreatedBy = userId,
                     StartedAt = startedAt ?? Now,
@@ -126,14 +144,11 @@ public class TrackersControllerStartTests
         return definition;
     }
 
-    private static TrackerInstanceEntity Running(DateTime startedAt) =>
-        new() { Id = Guid.NewGuid(), CreatedBy = OwnerId, StartedAt = startedAt };
-
     [Fact]
     public async Task StartInstance_CompletesTheRunningRunAtTheNewStart()
     {
         var old = Running(Now.AddDays(-3));
-        var definition = ArrangeDefinition(TrackerMode.Duration, old);
+        var definition = ArrangeDefinition(TrackerMode.Duration, [old]);
 
         var result = await CreateController().StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now });
@@ -172,7 +187,7 @@ public class TrackersControllerStartTests
     public async Task StartInstance_ByAnotherMember_ReplacesTheRunAndBroadcastsBoth()
     {
         var old = Running(Now.AddDays(-3));
-        var definition = ArrangeDefinition(TrackerMode.Duration, old);
+        var definition = ArrangeDefinition(TrackerMode.Duration, [old]);
         var sent = RecordBroadcasts();
 
         var result = await CreateController(MemberId).StartInstance(
@@ -185,19 +200,10 @@ public class TrackersControllerStartTests
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private TrackerInstanceEntity ArrangeAdminStartedRun()
+    private Run ArrangeAdminStartedRun()
     {
-        var run = new TrackerInstanceEntity { Id = Guid.NewGuid(), CreatedBy = AdminId, StartedAt = Now.AddDays(-1) };
-        var definition = ArrangeDefinition(TrackerMode.Duration, run);
-        _repository
-            .Setup(r => r.GetInstanceByIdAsync(run.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(run);
-        _repository
-            .Setup(r => r.CompleteInstanceAsync(
-                run.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(run);
-        run.Definition = definition;
+        var run = Running(Now.AddDays(-1), AdminId);
+        ArrangeDefinition(TrackerMode.Duration, [run]);
         return run;
     }
 
@@ -230,8 +236,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_WhenANewerRunIsRunning_ConflictsAndChangesNothing()
     {
-        var newer = Running(Now);
-        var definition = ArrangeDefinition(TrackerMode.Duration, newer);
+        var definition = ArrangeDefinition(TrackerMode.Duration, [Running(Now)]);
 
         var result = await CreateController().StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now.AddDays(-1) });
@@ -249,8 +254,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_ForAnEventTracker_LeavesOtherBookingsRunning()
     {
-        var booked = Running(Now.AddDays(-1));
-        var definition = ArrangeDefinition(TrackerMode.Event, booked);
+        var definition = ArrangeDefinition(TrackerMode.Event, [Running(Now.AddDays(-1))]);
 
         var result = await CreateController().StartInstance(new StartTrackerInstanceRequest
         {
@@ -268,12 +272,12 @@ public class TrackersControllerStartTests
     public async Task StartInstance_WhenAnotherWriterCompletesTheRunningRunFirst_ConflictsAndStartsNothing()
     {
         var old = Running(Now.AddDays(-3));
-        var definition = ArrangeDefinition(TrackerMode.Duration, old);
+        var definition = ArrangeDefinition(TrackerMode.Duration, [old]);
         _repository
             .Setup(r => r.CompleteInstanceAsync(
                 old.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TrackerInstanceEntity?)null);
+            .ReturnsAsync((TrackerInstance?)null);
 
         var result = await CreateController().StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now });
@@ -289,15 +293,12 @@ public class TrackersControllerStartTests
     public async Task CompleteInstance_WhenAnotherWriterCompletesItFirst_ReportsItAlreadyCompleted()
     {
         var running = Running(Now.AddDays(-3));
-        ArrangeDefinition(TrackerMode.Duration, running);
-        _repository
-            .Setup(r => r.GetInstanceByIdAsync(running.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(running);
+        ArrangeDefinition(TrackerMode.Duration, [running]);
         _repository
             .Setup(r => r.CompleteInstanceAsync(
                 running.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TrackerInstanceEntity?)null);
+            .ReturnsAsync((TrackerInstance?)null);
 
         var result = await CreateController().CompleteInstance(
             running.Id, new CompleteTrackerInstanceRequest { Reason = CompletionReason.Completed });
@@ -310,7 +311,7 @@ public class TrackersControllerStartTests
     public async Task ApplyPreset_CreatedByAnotherMember_StartsARunRecordedAsTheCaller()
     {
         var definition = ArrangeDefinition(TrackerMode.Duration);
-        var preset = new TrackerPresetEntity
+        var preset = new TrackerPreset
         {
             Id = Guid.NewGuid(),
             CreatedBy = MemberId,
@@ -329,14 +330,20 @@ public class TrackersControllerStartTests
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    private Func<TrackerDefinition?> CapturePersisted()
+    {
+        TrackerDefinition? persisted = null;
+        _repository
+            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()))
+            .Callback<TrackerDefinition, CancellationToken>((d, _) => persisted = d)
+            .ReturnsAsync((TrackerDefinition d, CancellationToken _) => d);
+        return () => persisted;
+    }
+
     [Fact]
     public async Task CreateDefinition_CanonicalisesTriggersAndDropsBlanks()
     {
-        TrackerDefinitionEntity? persisted = null;
-        _repository
-            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .Callback<TrackerDefinitionEntity, CancellationToken>((e, _) => persisted = e)
-            .ReturnsAsync((TrackerDefinitionEntity e, CancellationToken _) => e);
+        var persisted = CapturePersisted();
 
         var result = await CreateController().CreateDefinition(new CreateTrackerDefinitionRequest
         {
@@ -346,8 +353,8 @@ public class TrackersControllerStartTests
         });
 
         result.Result.Should().BeOfType<CreatedAtActionResult>();
-        persisted!.TriggerEventTypes.Should().Be("[\"Sensor Start\"]");
-        persisted.TriggerNotesContains.Should().BeNull();
+        persisted()!.TriggerEventTypes.Should().Equal("Sensor Start");
+        persisted()!.TriggerNotesContains.Should().BeNull();
     }
 
     [Fact]
@@ -362,26 +369,30 @@ public class TrackersControllerStartTests
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _repository.Verify(r => r.CreateDefinitionAsync(
-            It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private TrackerDefinitionEntity ArrangeStored(string triggers, string? notes)
+    /// <summary>A stored definition, and what the update saves of it.</summary>
+    private (TrackerDefinition Existing, Func<TrackerDefinition?> Saved) ArrangeStored(
+        string[] triggers, string? notes, string? startEventType = null, string? completionEventType = null)
     {
-        var existing = new TrackerDefinitionEntity
-        {
-            Id = Guid.NewGuid(),
-            CreatedBy = OwnerId,
-            Name = "Sensor",
-            TriggerEventTypes = triggers,
-            TriggerNotesContains = notes,
-        };
+        var existing = TrackerDefinition.Restore(
+            Guid.NewGuid(),
+            "Sensor",
+            createdBy: OwnerId,
+            triggerEventTypes: triggers,
+            triggerNotesContains: notes,
+            startEventType: startEventType,
+            completionEventType: completionEventType);
+        TrackerDefinition? saved = null;
         _repository
             .Setup(r => r.GetDefinitionByIdAsync(existing.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repository
-            .Setup(r => r.UpdateDefinitionAsync(existing.Id, It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, TrackerDefinitionEntity e, CancellationToken _) => e);
-        return existing;
+            .Setup(r => r.UpdateDefinitionAsync(It.Is<TrackerDefinition>(d => d.Id == existing.Id), It.IsAny<CancellationToken>()))
+            .Callback<TrackerDefinition, CancellationToken>((d, _) => saved = d)
+            .ReturnsAsync((TrackerDefinition d, CancellationToken _) => d);
+        return (existing, () => saved);
     }
 
     // The editor posts one blank trigger for "none", and a cleared notes box arrives as no field at
@@ -389,7 +400,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task UpdateDefinition_FromAClearedEditor_ClearsTriggersAndTheNotesFilter()
     {
-        var existing = ArrangeStored("[\"Sensor Start\"]", "left");
+        var (existing, saved) = ArrangeStored(["Sensor Start"], "left");
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -397,40 +408,40 @@ public class TrackersControllerStartTests
         });
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        existing.TriggerEventTypes.Should().Be("[]");
-        existing.TriggerNotesContains.Should().BeNull();
+        saved()!.TriggerEventTypes.Should().BeEmpty();
+        saved()!.TriggerNotesContains.Should().BeNull();
     }
 
 
     [Fact]
     public async Task UpdateDefinition_ClearingOnlyTheNotesFilter_KeepsTheTriggers()
     {
-        var existing = ArrangeStored("[\"Site Change\"]", "left");
+        var (existing, saved) = ArrangeStored(["Site Change"], "left");
 
         await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
             TriggerEventTypes = ["Site Change"],
         });
 
-        existing.TriggerEventTypes.Should().Be("[\"Site Change\"]");
-        existing.TriggerNotesContains.Should().BeNull();
+        saved()!.TriggerEventTypes.Should().Equal("Site Change");
+        saved()!.TriggerNotesContains.Should().BeNull();
     }
 
     [Fact]
     public async Task UpdateDefinition_WithNoTriggerList_KeepsTriggersAndNotes()
     {
-        var existing = ArrangeStored("[\"Site Change\"]", "left");
+        var (existing, saved) = ArrangeStored(["Site Change"], "left");
 
         await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest { Name = "Site" });
 
-        existing.TriggerEventTypes.Should().Be("[\"Site Change\"]");
-        existing.TriggerNotesContains.Should().Be("left");
+        saved()!.TriggerEventTypes.Should().Equal("Site Change");
+        saved()!.TriggerNotesContains.Should().Be("left");
     }
 
     [Fact]
     public async Task UpdateDefinition_RejectsATriggerNotInTheList()
     {
-        var existing = ArrangeStored("[\"Sensor Start\"]", null);
+        var (existing, _) = ArrangeStored(["Sensor Start"], null);
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -444,10 +455,8 @@ public class TrackersControllerStartTests
     [Fact]
     public void Dto_ListsOnlyTriggersInTheList()
     {
-        var dto = TrackerDefinitionDto.FromEntity(new TrackerDefinitionEntity
-        {
-            TriggerEventTypes = "[\"Pump Suspend\",\"sensor start\"]",
-        });
+        var dto = TrackerDefinitionDto.From(TrackerDefinition.Restore(
+            Guid.Empty, string.Empty, triggerEventTypes: ["Pump Suspend", "sensor start"]));
 
         dto.TriggerEventTypes.Should().Equal("Sensor Start");
     }
@@ -455,8 +464,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_RecordsTheDefinitionsStartEventAsATrackerDeviceEvent()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration);
-        definition.StartEventType = "Sensor Start";
+        var definition = ArrangeDefinition(TrackerMode.Duration, startEventType: "Sensor Start");
         var startedAt = Now.AddHours(-2);
 
         await CreateController().StartInstance(new StartTrackerInstanceRequest
@@ -487,8 +495,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_WithAStoredEventTypeThatIsNoDeviceEvent_StartsAndRecordsNoEvent()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration);
-        definition.StartEventType = "Meal Bolus";
+        var definition = ArrangeDefinition(TrackerMode.Duration, startEventType: "Meal Bolus");
 
         var result = await CreateController().StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id });
@@ -500,8 +507,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_ThatLosesToANewerRun_RecordsNoEvent()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration, Running(Now));
-        definition.StartEventType = "Sensor Start";
+        var definition = ArrangeDefinition(TrackerMode.Duration, [Running(Now)], startEventType: "Sensor Start");
 
         var result = await CreateController().StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now.AddHours(-1) });
@@ -514,25 +520,14 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task CompleteInstance_RecordsTheDefinitionsCompletionEventAtTheCompletionTime()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration);
-        definition.CompletionEventType = "Sensor Stop";
         var run = Running(Now.AddDays(-9));
-        run.DefinitionId = definition.Id;
-        run.Definition = definition;
+        var definition = ArrangeDefinition(TrackerMode.Duration, [run], completionEventType: "Sensor Stop");
         var completedAt = Now.AddHours(-1);
-        _repository
-            .Setup(r => r.GetInstanceByIdAsync(run.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(run);
         _repository
             .Setup(r => r.CompleteInstanceAsync(
                 run.Id, CompletionReason.Completed, "fell off", null, completedAt, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TrackerInstanceEntity
+            .ReturnsAsync(Instance(definition, run) with
             {
-                Id = run.Id,
-                DefinitionId = definition.Id,
-                Definition = definition,
-                CreatedBy = OwnerId,
-                StartedAt = run.StartedAt,
                 CompletedAt = completedAt,
                 CompletionReason = CompletionReason.Completed,
                 CompletionNotes = "fell off",
@@ -555,11 +550,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task CreateDefinition_CanonicalisesItsStartAndCompletionEventTypes()
     {
-        TrackerDefinitionEntity? persisted = null;
-        _repository
-            .Setup(r => r.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
-            .Callback<TrackerDefinitionEntity, CancellationToken>((e, _) => persisted = e)
-            .ReturnsAsync((TrackerDefinitionEntity e, CancellationToken _) => e);
+        var persisted = CapturePersisted();
 
         await CreateController().CreateDefinition(new CreateTrackerDefinitionRequest
         {
@@ -568,8 +559,8 @@ public class TrackersControllerStartTests
             CompletionEventType = " ",
         });
 
-        persisted!.StartEventType.Should().Be("Sensor Start");
-        persisted.CompletionEventType.Should().BeNull();
+        persisted()!.StartEventType.Should().Be("Sensor Start");
+        persisted()!.CompletionEventType.Should().BeNull();
     }
 
     [Fact]
@@ -585,13 +576,13 @@ public class TrackersControllerStartTests
             .Which.Value.Should().BeOfType<ProblemDetails>()
             .Which.Detail.Should().Contain("StartEventType");
         _repository.Verify(r => r.CreateDefinitionAsync(
-            It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<TrackerDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task UpdateDefinition_RejectsACompletionEventTypeThatIsNoDeviceEvent()
     {
-        var existing = ArrangeStored("[]", null);
+        var (existing, saved) = ArrangeStored([], null);
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -601,7 +592,7 @@ public class TrackersControllerStartTests
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.Value.Should().BeOfType<ProblemDetails>()
             .Which.Detail.Should().Contain("CompletionEventType");
-        existing.CompletionEventType.Should().BeNull();
+        saved().Should().BeNull();
     }
 
     [Theory]
@@ -610,9 +601,7 @@ public class TrackersControllerStartTests
     [InlineData(null)]
     public async Task UpdateDefinition_WithABlankEventType_ClearsBothEvents(string? blank)
     {
-        var existing = ArrangeStored("[]", null);
-        existing.StartEventType = "Sensor Start";
-        existing.CompletionEventType = "Sensor Stop";
+        var (existing, saved) = ArrangeStored([], null, startEventType: "Sensor Start", completionEventType: "Sensor Stop");
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -621,22 +610,21 @@ public class TrackersControllerStartTests
         });
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        existing.StartEventType.Should().BeNull();
-        existing.CompletionEventType.Should().BeNull();
+        saved()!.StartEventType.Should().BeNull();
+        saved()!.CompletionEventType.Should().BeNull();
     }
 
     [Fact]
     public async Task UpdateDefinition_ReplacesAnEventTypeWithTheCanonicalName()
     {
-        var existing = ArrangeStored("[]", null);
-        existing.StartEventType = "Sensor Start";
+        var (existing, saved) = ArrangeStored([], null, startEventType: "Sensor Start");
 
         await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
             StartEventType = "pod change",
         });
 
-        existing.StartEventType.Should().Be("Pod Change");
+        saved()!.StartEventType.Should().Be("Pod Change");
     }
 
     [Fact]
@@ -647,7 +635,7 @@ public class TrackersControllerStartTests
 
         names.Should().NotBeEmpty().And.OnlyHaveUniqueItems();
         names.Where(name =>
-                !(TrackerDeviceEventWriter.TryNormalise(name, "StartEventType", out var canonical, out _) && canonical == name))
+                !(TrackerEventTypes.TryNormaliseDeviceEvent(name, "StartEventType", out var canonical, out _) && canonical == name))
             .Should().BeEmpty();
     }
 
@@ -659,8 +647,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task StartInstance_WhenTheEventWriteFails_StillStarts()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration);
-        definition.StartEventType = "Sensor Start";
+        var definition = ArrangeDefinition(TrackerMode.Duration, startEventType: "Sensor Start");
         FailEventWrites();
 
         var result = await CreateController().StartInstance(
@@ -675,25 +662,14 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task CompleteInstance_WhenTheEventWriteFails_StillCompletesAndBroadcasts()
     {
-        var definition = ArrangeDefinition(TrackerMode.Duration);
-        definition.CompletionEventType = "Sensor Stop";
         var run = Running(Now.AddDays(-9));
-        run.DefinitionId = definition.Id;
-        run.Definition = definition;
-        _repository
-            .Setup(r => r.GetInstanceByIdAsync(run.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(run);
+        var definition = ArrangeDefinition(TrackerMode.Duration, [run], completionEventType: "Sensor Stop");
         _repository
             .Setup(r => r.CompleteInstanceAsync(
                 run.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TrackerInstanceEntity
+            .ReturnsAsync(Instance(definition, run) with
             {
-                Id = run.Id,
-                DefinitionId = definition.Id,
-                Definition = definition,
-                CreatedBy = OwnerId,
-                StartedAt = run.StartedAt,
                 CompletedAt = Now,
                 CompletionReason = CompletionReason.Completed,
             });
@@ -710,8 +686,7 @@ public class TrackersControllerStartTests
     [Fact]
     public async Task UpdateDefinition_RepostingAStoredEventTypeThatIsNoDeviceEvent_Saves()
     {
-        var existing = ArrangeStored("[]", null);
-        existing.StartEventType = "Note";
+        var (existing, saved) = ArrangeStored([], null, startEventType: "Note");
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -720,15 +695,14 @@ public class TrackersControllerStartTests
         });
 
         result.Result.Should().BeOfType<OkObjectResult>();
-        existing.Name.Should().Be("Renamed");
-        existing.StartEventType.Should().Be("Note");
+        saved()!.Name.Should().Be("Renamed");
+        saved()!.StartEventType.Should().Be("Note");
     }
 
     [Fact]
     public async Task UpdateDefinition_ChangingAStoredEventTypeToAnotherThatIsNoDeviceEvent_Is400()
     {
-        var existing = ArrangeStored("[]", null);
-        existing.StartEventType = "Note";
+        var (existing, saved) = ArrangeStored([], null, startEventType: "Note");
 
         var result = await CreateController().UpdateDefinition(existing.Id, new UpdateTrackerDefinitionRequest
         {
@@ -737,6 +711,6 @@ public class TrackersControllerStartTests
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        existing.StartEventType.Should().Be("Note");
+        saved().Should().BeNull();
     }
 }

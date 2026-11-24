@@ -16,15 +16,21 @@ public class ConnectorServerResolver<TConfig>(
     : IConnectorServerResolver<TConfig>
     where TConfig : BaseConnectorConfiguration
 {
+    private readonly Dictionary<string, string>? _serverMapping = serverMapping == null
+        ? null
+        : new Dictionary<string, string>(serverMapping, StringComparer.OrdinalIgnoreCase);
+
     public Uri? Resolve(TConfig config)
     {
-        if (serverMapping == null || getServerRegion == null)
+        if (_serverMapping == null || getServerRegion == null)
             return defaultServer != null ? BuildUri(defaultServer) : null;
 
         var region = getServerRegion(config);
-        var fallback = defaultServer ?? region ?? serverMapping.Values.FirstOrDefault() ?? "";
-        var resolved = ConnectorServerResolver.Resolve(region, serverMapping, fallback);
-        return BuildUri(resolved);
+        var mapped = string.IsNullOrWhiteSpace(region)
+            ? null
+            : _serverMapping.GetValueOrDefault(region.Trim());
+        var server = mapped ?? defaultServer ?? _serverMapping.Values.FirstOrDefault();
+        return server != null ? BuildUri(server) : null;
     }
 
     public string BuildUrl(TConfig config, string path)

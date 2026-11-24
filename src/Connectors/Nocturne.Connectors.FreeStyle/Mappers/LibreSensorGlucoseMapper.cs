@@ -10,6 +10,8 @@ namespace Nocturne.Connectors.FreeStyle.Mappers;
 
 public class LibreSensorGlucoseMapper(ILogger? logger = null)
 {
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<LibreLinkUpConnectorConfiguration>();
+
     private static readonly Dictionary<int, GlucoseDirection> TrendArrowMap = new()
     {
         { 1, GlucoseDirection.SingleDown },
@@ -19,7 +21,7 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
         { 5, GlucoseDirection.SingleUp }
     };
 
-    public SensorGlucose? ConvertMeasurement(LibreGlucoseMeasurement measurement, DateTime now)
+    public SensorGlucose? ConvertMeasurement(LibreGlucoseMeasurement measurement)
     {
         try
         {
@@ -29,15 +31,11 @@ public class LibreSensorGlucoseMapper(ILogger? logger = null)
 
             return new SensorGlucose
             {
-                Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
-                LegacyId = $"libre_{measurement.FactoryTimestamp}",
+                LegacyId = LegacyIds.Of(measurement.FactoryTimestamp),
                 Device = LibreLinkUpConstants.Configuration.DeviceIdentifier,
-                DataSource = DataSources.LibreConnector,
                 Mgdl = mgdl,
                 Direction = direction,
-                CreatedAt = now,
-                ModifiedAt = now
             };
         }
         catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))

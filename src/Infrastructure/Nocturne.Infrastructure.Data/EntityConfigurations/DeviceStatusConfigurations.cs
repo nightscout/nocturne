@@ -54,11 +54,34 @@ internal sealed class UploaderSnapshotEntityConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<UploaderSnapshotEntity> entity)
     {
+        // The newest snapshot of one uploader type is read on every alert pass of a tenant with
+        // a transmitter rule; see UploaderSnapshotRepository.GetLatestOfTypeAsync. Without type
+        // in an index, a tenant with no such snapshot has every one it holds read to find none.
+        entity
+            .HasIndex(e => new { e.TenantId, e.Type, e.Timestamp })
+            .HasDatabaseName("ix_uploader_snapshots_tenant_type_timestamp")
+            .IsDescending(false, false, true)
+            .HasFilter("deleted_at IS NULL");
+
         entity
             .HasOne<DeviceEntity>()
             .WithMany()
             .HasForeignKey(e => e.DeviceId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+internal sealed class SensorStateReportEntityConfiguration : IEntityTypeConfiguration<SensorStateReportEntity>
+{
+    public void Configure(EntityTypeBuilder<SensorStateReportEntity> entity)
+    {
+        // An alert pass that reads the sensor's state reads the recent reports of the newest
+        // reading's device and source; see SensorStateReportRepository.GetReportedAsync.
+        entity
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.Device, e.Timestamp })
+            .HasDatabaseName("ix_sensor_state_reports_tenant_source_device_timestamp")
+            .IsDescending(false, false, false, true)
+            .HasFilter("deleted_at IS NULL");
     }
 }
 

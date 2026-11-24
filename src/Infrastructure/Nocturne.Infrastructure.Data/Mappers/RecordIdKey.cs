@@ -43,4 +43,17 @@ public static class RecordIdKey
         var key = ParseIdToGuid(id);
         return e => e.OriginalId == id || e.Id == key;
     }
+
+    /// <summary>
+    /// <see cref="Matching{T}"/> for the tables that keep the id in <see cref="ILegacyIdentified.LegacyId"/>.
+    /// </summary>
+    public static Expression<Func<T, bool>> MatchingLegacy<T>(string? id)
+        where T : ILegacyIdentified
+    {
+        if (string.IsNullOrEmpty(id))
+            return _ => false;
+
+        var key = ParseIdToGuid(id);
+        return e => e.LegacyId == id || e.Id == key;
+    }
 }

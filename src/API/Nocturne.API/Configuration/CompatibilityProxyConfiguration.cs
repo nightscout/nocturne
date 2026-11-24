@@ -21,11 +21,6 @@ public class CompatibilityProxyConfiguration
     public int TimeoutSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Number of retry attempts
-    /// </summary>
-    public int RetryAttempts { get; set; } = 3;
-
-    /// <summary>
     /// Enable detailed request/response logging
     /// </summary>
     public bool EnableDetailedLogging { get; set; } = false;
@@ -174,16 +169,6 @@ public class DiscrepancyForwardingSettings
     /// Timeout for forwarding requests in seconds
     /// </summary>
     public int TimeoutSeconds { get; set; } = 10;
-
-    /// <summary>
-    /// Maximum retry attempts for failed forwards
-    /// </summary>
-    public int RetryAttempts { get; set; } = 3;
-
-    /// <summary>
-    /// Delay between retry attempts in milliseconds
-    /// </summary>
-    public int RetryDelayMs { get; set; } = 1000;
 }
 
 /// <summary>

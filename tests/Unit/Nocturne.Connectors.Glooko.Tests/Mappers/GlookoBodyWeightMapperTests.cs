@@ -38,7 +38,6 @@ public class GlookoBodyWeightMapperTests
 
         result.Should().ContainSingle();
         result[0].WeightKg.Should().Be(86.7m);
-        result[0].DataSource.Should().Be("glooko-connector");
         result[0].EnteredBy.Should().Be("glooko-connector");
     }
 

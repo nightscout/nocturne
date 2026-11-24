@@ -39,7 +39,7 @@ public class ScopeReadTierTests
     {
         AllDeclaredScopes().Should().HaveCountGreaterThan(20,
             "a reflection sweep that finds nothing would make the conformance check vacuous");
-        AllDeclaredScopes().Where(Scope.IsReadScope).Should().HaveCount(13);
+        AllDeclaredScopes().Where(Scope.IsReadScope).Should().HaveCount(14);
     }
 
     /// <summary>

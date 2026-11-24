@@ -46,7 +46,6 @@ public class HubCredentialKindTests
         { AuthType.None, HubCredentialKind.Restricted },
         { AuthType.Guest, HubCredentialKind.Restricted },
         { AuthType.InstanceKey, HubCredentialKind.Infrastructure },
-        { AuthType.OidcToken, HubCredentialKind.Subject },
         { AuthType.LegacyJwt, HubCredentialKind.Subject },
         { AuthType.ApiKey, HubCredentialKind.Subject },
         { AuthType.SessionCookie, HubCredentialKind.Subject },

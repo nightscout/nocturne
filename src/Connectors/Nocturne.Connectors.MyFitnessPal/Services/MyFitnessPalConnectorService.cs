@@ -29,7 +29,7 @@ public class MyFitnessPalConnectorService
     private readonly IConnectorConfigurationService _configService;
     private readonly MyFitnessPalFoodEntryMapper _mapper;
 
-    private string? _accessToken;
+    private TokenSession? _session;
     private string? _userId;
 
     public MyFitnessPalConnectorService(
@@ -50,31 +50,18 @@ public class MyFitnessPalConnectorService
 
     public override string ServiceName => "MyFitnessPal";
 
-    /// <summary>
-    /// Entry point for the scheduled sync.
-    /// </summary>
-    /// <remarks>
-    /// The base implementation derives the window from the tenant's most recent glucose reading,
-    /// which says nothing about how far back the food diary needs reading — with a live CGM it
-    /// resolves to roughly now, and nothing would ever be imported. The food diary's own window is
-    /// <see cref="MyFitnessPalConnectorConfiguration.LookbackDays"/>.
-    /// </remarks>
-    public override Task<SyncResult> SyncDataAsync(
-        MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null
-    ) =>
-        base.SyncDataAsync(
-            config,
-            cancellationToken,
-            since ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays),
-            progressReporter);
+    /// <inheritdoc />
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [MyFitnessPalConstants.FullWalkStamp] = [SyncDataType.Food] };
 
     /// <inheritdoc />
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override bool NeedsSignIn(SyncRequest request, MyFitnessPalConnectorConfiguration config) =>
+        ResolveActiveTypes(request, config).Contains(SyncDataType.Food);
+
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -89,10 +76,9 @@ public class MyFitnessPalConnectorService
             return result;
         }
 
-        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-            return AuthenticationFailedResult();
-
-        // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
+        // The food diary has no stored record to resume from, so a run with no lower bound, the
+        // scheduled one included, reads the diary's own window. The request carries UTC instants;
+        // pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays));
 
         // A background sync leaves the end open on purpose: clamping to "now" would discard
@@ -103,7 +89,7 @@ public class MyFitnessPalConnectorService
             ? AsUtc(request.To.Value)
             : AsUtc(Clock.GetUtcNow().UtcDateTime.AddDays(1));
 
-        var walkToEnd = IsFullWalkDue(config);
+        var walkToEnd = await IsFullWalkDueAsync(cancellationToken);
         var read = await FetchDiaryAsync(config, from, walkToEnd, cancellationToken);
         if (read == null)
         {
@@ -129,10 +115,7 @@ public class MyFitnessPalConnectorService
             // Record the walk only once it has been acted on, so a run that failed before
             // reconciling is retried rather than counting against the schedule.
             if (read.WalkedEntireDiary)
-            {
-                config.LastFullWalkAt = FullWalkSchedule.Stamp(Clock.GetUtcNow());
-                await PersistSecretsIfChangedAsync(config, cancellationToken);
-            }
+                await SetResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, Clock.GetUtcNow().UtcDateTime, cancellationToken);
         }
 
         return result;
@@ -150,28 +133,27 @@ public class MyFitnessPalConnectorService
     /// </summary>
     /// <remarks>
     /// Withdrawing an entry requires proof it is gone, and only a read that reached the first entry
-    /// provides it. An unset or unparseable timestamp walks — a connector that has never completed
-    /// one has never reconciled.
+    /// provides it. A connector with no stamp walks: one that has never completed a walk has never
+    /// reconciled.
     /// </remarks>
-    public bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config) =>
+    public async Task<bool> IsFullWalkDueAsync(CancellationToken cancellationToken) =>
         FullWalkSchedule.IsDue(
-            config.LastFullWalkAt, MyFitnessPalConstants.FullWalkInterval, Clock.GetUtcNow());
+            await ResumeStampAsync(MyFitnessPalConstants.FullWalkStamp, cancellationToken),
+            MyFitnessPalConstants.FullWalkInterval,
+            Clock.GetUtcNow());
 
     /// <summary>
-    /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.
+    /// Takes the session and the MyFitnessPal user id the GraphQL API requires.
     /// </summary>
-    private async Task<bool> AuthenticateWithConfigAsync(
+    protected override async Task<bool> CompleteSignInAsync(
         MyFitnessPalConnectorConfiguration config,
+        TokenSession session,
         CancellationToken cancellationToken)
     {
-        var token = await ValidTokenAsync(config, cancellationToken);
-        if (token is null)
-            return false;
+        var cached = await TokenProvider.GetCachedSessionAsync();
+        var metadata = cached?.Metadata;
 
-        var session = await TokenProvider.GetCachedSessionAsync();
-        var metadata = session?.Metadata;
-
-        _accessToken = token;
+        _session = session;
         _userId = metadata?.GetValueOrDefault(MyFitnessPalAuthTokenProvider.UserIdMetadataKey)
                   ?? config.UserId;
 
@@ -556,7 +538,7 @@ public class MyFitnessPalConnectorService
     /// </summary>
     private void AddAuthHeaders(HttpRequestMessage request)
     {
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_accessToken}");
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_session!.Token}");
         request.Headers.TryAddWithoutValidation(MyFitnessPalConstants.Headers.UserId, _userId);
         request.Headers.TryAddWithoutValidation(
             MyFitnessPalConstants.Headers.ClientId, MyFitnessPalConstants.ClientId);
@@ -586,14 +568,13 @@ public class MyFitnessPalConnectorService
     {
         try
         {
-            // The secrets document doubles as the connector's runtime state, as the derived user id
-            // already does: MergeSecretsAsync merges, whereas writing configuration back from a
-            // background sync would replace the document the user edits.
+            // The derived user id is kept in the secrets document: MergeSecretsAsync merges, whereas
+            // writing configuration back from a background sync would replace the document the user
+            // edits.
             var updates = new Dictionary<string, string?>
             {
                 ["refreshToken"] = config.RefreshToken,
                 ["userId"] = config.UserId,
-                ["lastFullWalkAt"] = config.LastFullWalkAt,
             };
 
             if (await _configService.MergeSecretsAsync("MyFitnessPal", updates, _logger, cancellationToken))

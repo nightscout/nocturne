@@ -118,7 +118,8 @@ public class HomeAssistantHubTests
 
     private static string Group(string name) => TenantAwareHub.FormatTenantGroup(Tenant.ToString(), name);
 
-    private async Task<Guid> SeedFailedDeliveryAsync(string destination)
+    private async Task<Guid> SeedFailedDeliveryAsync(
+        string destination, Action<AlertExcursionEntity, AlertInstanceEntity>? shape = null)
     {
         await using var db = await _contexts.CreateDbContextAsync();
         var excursion = new AlertExcursionEntity
@@ -159,6 +160,7 @@ public class HomeAssistantHubTests
             }),
             Status = "failed",
         };
+        shape?.Invoke(excursion, instance);
         db.AlertExcursions.Add(excursion);
         db.AlertInstances.Add(instance);
         db.AlertDeliveries.Add(delivery);
@@ -201,6 +203,30 @@ public class HomeAssistantHubTests
         (await StatusOfAsync(own)).Should().Be("delivered");
         (await StatusOfAsync(other)).Should().Be("failed");
         connection.JoinedGroups.Should().Contain(Group("ha:kitchen-ha")).And.NotContain(Group("ha:garage-ha"));
+    }
+
+    [Fact]
+    public async Task Subscribe_replays_a_notice_that_a_rule_cannot_be_evaluated_while_it_stands()
+    {
+        static void Notice(AlertExcursionEntity excursion, AlertInstanceEntity _)
+        {
+            excursion.UnevaluableConditionVersion = "v1";
+            excursion.EndedAt = AlertExcursionEntity.NoticeStandingEnd;
+        }
+        var standing = await SeedFailedDeliveryAsync("kitchen-ha", Notice);
+        var resolved = await SeedFailedDeliveryAsync("kitchen-ha", (excursion, instance) =>
+        {
+            Notice(excursion, instance);
+            excursion.EndedAt = DateTime.UtcNow.AddMinutes(-1);
+            instance.ResolvedAt = excursion.EndedAt;
+        });
+        var connection = Connect("kitchen-ha", [Scope.AlertsRead]);
+
+        await connection.Hub.Subscribe("kitchen-ha");
+
+        connection.SentToCaller.Should().ContainSingle();
+        (await StatusOfAsync(standing)).Should().Be("delivered");
+        (await StatusOfAsync(resolved)).Should().Be("failed");
     }
 
     [Fact]

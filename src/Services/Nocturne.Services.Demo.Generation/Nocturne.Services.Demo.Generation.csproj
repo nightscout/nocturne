@@ -19,10 +19,6 @@
         <InternalsVisibleTo Include="Nocturne.Services.Demo"/>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
         <AdditionalFiles Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\BannedSymbols.txt"/>
         <AdditionalFiles Include="BannedSymbols.Zone.txt"/>
     </ItemGroup>

@@ -1,22 +1,20 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
 /// <summary>
-/// Controller for food favorites, recent foods, and food lifecycle management.
+/// The food catalog of the tenant, each user's favorite foods, and the recently used foods of the
+/// tenant. Create, read, update, and delete foods. Deleting a food can clear or remove the meal
+/// attributions that reference it.
 /// </summary>
 /// <remarks>
 /// Provides a V4-native (non-Nightscout-legacy) food catalog in addition to per-user
@@ -72,18 +70,18 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => Scope.FoodReadWrite;
 
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IFoodRepository _foods;
     private readonly IUserFoodFavoriteService _favoriteService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IFoodService _foodService;
 
     public FoodsController(
-        INocturneDbContextFactory contexts,
+        IFoodRepository foods,
         IUserFoodFavoriteService favoriteService,
         ITreatmentFoodService treatmentFoodService,
         IFoodService foodService)
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _foods = foods ?? throw new ArgumentNullException(nameof(foods));
         _favoriteService = favoriteService;
         _treatmentFoodService = treatmentFoodService;
         _foodService = foodService;
@@ -220,22 +218,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> AddFavorite(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
         var userId = HttpContext.GetSubjectIdString();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
         }
 
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         await _favoriteService.AddFavoriteAsync(
             userId,
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -254,22 +251,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> RemoveFavorite(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
         var userId = HttpContext.GetSubjectIdString();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
         }
 
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         await _favoriteService.RemoveFavoriteAsync(
             userId,
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -311,15 +307,14 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<FoodAttributionCount>> GetFoodAttributionCount(string foodId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
 
         var count = await _treatmentFoodService.CountByFoodIdAsync(
-            food.Id,
+            key,
             HttpContext.RequestAborted
         );
 
@@ -345,9 +340,8 @@ public class FoodsController : ControllerBase, IWriteScopedController
         string foodId,
         [FromQuery] string attributionMode = "clear")
     {
-        await using var db = await _contexts.CreateAsync();
-        var food = await ResolveFoodEntityAsync(db, foodId, HttpContext.RequestAborted);
-        if (food == null)
+        var foodKey = await _foods.ResolveFoodKeyAsync(foodId, HttpContext.RequestAborted);
+        if (foodKey is not { } key)
         {
             return NotFound();
         }
@@ -356,32 +350,21 @@ public class FoodsController : ControllerBase, IWriteScopedController
         if (attributionMode == "remove")
         {
             await _treatmentFoodService.DeleteByFoodIdAsync(
-                food.Id,
+                key,
                 HttpContext.RequestAborted
             );
         }
         else
         {
             await _treatmentFoodService.ClearFoodReferencesByFoodIdAsync(
-                food.Id,
+                key,
                 HttpContext.RequestAborted
             );
         }
 
         // Delete the food itself
-        var id = food.OriginalId ?? food.Id.ToString();
-        await _foodService.DeleteFoodAsync(id, HttpContext.RequestAborted);
+        await _foodService.DeleteFoodAsync(key.ToString(), HttpContext.RequestAborted);
 
         return NoContent();
     }
-
-    private static Task<FoodEntity?> ResolveFoodEntityAsync(
-        NocturneDbContext db,
-        string id,
-        CancellationToken cancellationToken
-    ) =>
-        db.Foods.AsNoTracking().FirstOrDefaultAsync(
-            RecordIdKey.Matching<FoodEntity>(id),
-            cancellationToken
-        );
 }

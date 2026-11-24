@@ -187,6 +187,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         caches.Register(services);
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
@@ -302,6 +303,7 @@ public sealed class RestartSensitiveJobsPostgresTests(RestartSensitiveJobsPostgr
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddDataServices();
+        services.AddSingleton(AccountLinkRoutes.Off);
         services.AddSingleton<TimeProvider>(clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
         configure(services);

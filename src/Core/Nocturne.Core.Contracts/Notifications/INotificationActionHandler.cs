@@ -9,13 +9,23 @@ namespace Nocturne.Core.Contracts.Notifications;
 /// preventing a captive-dependency cycle when handlers are injected as
 /// <c>IEnumerable&lt;INotificationActionHandler&gt;</c>.
 /// </summary>
-/// <param name="Handled">Whether the action was understood and processed successfully.</param>
+/// <param name="Handled">
+/// Whether the action was understood and processed successfully. For <c>dismiss</c> and
+/// <c>navigate</c>, not handled makes the orchestrator archive the notification itself, so a
+/// handler declines either by returning <see cref="NotHandled"/>.
+/// </param>
 /// <param name="Archive">If non-null, the orchestrator archives the notification with this reason.</param>
+/// <param name="RefusedScope">
+/// The scope the caller lacks, when the handler refused the action for it. A refusal is never
+/// handled and never archives, not even <c>dismiss</c> or <c>navigate</c>, so the notification stays.
+/// </param>
 public readonly record struct NotificationActionResult(
     bool Handled,
-    NotificationArchiveReason? Archive = null)
+    NotificationArchiveReason? Archive = null,
+    string? RefusedScope = null)
 {
     public static NotificationActionResult NotHandled => new(false);
+    public static NotificationActionResult RefusedFor(string scope) => new(false, RefusedScope: scope);
     public static NotificationActionResult HandledNoArchive => new(true);
     public static NotificationActionResult Completed => new(true, NotificationArchiveReason.Completed);
     public static NotificationActionResult Dismissed => new(true, NotificationArchiveReason.Dismissed);

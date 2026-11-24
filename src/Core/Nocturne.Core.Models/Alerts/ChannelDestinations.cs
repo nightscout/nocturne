@@ -7,10 +7,11 @@ namespace Nocturne.Core.Models.Alerts;
 /// and the shape that destination must hold. Applied when a rule is saved.
 /// </summary>
 /// <remarks>
-/// Apart from an <c>in_app</c> channel's member check, the delivery path never inspects a
-/// destination: the bot service hands it to the platform adapter for the channel's type. A
-/// destination in the wrong shape therefore produces a channel that is accepted, stored, and
-/// silently never delivers.
+/// Delivery checks who a destination reaches, by its <see cref="ChannelDestinationMode"/>: the
+/// member of an <c>in_app</c> channel, the member a linked chat account belongs to, and the access
+/// of whoever typed a destination in. It never checks a destination's shape: the bot service hands
+/// it to the platform adapter for the channel's type. A destination in the wrong shape therefore
+/// produces a channel that is accepted, stored, and silently never delivers.
 /// </remarks>
 public static partial class ChannelDestinations
 {

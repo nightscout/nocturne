@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
-import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import type { DailySummaryDay } from "@nocturne/api-client";
 import { yearOverviewMocks } from "#lib/test-stubs/year-overview-remote.js";
 import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "#lib/stores/appearance-store.svelte.js";
-import { getGlucoseHeatmapFill } from "#lib/utils/chart-colors.js";
+import { getGlucoseHeatmapFill } from "@nocturne/charts/core";
 import { rampColor, rampPosition, GLUCOSE_LIMITS, GLUCOSE_RAMP } from "#lib/utils/metric-color-focus.js";
 
 vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", async () =>

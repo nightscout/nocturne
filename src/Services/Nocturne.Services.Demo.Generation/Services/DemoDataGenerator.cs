@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
@@ -144,7 +145,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 Device = _config.Device,
                 Mills = mills,
                 Date = now,
-                DateString = now.ToString("o"),
+                DateString = now.ToString("o", CultureInfo.InvariantCulture),
                 Mgdl = ScaledRounding.Round(_currentGlucose, 0),
                 Sgv = ScaledRounding.Round(_currentGlucose, 0),
                 Direction = direction.ToString(),
@@ -154,7 +155,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 Unfiltered = ScaledRounding.Round(_currentGlucose + (_random.NextDouble() - 0.5) * 5, 0),
                 Rssi = _random.Next(0, 101),
                 Noise = _random.Next(0, 5),
-                CreatedAt = now.ToString("o"),
+                CreatedAt = now.ToString("o", CultureInfo.InvariantCulture),
                 ModifiedAt = now,
             };
         }
@@ -322,7 +323,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 pending.Add((bolusTime, CreateBolusTreatment(
                     bolusTime,
                     bolus,
-                    meal.FoodType == "Snack" ? "Snack Bolus" : "Meal Bolus"
+                    meal.FoodType == "Snack" ? TreatmentTypes.SnackBolus : TreatmentTypes.MealBolus
                 )));
             }
 
@@ -1039,7 +1040,7 @@ public class DemoDataGenerator : IDemoDataGenerator
             Device = _config.Device,
             Mills = utc.ToMills(),
             Date = utc,
-            DateString = utc.ToString("o"),
+            DateString = utc.ToString("o", CultureInfo.InvariantCulture),
             Mgdl = ScaledRounding.Round(glucose, 0),
             Sgv = ScaledRounding.Round(glucose, 0),
             Direction = direction.ToString(),
@@ -1049,7 +1050,7 @@ public class DemoDataGenerator : IDemoDataGenerator
             Unfiltered = ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 5, 0),
             Rssi = _random.Next(0, 101),
             Noise = _random.Next(0, 3),
-            CreatedAt = utc.ToString("o"),
+            CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             ModifiedAt = utc,
         };
     }
@@ -1059,11 +1060,11 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Carbs",
+            EventType = TreatmentTypes.Carbs,
             Carbs = carbs,
             FoodType = foodType,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user",
             DataSource = DataSources.DemoService,
         };
@@ -1077,7 +1078,7 @@ public class DemoDataGenerator : IDemoDataGenerator
             EventType = eventType,
             Insulin = insulin,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user",
             DataSource = DataSources.DemoService,
         };
@@ -1088,10 +1089,10 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Correction Bolus",
+            EventType = TreatmentTypes.CorrectionBolus,
             Insulin = insulin,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user", // User manually corrects with exact ISF calculation
             Notes = "Manual correction",
             DataSource = DataSources.DemoService,
@@ -1103,10 +1104,10 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "SMB", // Super Micro Bolus - algorithm-delivered bolus
+            EventType = TreatmentTypes.Smb, // Super Micro Bolus - algorithm-delivered bolus
             Insulin = insulin,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-pump",
             DataSource = DataSources.DemoService,
         };
@@ -1117,10 +1118,10 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Carb Correction",
+            EventType = TreatmentTypes.CarbCorrection,
             Carbs = carbs,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user",
             Notes = "Low treatment",
             DataSource = DataSources.DemoService,
@@ -1132,11 +1133,11 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "Temp Basal",
+            EventType = TreatmentTypes.TempBasal,
             Rate = rate,
             Duration = duration,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = DemoDeviceStatusGenerator.DeviceName,
             DataSource = DataSources.DemoService,
         };
@@ -1182,7 +1183,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     private static List<CalibrationPlan> PlanCalibrations(DateTime day)
     {
-        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, "Sensor Start");
+        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart);
         if (sensorStart is null)
             return [];
 
@@ -1261,11 +1262,11 @@ public class DemoDataGenerator : IDemoDataGenerator
             Device = "Contour Next One",
             Mills = utc.ToMills(),
             Date = utc,
-            DateString = utc.ToString("o"),
+            DateString = utc.ToString("o", CultureInfo.InvariantCulture),
             Mbg = value,
             Mgdl = value,
             DataSource = DataSources.DemoService,
-            CreatedAt = utc.ToString("o"),
+            CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             ModifiedAt = utc,
         };
     }
@@ -1280,12 +1281,12 @@ public class DemoDataGenerator : IDemoDataGenerator
             Device = _config.Device,
             Mills = utc.ToMills(),
             Date = utc,
-            DateString = utc.ToString("o"),
+            DateString = utc.ToString("o", CultureInfo.InvariantCulture),
             Slope = plan.Slope,
             Intercept = plan.Intercept,
             Scale = 1,
             DataSource = DataSources.DemoService,
-            CreatedAt = utc.ToString("o"),
+            CreatedAt = utc.ToString("o", CultureInfo.InvariantCulture),
             ModifiedAt = utc,
         };
     }
@@ -1296,12 +1297,12 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = "BG Check",
+            EventType = TreatmentTypes.BgCheck,
             Glucose = Math.Max(40, ScaledRounding.Round(glucose + (_random.NextDouble() - 0.5) * 8, 0)),
             GlucoseType = "Finger",
             Units = "mg/dl",
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user",
             DataSource = DataSources.DemoService,
         };
@@ -1312,10 +1313,10 @@ public class DemoDataGenerator : IDemoDataGenerator
         var utc = _clock.ToUtc(time);
         return new Treatment
         {
-            EventType = announcement ? "Announcement" : "Note",
+            EventType = announcement ? TreatmentTypes.Announcement : TreatmentTypes.Note,
             Notes = text,
             Mills = utc.ToMills(),
-            Created_at = utc.ToString("o"),
+            Created_at = utc.ToString("o", CultureInfo.InvariantCulture),
             EnteredBy = "demo-user",
             DataSource = DataSources.DemoService,
         };
@@ -1354,7 +1355,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                     _realtimeSimulator.AddInsulinDose(nowUtc, treatment.Insulin.Value);
                 if (treatment.Carbs is > 0)
                     _realtimeSimulator.AddCarbs(nowUtc, treatment.Carbs.Value);
-                if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
+                if (treatment.EventType == TreatmentTypes.TempBasal && treatment.Rate is { } rate)
                 {
                     tempRate = rate;
                     tempDuration = treatment.Duration is > 0 ? (int)treatment.Duration.Value : null;

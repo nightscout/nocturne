@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
@@ -14,15 +15,18 @@ using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
-/// Profile controller that provides 1:1 compatibility with Nightscout profile endpoints.
-/// Implements the /api/v1/profile/* endpoints from the legacy JavaScript implementation.
+/// Nightscout profile documents. A client can list, read, create, update and delete profiles, and read the current profile.
 /// </summary>
+/// <remarks>
+/// Implements the /api/v1/profile/* endpoints from the legacy JavaScript implementation.
+/// </remarks>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IProfileWriteService"/>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
+[ErrorEnvelope]
 public class ProfileController : ControllerBase
 {
     private readonly IProfileProjectionService _projectionService;
@@ -65,7 +69,7 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile GET endpoint requested with count: {Count} from {RemoteIpAddress}",
             count,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
         try
@@ -91,7 +95,7 @@ public class ProfileController : ControllerBase
                 lastModified = DateTimeOffset.UtcNow.AddDays(-1); // Default fallback
             }
 
-            Response.Headers.LastModified = lastModified.ToString("R");
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
             // Check If-Modified-Since header for conditional requests
             if (Request.Headers.IfModifiedSince.Count > 0)
@@ -99,6 +103,8 @@ public class ProfileController : ControllerBase
                 if (
                     DateTimeOffset.TryParse(
                         Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out var ifModifiedSince
                     )
                 )
@@ -120,11 +126,6 @@ public class ProfileController : ControllerBase
             // This is normal behavior, not an error
             _logger.LogDebug("Profile request was cancelled by the client");
             return StatusCode(499, Array.Empty<Profile>()); // 499 = Client Closed Request (nginx convention)
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching profiles");
-            return StatusCode(500, Array.Empty<Profile>());
         }
     }
 
@@ -166,11 +167,6 @@ public class ProfileController : ControllerBase
         {
             return StatusCode(499, Array.Empty<Profile>());
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching profile history");
-            return StatusCode(500, Array.Empty<Profile>());
-        }
     }
 
     /// <summary>
@@ -191,11 +187,6 @@ public class ProfileController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Profile POST endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
         try
         {
             var profiles = NightscoutJsonBody.ReadObjects<Profile>(body);
@@ -230,11 +221,6 @@ public class ProfileController : ControllerBase
             _logger.LogWarning(ex, "Invalid JSON in create profiles request");
             return BadRequest("Invalid profile data format");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while creating profiles");
-            return StatusCode(500, Array.Empty<Profile>());
-        }
     }
 
     /// <summary>
@@ -268,22 +254,14 @@ public class ProfileController : ControllerBase
 
         StampCreatedAt(profile);
 
-        try
-        {
-            var saved = await _writeService.UpdateProfileAsync(
-                profile.Id,
-                profile,
-                cancellationToken
-            );
-            return saved is null
-                ? Conflict("A profile with this _id was deleted and cannot be recreated")
-                : Ok(saved);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while saving profile {ProfileId}", profile.Id);
-            return StatusCode(500, "Internal server error while saving profile");
-        }
+        var saved = await _writeService.UpdateProfileAsync(
+            profile.Id,
+            profile,
+            cancellationToken
+        );
+        return saved is null
+            ? Conflict("A profile with this _id was deleted and cannot be recreated")
+            : Ok(saved);
     }
 
     /// <summary>
@@ -293,7 +271,7 @@ public class ProfileController : ControllerBase
     private static void StampCreatedAt(Profile profile)
     {
         if (string.IsNullOrEmpty(profile.CreatedAt))
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -317,16 +295,8 @@ public class ProfileController : ControllerBase
             return BadRequest("keep must be a whole number between 10 and 10000");
         }
 
-        try
-        {
-            var deleted = await _writeService.PruneProfilesAsync(keepCount, cancellationToken);
-            return Ok(LegacyDeleteStatus.For(deleted));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while pruning profiles to {Keep}", keepCount);
-            return StatusCode(500, "Internal server error while pruning profiles");
-        }
+        var deleted = await _writeService.PruneProfilesAsync(keepCount, cancellationToken);
+        return Ok(LegacyDeleteStatus.For(deleted));
     }
 
     /// <summary>
@@ -346,16 +316,8 @@ public class ProfileController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
-            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while deleting profile {ProfileId}", id);
-            return StatusCode(500, "Internal server error while deleting profile");
-        }
+        var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
+        return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
     }
 
     /// <summary>
@@ -391,52 +353,41 @@ public class ProfileController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogDebug(
-            "Profile current endpoint requested from {RemoteIpAddress}",
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
+        var profile = await _projectionService.GetCurrentProfileAsync(cancellationToken);
 
-        try
+        if (profile == null)
         {
-            var profile = await _projectionService.GetCurrentProfileAsync(cancellationToken);
+            _logger.LogDebug("No current profile found, returning null");
+            return Content("null", "application/json");
+        }
 
-            if (profile == null)
-            {
-                _logger.LogDebug("No current profile found, returning null");
-                return Content("null", "application/json");
-            }
+        // Set Last-Modified header for caching
+        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
+        Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
 
-            // Set Last-Modified header for caching
-            var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-            Response.Headers.LastModified = lastModified.ToString("R");
-
-            // Check If-Modified-Since header for conditional requests
-            if (Request.Headers.IfModifiedSince.Count > 0)
-            {
-                if (
-                    DateTimeOffset.TryParse(
-                        Request.Headers.IfModifiedSince.ToString(),
-                        out var ifModifiedSince
-                    )
+        // Check If-Modified-Since header for conditional requests
+        if (Request.Headers.IfModifiedSince.Count > 0)
+        {
+            if (
+                DateTimeOffset.TryParse(
+                    Request.Headers.IfModifiedSince.ToString(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var ifModifiedSince
                 )
+            )
+            {
+                if (lastModified <= ifModifiedSince)
                 {
-                    if (lastModified <= ifModifiedSince)
-                    {
-                        _logger.LogDebug("Returning 304 Not Modified for current profile request");
-                        return StatusCode(304, Array.Empty<Profile>());
-                    }
+                    _logger.LogDebug("Returning 304 Not Modified for current profile request");
+                    return StatusCode(304, Array.Empty<Profile>());
                 }
             }
+        }
 
-            _logger.LogDebug("Returning current profile with ID: {ProfileId}", profile.Id);
-            // Nightscout returns a single object, not an array
-            return Ok(profile);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error occurred while fetching current profile");
-            return StatusCode(500, Array.Empty<Profile>());
-        }
+        _logger.LogDebug("Returning current profile with ID: {ProfileId}", profile.Id);
+        // Nightscout returns a single object, not an array
+        return Ok(profile);
     }
 
     /// <summary>
@@ -458,71 +409,65 @@ public class ProfileController : ControllerBase
         _logger.LogDebug(
             "Profile spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
             spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+            HttpContext?.GetClientAddress() ?? "unknown"
         );
 
-        try
+        // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
+        bool isId = System.Text.RegularExpressions.Regex.IsMatch(
+                spec,
+                "^([a-f\\d]{24}|[a-f\\d]{32})$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+
+        if (isId)
         {
-            // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
-            bool isId = System.Text.RegularExpressions.Regex.IsMatch(
-                    spec,
-                    "^([a-f\\d]{24}|[a-f\\d]{32})$",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                );
+            // Fetch specific profile by ID
+            var profile = await _projectionService.GetProfileByIdAsync(
+                spec,
+                cancellationToken
+            );
 
-            if (isId)
+            if (profile == null)
             {
-                // Fetch specific profile by ID
-                var profile = await _projectionService.GetProfileByIdAsync(
-                    spec,
-                    cancellationToken
-                );
-
-                if (profile == null)
-                {
-                    _logger.LogDebug("Profile with ID {ProfileId} not found", spec);
-                    return Ok(Array.Empty<Profile>());
-                }
-
-                // Set Last-Modified header for caching
-                var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
-                Response.Headers.LastModified = lastModified.ToString("R");
-
-                // Check If-Modified-Since header for conditional requests
-                if (Request.Headers.IfModifiedSince.Count > 0)
-                {
-                    if (
-                        DateTimeOffset.TryParse(
-                            Request.Headers.IfModifiedSince.ToString(),
-                            out var ifModifiedSince
-                        )
-                    )
-                    {
-                        if (lastModified <= ifModifiedSince)
-                        {
-                            _logger.LogDebug(
-                                "Returning 304 Not Modified for profile ID {ProfileId}",
-                                spec
-                            );
-                            return StatusCode(304, Array.Empty<Profile>());
-                        }
-                    }
-                }
-
-                _logger.LogDebug("Returning profile with ID: {ProfileId}", spec);
-                return Ok(new[] { profile });
-            }
-            else
-            {
-                // For non-ObjectId specs, return empty array (consistent with Nightscout behavior)
-                _logger.LogDebug("Spec {Spec} is not a valid MongoDB ObjectId", spec);
+                _logger.LogDebug("Profile with ID {ProfileId} not found", spec);
                 return Ok(Array.Empty<Profile>());
             }
+
+            // Set Last-Modified header for caching
+            var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills);
+            Response.Headers.LastModified = lastModified.ToString("R", CultureInfo.InvariantCulture);
+
+            // Check If-Modified-Since header for conditional requests
+            if (Request.Headers.IfModifiedSince.Count > 0)
+            {
+                if (
+                    DateTimeOffset.TryParse(
+                        Request.Headers.IfModifiedSince.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var ifModifiedSince
+                    )
+                )
+                {
+                    if (lastModified <= ifModifiedSince)
+                    {
+                        _logger.LogDebug(
+                            "Returning 304 Not Modified for profile ID {ProfileId}",
+                            spec
+                        );
+                        return StatusCode(304, Array.Empty<Profile>());
+                    }
+                }
+            }
+
+            _logger.LogDebug("Returning profile with ID: {ProfileId}", spec);
+            return Ok(new[] { profile });
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "Error occurred while fetching profile with spec: {Spec}", spec);
-            return StatusCode(500, Array.Empty<Profile>());
+            // For non-ObjectId specs, return empty array (consistent with Nightscout behavior)
+            _logger.LogDebug("Spec {Spec} is not a valid MongoDB ObjectId", spec);
+            return Ok(Array.Empty<Profile>());
         }
     }
 }

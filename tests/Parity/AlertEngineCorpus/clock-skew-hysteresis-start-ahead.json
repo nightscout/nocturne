@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "name": "clock-skew-hysteresis-start-ahead",
+  "description": "both rules enter hysteresis at 12:30, then the clock reads 12:10: the start is 20 minutes ahead, so neither window closes and clock_anomaly reports hysteresis_started_at; at 12:27 the start is within the tolerance and reads as now, so the 0-minute window closes and the 30-minute one does not; the 30-minute window closes at 13:00",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value": 180
+      },
+      "hysteresis_minutes": 30,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "above",
+        "value": 180
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-04-01T12:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 200,
+        "latest_timestamp": "2026-04-01T12:00:00Z",
+        "latest_received_at": "2026-04-01T12:00:00Z",
+        "last_reading_at": "2026-04-01T12:00:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:30:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-04-01T12:30:00Z",
+        "latest_received_at": "2026-04-01T12:30:00Z",
+        "last_reading_at": "2026-04-01T12:30:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:10:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-04-01T12:10:00Z",
+        "latest_received_at": "2026-04-01T12:10:00Z",
+        "last_reading_at": "2026-04-01T12:10:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T12:27:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-04-01T12:27:00Z",
+        "latest_received_at": "2026-04-01T12:27:00Z",
+        "last_reading_at": "2026-04-01T12:27:00Z"
+      }
+    },
+    {
+      "at": "2026-04-01T13:00:00Z",
+      "context": {
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "latest_value": 100,
+        "latest_timestamp": "2026-04-01T13:00:00Z",
+        "latest_received_at": "2026-04-01T13:00:00Z",
+        "last_reading_at": "2026-04-01T13:00:00Z"
+      }
+    }
+  ]
+}

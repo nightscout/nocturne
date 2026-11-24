@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -9,6 +10,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -28,6 +30,9 @@ public class FoodsControllerTests : IDisposable
     /// </summary>
     private readonly FoodEntity _seededFood;
 
+    /// <summary>A food with no legacy id, which v3 serves under the 24-hex prefix of its UUID.</summary>
+    private readonly FoodEntity _uuidKeyedFood;
+
     public FoodsControllerTests()
     {
         _favoriteServiceMock = new Mock<IUserFoodFavoriteService>();
@@ -44,7 +49,13 @@ public class FoodsControllerTests : IDisposable
             OriginalId = Guid.NewGuid().ToString(),
             Name = "Test food",
         };
-        _dbContext.Foods.Add(_seededFood);
+        _uuidKeyedFood = new FoodEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = "Uuid keyed food",
+        };
+        _dbContext.Foods.AddRange(_seededFood, _uuidKeyedFood);
         _dbContext.SaveChanges();
     }
 
@@ -57,7 +68,7 @@ public class FoodsControllerTests : IDisposable
     private FoodsController CreateController(AuthContext? authContext)
     {
         var controller = new FoodsController(
-            _dbContext.AsFactory(),
+            new FoodRepository(_dbContext.AsFactory(), NullLogger<FoodRepository>.Instance),
             _favoriteServiceMock.Object,
             _treatmentFoodServiceMock.Object,
             _foodServiceMock.Object
@@ -254,6 +265,153 @@ public class FoodsControllerTests : IDisposable
             x => x.AddFavoriteAsync(subjectId.ToString(), _seededFood.Id, It.IsAny<CancellationToken>()),
             Times.Once
         );
+    }
+
+    private static AuthContext Subject(Guid subjectId) =>
+        new() { IsAuthenticated = true, SubjectId = subjectId };
+
+    public static TheoryData<string> UnresolvableIds => new() { "5f1d7a3b9c0e4a2b8d6c1e0f", "not-a-food" };
+
+    [Fact]
+    public async Task AddFavorite_ByEveryIdFormV1AndV3Accept_ResolvesTheFood()
+    {
+        var subjectId = Guid.NewGuid();
+        var controller = CreateController(Subject(subjectId));
+
+        foreach (var id in new[]
+        {
+            _uuidKeyedFood.Id.ToString(),
+            MongoObjectId.Coerce(_uuidKeyedFood.Id.ToString())!,
+            _seededFood.OriginalId!,
+            _seededFood.Id.ToString(),
+        })
+        {
+            (await controller.AddFavorite(id)).Should().BeOfType<NoContentResult>(id);
+        }
+
+        _favoriteServiceMock.Verify(
+            x => x.AddFavoriteAsync(subjectId.ToString(), _uuidKeyedFood.Id, It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        _favoriteServiceMock.Verify(
+            x => x.AddFavoriteAsync(subjectId.ToString(), _seededFood.Id, It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task AddFavorite_ByTheHashOfAnUppercaseLegacyId_ResolvesTheFood()
+    {
+        const string legacyId = "5F1D7A3B9C0E4A2B8D6C1E0F";
+        _dbContext.Foods.Add(new FoodEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _seededFood.TenantId,
+            OriginalId = legacyId,
+            Name = "Uppercase legacy food",
+        });
+        await _dbContext.SaveChangesAsync();
+        var subjectId = Guid.NewGuid();
+        var controller = CreateController(Subject(subjectId));
+
+        var result = await controller.AddFavorite(MongoObjectId.Coerce(legacyId)!);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Theory]
+    [MemberData(nameof(UnresolvableIds))]
+    public async Task AddFavorite_ByAnIdNoFoodHas_ReturnsNotFound(string id)
+    {
+        var controller = CreateController(Subject(Guid.NewGuid()));
+
+        var result = await controller.AddFavorite(id);
+
+        result.Should().BeOfType<NotFoundResult>();
+        _favoriteServiceMock.Verify(
+            x => x.AddFavoriteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveFavorite_ByTheIdV3Serves_ResolvesTheFood()
+    {
+        var subjectId = Guid.NewGuid();
+        var controller = CreateController(Subject(subjectId));
+
+        var result = await controller.RemoveFavorite(MongoObjectId.Coerce(_uuidKeyedFood.Id.ToString())!);
+
+        result.Should().BeOfType<NoContentResult>();
+        _favoriteServiceMock.Verify(
+            x => x.RemoveFavoriteAsync(subjectId.ToString(), _uuidKeyedFood.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFoodAttributionCount_ByTheIdV3Serves_CountsTheFoodsAttributions()
+    {
+        _treatmentFoodServiceMock
+            .Setup(x => x.CountByFoodIdAsync(_uuidKeyedFood.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
+        var served = MongoObjectId.Coerce(_uuidKeyedFood.Id.ToString())!;
+        var controller = CreateController(null);
+
+        var result = await controller.GetFoodAttributionCount(served);
+
+        var count = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<FoodAttributionCount>().Subject;
+        count.Count.Should().Be(3);
+        count.FoodId.Should().Be(served);
+    }
+
+    [Fact]
+    public async Task GetFoodAttributionCount_ByAnIdNoFoodHas_ReturnsNotFound()
+    {
+        var controller = CreateController(null);
+
+        var result = await controller.GetFoodAttributionCount("5f1d7a3b9c0e4a2b8d6c1e0f");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task DeleteFood_ByTheIdV3Serves_ClearsAttributionsAndDeletesTheFood()
+    {
+        var controller = CreateController(null);
+
+        var result = await controller.DeleteFood(MongoObjectId.Coerce(_uuidKeyedFood.Id.ToString())!);
+
+        result.Should().BeOfType<NoContentResult>();
+        _treatmentFoodServiceMock.Verify(
+            x => x.ClearFoodReferencesByFoodIdAsync(_uuidKeyedFood.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _foodServiceMock.Verify(
+            x => x.DeleteFoodAsync(_uuidKeyedFood.Id.ToString(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteFood_WithRemoveMode_DeletesTheAttributionsOfAFoodNamedByItsLegacyId()
+    {
+        var controller = CreateController(null);
+
+        var result = await controller.DeleteFood(_seededFood.OriginalId!, "remove");
+
+        result.Should().BeOfType<NoContentResult>();
+        _treatmentFoodServiceMock.Verify(
+            x => x.DeleteByFoodIdAsync(_seededFood.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteFood_ByAnIdNoFoodHas_ReturnsNotFoundAndDeletesNothing()
+    {
+        var controller = CreateController(null);
+
+        var result = await controller.DeleteFood("5f1d7a3b9c0e4a2b8d6c1e0f");
+
+        result.Should().BeOfType<NotFoundResult>();
+        _foodServiceMock.Verify(
+            x => x.DeleteFoodAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

@@ -11,6 +11,7 @@ using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Connectors.MyLife.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.MyLife.Tests.Services;
@@ -219,11 +220,134 @@ public class MyLifeConnectorServiceSyncWindowTests
         result.ItemsSynced.Should().NotContainKey(SyncDataType.TempBasals);
     }
 
+    /// <summary>
+    /// A scheduled run streams from the family furthest behind. Once the first run has published
+    /// the stranded bolus, the second streams only from it, less the catch-up overlap.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledSyncTwice_SecondRunStreamsOnlyFromTheFirstRunsNewestTreatment()
+    {
+        var strandedBolus = new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc);
+        var fixture = new Fixture(BolusAt(strandedBolus));
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+        var firstSince = fixture.Sync.Since;
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        firstSince.Should().Be(TreatmentWatermark - CatchUpOverlap);
+        fixture.Sync.Since.Should().Be(strandedBolus - CatchUpOverlap);
+    }
+
+    /// <summary>
+    /// On a scheduled run each family filters the one month stream at its own resume point. The
+    /// stream starts at the earlier of the two, so glucose behind treatments widens it, but a
+    /// treatment between the two points is older than the newest stored treatment and is not
+    /// published again.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledRun_WhenGlucoseIsBehindTreatments_FiltersTreatmentsAtTheirOwnPoint()
+    {
+        var glucoseWatermark = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var treatmentWatermark = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var betweenThePoints = new DateTime(2026, 4, 15, 9, 0, 0, DateTimeKind.Utc);
+        var afterBoth = new DateTime(2026, 6, 15, 9, 0, 0, DateTimeKind.Utc);
+        var fixture = new Fixture(
+            glucoseWatermark, treatmentWatermark, null, null, BolusAt(betweenThePoints), BolusAt(afterBoth));
+
+        (await fixture.RunScheduledAsync()).Success.Should().BeTrue();
+
+        fixture.Sync.Since.Should().Be(glucoseWatermark - CatchUpOverlap,
+            "the stream still reaches back to the family furthest behind");
+        fixture.Boluses.Should().ContainSingle().Which.Timestamp.Should().Be(afterBoth);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_SecondSyncOfTheSameEvents_StoresNoNewRow()
+    {
+        var at = new DateTime(2026, 3, 15, 9, 0, 0, DateTimeKind.Utc);
+        var store = new StoringConnectorPublisher();
+        var fixture = new Fixture(
+            GlucoseWatermark, TreatmentWatermark, null, store,
+            new MyLifeEvent
+            {
+                EventTypeId = MyLifeEventType.Glucose,
+                EventDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
+                Value = "120",
+                PatientId = "patient-1",
+                DeviceId = "device-1",
+            },
+            BolusAt(at.AddMinutes(10)),
+            new MyLifeEvent
+            {
+                EventTypeId = MyLifeEventType.NeedlePriming,
+                EventDateTime = new DateTimeOffset(at.AddMinutes(20)).ToUnixTimeMilliseconds() * 10_000,
+                PatientId = "patient-1",
+                DeviceId = "device-1",
+            },
+            TempBasalAt(at.AddMinutes(30)),
+            EventAt(MyLifeEventType.CarbCorrection, at.AddMinutes(40), "30"),
+            EventAt(MyLifeEventType.ManualGlucose, at.AddMinutes(50), "95"),
+            EventAt(MyLifeEventType.Alert, at.AddMinutes(60), info: "Low reservoir"),
+            EventAt(
+                MyLifeEventType.BolusNormal, at.AddMinutes(70), "3",
+                "{\"AmountOfBolus\":3,\"BolusIsCalculated\":true,\"CalcCarbs\":40,\"CalcBG\":150,"
+                + "\"CalcIOB\":0.5,\"SuggestedMealBolus\":3}"));
+        fixture.Readouts.Add(new MyLifePumpSettingsReadout
+        {
+            Id = "readout-1",
+            DeviceSerialNumber = "SN-1",
+            ActiveBasalProgramName = "Day",
+            UploadDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
+            BasalPrograms =
+            [
+                new MyLifeBasalProgram
+                {
+                    BasalProgramName = "Day",
+                    BasalProgramEntries = [new MyLifeBasalProgramEntry { Hour = 0, Minute = 0, BasalRateUnitsPerHour = "0.8" }],
+                },
+            ],
+        });
+        var request = new SyncRequest
+        {
+            From = TreatmentWatermark,
+            DataTypes =
+            [
+                SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.DeviceEvents, SyncDataType.StateSpans,
+                SyncDataType.CarbIntake, SyncDataType.ManualBG, SyncDataType.BolusCalculations,
+                SyncDataType.Notes, SyncDataType.Profiles,
+            ],
+        };
+
+        (await fixture.RunAsync(request)).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        (await fixture.RunAsync(request)).Success.Should().BeTrue();
+
+        stored.Select(k => k.Type).Distinct().Should().Contain(
+            [
+                nameof(SensorGlucose), nameof(Bolus), nameof(DeviceEvent), nameof(TempBasal), nameof(CarbIntake),
+                nameof(BGCheck), nameof(BolusCalculation), nameof(Note), nameof(ProfileActivation),
+            ]);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
+        store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
     private static MyLifeEvent TempBasalAt(DateTime at) => new()
     {
         EventTypeId = MyLifeEventType.TempBasal,
         EventDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
         InformationFromDevice = "{\"ValueInUperH\": 1.5, \"Minutes\": 30}",
+        PatientId = "patient-1",
+        DeviceId = "device-1",
+    };
+
+    private static MyLifeEvent EventAt(MyLifeEventType type, DateTime at, string? value = null, string? info = null) => new()
+    {
+        EventTypeId = type,
+        EventDateTime = new DateTimeOffset(at).ToUnixTimeMilliseconds() * 10_000,
+        InformationFromDevice = info,
+        Value = value,
         PatientId = "patient-1",
         DeviceId = "device-1",
     };
@@ -251,10 +375,12 @@ public class MyLifeConnectorServiceSyncWindowTests
 
         public List<Bolus> Boluses { get; } = [];
 
+        public List<MyLifePumpSettingsReadout> Readouts { get; } = [];
+
         public List<TempBasal> TempBasals { get; } = [];
 
         public Fixture(params MyLifeEvent[] events)
-            : this(GlucoseWatermark, TreatmentWatermark, null, events)
+            : this(GlucoseWatermark, TreatmentWatermark, null, null, events)
         {
         }
 
@@ -262,13 +388,14 @@ public class MyLifeConnectorServiceSyncWindowTests
             DateTime glucoseWatermark,
             DateTime treatmentWatermark,
             TimeProvider? clock = null,
+            IConnectorPublisher? store = null,
             params MyLifeEvent[] events)
         {
             var treatments = new Mock<ITreatmentPublisher>();
             treatments
                 .Setup(p => p.GetLatestTreatmentTimestampAsync(
                     It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(treatmentWatermark);
+                .ReturnsAsync(() => Boluses.Count > 0 ? Boluses.Max(b => b.Timestamp) : treatmentWatermark);
             treatments
                 .Setup(p => p.PublishBolusesAsync(
                     It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
@@ -301,27 +428,33 @@ public class MyLifeConnectorServiceSyncWindowTests
             (_service, _, _) = MyLifeSyncHarness.BuildService(
                 http,
                 Guid.NewGuid(),
-                soapClient => Sync = new RecordingSyncService(soapClient, events),
-                publisher.Object,
+                soapClient => Sync = new RecordingSyncService(soapClient, events, Readouts),
+                store ?? publisher.Object,
                 clock);
         }
 
+        private static MyLifeConnectorConfiguration Config() => new()
+        {
+            Username = "user@example.com",
+            Password = "secret",
+            PatientId = "patient-1",
+        };
+
         public Task<SyncResult> RunAsync(SyncRequest request) =>
-            _service.SyncDataAsync(
-                request,
-                new MyLifeConnectorConfiguration
-                {
-                    Username = "user@example.com",
-                    Password = "secret",
-                    PatientId = "patient-1",
-                },
-                CancellationToken.None);
+            _service.SyncDataAsync(request, Config(), CancellationToken.None);
+
+        public Task<SyncResult> RunScheduledAsync() => _service.SyncDataAsync(Config(), CancellationToken.None);
     }
 
     private sealed class RecordingSyncService(
-        MyLifeSoapClient soapClient, IReadOnlyList<MyLifeEvent> events)
+        MyLifeSoapClient soapClient, IReadOnlyList<MyLifeEvent> events,
+        IReadOnlyList<MyLifePumpSettingsReadout> readouts)
         : MyLifeSyncService(soapClient, NullLogger<MyLifeSyncService>.Instance)
     {
+        public override Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsAsync(
+            string serviceUrl, string authToken, string patientId, CancellationToken cancellationToken)
+            => Task.FromResult(readouts);
+
         public DateTime Since { get; private set; }
         public DateTime Until { get; private set; }
 

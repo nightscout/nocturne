@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -14,7 +15,6 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -71,11 +71,6 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             if (Table is not null && command.CommandText.Contains($"UPDATE {Table} "))
                 throw new InvalidOperationException($"injected failure writing {Table}");
         }
-    }
-
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
     }
 
     private sealed record Setup(
@@ -144,13 +139,13 @@ public class TrackerAlertRuleSyncRearmPostgresTests(TrackerAlertRuleSyncRearmPos
             .Setup(r => r.FindReferencingRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Guid>());
         var sync = new TrackerAlertRuleSyncService(
-            new Factory(() => Context(tenant, failure)),
+            new SuppliedContextFactory(() => Context(tenant, failure)),
             classifier.Object,
             references.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
+            Rearms.Unannounced(),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             TimeProvider.System,
-            NullLogger<TrackerAlertRuleSyncService>.Instance);
+            NullLogger<TrackerAlertRuleSyncService>.Instance, AccountLinkRoutes.Off);
         await sync.SyncDefinitionAsync(definition.Id);
 
         Guid rule;

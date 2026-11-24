@@ -1,4 +1,5 @@
-using Nocturne.Connectors.MyLife.Mappers.Constants;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Constants;
@@ -13,57 +14,41 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 internal static class MyLifeFactory
 {
-    internal static T CreateBase<T>(MyLifeEvent ev, DateTime now)
+    private static readonly ConnectorLegacyIds LegacyIds = ConnectorLegacyIds.For<MyLifeConnectorConfiguration>();
+
+    internal static T CreateBase<T>(MyLifeEvent ev)
         where T : IV4Record, new()
     {
         var timestamp = MyLifeMapperHelpers.FromInstantTicks(ev.EventDateTime);
 
         return new T
         {
-            Id = Guid.CreateVersion7(),
             Timestamp = timestamp.UtcDateTime,
-            LegacyId = $"{MyLifeIdPrefixes.Treatment}{MyLifeMapperHelpers.BuildEventKey(ev)}",
-            DataSource = DataSources.MyLifeConnector,
-            CreatedAt = now,
-            ModifiedAt = now,
+            LegacyId = LegacyIds.Of("treatment", MyLifeMapperHelpers.BuildEventKey(ev)),
         };
     }
 
-    internal static T CreateBaseWithSuffix<T>(MyLifeEvent ev, DateTime now, string suffix)
-        where T : IV4Record, new()
-    {
-        var record = CreateBase<T>(ev, now);
-        if (!string.IsNullOrWhiteSpace(suffix))
-            record.LegacyId = $"{record.LegacyId}-{suffix}";
-        return record;
-    }
-
-    internal static SensorGlucose CreateSensorGlucose(MyLifeEvent ev, DateTime now, double mgdl)
+    internal static SensorGlucose CreateSensorGlucose(MyLifeEvent ev, double mgdl)
     {
         var timestamp = MyLifeMapperHelpers.FromInstantTicks(ev.EventDateTime);
 
         return new SensorGlucose
         {
-            Id = Guid.CreateVersion7(),
             Timestamp = timestamp.UtcDateTime,
-            LegacyId = $"{MyLifeIdPrefixes.Entry}{MyLifeMapperHelpers.BuildEventKey(ev)}",
-            DataSource = DataSources.MyLifeConnector,
-            CreatedAt = now,
-            ModifiedAt = now,
+            LegacyId = LegacyIds.Of("entry", MyLifeMapperHelpers.BuildEventKey(ev)),
             Mgdl = mgdl,
         };
     }
 
     internal static Bolus CreateBolus(
         MyLifeEvent ev,
-        DateTime now,
         double insulin,
         Nocturne.Core.Models.V4.BolusType? bolusType = null,
         double? duration = null,
         Guid? correlationId = null
     )
     {
-        var bolus = CreateBase<Bolus>(ev, now);
+        var bolus = CreateBase<Bolus>(ev);
         bolus.Insulin = insulin;
         bolus.BolusType = bolusType;
         bolus.Duration = duration;
@@ -73,20 +58,19 @@ internal static class MyLifeFactory
 
     internal static CarbIntake CreateCarbIntake(
         MyLifeEvent ev,
-        DateTime now,
         double carbs,
         Guid? correlationId = null
     )
     {
-        var carbIntake = CreateBase<CarbIntake>(ev, now);
+        var carbIntake = CreateBase<CarbIntake>(ev);
         carbIntake.Carbs = carbs;
         carbIntake.CorrelationId = correlationId;
         return carbIntake;
     }
 
-    internal static BGCheck CreateBGCheck(MyLifeEvent ev, DateTime now, double glucose)
+    internal static BGCheck CreateBGCheck(MyLifeEvent ev, double glucose)
     {
-        var bgCheck = CreateBase<BGCheck>(ev, now);
+        var bgCheck = CreateBase<BGCheck>(ev);
         bgCheck.Glucose = glucose;
         bgCheck.GlucoseType = GlucoseType.Finger;
         bgCheck.Units = GlucoseUnit.MgDl;
@@ -95,13 +79,12 @@ internal static class MyLifeFactory
 
     internal static Note CreateNote(
         MyLifeEvent ev,
-        DateTime now,
         string text,
         string? eventType = null,
         bool isAnnouncement = false
     )
     {
-        var note = CreateBase<Note>(ev, now);
+        var note = CreateBase<Note>(ev);
         note.Text = text;
         note.EventType = eventType;
         note.IsAnnouncement = isAnnouncement;
@@ -110,12 +93,11 @@ internal static class MyLifeFactory
 
     internal static DeviceEvent CreateDeviceEvent(
         MyLifeEvent ev,
-        DateTime now,
         DeviceEventType eventType,
         string? notes = null
     )
     {
-        var deviceEvent = CreateBase<DeviceEvent>(ev, now);
+        var deviceEvent = CreateBase<DeviceEvent>(ev);
         deviceEvent.EventType = eventType;
         deviceEvent.Notes = notes;
         return deviceEvent;
@@ -123,7 +105,6 @@ internal static class MyLifeFactory
 
     internal static BolusCalculation CreateBolusCalculation(
         MyLifeEvent ev,
-        DateTime now,
         double? bloodGlucoseInput = null,
         double? carbInput = null,
         double? insulinOnBoard = null,
@@ -131,7 +112,7 @@ internal static class MyLifeFactory
         Guid? correlationId = null
     )
     {
-        var calc = CreateBase<BolusCalculation>(ev, now);
+        var calc = CreateBase<BolusCalculation>(ev);
         calc.BloodGlucoseInput = bloodGlucoseInput;
         calc.CarbInput = carbInput;
         calc.InsulinOnBoard = insulinOnBoard;

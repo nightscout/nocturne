@@ -3,6 +3,7 @@
   import { onMount, untrack } from "svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Droplet from "@lucide/svelte/icons/droplet";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
@@ -27,7 +28,7 @@
   import Moon from "@lucide/svelte/icons/moon";
   import Ban from "@lucide/svelte/icons/ban";
   import Timer from "@lucide/svelte/icons/timer";
-  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import type { AlertRuleResponse } from "@nocturne/api-client";
   import type { ConditionNode } from "./types";
   import {
     composeRuleTruth,
@@ -258,16 +259,30 @@
 {/snippet}
 
 <div class="flex flex-col gap-2" data-testid="rule-sidebar">
-  {#each orderedRules as rule (rule.id ?? rule.name)}
+  {#each orderedRules as rule, position (rule.id ?? rule.name)}
     {@const id = rule.id ?? ""}
     {@const disabled = disabledRuleIds.has(id)}
     {@const truth = ruleTruth(rule)}
     {@const tree = treeByRule.get(id)}
     {@const leaves = tree ? collectLeaves(rule, tree) : []}
     {@const isEditing = editingRuleId === id}
+    {@const hasEditing = orderedRules[0]?.id === editingRuleId && !!editingRuleId}
 
+    <!-- The alert under edit is set apart from the saved ones: named, ringed and listed first. -->
+    {#if isEditing}
+      <p class="text-sm font-medium" id="rule-sidebar-editing">The alert you are editing</p>
+    {:else if hasEditing && position === 1}
+      <p class="mt-3 text-sm font-medium text-muted-foreground">Your other alerts</p>
+    {/if}
+
+    <div
+      class={isEditing ? "rounded-lg ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
+      data-testid={isEditing ? "rule-sidebar-editing" : undefined}
+      aria-labelledby={isEditing ? "rule-sidebar-editing" : undefined}
+      role={isEditing ? "group" : undefined}
+    >
     <Collapsible.Root open={expanded || isEditing} variant="outline">
-      <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
+      <div class="flex items-center gap-2 rounded-t-lg px-2 py-1.5 text-sm {isEditing ? 'bg-primary/5' : ''}">
         <Collapsible.Trigger
           class="group flex flex-1 min-w-0 items-center gap-2 text-left"
         >
@@ -282,14 +297,12 @@
             style:--severity={severityVar(rule.severity)}
             aria-hidden="true"
           ></span>
-          <span class="flex-1 min-w-0 truncate">
+          <span class="flex-1 min-w-0 {isEditing ? 'font-semibold' : 'truncate'}">
             {rule.name ?? "(unnamed)"}
-            {#if isEditing}
-              <span class="ml-1 text-2xs uppercase tracking-wide text-muted-foreground">
-                (editing)
-              </span>
-            {/if}
           </span>
+          {#if isEditing}
+            <Badge>This alert</Badge>
+          {/if}
           {#if toggleable}
             <span
               class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
@@ -308,7 +321,7 @@
       </div>
       <Collapsible.Content class="border-t px-2 py-1.5">
         {#if leaves.length === 0}
-          <p class="text-xs text-muted-foreground">No leaves to evaluate.</p>
+          <p class="text-xs text-muted-foreground">No conditions.</p>
         {:else}
           <ul class="space-y-1">
             {#each leaves as entry (entry.leafId)}
@@ -332,6 +345,7 @@
                   class:opacity-30={!lt}
                   aria-hidden="true"
                 ></span>
+                <span class="sr-only">{lt ? "True:" : "Not true:"}</span>
                 {@render leafIconFor(entry.wrapper)}
                 {#if isNot}
                   <Ban class="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -354,5 +368,6 @@
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
+    </div>
   {/each}
 </div>

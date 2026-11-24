@@ -10,8 +10,14 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <summary>A restore made with <see cref="SoftDeleteRestoreExtensions.RestoreDeletedGroupAsync{TEntity}(NocturneDbContext, IEnumerable{Guid}, string, CancellationToken)"/>.</summary>
 /// <param name="Restored">The requested rows restored.</param>
 /// <param name="Conflicts">The requested ids left deleted for a key clash.</param>
-/// <param name="Copies">The other copies in their duplicate groups restored with them.</param>
-/// <param name="Promoted">The live rows made their group's primary because its primary stayed deleted.</param>
+/// <param name="Copies">
+/// The other copies in their duplicate groups restored with them that the caller's history clamp shows
+/// it. A copy the clamp hides is restored too, and left out.
+/// </param>
+/// <param name="Promoted">
+/// The live rows made their group's primary because its primary stayed deleted. One may be a row the
+/// caller's history clamp hides, so a caller reads them back through its own context.
+/// </param>
 public sealed record GroupRestore<TEntity>(
     IReadOnlyList<TEntity> Restored,
     IReadOnlyList<Guid> Conflicts,
@@ -141,7 +147,12 @@ public static class SoftDeleteRestoreExtensions
     /// </summary>
     /// <remarks>
     /// Every restored row is saved through the change tracker, so each gets its own audit row and a
-    /// fresh <c>SysUpdatedAt</c>.
+    /// fresh <c>SysUpdatedAt</c>. A co-deleted copy the caller's history clamp hides is restored as
+    /// well, read and saved by id with the clamp lifted after the rest are saved
+    /// (<see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>), and is not given back. A
+    /// restored state span ends the spans it supersedes again, and is ended at its own successor
+    /// (<see cref="StateSpanSupersessionExtensions.SupersedeByArrivedAsync"/>); the rows given back carry
+    /// the ends written.
     /// </remarks>
     /// <param name="ctx">The context the restore writes through.</param>
     /// <param name="pick">Loads the rows to restore, tracked, and the ids refused for a key clash.</param>
@@ -156,31 +167,41 @@ public static class SoftDeleteRestoreExtensions
         => ctx.ExecuteInTransactionAsync(async token =>
         {
             var (restoring, conflicts) = await pick(token);
+            await ctx.PlanForEachArrayAsync(restoring.Count, token);
             var dedup = DuplicateGroupPrimaries.RecordTypeOf<TEntity>();
 
             List<TEntity> copies = [];
+            List<TEntity> hidden = [];
             if (dedup is { } type && restoring.Count > 0)
             {
                 await DuplicateGroupPrimaries.LockGroupsOfAsync(ctx, type, [.. restoring.Select(ctx.IdOf)], token);
-                var candidates = await ctx.CoDeletedCopiesAsync(type, restoring, token);
-                var clashes = await ctx.FindLiveKeyClashesAsync([.. restoring, .. candidates], token);
-                copies = candidates.Where((_, i) => clashes[restoring.Count + i] is null).ToList();
+                var (shown, unseen) = await ctx.CoDeletedCopiesAsync(type, restoring, token);
+                var clashes = await ctx.FindLiveKeyClashesAsync([.. restoring, .. shown, .. unseen], token);
+                copies = shown.Where((_, i) => clashes[restoring.Count + i] is null).ToList();
+                hidden = unseen.Where((_, i) => clashes[restoring.Count + shown.Count + i] is null).ToList();
+                foreach (var refused in unseen.Except(hidden))
+                    ctx.Entry(refused).State = EntityState.Detached;
             }
 
             using var wide = typeof(TEntity) == typeof(SensorGlucoseEntity)
-                ? await GlucoseStreamFlags.DeferIfWideAsync(ctx, restoring.Count + copies.Count, token)
+                ? await GlucoseStreamFlags.DeferIfWideAsync(ctx, restoring.Count + copies.Count + hidden.Count, token)
                 : null;
             foreach (var entity in restoring.Concat(copies))
                 entity.DeletedAt = null;
             await ctx.SaveRestoreAsync(recordType, token);
+            List<Guid> restoredIds = [.. restoring.Concat(copies).Concat(hidden).Select(ctx.IdOf)];
+            await ctx.RestoreHiddenAsync(hidden, recordType, token);
+            if (typeof(TEntity) == typeof(StateSpanEntity))
+                ctx.AcceptWrittenEnds(
+                    await ctx.SupersedeByArrivedAsync(restoredIds, asGiven: false, token),
+                    restoring.Concat(copies).OfType<StateSpanEntity>());
 
             IReadOnlyList<Guid> promoted = dedup is { } restoredType && restoring.Count > 0
                 ? await DuplicateGroupPrimaries.RepointHeadlessGroupsAsync(
-                    ctx, restoredType, [.. restoring.Concat(copies).Select(ctx.IdOf)],
-                    NocturneDbContext.UtcNowAtStoredPrecision(), token)
+                    ctx, restoredType, restoredIds, NocturneDbContext.UtcNowAtStoredPrecision(), token)
                 : [];
             if (typeof(TEntity) == typeof(SensorGlucoseEntity))
-                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, [.. restoring.Concat(copies).Select(ctx.IdOf)], token);
+                await GlucoseStreamFlags.AfterRowsChangedAsync(ctx, restoredIds, token);
 
             return new GroupRestore<TEntity>(restoring, conflicts, copies, promoted);
         }, ct: ct);
@@ -188,9 +209,10 @@ public static class SoftDeleteRestoreExtensions
     /// <summary>
     /// The soft-deleted rows linked into the duplicate groups of <paramref name="restoring"/> whose
     /// <see cref="ISoftDeletable.DeletedAt"/> is that of a row being restored from the same group:
-    /// the copies one delete took together.
+    /// the copies one delete took together. <c>Hidden</c> are those the caller's history clamp hides
+    /// (<see cref="DuplicateGroupPrimaries.HiddenRowsAsync{TEntity}"/>).
     /// </summary>
-    private static async Task<List<TEntity>> CoDeletedCopiesAsync<TEntity>(
+    private static async Task<(List<TEntity> Shown, List<TEntity> Hidden)> CoDeletedCopiesAsync<TEntity>(
         this NocturneDbContext ctx, RecordType recordType, IReadOnlyList<TEntity> restoring, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable
     {
@@ -203,7 +225,7 @@ public static class SoftDeleteRestoreExtensions
             .Select(lr => new { lr.CanonicalId, lr.RecordId })
             .ToListAsync(ct);
         if (ownLinks.Count == 0)
-            return [];
+            return ([], []);
 
         var stampsByGroup = ownLinks
             .GroupBy(l => l.CanonicalId)
@@ -214,31 +236,51 @@ public static class SoftDeleteRestoreExtensions
             .Select(lr => new { lr.CanonicalId, lr.RecordId })
             .ToListAsync(ct);
         if (mateLinks.Count == 0)
-            return [];
+            return ([], []);
 
         var mateIds = mateLinks.Select(l => l.RecordId).Distinct().ToArray();
         var groupsOf = mateLinks.ToLookup(l => l.RecordId, l => l.CanonicalId);
         var deletedMates = await ctx.DeletedRows<TEntity>()
             .Where(e => mateIds.Contains(EF.Property<Guid>(e, IdProperty)))
             .ToListAsync(ct);
-        return deletedMates
-            .Where(m => groupsOf[ctx.IdOf(m)].Any(c => stampsByGroup[c].Contains(m.DeletedAt)))
-            .ToList();
+        var hiddenMates = await DuplicateGroupPrimaries.HiddenRowsAsync(
+            ctx, ctx.DeletedRows<TEntity>(), mateIds, deletedMates.Select(ctx.IdOf), ct);
+
+        var hidden = hiddenMates.Where(CoDeleted).ToList();
+        foreach (var other in hiddenMates.Except(hidden))
+            ctx.Entry(other).State = EntityState.Detached;
+        return (deletedMates.Where(CoDeleted).ToList(), hidden);
+
+        bool CoDeleted(TEntity mate) => groupsOf[ctx.IdOf(mate)].Any(c => stampsByGroup[c].Contains(mate.DeletedAt));
     }
+
+    /// <summary>
+    /// Restores <paramref name="hidden"/>, co-deleted copies the caller's history clamp hides, by id
+    /// with the clamp lifted (<see cref="DuplicateGroupPrimaries.SaveHiddenAsync{TEntity}"/>).
+    /// </summary>
+    private static Task RestoreHiddenAsync<TEntity>(
+        this NocturneDbContext ctx, IReadOnlyList<TEntity> hidden, string recordType, CancellationToken ct)
+        where TEntity : class, ISoftDeletable
+        => RefuseKeyClashAsync(
+            () => DuplicateGroupPrimaries.SaveHiddenAsync(ctx, hidden, e => e.DeletedAt = null, ct), recordType);
 
     private static Guid IdOf(this NocturneDbContext ctx, object entity)
         => (Guid)ctx.Entry(entity).Property(IdProperty).CurrentValue!;
 
+    /// <summary>Saves a restore (<see cref="RefuseKeyClashAsync"/>).</summary>
+    private static Task SaveRestoreAsync(this NocturneDbContext ctx, string recordType, CancellationToken ct)
+        => RefuseKeyClashAsync(() => ctx.SaveChangesAsync(ct), recordType);
+
     /// <summary>
-    /// Saves a restore, answering a unique violation as the refusal the clash check would have given.
-    /// A live row written after <see cref="FindLiveKeyClashesAsync{TEntity}"/> read the table is
+    /// Runs a restore's save, answering a unique violation as the refusal the clash check would have
+    /// given. A live row written after <see cref="FindLiveKeyClashesAsync{TEntity}"/> read the table is
     /// caught only by the index, and which key it took is not known here.
     /// </summary>
-    private static async Task SaveRestoreAsync(this NocturneDbContext ctx, string recordType, CancellationToken ct)
+    private static async Task RefuseKeyClashAsync(Func<Task> save, string recordType)
     {
         try
         {
-            await ctx.SaveChangesAsync(ct);
+            await save();
         }
         catch (DbUpdateException ex) when (ex.IsUniqueViolation())
         {
@@ -254,6 +296,12 @@ public static class SoftDeleteRestoreExtensions
     /// <see cref="NocturneDbContext.SyncDedupedEntities"/>. A key is held
     /// by a live row of this tenant, or by an earlier candidate that restores cleanly.
     /// </summary>
+    /// <remarks>
+    /// The live rows are read with the history clamp lifted (<see cref="HistoryClampLiftExtensions"/>):
+    /// the index the restore must not trip spans the whole tenant, and a clamped reader would miss a
+    /// holder older than its window. Only which wanted keys are held is read, and the refusal names
+    /// the candidate's own key.
+    /// </remarks>
     private static async Task<string?[]> FindLiveKeyClashesAsync<TEntity>(
         this NocturneDbContext ctx, IReadOnlyList<TEntity> candidates, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable
@@ -283,17 +331,17 @@ public static class SoftDeleteRestoreExtensions
         var wantedLegacyIds = keys.Select(k => k.LegacyId).OfType<string>().Distinct().ToList();
         if (wantedLegacyIds.Count > 0)
         {
-            heldLegacyIds.UnionWith(await live
+            heldLegacyIds.UnionWith(await ctx.WriteWithHistoryClampLiftedAsync(token => live
                 .Select(e => EF.Property<string>(e, LegacyIdProperty))
                 .Where(legacyId => wantedLegacyIds.Contains(legacyId))
-                .ToListAsync(ct));
+                .ToListAsync(token), ct));
         }
 
         var heldSyncKeys = new HashSet<(string DataSource, string SyncIdentifier)>();
         var wantedSyncIdentifiers = keys.Select(k => k.SyncKey?.SyncIdentifier).OfType<string>().Distinct().ToList();
         if (wantedSyncIdentifiers.Count > 0)
         {
-            var rows = await live
+            var rows = await ctx.WriteWithHistoryClampLiftedAsync(token => live
                 .Where(e => EF.Property<string?>(e, DataSourceProperty) != null
                          && wantedSyncIdentifiers.Contains(EF.Property<string>(e, SyncIdentifierProperty)))
                 .Select(e => new
@@ -301,7 +349,7 @@ public static class SoftDeleteRestoreExtensions
                     DataSource = EF.Property<string>(e, DataSourceProperty),
                     SyncIdentifier = EF.Property<string>(e, SyncIdentifierProperty),
                 })
-                .ToListAsync(ct);
+                .ToListAsync(token), ct);
             heldSyncKeys.UnionWith(rows.Select(r => (r.DataSource, r.SyncIdentifier)));
         }
 

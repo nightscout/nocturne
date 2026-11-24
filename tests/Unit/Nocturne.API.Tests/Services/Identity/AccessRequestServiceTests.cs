@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -20,6 +21,8 @@ namespace Nocturne.API.Tests.Services.Identity;
 public sealed class AccessRequestServiceTests : IDisposable
 {
     private static readonly string[] Granter = ["*"];
+
+    private static readonly Guid Approver = Guid.CreateVersion7();
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
@@ -41,12 +44,13 @@ public sealed class AccessRequestServiceTests : IDisposable
             .ReturnsAsync(RoleGrantValidation.Valid);
 
         _service = new AccessRequestService(
-            new SubjectRepository(_dbContext.AsFactory()),
-            new TenantMembershipRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off),
             _dbContext.AsFactory(),
             _roles.Object,
             _notifications.Object,
-            NullLogger<AccessRequestService>.Instance);
+            TimeProvider.System,
+            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off);
 
         _dbContext.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
         _dbContext.SaveChanges();
@@ -180,7 +184,7 @@ public sealed class AccessRequestServiceTests : IDisposable
         var requestorId = await SeedPendingRequestAsync();
 
         var result = await _service.ApproveAsync(
-            requestorId, tenantId: null, [], ["api:*:read"], limitTo24Hours: false, Granter);
+            requestorId, tenantId: null, [], ["api:*:read"], limitTo24Hours: false, Granter, Approver);
 
         result.Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
         (await _dbContext.Subjects.AsNoTracking().SingleAsync(s => s.Id == requestorId))
@@ -188,12 +192,67 @@ public sealed class AccessRequestServiceTests : IDisposable
         (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == requestorId)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Approve_decidesTheRequestTheSubjectFiledOnThatTenant()
+    {
+        var requestorId = await SeedPendingRequestAsync();
+        var requestId = await FileRequestAsync(requestorId);
+
+        (await Approve(requestorId, directPermissions: ["api:*:read"])).Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
+
+        var request = await _dbContext.MembershipRequests.AsNoTracking().SingleAsync(r => r.Id == requestId);
+        request.Status.Should().Be(MembershipRequestRecord.Approved, "the owner must not be left a request for a member");
+        request.DecidedBySubjectId.Should().Be(Approver);
+    }
+
+    [Fact]
+    public async Task Approve_byAnAdministratorWithNoSubject_decidesTheRequestWithNoDecider()
+    {
+        var requestorId = await SeedPendingRequestAsync();
+        var requestId = await FileRequestAsync(requestorId);
+
+        (await _service.ApproveAsync(requestorId, _tenantId, [], ["api:*:read"], limitTo24Hours: false, Granter, decidedBySubjectId: null))
+            .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
+
+        var request = await _dbContext.MembershipRequests.AsNoTracking().SingleAsync(r => r.Id == requestId);
+        request.Status.Should().Be(MembershipRequestRecord.Approved);
+        request.DecidedBySubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Approve_withNoTenant_leavesTheRequestPendingForTheOwner()
+    {
+        var requestorId = await SeedPendingRequestAsync();
+        var requestId = await FileRequestAsync(requestorId);
+
+        (await _service.ApproveAsync(requestorId, tenantId: null, [], ["api:*:read"], limitTo24Hours: false, Granter, Approver))
+            .Outcome.Should().Be(ApproveAccessRequestOutcome.Approved);
+
+        (await _dbContext.MembershipRequests.AsNoTracking().SingleAsync(r => r.Id == requestId)).Status
+            .Should().Be(MembershipRequestRecord.Pending);
+    }
+
+    private async Task<Guid> FileRequestAsync(Guid subjectId)
+    {
+        var request = new MembershipRequestEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+            Status = MembershipRequestRecord.Pending,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.MembershipRequests.Add(request);
+        await _dbContext.SaveChangesAsync();
+        return request.Id;
+    }
+
     private Task<ApproveAccessRequestResult> Approve(
         Guid subjectId,
         List<Guid>? roleIds = null,
         List<string>? directPermissions = null,
         bool limitTo24Hours = false) =>
-        _service.ApproveAsync(subjectId, _tenantId, roleIds ?? [], directPermissions, limitTo24Hours, Granter);
+        _service.ApproveAsync(subjectId, _tenantId, roleIds ?? [], directPermissions, limitTo24Hours, Granter, Approver);
 
     private void ArchivedFor(Guid subjectId, Times times) =>
         _notifications.Verify(

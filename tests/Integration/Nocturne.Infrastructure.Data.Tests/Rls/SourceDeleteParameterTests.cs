@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Infrastructure.Data.Extensions;
 using Npgsql;
 
@@ -41,7 +42,7 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         recorder.Statements.Clear();
 
         var deleted = await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
+            ctx.SensorGlucose.Selected(RecordSelector.ForSource("source-a")), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(Groups);
         recorder.MaxParameters.Should().BeLessThan(10, "an id list is bound as one parameter, not one per id");
@@ -51,6 +52,10 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
         (await ctx.LinkedRecords.CountAsync(l => l.IsPrimary && l.DataSource == "source-b")).Should().Be(Groups);
     }
 
+    /// <remarks>
+    /// The seed is analysed so that this test measures the SQL shape and not the planner's choice on
+    /// a table with no statistics.
+    /// </remarks>
     private async Task SeedAsync(Guid tenant)
     {
         await using var conn = await fx.OpenMigratorConnectionAsync();
@@ -73,6 +78,7 @@ public class SourceDeleteParameterTests(RlsCompletenessFixture fx)
             SELECT gen_random_uuid(), @tid, canonical, @type, a, 'source-a', true, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g
             UNION ALL
             SELECT gen_random_uuid(), @tid, canonical, @type, b, 'source-b', false, (extract(epoch FROM ts) * 1000)::bigint, now() FROM g;
+            ANALYZE sensor_glucose, linked_records;
             """;
         cmd.Parameters.AddWithValue("tid", tenant);
         cmd.Parameters.AddWithValue("slug", $"srcdel-{tenant:N}");

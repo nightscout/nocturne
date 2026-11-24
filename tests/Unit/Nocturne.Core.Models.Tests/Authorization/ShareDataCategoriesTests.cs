@@ -191,6 +191,19 @@ public class ShareDataCategoriesTests
             .Should().OnlyContain(t => ShareDataCategories.SpanEndColumnFor(t) != null);
     }
 
+    /// <summary>
+    /// A child clamped through its parent is shown while the parent's span end column says the parent is, and the
+    /// parent's early end is not read there, so a parent with an early end column would show its children past it.
+    /// </summary>
+    [Fact]
+    public void NoTableWithAnEarlyEndColumn_IsAParentOfAClampedChild()
+    {
+        ShareDataCategories.HiddenSpanEarlyEndColumns.Keys
+            .Should().NotIntersectWith(ShareDataCategories.HiddenParentRecency.Values.Select(p => p.Table));
+        ShareDataCategories.HiddenOpenSpanBounds.Keys
+            .Should().NotIntersectWith(ShareDataCategories.HiddenParentRecency.Values.Select(p => p.Table));
+    }
+
     [Theory]
     [InlineData("treatment_foods", "carb_intakes", "carb_intake_id")]
     [InlineData("sleep_stages", "sleep_sessions", "sleep_session_id")]

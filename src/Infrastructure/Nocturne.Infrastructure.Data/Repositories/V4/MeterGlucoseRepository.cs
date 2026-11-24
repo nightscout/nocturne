@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -25,8 +26,8 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// Initializes a new instance of the <see cref="MeterGlucoseRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public MeterGlucoseRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null, ILegacyReadCacheInvalidation? legacyReads = null)
-        : base(contextFactory, auditContext, logger, broadcaster, entrySink, legacyReads)
+    public MeterGlucoseRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IRecordChangePublisher? changes = null, IDataEventSink<Entry>? entrySink = null)
+        : base(contextFactory, auditContext, logger, changes, entrySink)
     {
     }
 
@@ -43,18 +44,12 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     protected override void ApplyUpdate(MeterGlucoseEntity target, MeterGlucose source) =>
         MeterGlucoseMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Deletes all meter glucose records for the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier.</param>
-    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<int> DeleteAsync(RecordSelector selector, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await AuditedSoftDeleteAndBroadcastAsync(
-            ctx, ctx.MeterGlucose.FromSource(source), $"data_source={source}", DuplicateDelete.PromoteSurvivor, origin, ct);
+            ctx, ctx.MeterGlucose.Selected(selector), selector.Scope, DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <summary>

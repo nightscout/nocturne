@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "staleness-cold-start",
-  "description": "both LastReadingAt and LatestTimestamp null: false for every operator (cold-start short-circuit)",
+  "description": "both LastReadingAt and LatestTimestamp null: unknown for every operator (cold-start short-circuit)",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "operator": "\u003E",
         "value": 15
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
@@ -23,7 +22,6 @@
         "operator": "\u003C",
         "value": 15
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

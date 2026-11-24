@@ -36,6 +36,27 @@ public interface IInAppNotificationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates <paramref name="entity"/> unless its user already has an active notification of its
+    /// type and source id, deciding under a lock on that key so two concurrent callers create one.
+    /// </summary>
+    /// <returns>The created notification, or null when one already stood.</returns>
+    Task<InAppNotificationEntity?> CreateUnlessActiveAsync(
+        InAppNotificationEntity entity,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces the metadata of the user's active notification of <paramref name="type"/> and
+    /// <paramref name="sourceId"/>.
+    /// </summary>
+    /// <returns>Whether an active notification was found.</returns>
+    Task<bool> ReplaceMetadataBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        string? metadataJson,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Archives a notification with a specified reason
     /// </summary>
     Task<InAppNotificationEntity?> ArchiveAsync(

@@ -109,7 +109,7 @@ public class GlookoAuthTokenProvider(
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{signInPath}")
         {
             Content = new StringContent(loginJson, Encoding.UTF8, "application/json")
-        };
+        }.MarkRepeatable();
 
         GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin);
 

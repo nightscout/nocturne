@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { timeDay } from "d3-time";
-import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
+import type { DailySummaryDay } from "@nocturne/api-client";
 import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 import { regionFormat, type RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./YearHeatmap.test-harness.svelte";
@@ -69,6 +69,7 @@ const savedRegion = regionFormat.current;
 
 afterEach(() => {
   document.documentElement.classList.remove(PRINT_LAYOUT_CLASS);
+  document.body.style.width = "";
   regionFormat.current = savedRegion;
 });
 
@@ -249,5 +250,69 @@ describe("YearHeatmap", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+function scroller(container: HTMLElement): HTMLElement {
+  const element = container.querySelector<HTMLElement>(".overflow-x-auto");
+  if (!element) throw new Error("The heatmap scroll container is not in the document");
+  return element;
+}
+
+describe("YearHeatmap month scrolling", () => {
+  it("opens scrolled to the latest weeks and steps back one month at a time", async () => {
+    document.body.style.width = "400px";
+    const { container } = render(Harness, { yearData });
+    await waitForCells(container, 366);
+    const el = scroller(container);
+    const previous = page.getByRole("button", { name: "Previous month" });
+    const next = page.getByRole("button", { name: "Next month" });
+
+    await vi.waitFor(() => expect(el.scrollLeft).toBeGreaterThan(0));
+    const max = el.scrollWidth - el.clientWidth;
+    expect(el.scrollLeft).toBeCloseTo(max, 0);
+    await expect.element(next).toBeDisabled();
+    await expect.element(previous).toBeEnabled();
+
+    const monthStops = Array.from(
+      container.querySelectorAll("a[href^='/calendar?'] text")
+    ).map((label) => Math.round(Number(label.getAttribute("x"))));
+    expect(monthStops).toHaveLength(12);
+    const before = el.scrollLeft;
+    await previous.click();
+    await vi.waitFor(() => expect(el.scrollLeft).toBeLessThan(before));
+    await vi.waitFor(() => expect(monthStops).toContain(Math.round(el.scrollLeft)));
+    const stepped = el.scrollLeft;
+    expect(before - stepped).toBeLessThanOrEqual(6 * 24);
+    await expect.element(next).toBeEnabled();
+
+    await next.click();
+    await vi.waitFor(() => expect(el.scrollLeft).toBeGreaterThan(stepped));
+    await vi.waitFor(() => expect(el.scrollLeft).toBeCloseTo(max, 0));
+    await expect.element(next).toBeDisabled();
+  });
+
+  it("disables previous at the start of the year", async () => {
+    document.body.style.width = "400px";
+    const { container } = render(Harness, { yearData });
+    await waitForCells(container, 366);
+    const el = scroller(container);
+    await vi.waitFor(() => expect(el.scrollLeft).toBeGreaterThan(0));
+
+    el.scrollLeft = 0;
+
+    await expect.element(page.getByRole("button", { name: "Previous month" })).toBeDisabled();
+    await expect.element(page.getByRole("button", { name: "Next month" })).toBeEnabled();
+  });
+
+  it("hides the buttons when the heatmap fits", async () => {
+    document.body.style.width = "8000px";
+    const { container } = render(Harness, { yearData });
+    await waitForCells(container, 366);
+
+    await vi.waitFor(() =>
+      expect(page.getByRole("button", { name: "Next month" }).query()).toBeNull()
+    );
+    expect(page.getByRole("button", { name: "Previous month" }).query()).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 //! The replay envelope, documented in the crate `README.md`: the replay driver
 //! (engine-semantics.md §8) over a whole series of ticks in one call.
 
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -17,6 +18,8 @@ struct ReplayRequest {
     ticks: Vec<ReplayTick>,
     #[serde(default)]
     include_ticks: bool,
+    #[serde(default)]
+    until: Option<DateTime<Utc>>,
 }
 
 /// A rule body that cannot be evaluated is skipped on every tick, not an
@@ -31,8 +34,12 @@ pub(crate) fn replay(request_json: &str) -> Result<Value, String> {
     for tick in &req.ticks {
         check_timestamp(tick.at, "ticks.at")?;
     }
+    if let Some(until) = req.until {
+        check_timestamp(until, "until")?;
+    }
     let options = ReplayOptions {
         include_ticks: req.include_ticks,
+        until: req.until,
     };
     let outcome = run_replay(&rules, req.ticks, options).map_err(|e| e.to_string())?;
     Ok(ok(outcome.to_json()))

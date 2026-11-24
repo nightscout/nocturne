@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "name": "predicted-old-and-new-wire",
+  "description": "an unnamed predicted reads predictions, the one array of the old wire shape, as default: the same verdict whether the context carries only that array or also named curves, a curve named default under prediction_curves (not read) and one under a name the engine has no member for (dropped)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": "<",
+        "value": 70,
+        "within_minutes": 30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "predicted",
+      "condition_params": {
+        "operator": ">",
+        "value": 150,
+        "within_minutes": 30
+      },
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 80
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 75
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 80
+          },
+          {
+            "offset_minutes": 15,
+            "mgdl": 75
+          }
+        ],
+        "prediction_curves": {
+          "cob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 200
+            },
+            {
+              "offset_minutes": 10,
+              "mgdl": 210
+            }
+          ],
+          "uam": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 50
+            }
+          ],
+          "default": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 40
+            }
+          ],
+          "ar2": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 66
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "predictions": [
+          {
+            "offset_minutes": 5,
+            "mgdl": 90
+          },
+          {
+            "offset_minutes": 10,
+            "mgdl": 66
+          }
+        ],
+        "prediction_curves": {
+          "iob": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 200
+            }
+          ],
+          "default": [
+            {
+              "offset_minutes": 5,
+              "mgdl": 200
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

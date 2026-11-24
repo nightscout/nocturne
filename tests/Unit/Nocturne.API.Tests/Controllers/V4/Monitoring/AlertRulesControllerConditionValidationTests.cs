@@ -37,7 +37,8 @@ public class AlertRulesControllerConditionValidationTests
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(ctx), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(ctx)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(ctx)),
             MockTenantAccessor.Create(ctx.TenantId).Object,
@@ -46,9 +47,9 @@ public class AlertRulesControllerConditionValidationTests
             Mock.Of<IRuleScopeClassifier>(),
             validator,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            logger ?? Mock.Of<ILogger<AlertRulesController>>());
+            Rearms.Unannounced(),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
+            logger ?? Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
         return (controller, ctx);
     }
 
@@ -93,6 +94,141 @@ public class AlertRulesControllerConditionValidationTests
             true,
             "[]",
             null));
+    }
+
+    [Fact]
+    public async Task On_unknown_round_trips_create_read_update_and_snapshot()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, db) = CreateController(validator.Object);
+        var body = Json("""{"direction": "below", "value": 70}""");
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            OnUnknown = AlertRuleOnUnknown.Met,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        created.OnUnknown.Should().Be(AlertRuleOnUnknown.Met);
+
+        var keptOnUpdate = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None);
+        keptOnUpdate.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.OnUnknown.Should().Be(AlertRuleOnUnknown.Met, "an update without it keeps the stored word");
+
+        var changed = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            OnUnknown = AlertRuleOnUnknown.NotMet,
+        }, CancellationToken.None);
+        changed.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync()).OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+        var snapshot = (await new AlertRepository(new TestNocturneDbContextFactory(db)).GetEnabledRulesAsync(CancellationToken.None))
+            .Single();
+        snapshot.OnUnknown.Should().Be(AlertRuleOnUnknown.NotMet);
+    }
+
+    [Fact]
+    public async Task Glucose_freshness_round_trips_create_read_update_and_snapshot()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, db) = CreateController(validator.Object);
+        var body = Json("""{"direction": "below", "value": 70}""");
+
+        var unset = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Default",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        unset.GlucoseFreshnessMinutes.Should().BeNull();
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            GlucoseFreshnessMinutes = 30,
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+        created.GlucoseFreshnessMinutes.Should().Be(30);
+
+        var changed = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            GlucoseFreshnessMinutes = 20,
+        }, CancellationToken.None);
+        changed.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes.Should().Be(20);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == created.Id))
+            .GlucoseFreshnessMinutes.Should().Be(20);
+        var snapshots = await new AlertRepository(new TestNocturneDbContextFactory(db))
+            .GetEnabledRulesAsync(CancellationToken.None);
+        snapshots.Single(r => r.Id == created.Id).GlucoseFreshnessMinutes.Should().Be(20);
+        snapshots.Single(r => r.Id == unset.Id).GlucoseFreshnessMinutes.Should().BeNull();
+
+        var kept = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+        }, CancellationToken.None);
+        kept.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes
+            .Should().Be(20, "an update without it keeps the stored bound");
+
+        var cleared = await controller.UpdateRule(created.Id, new UpdateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = body,
+            ClearGlucoseFreshness = true,
+        }, CancellationToken.None);
+        cleared.Result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which.GlucoseFreshnessMinutes
+            .Should().BeNull("clearing returns the rule to the engine's default");
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == created.Id))
+            .GlucoseFreshnessMinutes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateRule_without_on_unknown_holds()
+    {
+        var validator = new Mock<IAlertRuleConditionValidator>();
+        validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([]);
+        var (controller, _) = CreateController(validator.Object);
+
+        var created = (await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 70}"""),
+        }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
+            .Should().BeOfType<AlertRuleResponse>().Which;
+
+        created.OnUnknown.Should().Be(AlertRuleOnUnknown.Hold);
     }
 
     [Fact]
@@ -269,5 +405,138 @@ public class AlertRulesControllerConditionValidationTests
                 [$"condition:{path}"] = ["pump_mode_category:category"],
             });
         (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
+    [InlineData("Threshold", """{"direction": "below", "value": 70, "clear_margin": -5}""", "threshold", "margin_negative:clear_margin")]
+    [InlineData("Iob", """{"operator": "==", "value": 2, "clear_margin": 1}""", "iob", "margin_on_equality:clear_margin")]
+    [InlineData("Cob", """{"operator": ">", "value": 2, "clear_margin": "1"}""", "cob", "invalid_field:clear_margin")]
+    [InlineData("SiteAge", """{"operator": ">=", "value": 72, "clear_margin": 5}""", "site_age", "unknown_field")]
+    [InlineData("Not",
+        """{"child": {"type": "reservoir", "reservoir": {"operator": "<", "value": 20, "clear_margin": -1}}}""",
+        "not[0].reservoir", "margin_negative:clear_margin")]
+    [InlineData("Sustained",
+        """{"minutes": 15, "child": {"type": "composite", "composite": {"operator": "and", "conditions": [{"type": "iob", "iob": {"operator": ">", "value": 1}}, {"type": "threshold", "threshold": {"direction": "below", "value": 70, "clear_margin": 5}}]}}}""",
+        "sustained[0].composite[1].threshold", "margin_under_sustained:clear_margin")]
+    [InlineData("RateOfChange", """{"direction": "falling", "rate": 1, "clear_margin": 1.5}""", "rate_of_change", "margin_past_zero:clear_margin")]
+    public async Task CreateRule_rejects_an_invalid_clear_margin(
+        string type, string conditionParams, string path, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
+    [InlineData("Threshold", """{"direction": "below", "value": 70, "value_from": {"fact": "target_low"}}""", "threshold", "limit_conflict:value_from")]
+    [InlineData("Threshold", """{"direction": "below"}""", "threshold", "field_missing:value")]
+    [InlineData("Threshold", """{"direction": "above", "value_from": {"fact": "latest_glucose"}}""", "threshold", "self_reference:value_from")]
+    [InlineData("Predicted", """{"operator": "<", "within_minutes": 30, "value_from": {"fact": "latest_glucose", "offset": -1000.5}}""", "predicted", "offset_out_of_range:offset")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "target_low", "offset": "-10"}}""", "eventual_glucose", "invalid_field:offset")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "max_iob"}}""", "eventual_glucose", "unknown_value:fact")]
+    [InlineData("Iob", """{"operator": ">", "value": 2, "value_from": {"fact": "target_low"}}""", "iob", "unknown_field")]
+    [InlineData("Sustained",
+        """{"minutes": 15, "child": {"type": "threshold", "threshold": {"direction": "below", "value_from": {"fact": "target_low"}, "clear_margin": 5}}}""",
+        "sustained[0].threshold", "margin_under_sustained:clear_margin")]
+    public async Task CreateRule_rejects_an_invalid_limit_from_a_fact(
+        string type, string conditionParams, string path, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Below target",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "iob", "min_of": ["cob"]}""", "selector_conflict:min_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob"], "max_of": ["cob"]}""", "selector_conflict:max_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": []}""", "list_empty:min_of")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "ar2"}""", "unknown_value:curve")]
+    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "max_of": ["iob", "Cob"]}""", "unknown_value:max_of")]
+    public async Task CreateRule_rejects_an_invalid_curve_selection(string conditionParams, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low soon",
+            ConditionType = AlertConditionType.Predicted,
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                ["condition:predicted"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [NativeTheory]
+    [InlineData("Predicted", """{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob", "cob", "uam", "zt"]}""")]
+    [InlineData("EventualGlucose", """{"operator": "<", "value": 80, "clear_margin": 5}""")]
+    [InlineData("CarbsRequired", """{"operator": ">=", "value": 10}""")]
+    public async Task CreateRule_saves_a_curve_selection_and_the_loop_conditions(string type, string conditionParams)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Loop",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().NotBeOfType<BadRequestObjectResult>();
+        (await db.AlertRules.CountAsync()).Should().Be(1);
+    }
+
+    [NativeFact]
+    public async Task CreateRule_saves_a_valid_clear_margin_as_written()
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Low",
+            ConditionType = AlertConditionType.Threshold,
+            ConditionParams = Json("""{"direction": "below", "value": 70, "clear_margin": 5}"""),
+        }, CancellationToken.None);
+
+        result.Result.Should().NotBeOfType<BadRequestObjectResult>();
+        var stored = await db.AlertRules.SingleAsync();
+        JsonDocument.Parse(stored.ConditionParams).RootElement.GetProperty("clear_margin").GetDecimal()
+            .Should().Be(5m);
     }
 }

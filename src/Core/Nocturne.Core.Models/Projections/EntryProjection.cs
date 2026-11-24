@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models.Projections;
@@ -74,7 +75,7 @@ public static class EntryProjection
         {
             Id = legacyId ?? id.ToString(),
             Mills = mills,
-            DateString = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            DateString = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Device = device,
             App = app,
             DataSource = dataSource,

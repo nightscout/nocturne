@@ -1,6 +1,6 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
-  import { bg, bgLabel, formatLocale, relativeAge } from "#lib/utils/formatting.js";
+  import { bg, bgLabel, relativeAge, time } from "#lib/utils/formatting.js";
   import type {
     LoopPillData,
     PillInfoItem,
@@ -9,9 +9,11 @@
 
   interface LoopPillProps {
     data: LoopPillData | null;
+    /** "nightscout" reads as cgm-remote-monitor's loop pill: "Loop ↻" and "2m ago ↝ 5.6". */
+    variant?: "default" | "nightscout";
   }
 
-  let { data }: LoopPillProps = $props();
+  let { data, variant = "default" }: LoopPillProps = $props();
 
   /** Build info items for the popover */
   const info = $derived.by((): PillInfoItem[] => {
@@ -89,25 +91,46 @@
     }
   });
 
-  const pillLabel = $derived(`${data?.loopName ?? "Loop"} · ${statusWord}`);
+  // The symbols lib/plugins/loop.js shows for each status.
+  const nightscoutSymbol = $derived.by((): string => {
+    switch (data?.status) {
+      case "enacted":
+        return "⌁";
+      case "recommendation":
+        return "⏀";
+      case "looping":
+        return "↻";
+      case "warning":
+        return "⚠";
+      case "error":
+        return "x";
+      default:
+        return "?";
+    }
+  });
+
+  const pillLabel = $derived(
+    variant === "nightscout"
+      ? `${data?.loopName ?? "Loop"} ${nightscoutSymbol}`
+      : `${data?.loopName ?? "Loop"} · ${statusWord}`
+  );
 
   /** Build display value with time and eventual BG */
   const display = $derived.by(() => {
     if (!data?.lastLoopTime) return null;
 
-    const time = new Date(data.lastLoopTime).toLocaleTimeString(
-      formatLocale(),
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
-
-    if (data.eventualBG != null) {
-      return `${time} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
+    if (variant === "nightscout") {
+      const age = relativeAge(data.lastLoopTime);
+      return data.eventualBG != null ? `${age} ↝ ${bg(data.eventualBG)}` : age;
     }
 
-    return time;
+    const at = time(data.lastLoopTime);
+
+    if (data.eventualBG != null) {
+      return `${at} · eventual ${bg(data.eventualBG)} ${bgLabel()}`;
+    }
+
+    return at;
   });
 
   const level = $derived<AlertLevel>(data?.level ?? "none");

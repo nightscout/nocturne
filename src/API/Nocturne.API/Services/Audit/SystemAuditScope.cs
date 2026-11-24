@@ -5,7 +5,7 @@ namespace Nocturne.API.Services.Audit;
 /// <summary>
 /// Mutates a scoped <see cref="IAuditContext"/> into system-attribution mode for
 /// the duration of the scope. Actor fields (actor_subject_id, actor_name, auth_type,
-/// token_id, ip_address) are nulled; trace fields (correlation_id, endpoint) are
+/// token_id, credential fingerprint, ip_address, user agent) are nulled; trace fields (correlation_id, endpoint) are
 /// preserved so the resulting audit rows remain tied to the originating request.
 /// Restores the original field values on dispose. Use around connector-pipeline
 /// sweep operations (DeleteBy*, decomposer cleanup) that should not appear in
@@ -19,6 +19,8 @@ public sealed class SystemAuditScope : IDisposable
     private readonly string? _authType;
     private readonly Guid? _tokenId;
     private readonly string? _ipAddress;
+    private readonly string? _credentialFingerprint;
+    private readonly string? _userAgent;
     private readonly bool _isSystem;
     private readonly Guid? _keptWriter;
 
@@ -33,6 +35,8 @@ public sealed class SystemAuditScope : IDisposable
         _authType = target.AuthType;
         _tokenId = target.TokenId;
         _ipAddress = target.IpAddress;
+        _credentialFingerprint = target.CredentialFingerprint;
+        _userAgent = target.UserAgent;
         _isSystem = target.IsSystem;
 
         target.SubjectId = null;
@@ -40,6 +44,8 @@ public sealed class SystemAuditScope : IDisposable
         target.AuthType = null;
         target.TokenId = null;
         target.IpAddress = null;
+        target.CredentialFingerprint = null;
+        target.UserAgent = null;
         target.IsSystem = true;
     }
 
@@ -68,6 +74,8 @@ public sealed class SystemAuditScope : IDisposable
         _target.AuthType = _authType;
         _target.TokenId = _tokenId;
         _target.IpAddress = _ipAddress;
+        _target.CredentialFingerprint = _credentialFingerprint;
+        _target.UserAgent = _userAgent;
         _target.IsSystem = _isSystem;
         _target.KeptWriterGrantId = _keptWriter;
     }

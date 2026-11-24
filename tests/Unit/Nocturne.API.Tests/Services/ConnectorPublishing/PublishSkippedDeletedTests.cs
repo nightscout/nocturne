@@ -174,6 +174,6 @@ public class PublishSkippedDeletedTests : IDisposable
 
         return new GlucosePublisher(
             entryService, sensorGlucose, meterGlucose, calibration, Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ICanonicalAlertEvaluator>(), audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
+            audit, _tally, Mock.Of<ITenantAccessor>(), NullLogger<GlucosePublisher>.Instance);
     }
 }

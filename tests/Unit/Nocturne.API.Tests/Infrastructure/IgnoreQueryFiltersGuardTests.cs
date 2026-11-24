@@ -22,8 +22,10 @@ public class IgnoreQueryFiltersGuardTests
 
     private static readonly Dictionary<string, string> TenantLifts = new()
     {
-        [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.ScrubTenantAuditTrailsAsync"] =
-            "scrubs the deleted subject from every tenant's audit trail, naming each tenant in turn",
+        [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.ScrubTenantRowsAsync"] =
+            "scrubs the deleted subject from every tenant's audit trail and membership requests, naming each tenant in turn",
+        [$"{Data}/Repositories/SubjectRepository.cs: SubjectRepository.TenantRowsNaming"] =
+            "proves no tenant's rows name a subject about to be deleted, naming each tenant in turn",
     };
 
     private static IEnumerable<SourceFile> OutsideTheApi => RepoSources.Src

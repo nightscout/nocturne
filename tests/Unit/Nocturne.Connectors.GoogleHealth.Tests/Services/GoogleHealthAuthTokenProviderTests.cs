@@ -12,6 +12,7 @@ using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
+using Nocturne.Tests.Shared.Connectors;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
@@ -32,7 +33,7 @@ public class GoogleHealthAuthTokenProviderTests
         var body = field == "scope"
             ? "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600,\"scope\":" + value + "}"
             : "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":" + value + "}";
-        var provider = CreateProvider(new StubHandler(_ => Json(body)));
+        var provider = CreateProvider(new FakeHttpHandler(_ => Json(body)));
         await provider.DiscardStaleCacheAsync(Configuration("refresh"));
         var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
         {
@@ -55,7 +56,7 @@ public class GoogleHealthAuthTokenProviderTests
     {
         var body = "{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expires_in\":3600" +
             (empty ? ",\"scope\":\"\"}" : "}");
-        var provider = CreateProvider(new StubHandler(_ => Json(body)));
+        var provider = CreateProvider(new FakeHttpHandler(_ => Json(body)));
         await provider.DiscardStaleCacheAsync(Configuration("refresh"));
         GoogleHealthTokenSession session;
         if (stage == "authorization_code")
@@ -72,7 +73,7 @@ public class GoogleHealthAuthTokenProviderTests
     public async Task Durable_rotated_session_replaces_a_stale_cache()
     {
         string? posted = null;
-        var provider = CreateProvider(new StubHandler(request =>
+        var provider = CreateProvider(new FakeHttpHandler(request =>
         {
             posted = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             return Json("""{"access_token":"fresh","expires_in":3600,"token_type":"Bearer"}""");
@@ -88,7 +89,7 @@ public class GoogleHealthAuthTokenProviderTests
     public async Task Refreshes_once_and_reuses_the_tenant_session()
     {
         var calls = 0;
-        var provider = CreateProvider(new StubHandler(_ =>
+        var provider = CreateProvider(new FakeHttpHandler(_ =>
         {
             calls++;
             return Json("""
@@ -119,7 +120,7 @@ public class GoogleHealthAuthTokenProviderTests
     [Fact]
     public async Task Preserves_the_actionable_refresh_error()
     {
-        var provider = CreateProvider(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        var provider = CreateProvider(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
         {
             Content = new StringContent("{\"error\":\"invalid_grant\"}", Encoding.UTF8, "application/json")
         }));
@@ -136,7 +137,7 @@ public class GoogleHealthAuthTokenProviderTests
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
         var provider = CreateProvider(
-            new StubHandler(_ => Json("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}""")),
+            new FakeHttpHandler(_ => Json("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}""")),
             clock: clock);
         await provider.DiscardStaleCacheAsync(Configuration("refresh"));
 
@@ -155,7 +156,7 @@ public class GoogleHealthAuthTokenProviderTests
     public async Task Refresh_and_exchange_present_the_instance_client()
     {
         var posted = new List<string>();
-        var provider = CreateProvider(new StubHandler(request =>
+        var provider = CreateProvider(new FakeHttpHandler(request =>
         {
             posted.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             return Json("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}""");
@@ -188,7 +189,7 @@ public class GoogleHealthAuthTokenProviderTests
                 ["Scopes"] = "not-json",
                 ["AccessTokenExpiresAt"] = DateTimeOffset.UtcNow.AddHours(1).ToString("O")
             }));
-        var provider = CreateProvider(new StubHandler(_ => Json("""
+        var provider = CreateProvider(new FakeHttpHandler(_ => Json("""
             {
               "access_token":"refreshed-access-token",
               "expires_in":3600,
@@ -238,10 +239,4 @@ public class GoogleHealthAuthTokenProviderTests
         Content = new StringContent(text, Encoding.UTF8, "application/json")
     };
 
-    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken) => Task.FromResult(responder(request));
-    }
 }

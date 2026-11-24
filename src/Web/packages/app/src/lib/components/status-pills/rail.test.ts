@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { RailItemId } from "#lib/api/generated/nocturne-api-client.js";
-import { effectiveRail, parseRailPreference, railOrder } from "./rail";
+import { RailItemId } from "@nocturne/api-client";
+import { effectiveRail, parseRailPreference, railOrder, splitMobileRail } from "./rail";
 
-const { Cob, Basal, Iob, Loop, Reservoir, Trackers } = RailItemId;
-const DEFAULT = [Cob, Basal, Iob, Loop, Reservoir, Trackers];
+const { Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers } = RailItemId;
+const DEFAULT = [Cob, Basal, Iob, Loop, Reservoir, LinkBattery, Trackers];
 
 describe("parseRailPreference", () => {
   it("is undefined for a value that is not an object", () => {
@@ -38,19 +38,46 @@ describe("effectiveRail", () => {
 
   it("puts the ordered items first and the rest after in default order", () => {
     expect(railOrder({ order: [Reservoir, Iob] })).toEqual([
-      Reservoir, Iob, Cob, Basal, Loop, Trackers,
+      Reservoir, Iob, Cob, Basal, Loop, LinkBattery, Trackers,
     ]);
   });
 
   it("leaves out hidden items", () => {
     expect(effectiveRail({ order: [Loop], hidden: [Cob, Trackers] }, true)).toEqual([
-      Loop, Basal, Iob, Reservoir,
+      Loop, Basal, Iob, Reservoir, LinkBattery,
     ]);
   });
 
   it("leaves out trackers while the tenant switch is off, whatever the user chose", () => {
     expect(effectiveRail({ order: [Trackers, Cob] }, false)).toEqual([
-      Cob, Basal, Iob, Loop, Reservoir,
+      Cob, Basal, Iob, Loop, Reservoir, LinkBattery,
     ]);
+  });
+});
+
+describe("splitMobileRail", () => {
+  it("leads with COB, basal, IOB and loop for the default order", () => {
+    expect(splitMobileRail(DEFAULT, false)).toEqual({
+      lead: [Cob, Basal, Iob, Loop],
+      rest: [Reservoir, LinkBattery, Trackers],
+    });
+  });
+
+  it("leads with the first four items of the user's order", () => {
+    expect(splitMobileRail([Trackers, Reservoir, Iob, Cob, Basal, Loop], false)).toEqual({
+      lead: [Trackers, Reservoir, Iob, Cob],
+      rest: [Basal, Loop],
+    });
+  });
+
+  it("puts trackers in the lead, in their place, while one warns", () => {
+    expect(splitMobileRail(DEFAULT, true)).toEqual({
+      lead: [Cob, Basal, Iob, Loop, Trackers],
+      rest: [Reservoir, LinkBattery],
+    });
+  });
+
+  it("has no rest for four items or fewer", () => {
+    expect(splitMobileRail([Iob, Cob], false)).toEqual({ lead: [Iob, Cob], rest: [] });
   });
 });

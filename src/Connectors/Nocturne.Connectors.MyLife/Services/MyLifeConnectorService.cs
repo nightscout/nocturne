@@ -71,13 +71,21 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
+    ///     The run starts at the earlier of the glucose and treatment points, which only an
+    ///     open-ended request reads.
+    /// </summary>
+    protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, MyLifeConnectorConfiguration config) =>
+        request.To is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments] : [];
+
+    /// <summary>
     /// Performs sync by streaming one calendar month at a time, mapping and publishing
     /// each batch before moving on. A configurable overlap tail preserves cross-month
     /// carb-bolus and temp-basal consolidation context.
     /// </summary>
-    protected override async Task<SyncResult> PerformSyncInternalAsync(
+    protected override async Task<SyncResult> SyncWithTokenAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
+        TokenSession tokenSession,
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { Success = true };
@@ -86,18 +94,8 @@ public class MyLifeConnectorService(
 
         try
         {
-            // Establish the MyLife session up front. AcquireTokenAsync (reached via the token
-            // provider) performs the SOAP login and populates the session cache as a side effect;
-            // the token is cached so subsequent cycles reuse it. Without this call the session cache
-            // is never populated and every sync fails with "session not established".
-            if (await ValidTokenAsync(config, cancellationToken) is null)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
-                    ConnectorSource);
-                return AuthenticationFailedResult();
-            }
-
+            // The sign-in that preceded this sync performed the SOAP login and populated the
+            // session cache as a side effect; without it every sync fails with "session not established".
             var session = sessionCache.Get(tenantAccessor.TenantId);
             if (session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)
@@ -131,9 +129,9 @@ public class MyLifeConnectorService(
             // a range naming no lower bound; whether the source itself holds more is unverified.
             var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
             var glucoseSince = ResumeFrom(
-                request, await CalculateSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Glucose) ?? floor, floor);
             var treatmentSince = ResumeFrom(
-                request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
+                request, () => request.Resume.Point(ResumeFamily.Treatments) ?? floor, floor);
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var now = Clock.GetUtcNow().UtcDateTime;
@@ -166,7 +164,7 @@ public class MyLifeConnectorService(
                 if (needGlucose)
                 {
                     var sgList = eventProcessor
-                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks), now)
+                        .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
                     await PublishRecordTypeAsync(result, activeTypes,
@@ -184,8 +182,7 @@ public class MyLifeConnectorService(
                         contextEvents,
                         config.EnableMealCarbConsolidation,
                         config.EnableTempBasalConsolidation,
-                        config.TempBasalConsolidationWindowMinutes,
-                        now);
+                        config.TempBasalConsolidationWindowMinutes);
 
                     // Treatment records
                     if (needRecords)
@@ -231,7 +228,7 @@ public class MyLifeConnectorService(
                 await PublishRecordTypeAsync(result, activeTypes,
                     profiles, config, cancellationToken);
 
-                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts, ConnectorSource);
+                var activations = MyLifePumpSettingsMapper.MapToProfileActivations(readouts);
                 await PublishRecordTypeAsync(result, activeTypes,
                     activations, config, cancellationToken, "from pump settings");
             }

@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Tests.TestDoubles;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
@@ -180,7 +179,7 @@ public class DemoGenerationTests
         // The dashboard age pills only work if the decomposer recognizes the
         // seeded treatment EventTypes.
         foreach (var spec in DemoDeviceLifecycle.TrackerSpecs)
-            TreatmentTypes.DeviceEventTypeMap.Should().ContainKey(spec.TriggerEventType);
+            TreatmentTypeMaps.DeviceEventTypeMap.Should().ContainKey(spec.TriggerEventType);
     }
 
     [Fact]

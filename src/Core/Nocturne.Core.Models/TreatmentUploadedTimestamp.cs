@@ -21,15 +21,8 @@ public static class TreatmentUploadedTimestamp
     /// <paramref name="record"/> with the uploaded timestamp of <paramref name="treatment"/> added, or
     /// unchanged when it carries none.
     /// </summary>
-    public static Dictionary<string, object?>? AddTo(Dictionary<string, object?>? record, Treatment treatment)
-    {
-        if (Uploaded(treatment) is not { } timestamp)
-            return record;
-
-        record ??= new();
-        record[Field] = timestamp;
-        return record;
-    }
+    public static Dictionary<string, object?>? AddTo(Dictionary<string, object?>? record, Treatment treatment) =>
+        KeptField.Add(record, Field, Uploaded(treatment));
 
     /// <summary>The uploaded timestamp of <paramref name="treatment"/> as stored, or null.</summary>
     public static JsonElement? Uploaded(Treatment treatment) =>
@@ -39,17 +32,9 @@ public static class TreatmentUploadedTimestamp
 
     /// <summary>The uploaded timestamp a record's additional properties hold, or null.</summary>
     public static JsonElement? Of(IReadOnlyDictionary<string, object?>? record) =>
-        Read(record?.GetValueOrDefault(Field));
+        KeptField.Json(record?.GetValueOrDefault(Field));
 
     /// <summary>The uploaded timestamp a span's metadata holds, or null.</summary>
     public static JsonElement? OfSpan(IDictionary<string, object>? metadata) =>
-        metadata is not null && metadata.TryGetValue(Field, out var value) ? Read(value) : null;
-
-    private static JsonElement? Read(object? value) => value switch
-    {
-        null => null,
-        JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } => null,
-        JsonElement je => je,
-        _ => JsonSerializer.SerializeToElement(value),
-    };
+        metadata is not null && metadata.TryGetValue(Field, out var value) ? KeptField.Json(value) : null;
 }

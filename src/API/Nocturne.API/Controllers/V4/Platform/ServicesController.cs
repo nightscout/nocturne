@@ -1,8 +1,10 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Models;
@@ -17,19 +19,24 @@ using Nocturne.Core.Models.Services;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 /// <summary>
-/// Services controller for managing data sources, connectors, and integrations.
-/// Provides information about connected data sources, available connectors,
-/// sync status for connectors, and setup instructions for uploaders like xDrip+, Loop, AAPS, etc.
+/// Data sources, connectors, and uploaders for the tenant. Read their status and capabilities, and get
+/// setup instructions for uploaders such as xDrip+, Loop and AAPS. Start syncs, reset sync cursors,
+/// and delete data.
 /// </summary>
 /// <seealso cref="IDataSourceService"/>
 /// <seealso cref="IConnectorHealthService"/>
 /// <seealso cref="IConnectorSyncService"/>
 [ApiController]
+[System.ComponentModel.DisplayName("Data Sources and Sync")]
+[Tags("Connectors")]
 [Route("api/v4/services")]
 [Produces("application/json")]
 [Authorize]
 public class ServicesController : ControllerBase
 {
+    private const string SyncRunningCode = "sync_running";
+    private const string ImportRunningCode = "import_running";
+
     private readonly IDataSourceService _dataSourceService;
     private readonly IConnectionService _connectionService;
     private readonly IConnectorHealthService _connectorHealthService;
@@ -77,30 +84,23 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ServicesOverview), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ServicesOverview>> GetServicesOverview(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogDebug("Getting services overview");
 
-        try
-        {
-            // Get base URL for API endpoint info
-            var baseUrl = GetBaseUrl();
-            var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+        // Get base URL for API endpoint info
+        var baseUrl = GetBaseUrl();
+        var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
 
-            var overview = await _dataSourceService.GetServicesOverviewAsync(
-                baseUrl,
-                isAuthenticated,
-                cancellationToken
-            );
-            return Ok(overview);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting services overview");
-            return Problem(detail: "Failed to get services overview", statusCode: 500, title: "Internal Server Error");
-        }
+        var overview = await _dataSourceService.GetServicesOverviewAsync(
+            baseUrl,
+            isAuthenticated,
+            cancellationToken
+        );
+        return Ok(overview);
     }
 
     /// <summary>
@@ -118,7 +118,8 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectionsOverview), 200)]
     public async Task<ActionResult<ConnectionsOverview>> GetConnections(CancellationToken cancellationToken = default) =>
-        Ok(await _connectionService.GetConnectionsAsync(HttpContext.GetSubjectId(), cancellationToken));
+        Ok(await _connectionService.GetConnectionsAsync(
+            HttpContext.GetSubjectId(), HttpContext.MayKeepDeviceCredentials(), cancellationToken));
 
     /// <summary>
     /// Get all active data sources that have been sending data to this Nocturne instance.
@@ -131,22 +132,15 @@ public class ServicesController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DataSourceInfo>), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<DataSourceInfo>>> GetActiveDataSources(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogDebug("Getting active data sources");
 
-        try
-        {
-            var dataSources = await _dataSourceService.GetActiveDataSourcesAsync(cancellationToken);
-            return Ok(dataSources);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting active data sources");
-            return Problem(detail: "Failed to get active data sources", statusCode: 500, title: "Internal Server Error");
-        }
+        var dataSources = await _dataSourceService.GetActiveDataSourcesAsync(cancellationToken);
+        return Ok(dataSources);
     }
 
     /// <summary>
@@ -161,6 +155,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(DataSourceInfo), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceInfo>> GetDataSource(
         string id,
         CancellationToken cancellationToken = default
@@ -168,20 +163,12 @@ public class ServicesController : ControllerBase
     {
         _logger.LogDebug("Getting data source: {Id}", id);
 
-        try
+        var dataSource = await _dataSourceService.GetDataSourceInfoAsync(id, cancellationToken);
+        if (dataSource == null)
         {
-            var dataSource = await _dataSourceService.GetDataSourceInfoAsync(id, cancellationToken);
-            if (dataSource == null)
-            {
-                return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
-            }
-            return Ok(dataSource);
+            return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting data source: {Id}", id);
-            return Problem(detail: "Failed to get data source", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(dataSource);
     }
 
     /// <summary>
@@ -189,7 +176,7 @@ public class ServicesController : ControllerBase
     /// </summary>
     /// <returns>List of available connectors</returns>
     [HttpGet("connectors")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AvailableConnector>), 200)]
     public async Task<ActionResult<List<AvailableConnector>>> GetAvailableConnectors(
@@ -201,7 +188,7 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
-    /// Get capabilities for a specific connector.
+    /// Get capabilities for a specific connector, and when an API secret the caller saves on it stops.
     /// </summary>
     /// <param name="id">The connector ID (e.g., "dexcom", "libre")</param>
     /// <returns>Connector capabilities</returns>
@@ -218,6 +205,15 @@ public class ServicesController : ControllerBase
         {
             return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
         }
+
+        if (!ConnectorConfigurationService.AdoptsSecret(id))
+            return Ok(capabilities);
+
+        var ceiling = HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing;
+        if (ConnectorSecretSaver.MayAdoptFor(ceiling.Scopes, ceiling.HistoryClamped))
+            capabilities.SavedSecretStopsAt = HttpContext.CallerAccessEndsAt();
+        else
+            capabilities.SavedSecretMakesNoCredential = true;
 
         return Ok(capabilities);
     }
@@ -305,6 +301,18 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// Whether the tenant holds demo data, which <see cref="DeleteDemoData"/> would delete.
+    /// </summary>
+    [HttpGet("data-sources/demo")]
+    [RequireScope(Scope.TenantSettings)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(DemoDataPresence), 200)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<DemoDataPresence>> GetDemoDataPresence(
+        CancellationToken cancellationToken = default
+    ) => Ok(new DemoDataPresence(await _dataSourceService.HoldsDemoDataAsync(cancellationToken)));
+
+    /// <summary>
     /// Delete all demo data. This operation is safe as demo data can be easily regenerated.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -312,29 +320,22 @@ public class ServicesController : ControllerBase
     [HttpDelete("data-sources/demo")]
     [RequireScope(Scope.TenantSettings)]
     [DenyDemoSubject]
-    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus", "GetDemoDataPresence"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDemoData(
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogInformation("Deleting demo data via API");
 
-        try
+        var result = await _dataSourceService.DeleteDemoDataAsync(cancellationToken);
+        if (!result.Success)
         {
-            var result = await _dataSourceService.DeleteDemoDataAsync(cancellationToken);
-            if (!result.Success)
-            {
-                return StatusCode(500, result);
-            }
-            return Ok(result);
+            return StatusCode(500, result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting demo data");
-            return Problem(detail: "Failed to delete demo data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -352,6 +353,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteDataSourceData(
         string id,
         [FromQuery] bool allowReimport = false,
@@ -360,24 +362,50 @@ public class ServicesController : ControllerBase
     {
         _logger.LogWarning("Deleting all data for data source: {Id}", id);
 
-        try
+        var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
+        if (!result.Success)
         {
-            var result = await _dataSourceService.DeleteDataSourceDataAsync(id, allowReimport, cancellationToken);
-            if (!result.Success)
+            if (result.ErrorCode == DataSourceDeleteError.NotFound)
             {
-                if (result.ErrorCode == DataSourceDeleteError.NotFound)
-                {
-                    return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
-                }
-                return StatusCode(500, result);
+                return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
             }
-            return Ok(result);
+            return StatusCode(500, result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting data for data source: {Id}", id);
-            return Problem(detail: "Failed to delete data source data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Delete every record a connection's credentials wrote, whatever device or data source it names.
+    /// WARNING: This is a destructive operation that cannot be undone.
+    /// </summary>
+    /// <remarks>
+    /// The delete covers every credential of the named connection, revoked ones and those whose records
+    /// are older than the connections list shows, and each has to be an app or API token of the caller.
+    /// A connector's records have no credential and keep the delete by data source.
+    /// </remarks>
+    /// <param name="request">Credentials of one connection, and whether they may send the records again.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result of the delete operation</returns>
+    [HttpPost("connections/delete-records")]
+    [RequireScope(Scope.TenantSettings)]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetServicesOverview", "GetConnections", "GetActiveDataSources", "ConnectorStatus_GetStatus"])]
+    [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
+    [ProducesResponseType(401)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectionRecords(
+        [FromBody] DeleteConnectionRecordsRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (HttpContext.GetSubjectId() is not { } subjectId)
+            return Unauthorized();
+
+        var result = await _connectionService.DeleteRecordsAsync(
+            subjectId, request.GrantIds, request.AllowReimport, cancellationToken);
+        return result.Success
+            ? Ok(result)
+            : Problem(detail: result.Error, statusCode: 404, title: "Not Found");
     }
 
     /// <summary>
@@ -388,10 +416,11 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data summary with counts by type</returns>
     [HttpGet("connectors/{id}/data-summary")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ConnectorDataSummary>> GetConnectorDataSummary(
         string id,
         CancellationToken cancellationToken = default
@@ -399,19 +428,11 @@ public class ServicesController : ControllerBase
     {
         _logger.LogDebug("Getting data summary for connector: {Id}", id);
 
-        try
-        {
-            var summary = await _dataSourceService.GetConnectorDataSummaryAsync(
-                id,
-                cancellationToken
-            );
-            return Ok(summary);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting data summary for connector: {Id}", id);
-            return Problem(detail: "Failed to get connector data summary", statusCode: 500, title: "Internal Server Error");
-        }
+        var summary = await _dataSourceService.GetConnectorDataSummaryAsync(
+            id,
+            cancellationToken
+        );
+        return Ok(summary);
     }
 
     /// <summary>
@@ -433,6 +454,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(409)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectorData(
         string id,
         [FromQuery] bool allowReimport = false,
@@ -441,33 +463,30 @@ public class ServicesController : ControllerBase
     {
         _logger.LogWarning("Deleting all data for connector: {Id}", id);
 
-        try
-        {
-            var result = await _dataSourceService.DeleteConnectorDataAsync(id, allowReimport, cancellationToken);
+        var result = await _dataSourceService.DeleteConnectorDataAsync(id, allowReimport, cancellationToken);
 
-            if (!result.Success)
+        if (!result.Success)
+        {
+            if (result.ErrorCode == DataSourceDeleteError.NotFound)
             {
-                if (result.ErrorCode == DataSourceDeleteError.NotFound)
-                {
-                    return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
-                }
-                if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
-                {
-                    return Problem(
-                        detail: "A sync is running for this connector. Wait for it to end, then try again.",
-                        statusCode: 409,
-                        title: "Conflict");
-                }
-                return StatusCode(500, result);
+                return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
             }
+            if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
+            {
+                return ConnectorMetadataService.GetByConnectorId(id)?.IsImport == true
+                    ? this.ProblemWithCode(
+                        ImportRunningCode,
+                        "An import is running for this connector. Wait for it to end, then try again.",
+                        StatusCodes.Status409Conflict)
+                    : this.ProblemWithCode(
+                        SyncRunningCode,
+                        "A sync is running for this connector. Wait for it to end, then try again.",
+                        StatusCodes.Status409Conflict);
+            }
+            return StatusCode(500, result);
+        }
 
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting data for connector: {Id}", id);
-            return Problem(detail: "Failed to delete connector data", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -478,7 +497,8 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
+    [LimitDelegatedConnectorSync]
     [DenyDemoSubject]
     [RemoteCommand(
         Invalidates = [
@@ -491,6 +511,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(409)]
+    [ProducesResponseType(404)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > TriggerConnectorSync(
@@ -514,12 +535,13 @@ public class ServicesController : ControllerBase
     /// Re-ingested records are deduplicated. The request runs synchronously: a full-history re-pull can take minutes and may exceed proxy or browser timeouts, so limit it with <c>from</c> or <c>dataTypes</c>.
     /// </summary>
     /// <remarks>
-    /// Nocturne does not persist a sync cursor — each data type resumes from the latest record
-    /// already stored. This endpoint forces a fresh ingest of history by running an explicit-range
-    /// sync (an upper bound of "now" bypasses the per-type catch-up cursors), so the effect is a
-    /// cursor reset. Re-ingested records are deduplicated on their idempotency keys (see the
-    /// "Syncing" guide), so it is safe to run after fixing a connector bug to push corrected data
-    /// to a tenant.
+    /// The connector re-pulls the window up to now. Once it has signed in to its source, it
+    /// forgets how far earlier syncs reached in each data type it re-pulls, and the sync schedule
+    /// of those types. It keeps the record of older history an earlier import has still to fetch,
+    /// so that import continues after the reset, and it keeps its vendor state. A reset whose
+    /// sign-in is refused changes nothing. Re-ingested records are deduplicated on their
+    /// idempotency keys (see the "Syncing" guide), so it is safe to run after fixing a connector
+    /// bug to push corrected data to a tenant.
     ///
     /// <para><b>Latency:</b> this runs synchronously. A full-history re-pull with no lower bound
     /// re-ingests every data type over the connector's entire history (glucose can be tens of
@@ -534,7 +556,8 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Sync result with success status and details.</returns>
     [HttpPost("connectors/{id}/reset-cursor")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsReadWrite)]
+    [LimitDelegatedConnectorSync]
     [DenyDemoSubject]
     [RemoteCommand(
         Invalidates = [
@@ -547,6 +570,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(409)]
+    [ProducesResponseType(404)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > ResetConnectorCursor(
@@ -558,15 +582,8 @@ public class ServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(id))
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
 
-        // Setting To forces "explicit range" mode in the connectors, bypassing the per-type
-        // catch-up cursors so history is genuinely re-pulled rather than resumed from the latest
-        // stored record. A null From means no lower bound — re-pull everything available.
-        var syncRequest = new Nocturne.Connectors.Core.Models.SyncRequest
-        {
-            From = request.From,
-            To = DateTime.UtcNow,
-            DataTypes = request.DataTypes ?? [],
-        };
+        var syncRequest = Nocturne.Connectors.Core.Models.SyncRequest.Reset(
+            request.From, DateTime.UtcNow, request.DataTypes);
 
         if (syncRequest.WindowError() is { } windowError)
             return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
@@ -574,7 +591,7 @@ public class ServicesController : ControllerBase
         _logger.LogInformation(
             "Cursor reset requested for connector {ConnectorId} (from {From})",
             id,
-            request.From?.ToString("o") ?? "beginning");
+            request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "beginning");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
         return SyncOrConflict(result);
@@ -588,12 +605,13 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete sync status including timestamps for entries, treatments, and connector state</returns>
     [HttpGet("connectors/{id}/sync-status")]
-    [RequireScope(Scope.TenantSettings)]
+    [RequireScope(Scope.ConnectorsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorSyncStatus), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ConnectorSyncStatus>> GetConnectorSyncStatus(
         string id,
         CancellationToken cancellationToken = default
@@ -611,56 +629,48 @@ public class ServicesController : ControllerBase
             return Problem(detail: $"Unknown connector '{id}'", statusCode: 404, title: "Not Found");
         }
 
-        try
-        {
-            // Get latest timestamps from V4 glucose tables
-            var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
+        // Get latest timestamps from V4 glucose tables
+        var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
+            dataSource,
+            cancellationToken
+        );
+
+        var oldestEntryTimestamp =
+            await _dataSourceService.GetOldestGlucoseTimestampBySourceAsync(
                 dataSource,
                 cancellationToken
             );
 
-            var oldestEntryTimestamp =
-                await _dataSourceService.GetOldestGlucoseTimestampBySourceAsync(
-                    dataSource,
-                    cancellationToken
-                );
+        var treatmentTimestamp = await _dataSourceService.GetLatestTreatmentTimestampBySourceAsync(
+            dataSource, cancellationToken);
+        var oldestTreatmentTimestamp = await _dataSourceService.GetOldestTreatmentTimestampBySourceAsync(
+            dataSource, cancellationToken);
 
-            var treatmentTimestamp = await _dataSourceService.GetLatestTreatmentTimestampBySourceAsync(
-                dataSource, cancellationToken);
-            var oldestTreatmentTimestamp = await _dataSourceService.GetOldestTreatmentTimestampBySourceAsync(
-                dataSource, cancellationToken);
+        // Get connector health/state
+        var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(
+            cancellationToken
+        );
+        var connectorStatus = connectorStatuses.FirstOrDefault(c =>
+            c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+        );
 
-            // Get connector health/state
-            var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(
-                cancellationToken
-            );
-            var connectorStatus = connectorStatuses.FirstOrDefault(c =>
-                c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
-            );
-
-            return Ok(
-                new ConnectorSyncStatus
-                {
-                    ConnectorId = id,
-                    DataSource = dataSource,
-                    LatestEntryTimestamp = entryTimestamp,
-                    OldestEntryTimestamp = oldestEntryTimestamp,
-                    LatestTreatmentTimestamp = treatmentTimestamp,
-                    OldestTreatmentTimestamp = oldestTreatmentTimestamp,
-                    HasEntries = entryTimestamp.HasValue,
-                    HasTreatments = treatmentTimestamp.HasValue,
-                    State = connectorStatus?.State ?? "Unknown",
-                    StateMessage = connectorStatus?.StateMessage,
-                    IsHealthy = connectorStatus?.IsHealthy ?? false,
-                    QueriedAt = DateTime.UtcNow,
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting sync status for connector: {Id}", id);
-            return Problem(detail: "Failed to get sync status", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(
+            new ConnectorSyncStatus
+            {
+                ConnectorId = id,
+                DataSource = dataSource,
+                LatestEntryTimestamp = entryTimestamp,
+                OldestEntryTimestamp = oldestEntryTimestamp,
+                LatestTreatmentTimestamp = treatmentTimestamp,
+                OldestTreatmentTimestamp = oldestTreatmentTimestamp,
+                HasEntries = entryTimestamp.HasValue,
+                HasTreatments = treatmentTimestamp.HasValue,
+                State = connectorStatus?.State ?? "Unknown",
+                StateMessage = connectorStatus?.StateMessage,
+                IsHealthy = connectorStatus?.IsHealthy ?? false,
+                QueriedAt = DateTime.UtcNow,
+            }
+        );
     }
 
     private ActionResult<Nocturne.Connectors.Core.Models.SyncResult> SyncOrConflict(
@@ -692,6 +702,16 @@ public class ServicesController : ControllerBase
         return $"{request.PublicScheme()}://{request.Host}";
     }
 
+}
+
+/// <summary>The credentials whose records <see cref="ServicesController.DeleteConnectionRecords"/> deletes.</summary>
+public class DeleteConnectionRecordsRequest
+{
+    /// <summary>The grant ids of credentials of one connection, as the connections list shows them.</summary>
+    public List<Guid> GrantIds { get; init; } = [];
+
+    /// <summary>Let the credentials send the deleted records again.</summary>
+    public bool AllowReimport { get; init; }
 }
 
 /// <summary>
@@ -800,3 +820,6 @@ public class ConnectorSyncStatus
     /// </summary>
     public DateTime QueriedAt { get; set; }
 }
+
+/// <summary>Whether the tenant holds demo data.</summary>
+public record DemoDataPresence(bool HasDemoData);

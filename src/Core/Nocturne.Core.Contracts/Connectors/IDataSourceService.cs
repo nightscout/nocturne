@@ -66,11 +66,30 @@ public interface IDataSourceService
     );
 
     /// <summary>
+    /// Deletes every record the credentials <paramref name="grantIds"/> inserted, whatever handle it
+    /// carries, through the same steps as <see cref="DeleteDataSourceDataAsync"/>. The caller decides
+    /// whether the reader may delete them (<see cref="IConnectionService.DeleteRecordsAsync"/>).
+    /// </summary>
+    /// <param name="allowReimport">
+    /// Leave the credentials free to send their records again, including those of earlier deletes.
+    /// </param>
+    Task<DataSourceDeleteResult> DeleteWrittenDataAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        bool allowReimport = false,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Delete all demo data (data from the demo-service source).
     /// This is safe to call as demo data can be easily regenerated.
     /// </summary>
     /// <returns>Result containing number of entries and treatments deleted</returns>
     Task<DataSourceDeleteResult> DeleteDemoDataAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether <see cref="DeleteDemoDataAsync"/> has something to delete (<see cref="IDemoDataPurge.HoldsDataAsync"/>).
+    /// </summary>
+    Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete all data from a specific connector.
@@ -86,6 +105,13 @@ public interface IDataSourceService
         bool allowReimport = false,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Whether the connector holds any record, by reads an index serves: a row of its data source id,
+    /// or a record its <see cref="IConnectorDataPurge"/> describes. A cheap test before
+    /// <see cref="GetConnectorDataSummaryAsync"/>, which counts every record table.
+    /// </summary>
+    Task<bool> ConnectorHoldsDataAsync(string connectorId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a summary of data counts for a specific connector.

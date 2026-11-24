@@ -145,7 +145,7 @@ public class UISettingsControllerAlarmProfileTests
     }
 
     [Fact]
-    public async Task AddOrUpdateAlarmProfile_reports500_whenTheServiceFails()
+    public async Task AddOrUpdateAlarmProfile_lets_theFailureEscape_whenTheServiceFails()
     {
         var settingsService = new Mock<IUISettingsService>();
         settingsService
@@ -153,25 +153,23 @@ public class UISettingsControllerAlarmProfileTests
                 It.IsAny<AlarmProfileConfiguration>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
 
-        var result = await NewController(settingsService.Object).AddOrUpdateAlarmProfile(
+        var act = () => NewController(settingsService.Object).AddOrUpdateAlarmProfile(
             new AlarmProfileConfiguration { Id = "night-high" });
 
-        result.Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
-    public async Task DeleteAlarmProfile_reports500_whenTheServiceFails()
+    public async Task DeleteAlarmProfile_lets_theFailureEscape_whenTheServiceFails()
     {
         var settingsService = new Mock<IUISettingsService>();
         settingsService
             .Setup(s => s.DeleteAlarmProfileAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
 
-        var result = await NewController(settingsService.Object).DeleteAlarmProfile("night-high");
+        var act = () => NewController(settingsService.Object).DeleteAlarmProfile("night-high");
 
-        result.Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     // ----- helpers -----

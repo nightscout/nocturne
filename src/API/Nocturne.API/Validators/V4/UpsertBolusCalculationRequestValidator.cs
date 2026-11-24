@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -9,7 +10,7 @@ namespace Nocturne.API.Validators.V4;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
-/// <item><description>Device, App, DataSource capped at 500 characters; BloodGlucoseInputSource at 200.</description></item>
+/// <item><description>DataSource capped at its column length (<see cref="RecordColumnLengths"/>); Device and App at 500; BloodGlucoseInputSource at 200.</description></item>
 /// <item><description>CarbInput and InsulinRecommendation, when provided, must be non-negative.</description></item>
 /// <item><description>CarbRatio, when provided, must be strictly positive (division denominator).</description></item>
 /// <item><description>CalculationType, when provided, must be a valid enum value.</description></item>
@@ -25,10 +26,10 @@ public class UpsertBolusCalculationRequestValidator : AbstractValidator<UpsertBo
     /// </summary>
     public UpsertBolusCalculationRequestValidator()
     {
-        RuleFor(x => x.Timestamp).NotEqual(default(DateTimeOffset)).WithMessage("Timestamp is required");
+        RuleFor(x => x.Timestamp).TimestampRequired();
         RuleFor(x => x.Device).MaximumLength(500).When(x => x.Device is not null);
         RuleFor(x => x.App).MaximumLength(500).When(x => x.App is not null);
-        RuleFor(x => x.DataSource).MaximumLength(500).When(x => x.DataSource is not null);
+        RuleFor(x => x.DataSource).MaximumLength(RecordColumnLengths.Provenance).When(x => x.DataSource is not null);
         RuleFor(x => x.CarbInput).GreaterThanOrEqualTo(0).When(x => x.CarbInput is not null)
             .WithMessage("CarbInput must be >= 0");
         RuleFor(x => x.CarbRatio).GreaterThan(0).When(x => x.CarbRatio is not null)

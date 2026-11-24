@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
@@ -62,7 +63,7 @@ public class ChatAcknowledgeEndpointTests : IDisposable
 
         return new ChatIdentityDirectoryController(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
                 _db.ContextFactory.AsNocturneFactory(), TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,
@@ -175,6 +176,23 @@ public class ChatAcknowledgeEndpointTests : IDisposable
         response.AcknowledgedBy.Should().BeNull();
         response.AlreadyAcknowledged.Should().BeFalse();
         VerifyJudgedOnLinkedMember(excursionId);
+    }
+
+    [Fact]
+    public async Task Excursion_OnALinkWhoseSubjectIsDeactivated_IsNotFoundAndNothingIsAcknowledged()
+    {
+        var linkId = InsertLink(_tenantId);
+        var excursionId = InsertExcursion();
+        await using (var db = _db.CreateContext())
+        {
+            await db.Subjects.Where(s => s.Id == _subjectId).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        }
+
+        var result = await CreateController().AcknowledgeAsLinkedMember(
+            linkId, Request(excursionId), CancellationToken.None);
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+        VerifyNothingAcknowledged();
     }
 
     [Fact]

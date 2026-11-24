@@ -35,12 +35,17 @@ NOCTURNE_CORPUS_BLESS=1 cargo test -p nocturne-alerts-core --test parity --test 
 Only a scenario with no `.expected.json` is written; without `NOCTURNE_CORPUS_BLESS=1` a
 missing snapshot fails the suite.
 
+A result's `next_change_at` (engine-semantics.md §5.3) is pinned only by a snapshot that
+carries it. Snapshots written before the engine reported it omit it, and every consumer
+compares it only where the snapshot has it; the `next-change-*` scenarios pin it.
+
 Consumers:
 
 1. `crates/nocturne-alerts-core` Rust tests (`tests/parity.rs`, `tests/replay_parity.rs`),
 2. the .NET FFI parity suite (`tests/Unit/Nocturne.Alerts.Native.Tests`),
 3. the backend's engine-seam corpus tests (`tests/Unit/Nocturne.API.Tests`, `Services/Alerts/Engines`),
-4. Prelude's Kotlin instrumented corpus test (via UniFFI bindings).
+4. Prelude's Kotlin instrumented corpus test (via UniFFI bindings),
+5. the Swift package test (`crates/nocturne-alerts-ffi/swift`), which replays `sustained-basic-window` through the UniFFI Swift bindings.
 
 After the backend cuts over to the Rust engine, the snapshots become the single
 normative spec, regenerated only by the Rust engine.

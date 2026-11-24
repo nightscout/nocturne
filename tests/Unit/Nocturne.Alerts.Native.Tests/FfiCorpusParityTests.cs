@@ -47,15 +47,15 @@ public class FfiCorpusParityTests
 
     /// <summary>
     /// Drives a scenario through <see cref="RustAlertEngine"/> per rule per
-    /// tick, persisting the timers/tracker state envelopes between calls and
-    /// threading the shared <c>next_excursion_ordinal</c> across rules in
-    /// evaluation order, then reassembles the expected-file JSON shape.
+    /// tick, persisting each rule's timers/tracker state envelopes between calls,
+    /// then reassembles the expected-file JSON shape with the corpus's excursion
+    /// numbering (<see cref="NumberAsCorpus"/>).
     /// </summary>
     private static JsonNode RunScenarioThroughFfi(ScenarioFile scenario)
     {
         var timers = new Dictionary<Guid, Dictionary<string, DateTime>>();
+        var notTrue = new Dictionary<Guid, Dictionary<string, DateTime>>();
         var trackers = new Dictionary<Guid, RustTrackerState>();
-        var nextExcursionOrdinal = 1;
 
         var ticks = new JsonArray();
         foreach (var tick in scenario.Ticks)
@@ -66,10 +66,6 @@ public class FfiCorpusParityTests
             var rules = new JsonArray();
             foreach (var rule in scenario.Rules)
             {
-                var tracker = (trackers.GetValueOrDefault(rule.Id) ?? new RustTrackerState())
-                    with
-                { NextExcursionOrdinal = nextExcursionOrdinal };
-
                 RustEvaluateResponse response;
                 try
                 {
@@ -78,7 +74,9 @@ public class FfiCorpusParityTests
                         context,
                         at,
                         timers.GetValueOrDefault(rule.Id),
-                        tracker);
+                        trackers.GetValueOrDefault(rule.Id),
+                        includeLeaves: true,
+                        notTrue: notTrue.GetValueOrDefault(rule.Id));
                 }
                 catch (RustAlertEngineException ex) when (ex.Message.Contains("malformed condition_params for "))
                 {
@@ -88,11 +86,9 @@ public class FfiCorpusParityTests
                 }
 
                 timers[rule.Id] = response.Timers ?? new Dictionary<string, DateTime>();
+                notTrue[rule.Id] = response.NotTrue ?? new Dictionary<string, DateTime>();
                 if (response.Tracker is not null)
-                {
                     trackers[rule.Id] = response.Tracker;
-                    nextExcursionOrdinal = response.Tracker.NextExcursionOrdinal;
-                }
 
                 rules.Add(JsonNode.Parse(response.Result!.Value.GetRawText()));
             }
@@ -104,6 +100,7 @@ public class FfiCorpusParityTests
             });
         }
 
+        NumberAsCorpus(ticks);
         return new JsonObject
         {
             ["schema_version"] = 1,
@@ -112,14 +109,38 @@ public class FfiCorpusParityTests
         };
     }
 
+    /// <summary>
+    /// Renumbers each <c>tracker.excursion</c> as the corpus numbers excursions: 1, 2, ... in the
+    /// order they open across every rule of the scenario. The envelope numbers each rule's own, so
+    /// the corpus number is the rule and its ordinal looked up in opening order.
+    /// </summary>
+    private static void NumberAsCorpus(JsonArray ticks)
+    {
+        var opened = new Dictionary<string, int>();
+        var corpus = new Dictionary<(string Rule, int Ordinal), int>();
+        foreach (var result in ticks.SelectMany(t => t!["rules"]!.AsArray()))
+        {
+            var rule = result!["rule_id"]!.GetValue<string>();
+            if (result["transition"]?.GetValue<string>() == "opened")
+            {
+                opened[rule] = opened.GetValueOrDefault(rule) + 1;
+                corpus[(rule, opened[rule])] = corpus.Count + 1;
+            }
+            if (result["tracker"]?["excursion"] is { } excursion)
+                result["tracker"]!["excursion"] = corpus[(rule, excursion.GetValue<int>())];
+        }
+    }
+
     private static RustAlertRule ToRustRule(ScenarioRule rule) => new()
     {
         Id = rule.Id,
         ConditionType = rule.ConditionType,
         ConditionParams = rule.ConditionParams,
-        ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveParams,
+        OnUnknown = rule.OnUnknown ?? "hold",
+        GlucoseFreshnessMinutes = rule.GlucoseFreshnessMinutes,
+        EnabledAt = rule.EnabledAt,
     };
 }

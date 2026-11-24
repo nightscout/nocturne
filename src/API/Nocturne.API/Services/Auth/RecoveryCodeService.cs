@@ -60,6 +60,12 @@ public class RecoveryCodeService : IRecoveryCodeService
     }
 
     /// <inheritdoc />
+    public async Task<List<string>?> GenerateFirstCodesAsync(Guid subjectId) =>
+        await _codes.AnyAsync(subjectId, CancellationToken.None)
+            ? null
+            : await GenerateCodesAsync(subjectId);
+
+    /// <inheritdoc />
     public async Task<bool> VerifyAndConsumeAsync(Guid? subjectId, string code)
     {
         var live = await _codes.GetLiveAsync(subjectId ?? Guid.Empty, CancellationToken.None);

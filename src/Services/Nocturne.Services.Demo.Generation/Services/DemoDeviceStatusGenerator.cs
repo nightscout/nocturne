@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
@@ -81,7 +82,7 @@ public static class DemoDeviceStatusGenerator
         var utc = clock.ToUtc(time);
         var localTime = clock.ToLocal(utc);
         var mills = utc.ToMills();
-        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var isoTime = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
         var rng = DayScenarios.RngFor(localTime.Date, $"devicestatus:{localTime.Hour}:{localTime.Minute}");
 
         var eventualBg = EstimateEventualBg(glucose, iob, cob, effectiveIsf, effectiveCarbRatio, targetGlucose);
@@ -184,7 +185,7 @@ public static class DemoDeviceStatusGenerator
     /// </summary>
     public static double ReservoirAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Insulin Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.InsulinChange);
         var used = AssumedDailyInsulinUnits * sinceChange.TotalDays;
         return ScaledRounding.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
     }
@@ -192,7 +193,7 @@ public static class DemoDeviceStatusGenerator
     /// <summary>Pump battery percent, resetting on Pump Battery Change days.</summary>
     public static int PumpBatteryAt(DateTime localTime)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, "Pump Battery Change");
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.PumpBatteryChange);
         var drained = PumpBatteryDrainPerDayPercent * sinceChange.TotalDays;
         return (int)Math.Clamp(100 - drained, 4, 100);
     }

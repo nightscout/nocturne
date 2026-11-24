@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Notifications;
@@ -144,7 +145,7 @@ public class ReleaseNoticeJob(
         {
             metadata["AutoUpdateMode"] = autoUpdate.Mode.ToString();
             if (autoUpdate.NextCheckAt is { } next)
-                metadata["NextCheckAt"] = next.ToString("O");
+                metadata["NextCheckAt"] = next.ToString("O", CultureInfo.InvariantCulture);
             if (autoUpdate.CheckIntervalSeconds is { } interval)
                 metadata["CheckIntervalSeconds"] = interval;
         }

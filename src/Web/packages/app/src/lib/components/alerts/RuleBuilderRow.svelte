@@ -8,6 +8,8 @@
   import Timer from "@lucide/svelte/icons/timer";
   import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Droplet from "@lucide/svelte/icons/droplet";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Syringe from "@lucide/svelte/icons/syringe";
@@ -29,10 +31,21 @@
   import CalendarClock from "@lucide/svelte/icons/calendar-clock";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Moon from "@lucide/svelte/icons/moon";
-  import type { ConditionNode } from "./types";
-  import { isTrendBucket, toAlertConditionType, type TrendBucket } from "./types";
+  import type { ConditionNode, RulePurpose } from "./types";
+  import {
+    isTrendBucket,
+    marginedPayload,
+    marginPayload,
+    curveChoice,
+    setCurveChoice,
+    clearCurveChoice,
+    toAlertConditionType,
+    type TrendBucket,
+  } from "./types";
+  import Ruler from "@lucide/svelte/icons/ruler";
+  import ChartSpline from "@lucide/svelte/icons/chart-spline";
   import { Direction } from "#lib/api/index.js";
-  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { getDirectionInfo } from "#lib/utils/direction-info.svelte.js";
   import RuleBuilder from "./RuleBuilder.svelte";
   import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
   import { FACT_GROUP_COLOURS, getFact, type LucideIconName } from "./factCatalog";
@@ -40,6 +53,7 @@
   import { conditionLabel } from "./conditionLabel.svelte";
   import {
     eyebrow,
+    moveChild,
     removeChild,
     rowLeafKind,
     rowLeafNode,
@@ -60,9 +74,10 @@
     availableRules?: AvailableRule[];
     /** Tracked at RuleBuilder scope; passed in so every row in a group reacts to the same shift state. */
     shiftHeld: boolean;
+    purpose: RulePurpose;
   }
 
-  let { parent, index, availableRules = [], shiftHeld }: Props = $props();
+  let { parent, index, availableRules = [], shiftHeld, purpose }: Props = $props();
 
   let child = $derived(parent.composite!.conditions[index]);
   let operator = $derived(parent.composite!.operator);
@@ -123,6 +138,11 @@
     child.type === "sustained" ||
       (isNot && child.not?.child.type === "sustained"),
   );
+  let margined = $derived(marginedPayload(leafTarget, purpose, isSustained));
+  let stored = $derived(marginPayload(leafTarget));
+  let chosenCurve = $derived(
+    leafTarget.type === "predicted" && leafTarget.predicted ? curveChoice(leafTarget.predicted) : undefined,
+  );
   let sustainedNode = $derived(
     child.type === "sustained"
       ? child
@@ -131,6 +151,8 @@
         : null,
   );
   let label = $derived(eyebrow(index, operator));
+  let isFirst = $derived(index === 0);
+  let isLast = $derived(index === parent.composite!.conditions.length - 1);
 
   // Drag-and-drop wiring. Rows are draggable as a whole; a thin "above-this-
   // row" zone reorders within the same group, while dropping anywhere on a
@@ -229,7 +251,7 @@
       <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
       <button
         type="button"
-        class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
+        class="grid size-6 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
         aria-label="Drag to reorder"
         tabindex="-1"
       >
@@ -241,7 +263,7 @@
         {label}
       </span>
       <div class="min-w-0 flex-1">
-        <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} nested />
+        <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} {purpose} nested />
       </div>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
@@ -249,7 +271,7 @@
             <Button
               {...props}
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               class="shrink-0"
               aria-label="Group actions"
             >
@@ -259,11 +281,22 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
-            <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
+            <Ban class="h-4 w-4 mr-2" /> Make it the opposite (NOT)
           </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
-            Unwrap (when single child)
-          </DropdownMenu.Item>
+          {#if child.composite?.conditions.length === 1}
+            <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
+              Remove the group and keep its condition
+            </DropdownMenu.Item>
+          {/if}
+          {#if !isFirst || !isLast}
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item disabled={isFirst} onclick={() => moveChild(parent, index, -1)}>
+              <ArrowUp class="h-4 w-4 mr-2" /> Move up
+            </DropdownMenu.Item>
+            <DropdownMenu.Item disabled={isLast} onclick={() => moveChild(parent, index, 1)}>
+              <ArrowDown class="h-4 w-4 mr-2" /> Move down
+            </DropdownMenu.Item>
+          {/if}
           <DropdownMenu.Separator />
           <DropdownMenu.Item onclick={() => removeChild(parent, index)}>
             <X class="h-4 w-4 mr-2" /> Remove group
@@ -286,7 +319,7 @@
     <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
     <button
       type="button"
-      class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
+      class="grid size-6 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
       aria-label="Drag to reorder"
       tabindex="-1"
     >
@@ -315,14 +348,15 @@
         ? factLabel(leafKind)
         : conditionLabel(toAlertConditionType(child.type))}
     </span>
-    <RuleBuilderLeafEditor node={leafTarget} {availableRules} />
+    <RuleBuilderLeafEditor node={leafTarget} {availableRules} {purpose} underSustained={isSustained} />
     {#if isSustained && sustainedNode?.sustained}
       <span class="text-xs text-muted-foreground shrink-0">for at least</span>
       <Input
         type="number"
         min="1"
-        size="xs"
+        size="sm"
         class="w-16 text-right tabular-nums"
+        aria-label="Minutes"
         data-testid="alert-sustained-minutes"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -341,7 +375,7 @@
       <Button
         type="button"
         variant="ghost-destructive"
-        size="icon-xs"
+        size="icon-sm"
         class="shrink-0 hidden group-hover/row:inline-flex"
         aria-label="Remove condition (hold shift and select)"
         onclick={() => removeChild(parent, index)}
@@ -355,9 +389,9 @@
           <Button
             {...props}
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             class="shrink-0"
-            aria-label="Row actions"
+            aria-label="Condition actions"
             data-testid="alert-row-actions"
           >
             <MoreHorizontal class="h-4 w-4" />
@@ -365,24 +399,70 @@
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" data-testid="alert-row-actions-menu">
+        {#if !isSustained}
+          <DropdownMenu.Item
+            onclick={() => {
+              if (stored) stored.clear_margin = undefined;
+              wrapChild(parent, index, "sustained");
+            }}
+          >
+            <Timer class="h-4 w-4 mr-2" /> Add “for at least”
+          </DropdownMenu.Item>
+        {/if}
+        {#if leafTarget.type === "predicted" && leafTarget.predicted && !curveChoice(leafTarget.predicted)}
+          {@const predicted = leafTarget.predicted}
+          <DropdownMenu.Item onclick={() => setCurveChoice(predicted, "curve")}>
+            <ChartSpline class="h-4 w-4 mr-2" /> Choose a forecast curve
+          </DropdownMenu.Item>
+        {/if}
+        {#if margined && margined.clear_margin == null}
+          <DropdownMenu.Item
+            onclick={() => {
+              if (margined) margined.clear_margin = 0;
+            }}
+          >
+            <Ruler class="h-4 w-4 mr-2" /> Add a clear margin
+          </DropdownMenu.Item>
+        {/if}
+        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
+          <Ban class="h-4 w-4 mr-2" /> Make it the opposite (NOT)
+        </DropdownMenu.Item>
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "and")}>
-          <Brackets class="h-4 w-4 mr-2" /> Wrap in AND group
+          <Brackets class="h-4 w-4 mr-2" /> Put in an “all of” group
         </DropdownMenu.Item>
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "or")}>
-          <Brackets class="h-4 w-4 mr-2" /> Wrap in OR group
+          <Brackets class="h-4 w-4 mr-2" /> Put in an “any of” group
         </DropdownMenu.Item>
-        <DropdownMenu.Item onclick={() => wrapChild(parent, index, "not")}>
-          <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
-        </DropdownMenu.Item>
-        {#if !isSustained}
-          <DropdownMenu.Item onclick={() => wrapChild(parent, index, "sustained")}>
-            <Timer class="h-4 w-4 mr-2" /> Make sustained
+        {#if isNot || isSustained || stored?.clear_margin != null || chosenCurve}
+          <DropdownMenu.Separator />
+        {/if}
+        {#if chosenCurve && leafTarget.predicted}
+          {@const predicted = leafTarget.predicted}
+          <DropdownMenu.Item onclick={() => clearCurveChoice(predicted)}>
+            Use the default forecast
           </DropdownMenu.Item>
         {/if}
         {#if isNot || isSustained}
-          <DropdownMenu.Separator />
           <DropdownMenu.Item onclick={() => unwrapChild(parent, index)}>
-            Remove wrapper
+            {isNot ? "Remove NOT" : "Remove “for at least”"}
+          </DropdownMenu.Item>
+        {/if}
+        {#if stored?.clear_margin != null}
+          <DropdownMenu.Item
+            onclick={() => {
+              if (stored) stored.clear_margin = undefined;
+            }}
+          >
+            Remove the clear margin
+          </DropdownMenu.Item>
+        {/if}
+        {#if !isFirst || !isLast}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item disabled={isFirst} onclick={() => moveChild(parent, index, -1)}>
+            <ArrowUp class="h-4 w-4 mr-2" /> Move up
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled={isLast} onclick={() => moveChild(parent, index, 1)}>
+            <ArrowDown class="h-4 w-4 mr-2" /> Move down
           </DropdownMenu.Item>
         {/if}
         <DropdownMenu.Separator />

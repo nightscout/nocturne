@@ -30,6 +30,8 @@
     <ItemGroup>
         <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj"/>
         <ProjectReference Include="../../../src/Core/Nocturne.Core.Models/Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.Glooko/Nocturne.Connectors.Glooko.csproj"/>
+        <ProjectReference Include="../../../src/Connectors/Nocturne.Connectors.GoogleHealth/Nocturne.Connectors.GoogleHealth.csproj"/>
         <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj"/>
     </ItemGroup>
 </Project>

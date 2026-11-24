@@ -8,7 +8,8 @@ using Nocturne.Core.Models.CoachMarks;
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Controller for managing per-user coach mark progression.
+/// First-time tips shown in the app, and how far the signed-in user has progressed through each one. List the
+/// tips, update the status of one tip, and reset all tips.
 /// </summary>
 /// <remarks>
 /// Coach marks track first-time user experience hints. Each mark transitions through
@@ -18,7 +19,8 @@ namespace Nocturne.API.Controllers.V4;
 /// <seealso cref="CoachMarkState"/>
 [ApiController]
 [Route("api/v4/coach-marks")]
-[Tags("Coach Marks")]
+[System.ComponentModel.DisplayName("Coach Marks")]
+[Tags("Profiles")]
 [Authorize]
 public class CoachMarkController : ControllerBase
 {

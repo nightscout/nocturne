@@ -42,7 +42,7 @@
   import TitleFaviconSettings from "#lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "#lib/components/settings/DashboardWidgetConfigurator.svelte";
   import DashboardRailConfigurator from "#lib/components/settings/DashboardRailConfigurator.svelte";
-  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { TextureSwatch } from "@nocturne/charts/print";
   import LanguageSelector from "#lib/components/LanguageSelector.svelte";
   import CarbRatioFormatSelect from "#lib/components/settings/CarbRatioFormatSelect.svelte";
   import { updateLanguagePreference } from "#lib/api/user-preferences.remote.js";
@@ -53,7 +53,7 @@
     setSourceDefaults,
   } from "#lib/api/generated/glucoseProcessingSettings.generated.remote.js";
   import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
-  import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
+  import type { FeatureSettings } from "@nocturne/api-client";
   import { getUiSettings } from "#lib/api/ui-settings.remote.js";
   import { patchFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -97,11 +97,13 @@
   import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/env";
   import { resolve } from "$app/paths";
-  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { WidgetId } from "@nocturne/api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { canChangeTenantSettings } from "#lib/authorization/tenant-settings.js";
+  import ReadOnlyNotice from "#lib/components/settings/ReadOnlyNotice.svelte";
 
   const realtimeStore = getRealtimeStore();
 
@@ -164,11 +166,31 @@
   // Glucose processing settings
   const preferenceQuery = tenantless ? null : getPreference();
   const sourceDefaultsQuery = tenantless ? null : getSourceDefaults();
-  let glucoseProcessingPreference: string | null = $derived(
+  const glucoseProcessingPreference: string | null = $derived(
     preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
-  let sourceDefaults = $derived(sourceDefaultsQuery?.current?.rules ?? []);
+  const sourceDefaults = $derived(sourceDefaultsQuery?.current?.rules ?? []);
+  // The dialog drafts from the rules it opens with and saves the whole list, so it opens only
+  // once the stored rules are known.
+  const sourceDefaultsLoaded = $derived(sourceDefaultsQuery?.current !== undefined);
   let sourceDefaultsDialogOpen = $state(false);
+  const canChangeGlucoseProcessing = $derived(
+    canChangeTenantSettings(page.data.effectivePermissions, page.data.refusedAsDemoSubject),
+  );
+
+  async function saveGlucoseProcessing(save: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await save();
+      return true;
+    } catch (err) {
+      toast.error(
+        describeSubmitError(err, "Could not save. Check your connection and try again.")
+      );
+      return false;
+    } finally {
+      await Promise.allSettled([preferenceQuery?.refresh(), sourceDefaultsQuery?.refresh()]);
+    }
+  }
 
   // Chart range and tracker pills persist server-side. They used to only mutate
   // the in-memory settings store, which nothing ever saved, so the dashboard
@@ -234,7 +256,13 @@
           aria-label="Color theme"
           value={currentTheme}
           onValueChange={(theme) => {
-            if (theme === "nocturne" || theme === "trio" || theme === "aaps" || theme === "classic")
+            if (
+              theme === "nocturne" ||
+              theme === "trio" ||
+              theme === "aaps" ||
+              theme === "classic" ||
+              theme === "nightscout"
+            )
               handleThemeChange(theme);
           }}
         >
@@ -394,6 +422,46 @@
                 class="h-4 w-4 rounded-full"
                 style="background: #0099ff"
                 title="Classic blue"
+              ></div>
+            </div>
+          </RadioGroup.Card>
+
+          <!-- Nightscout Theme -->
+          <RadioGroup.Card value="nightscout">
+            {#if currentTheme === "nightscout"}
+              <Badge class="absolute right-2 top-2" variant="default">
+                Active
+              </Badge>
+            {/if}
+            <div class="font-semibold">Nightscout</div>
+            <p class="text-sm text-muted-foreground">
+              Use the Nightscout dashboard layout, pills, and chart
+            </p>
+            <div class="flex gap-1 mt-2">
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #4cff00"
+                title="In range"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ffff00"
+                title="Warning"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ff0000"
+                title="Urgent"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #0099ff"
+                title="Insulin"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #ff00ff"
+                title="Forecast"
               ></div>
             </div>
           </RadioGroup.Card>
@@ -1021,17 +1089,26 @@
         </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
+          {#if !canChangeGlucoseProcessing}
+            <ReadOnlyNotice data-testid="glucose-processing-read-only">
+              Only members who can manage this site's settings can change glucose processing.
+            </ReadOnlyNotice>
+          {/if}
           <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Label>Display preference</Label>
               <Select
                 type="single"
-                value={glucoseProcessingPreference ?? "default"}
-                onValueChange={async (value) => {
-                  const newValue = value === "default" ? null : value;
-                  glucoseProcessingPreference = newValue;
-                  await setPreference({ preferredGlucoseProcessing: newValue });
-                }}
+                bind:value={
+                  () => glucoseProcessingPreference ?? "default",
+                  (value) =>
+                    void saveGlucoseProcessing(() =>
+                      setPreference({
+                        preferredGlucoseProcessing: value === "default" ? null : value,
+                      }),
+                    )
+                }
+                disabled={!canChangeGlucoseProcessing}
               >
                 <SelectTrigger>
                   <span>
@@ -1074,6 +1151,7 @@
             <Button
               variant="outline"
               size="sm"
+              disabled={!canChangeGlucoseProcessing || !sourceDefaultsLoaded}
               onclick={() => sourceDefaultsDialogOpen = true}
             >Configure</Button>
           </div>
@@ -1082,9 +1160,9 @@
             bind:open={sourceDefaultsDialogOpen}
             rules={sourceDefaults}
             onSave={async (rules) => {
-              sourceDefaults = rules;
-              sourceDefaultsDialogOpen = false;
-              await setSourceDefaults({ rules });
+              if (await saveGlucoseProcessing(() => setSourceDefaults({ rules }))) {
+                sourceDefaultsDialogOpen = false;
+              }
             }}
             onCancel={() => sourceDefaultsDialogOpen = false}
           />

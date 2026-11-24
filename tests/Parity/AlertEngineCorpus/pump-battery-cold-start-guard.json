@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "pump-battery-cold-start-guard",
-  "description": "pump_battery returns false when its HasEver* guard is unset even though the fact value would match",
+  "description": "pump_battery is unknown when its HasEver* guard is unset even though the fact value would match",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "operator": "\u003E=",
         "value": 0
       },
-      "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }

@@ -121,7 +121,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
         _mockTempBasalRepo
@@ -180,11 +180,11 @@ public class DataFetchStageTests
 
         _mockTrackerRepo
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<TrackerDefinitionEntity>());
+            .ReturnsAsync(Array.Empty<TrackerDefinition>());
 
         _mockTrackerRepo
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
+            .ReturnsAsync(Array.Empty<TrackerInstance>());
 
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
@@ -232,8 +232,8 @@ public class DataFetchStageTests
         result.DeviceEventList.Should().NotBeNull();
         result.TempBasalList.Should().NotBeNull();
         result.SystemEvents.Should().NotBeNull();
-        result.TrackerDefinitions.Should().NotBeNull();
-        result.TrackerInstances.Should().NotBeNull();
+        result.Trackers.Should().NotBeNull();
+        result.RunningTrackers.Should().NotBeNull();
         result.StateSpans.Should().NotBeNull();
 
         // Assert — all 6 state span categories are present in the result
@@ -321,7 +321,7 @@ public class DataFetchStageTests
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<DeviceEventType>?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Gated<IEnumerable<DeviceEvent>>(Array.Empty<DeviceEvent>()));
         _mockTempBasalRepo
             .Setup(r => r.GetAsync(
@@ -395,10 +395,10 @@ public class DataFetchStageTests
             .Returns(() => Tracked<IEnumerable<SystemEvent>>(Array.Empty<SystemEvent>()));
         _mockTrackerRepo
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Tracked(new List<TrackerDefinitionEntity>()));
+            .Returns(() => Tracked<IReadOnlyList<TrackerDefinition>>(Array.Empty<TrackerDefinition>()));
         _mockTrackerRepo
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Tracked(Array.Empty<TrackerInstanceEntity>()));
+            .Returns(() => Tracked<IReadOnlyList<TrackerInstance>>(Array.Empty<TrackerInstance>()));
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
                 It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),

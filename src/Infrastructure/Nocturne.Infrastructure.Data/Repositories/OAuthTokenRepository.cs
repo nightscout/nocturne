@@ -241,27 +241,49 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
-    public virtual Task<bool> ApproveDeviceCodeAsync(
-        Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d =>
-        {
-            d.ApprovedAt = now;
-            d.GrantId = grantId;
-            d.SubjectId = subjectId;
-        }, ct);
-
-    /// <inheritdoc/>
-    public virtual Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d => d.DeniedAt = now, ct);
+    /// <remarks>
+    /// One statement whose predicate is the pending state, so of two overlapping approvals one
+    /// matches, and a code a rival poll's refusal deleted after it was read matches none.
+    /// </remarks>
+    public virtual async Task<bool> ApproveDeviceCodeAsync(
+        Guid id, Guid subjectId, Guid grantId, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var approved = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id && d.ApprovedAt == null && d.DeniedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.ApprovedAt, now)
+                .SetProperty(d => d.GrantId, grantId)
+                .SetProperty(d => d.SubjectId, subjectId), ct);
+        return approved == 1;
+    }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// A tracked save rather than an <c>ExecuteUpdate</c>: it is the save between a poll's read of
-    /// the code and its claim, which is where a rival poll can redeem the code, and the exchange
-    /// test for that race stages the rival in a <c>SaveChangesInterceptor</c>.
+    /// Conditional on the pending state, like <see cref="ApproveDeviceCodeAsync"/>.
     /// </remarks>
-    public virtual Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d => d.LastPolledAt = polledAt, ct);
+    public virtual async Task<bool> DenyDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var denied = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id && d.ApprovedAt == null && d.DeniedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DeniedAt, now), ct);
+        return denied == 1;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One statement, so a code that a rival poll's refusal deleted after this poll read it is
+    /// reported as <c>false</c> instead of throwing.
+    /// </remarks>
+    public virtual async Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        var stamped = await lease.Context.OAuthDeviceCodes
+            .Where(d => d.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.LastPolledAt, polledAt), ct);
+        return stamped == 1;
+    }
 
     /// <inheritdoc/>
     public virtual async Task<bool> BumpDeviceCodeIntervalAsync(Guid id, int by, CancellationToken ct)
@@ -284,6 +306,13 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task DeleteDeviceCodeAsync(Guid id, CancellationToken ct)
+    {
+        await using var lease = await OpenAsync(ct);
+        await lease.Context.OAuthDeviceCodes.Where(d => d.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Pinned because the sweep runs from a hosted service, whose root-resolved factory reads as no
     /// tenant and under FORCE ROW LEVEL SECURITY would see none of the rows.
@@ -299,19 +328,6 @@ public class OAuthTokenRepository : IOAuthTokenRepository
             .Where(c => c.ExpiresAt < cutoff)
             .ExecuteDeleteAsync(ct);
         return new ExpiredCodeDeletion(deviceCodes, authorizationCodes);
-    }
-
-    private async Task<bool> UpdateDeviceCodeAsync(Guid id, Action<OAuthDeviceCodeEntity> change, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
-        var entity = await db.OAuthDeviceCodes.FirstOrDefaultAsync(d => d.Id == id, ct);
-        if (entity is null)
-            return false;
-
-        change(entity);
-        await SaveAsync(db, ct);
-        return true;
     }
 
     private static IQueryable<OAuthRefreshTokenEntity> TokensWithGrant(NocturneDbContext db) =>
@@ -336,7 +352,8 @@ public class OAuthTokenRepository : IOAuthTokenRepository
                 token.Grant.Scopes,
                 token.Grant.Client?.ClientId,
                 token.Grant.LimitTo24Hours,
-                token.Grant.IsRevoked));
+                token.Grant.IsRevoked,
+                token.Grant.ExpiresAt));
 
     private static DeviceCodeRecord? ToRecord(OAuthDeviceCodeEntity? code) =>
         code is null ? null : new DeviceCodeRecord(

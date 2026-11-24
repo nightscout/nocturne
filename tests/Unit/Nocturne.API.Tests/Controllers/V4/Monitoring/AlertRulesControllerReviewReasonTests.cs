@@ -66,7 +66,8 @@ public class AlertRulesControllerReviewReasonTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
-            new TenantMembershipRepository(new TestNocturneDbContextFactory(db)),
+            new TenantMembershipRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
+            new SubjectRepository(new TestNocturneDbContextFactory(db), AccountLinkRoutes.Off),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
             new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
             MockTenantAccessor.Create(db.TenantId).Object,
@@ -75,9 +76,9 @@ public class AlertRulesControllerReviewReasonTests
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
-            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Rearms.Unannounced(),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
+            Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
 
         return (controller, db);
     }

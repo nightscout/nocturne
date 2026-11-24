@@ -71,6 +71,28 @@ describe('TenantRegistry', () => {
     expect(tenants.get('fresh')?.connect).toHaveBeenCalledTimes(1);
   });
 
+  it('connects a tenant created after startup once an overview ticket names its id', async () => {
+    vi.useFakeTimers();
+    const { tenants, created } = registry([directory({ rhys: 't1' }), directory({ rhys: 't1', fresh: 't2' })]);
+    await tenants.refresh();
+
+    tenants.ensureIds(['t1', 't2']);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+
+    expect(created.map((c) => c.slug)).toEqual(['rhys', 'fresh']);
+  });
+
+  it('does not rediscover for an overview ticket naming only tenants it holds', async () => {
+    vi.useFakeTimers();
+    const { tenants, discover } = registry([directory({ rhys: 't1', sam: 't2' })]);
+    await tenants.refresh();
+
+    tenants.ensureIds(['t2', 't1']);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 3);
+
+    expect(discover).toHaveBeenCalledTimes(1);
+  });
+
   it('names a tenant it holds without reading the tenant list again', async () => {
     const { tenants, discover } = registry([directory({ rhys: 't1' })]);
     await tenants.refresh();

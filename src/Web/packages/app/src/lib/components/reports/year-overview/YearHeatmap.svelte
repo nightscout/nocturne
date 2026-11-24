@@ -5,6 +5,9 @@
   import { timeMonth, timeMonths } from "d3-time";
   import { Button } from "#lib/components/ui/button/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import { prefersReducedMotion } from "svelte/motion";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import {
@@ -22,7 +25,7 @@
   import { layoutYear, monthOutlinePath } from "./week-layout";
   import VisibleChart from "./VisibleChart.svelte";
   import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
-  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass, type TextureKey } from "@nocturne/charts/core";
   import type { DailySummaryDay, YearCalendarDatum } from "./calendar-datum";
 
 
@@ -73,6 +76,11 @@
 
   const print = new PrintMode();
   let chartWidth = $state(0);
+  let scroller = $state<HTMLDivElement>();
+  let scrollerWidth = $state(0);
+  let scrollLeft = $state(0);
+  let scrollWidth = $state(0);
+  let pendingScrollTarget: number | undefined;
 
   /**
    * Screen scrolls a full year of fixed-size cells. Paper cannot scroll, so a
@@ -93,12 +101,53 @@
   const firstDay = $derived(firstDayOfWeek(formatLocale()));
   const layout = $derived(layoutYear(bounds.start, bounds.end, firstDay));
   const columnCount = $derived(layout.columns.length);
+  const monthColumns = $derived(
+    timeMonths(bounds.start, bounds.end).map((monthDate) => ({
+      monthDate,
+      column: layout.columns.find((c) => c.start >= monthDate)?.column ?? 0,
+    }))
+  );
   const datumByDay = $derived(new Map(chartData.map((d) => [d.dateString, d])));
   const cellSize = $derived(
     print.active && chartWidth > 0
       ? Math.min(PRINT_CELL_MAX, chartWidth / columnCount)
       : SCREEN_CELL
   );
+  const maxScroll = $derived(Math.max(0, scrollWidth - scrollerWidth));
+  const canScroll = $derived(maxScroll > 1);
+  const atStart = $derived(scrollLeft <= 1);
+  const atEnd = $derived(scrollLeft >= maxScroll - 1);
+
+  function measure() {
+    if (!scroller) return;
+    scrollLeft = scroller.scrollLeft;
+    scrollWidth = scroller.scrollWidth;
+  }
+
+  function scrollByMonth(direction: 1 | -1) {
+    if (!scroller) return;
+    const from = pendingScrollTarget ?? scrollLeft;
+    const targets = monthColumns.map((m) => m.column * cellSize);
+    const target =
+      direction === 1
+        ? targets.find((x) => x > from + 1)
+        : targets.findLast((x) => x < from - 1);
+    const left = Math.min(Math.max(target ?? (direction === 1 ? maxScroll : 0), 0), maxScroll);
+    pendingScrollTarget = left;
+    scroller.scrollTo({ left, behavior: prefersReducedMotion.current ? "auto" : "smooth" });
+  }
+
+  $effect(() => {
+    void [year, chartData.length, columnCount];
+    if (!scroller) return;
+    scroller.scrollLeft = scroller.scrollWidth;
+    measure();
+  });
+
+  $effect(() => {
+    void scrollerWidth;
+    measure();
+  });
 </script>
 
 <div
@@ -136,7 +185,33 @@
 
   <!-- Calendar Heatmap -->
   {#if chartData.length > 0}
+    {#if canScroll}
+      <div class="mb-2 flex justify-end gap-2 print:hidden">
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Previous month"
+          disabled={atStart}
+          onclick={() => scrollByMonth(-1)}
+        >
+          <ChevronLeft class="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Next month"
+          disabled={atEnd}
+          onclick={() => scrollByMonth(1)}
+        >
+          <ChevronRight class="h-4 w-4" />
+        </Button>
+      </div>
+    {/if}
     <div
+      bind:this={scroller}
+      bind:clientWidth={scrollerWidth}
+      onscroll={measure}
+      onscrollend={() => (pendingScrollTarget = undefined)}
       class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
       <div
@@ -172,9 +247,7 @@
                   />
                 {/each}
                 <!-- Month labels (clickable → calendar) -->
-                {#each timeMonths(bounds.start, bounds.end) as monthDate (monthDate.getTime())}
-                  {@const monthX =
-                    layout.columns.find((c) => c.start >= monthDate)?.column ?? 0}
+                {#each monthColumns as { monthDate, column: monthX } (monthDate.getTime())}
                   <a
                     href={resolve(`calendar?year=${monthDate.getFullYear()}&month=${monthDate.getMonth() + 1}`)}
                   >

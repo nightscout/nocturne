@@ -13,6 +13,7 @@ using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.Internal;
 
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -294,7 +295,8 @@ public static class DatabaseInitializationExtensions
                         parent,
                         parent is null ? null : ShareDataCategories.RecencyColumnFor(parent.Table),
                         parent is null ? null : ShareDataCategories.SpanEndColumnFor(parent.Table),
-                        ShareDataCategories.OpenSpanBoundFor(table));
+                        ShareDataCategories.OpenSpanBoundFor(table),
+                        ShareDataCategories.SpanEarlyEndColumnFor(table));
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);
@@ -388,9 +390,77 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Marks any background job record still in a live state as Interrupted. Migration and
-    /// connector cursor reset jobs run on detached in-process tasks that die with the process,
-    /// so a row left in a live state at startup can only be an orphan from a previous run.
+    /// Checks every membership row against its reasons under the migrator role, after migrations, and
+    /// logs what it changed: first it recomputes the rows due at <paramref name="now"/>
+    /// (<see cref="MembershipReasons.RecomputeDueAsync"/>), then it aligns every row with its reasons
+    /// (<see cref="MembershipReasons.ReconcileAsync"/>), then it brings every team reason into line with
+    /// the team's rows (<see cref="TeamReasonChanges.SyncAllAsync"/>). It never throws: a crash at startup
+    /// leaves a self-hosted instance no way out, and a membership it could not check is checked again on
+    /// the next startup.
+    /// </summary>
+    /// <param name="migratorConnectionString">Connection string for the schema-owning migrator role.</param>
+    /// <param name="now">The instant the reasons in force are taken at.</param>
+    /// <param name="applyTeamReasons">
+    /// Stages and saves the team reasons a membership changes, on its unit, with what a member whose
+    /// membership ends or narrows made stopped or capped. The check runs before the app serves, so no
+    /// session is cached to evict.
+    /// </param>
+    /// <param name="logger">Logger for what the check changed.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    public static async Task ReconcileMembershipReasonsAsync(
+        string migratorConnectionString,
+        DateTime now,
+        Func<DbUnitOfWork, TeamReasonChanges, CancellationToken, Task> applyTeamReasons,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+            var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+            optionsBuilder.UseNpgsql(dataSource);
+            NocturneDbContext Open() => new(optionsBuilder.Options);
+
+            var sweep = await MembershipReasons.RecomputeDueAsync(
+                _ => ValueTask.FromResult(Open()), (_, _) => ValueTask.FromResult(Open()), now, logger, cancellationToken);
+            if (sweep.Recomputed > 0)
+                logger.LogInformation("Recomputed {Count} memberships whose reasons had lapsed.", sweep.Recomputed);
+
+            var result = await MembershipReasons.ReconcileAsync(Open, now, logger, cancellationToken);
+            if (result.Adopted > 0)
+                logger.LogInformation("Gave {Count} memberships with no reason their direct reason.", result.Adopted);
+            if (result.Resynced.Count > 0)
+                logger.LogWarning(
+                    "Re-synced the direct reason of {Count} memberships from their rows, which did not match it: {MemberIds}",
+                    result.Resynced.Count, result.Resynced);
+            if (result.Reprojected.Count > 0)
+                logger.LogWarning(
+                    "Re-projected {Count} memberships that hold a reason of another kind from their reasons, which their rows did not match: {MemberIds}",
+                    result.Reprojected.Count, result.Reprojected);
+            if (result.Failed > 0)
+                logger.LogWarning(
+                    "Could not align {Count} memberships with their reasons; they are checked again on the next startup.",
+                    result.Failed);
+
+            var (synced, failed) = await TeamReasonChanges.SyncAllAsync(Open, applyTeamReasons, now, logger, cancellationToken);
+            if (synced > 0)
+                logger.LogInformation("Brought the team reasons of {Count} memberships into line with the team's rows.", synced);
+            if (failed > 0)
+                logger.LogWarning(
+                    "Could not bring the team reasons of {Count} memberships into line; they are checked again on the next startup.",
+                    failed);
+        }
+        catch (Exception ex) when (MembershipReasons.IsMembershipFailure(ex))
+        {
+            logger.LogError(ex, "Could not check memberships against their reasons; the check runs again on the next startup.");
+        }
+    }
+
+    /// <summary>
+    /// Marks any background job record still in a live state as Interrupted. A connector cursor
+    /// reset job runs on a detached in-process task that dies with the process, so a row left in a
+    /// live state at startup can only be an orphan from a previous run. A job the job ledger runs
+    /// is resumed instead and has no table here.
     /// Each job table is paired with the live state names its owning enum defines.
     /// Without this sweep, an operator polling such a job sees "Running" forever.
     /// Relies on the API running as one process: an instance booting while another has a job

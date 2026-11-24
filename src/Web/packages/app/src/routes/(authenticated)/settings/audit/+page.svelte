@@ -9,6 +9,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import History from "@lucide/svelte/icons/history";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import X from "@lucide/svelte/icons/x";
@@ -27,6 +29,10 @@
   // Permissions
   const canManageAudit = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "audit.manage"),
+  );
+
+  const canViewMemberHistory = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "members.manage"),
   );
 
   // --- Config ---
@@ -164,6 +170,17 @@
       </p>
     </div>
   </div>
+
+  {#if canViewMemberHistory}
+    <SettingsLinkCard
+      link={{
+        title: "Member history",
+        description: "Review who gave or took access to your data, and when.",
+        href: "/settings/members/history",
+        icon: History,
+      }}
+    />
+  {/if}
 
   <!-- Config Card (audit.manage only) -->
   {#if canManageAudit}

@@ -9,8 +9,6 @@ namespace Nocturne.Connectors.MyLife.Tests.Mappers;
 
 public class StateSpanMapperTests
 {
-    private static readonly DateTime Now = new(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);
-
     private static MyLifeEvent CreateBasalRateEvent(
         long eventDateTime,
         double rate,
@@ -84,14 +82,13 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
         var record = tempBasals[0];
         record.Rate.Should().Be(1.5);
         record.Origin.Should().Be(TempBasalOrigin.Scheduled);
-        record.DataSource.Should().Be("mylife-connector");
     }
 
     [Fact]
@@ -105,7 +102,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
@@ -126,7 +123,7 @@ public class StateSpanMapperTests
             CreateBasalRateEvent(ToMyLifeTicks(eventTime), 0, isTempBasalRate)
         };
 
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         tempBasals.Should().HaveCount(1);
         var record = tempBasals[0];
@@ -145,7 +142,7 @@ public class StateSpanMapperTests
             CreateTempBasalEvent(ToMyLifeTicks(eventTime), rate, minutes: 30, percent: percent)
         };
 
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         tempBasals.Should().HaveCount(1);
         tempBasals[0].Origin.Should().Be(TempBasalOrigin.Manual);
@@ -162,7 +159,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
@@ -182,7 +179,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
@@ -208,7 +205,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(3);
@@ -234,7 +231,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
@@ -263,7 +260,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().BeEmpty();
@@ -286,7 +283,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert — Basal event skipped because BasalRate events are present
         tempBasals.Should().HaveCount(2);
@@ -310,7 +307,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(3);
@@ -335,18 +332,14 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);
         var record = tempBasals[0];
-        record.Id.Should().NotBe(Guid.Empty);
         record.StartMills.Should().BeGreaterThan(0);
         record.Rate.Should().Be(1.5);
         record.LegacyId.Should().NotBeNullOrEmpty();
-        record.DataSource.Should().Be("mylife-connector");
-        record.CreatedAt.Should().Be(Now);
-        record.ModifiedAt.Should().Be(Now);
     }
 
     [Fact]
@@ -360,7 +353,7 @@ public class StateSpanMapperTests
         };
 
         // Act
-        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0, Now).ToList();
+        var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
         // Assert
         tempBasals.Should().HaveCount(1);

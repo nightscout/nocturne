@@ -16,6 +16,20 @@ public interface IDecomposedTreatmentKeys
     /// </summary>
     Task<HeldLegacyIds> GetHeldLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
+    /// <summary>The ids among <paramref name="legacyIds"/> a deleted row is stored under, whoever deleted it.</summary>
+    Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Stores <paramref name="records"/> and <paramref name="spans"/> as rows already deleted, in one
+    /// save: nothing reads them live, and nothing a live write sets off (deduplication, a change
+    /// broadcast, the settling of the records around them) runs for them. The delete is attributed as
+    /// the scope's audit actor attributes it.
+    /// </summary>
+    Task StoreDeletedAsync(
+        IReadOnlyCollection<Models.V4.IV4Record> records, IReadOnlyCollection<StateSpan> spans,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Moves <paramref name="source"/>'s records under each client id onto one of its
     /// <paramref name="equivalents"/>: the one at a stored record's time, else the first. A client id

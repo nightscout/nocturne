@@ -34,7 +34,8 @@ namespace Nocturne.Connectors.Tandem.Configurations;
         SyncDataType.StateSpans,
         SyncDataType.DeviceStatus,
         SyncDataType.Profiles
-    ]
+    ],
+    LegacyIdPrefix = "tandem"
 )]
 public class TandemConnectorConfiguration : BaseConnectorConfiguration
 {
@@ -75,4 +76,12 @@ public class TandemConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.IgnoreZeroUnitBasal, DefaultValue = "false")]
     public bool IgnoreZeroUnitBasal { get; set; }
+
+    /// <summary>
+    /// IANA time zone the pump clock follows (e.g. <c>America/Los_Angeles</c>), mirroring
+    /// <c>tconnectsync</c>'s <c>TIMEZONE_NAME</c>. When empty or unknown, <see cref="BaseConnectorConfiguration.TimezoneOffset"/>
+    /// applies, and with that at zero too, the tenant's zone. See <see cref="EventParser.TandemTimeResolver"/>.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.TimeZoneId)]
+    public string? TimeZoneId { get; set; }
 }

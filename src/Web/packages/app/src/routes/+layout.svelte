@@ -9,6 +9,8 @@
   import { setPreferencesContext } from "#lib/stores/appearance-store.svelte.js";
   import AlarmActiveView from "#lib/components/settings/alarm-preview/AlarmActiveView.svelte";
   import EmergencyOverlay from "#lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
+  import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
 
   const activeAlarm = $derived(alarmState.getActiveAlarm());
   const alarmIsFlashing = $derived(alarmState.getIsFlashing());
@@ -34,6 +36,14 @@
   }
 
   let { children, data } = $props();
+
+  // Mounted here rather than in a group layout so the error page and the setup routes can open it.
+  const confirmIdentityDialog = lazyComponent(
+    () => import("#lib/components/auth/ConfirmIdentityDialog.svelte"),
+  );
+  $effect(() => {
+    if (confirmIdentity.open) confirmIdentityDialog.open = true;
+  });
 
   setPreferencesContext(() => ({
     layers: data.displayPreferences ?? [],
@@ -71,6 +81,10 @@
     onDismiss={handleAlarmDismiss}
     onEmergencyClick={handleEmergencyClick}
   />
+{/if}
+
+{#if confirmIdentityDialog.component}
+  <confirmIdentityDialog.component />
 {/if}
 
 {@render children()}

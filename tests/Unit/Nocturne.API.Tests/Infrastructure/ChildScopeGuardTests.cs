@@ -69,10 +69,8 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Hubs/HubCredentialVerifier.cs: HubCredentialVerifier.GuestSessionAsync",
         "src/API/Nocturne.API/Middleware/AuthenticationMiddleware.cs: AuthenticationMiddleware.InvokeAsync",
         "src/API/Nocturne.API/Middleware/Handlers/GuestSessionHandler.cs: GuestSessionHandler.AuthenticateAsync",
-        "src/API/Nocturne.API/Middleware/Handlers/LegacyJwtHandler.cs: LegacyJwtHandler.AuthenticateAsync",
+        "src/API/Nocturne.API/Middleware/Handlers/SessionBearerHandler.cs: SessionBearerHandler.AuthenticateAsync",
         "src/API/Nocturne.API/Middleware/Handlers/OAuthAccessTokenHandler.cs: OAuthAccessTokenHandler.AuthenticateAsync",
-        "src/API/Nocturne.API/Middleware/Handlers/OidcTokenHandler.cs: OidcTokenHandler.AuthenticateAsync",
-        "src/API/Nocturne.API/Middleware/Handlers/OidcTokenHandler.cs: OidcTokenHandler.RecordLastLoginAsync",
         "src/API/Nocturne.API/Middleware/Handlers/PlatformAccessCookieHandler.cs: PlatformAccessCookieHandler.AuthenticateAsync",
         "src/API/Nocturne.API/Middleware/Handlers/SessionCookieHandler.cs: SessionCookieHandler.AuthenticateAsync",
 
@@ -83,9 +81,6 @@ public partial class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.ReadAsync",
         "src/API/Nocturne.API/Services/Health/GoogleHealth/GoogleHealthCoordinator.cs: GoogleHealthCoordinator.WriteAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.PersistSnapshotAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
 
         // A share's zone and timezone timeline, which no category governs and every local-day report
         // needs. Each returns only the zone id or the timeline's entries.
@@ -95,13 +90,17 @@ public partial class ChildScopeGuardTests
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
         // inference would take the rows the caller cannot see for missing ones.
+        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestComplete",
         "src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs: DevAdminController.SyncAll",
         "src/API/Nocturne.API/Middleware/CompatibilityProxyMiddleware.cs: CompatibilityProxyMiddleware.InvokeAsync",
         "src/API/Nocturne.API/Middleware/Handlers/ApiKeyHandler.cs: ApiKeyHandler.SendRotationNudgeAsync",
+        "src/API/Nocturne.API/Services/Alerts/AlertFactEvaluationScheduler.cs: AlertFactEvaluationScheduler.RunAsync",
+        "src/API/Nocturne.API/Services/Auth/AccountLinkService.cs: RecoveryLinkRequests.RequestAsync",
         "src/API/Nocturne.API/Services/Auth/ShareLinkRotatedNotifier.cs: ShareLinkRotatedNotifier.NotifyAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorCursorResetJobService.cs: ConnectorResetJob.ExecuteAsync",
         "src/API/Nocturne.API/Services/Connectors/ConnectorSyncService.cs: ConnectorSyncService.TriggerSyncAsync",
         "src/API/Nocturne.API/Services/Devices/SensorSessionInferenceRunner.cs: SensorSessionInferenceRunner.RunAsync",
+        "src/API/Nocturne.API/Services/Identity/TeamRenameAnnouncer.cs: TeamRenameAnnouncer.AnnounceToAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.CreateTenantScope",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteApiMigrationAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJob.ExecuteMongoMigrationAsync",

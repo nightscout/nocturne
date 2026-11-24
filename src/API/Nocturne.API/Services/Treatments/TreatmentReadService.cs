@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
@@ -198,9 +197,12 @@ internal class TreatmentReadService : ITreatmentStore
         ICollection<StoredTreatment>? stored = null)
     {
         var decomposition = new TreatmentDecomposition();
+        IReadOnlyDictionary<int, Treatment> servedBefore = new Dictionary<int, Treatment>();
         try
         {
-            await _store.KeyToServedAsync(treatments, ct);
+            decomposition.KeyedToServed(await _store.KeyToServedAsync(treatments, ct));
+            if (stored is not null)
+                servedBefore = await ServedBeforeInvalidAsync(treatments, ct);
             await _decomposer.DecomposeBatchAsync(treatments, origin, ct, decomposition);
         }
         catch (Exception ex) when (Stops(ex))
@@ -209,6 +211,7 @@ internal class TreatmentReadService : ITreatmentStore
         }
         catch (Exception) when (stored is not null)
         {
+            RecordInvalidated();
             await ReportCommittedAsync(treatments, decomposition, stored);
             throw;
         }
@@ -230,6 +233,7 @@ internal class TreatmentReadService : ITreatmentStore
             accepted = [.. accepted.TakeWhile(i => i < failedAt)];
             created = await _store.ToCreatedAsync([.. accepted.Select(i => (treatments[i], decomposition.Of(i)))], ct);
             Record();
+            RecordInvalidated();
             List<Treatment> unread = [treatments[failedAt]];
             if (Wrote(decomposition.Of(failedAt)))
                 stored?.Add(new StoredTreatment.Unnamed(treatments[failedAt]));
@@ -247,6 +251,7 @@ internal class TreatmentReadService : ITreatmentStore
         }
 
         Record();
+        RecordInvalidated();
 
         _logger.LogSkippedDeleted(nameof(Treatment), decomposition.SkippedDeleted);
         return new BulkWrite<Treatment>(results, decomposition.SkippedDeleted) { Rejected = rejected };
@@ -261,9 +266,22 @@ internal class TreatmentReadService : ITreatmentStore
             }
         }
 
+        // A live treatment an upload deleted, as reads served it before: its delete commits before the
+        // batch's other writes, so it is announced whatever ends the batch.
+        void RecordInvalidated()
+        {
+            foreach (var index in decomposition.Invalidated.Order())
+            {
+                var deleted = servedBefore.GetValueOrDefault(index) ?? treatments[index];
+                deleted.IsValid = false;
+                stored?.Add(new StoredTreatment.Deleted(deleted));
+            }
+        }
+
         TreatmentBatchFailedException Stopped(Exception ex, TreatmentDecomposition committed)
         {
             _logger.LogError(ex, "Failed to store a batch of {Count} treatments", treatments.Count);
+            RecordInvalidated();
             var written = new List<Treatment>();
             int? failedIndex = null;
             for (var i = 0; i < treatments.Count; i++)
@@ -314,9 +332,29 @@ internal class TreatmentReadService : ITreatmentStore
         }
     }
 
+    /// <summary>
+    /// The treatments reads serve under the ids of the batch's uploads with <c>isValid: false</c>, by
+    /// batch index: one of those that names a live treatment deletes it, and its delete is announced as
+    /// the treatment that was served.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, Treatment>> ServedBeforeInvalidAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var served = new Dictionary<int, Treatment>();
+        for (var i = 0; i < treatments.Count; i++)
+        {
+            if (treatments[i] is { IsValid: false } treatment
+                && (treatment.Id ?? treatment.SyncIdentifier) is { Length: > 0 } id
+                && await GetByIdAsync(id, ct) is { } found)
+                served[i] = found;
+        }
+
+        return served;
+    }
+
     /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
     private static bool Stops(Exception ex) =>
-        ex is DbUpdateException or DbException or TimeoutException or InvalidOperationException or OperationCanceledException;
+        StoreFailure.Is(ex) || ex is TimeoutException or InvalidOperationException or OperationCanceledException;
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Treatment?>> ReadBackAsync(

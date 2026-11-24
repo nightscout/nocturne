@@ -24,7 +24,7 @@
     A1cDisplayValue,
     A1cDisplayReferences,
     TimeZoneUnavailableReason,
-  } from "#lib/api/generated/nocturne-api-client.js";
+  } from "@nocturne/api-client";
   import { a1cUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     a1cLabel,
@@ -43,7 +43,7 @@
     CHART_TEXTURES,
     patternClass,
     type TextureKey,
-  } from "#lib/components/charts/print/chart-print-patterns.js";
+  } from "@nocturne/charts/core";
   import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {

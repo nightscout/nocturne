@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -19,7 +20,13 @@ internal static class TenantOwnerLock
     internal static Task LockTenantOwnersAsync(this NocturneDbContext db, Guid tenantId, CancellationToken ct) =>
         db.LockForTransactionAsync(Class, tenantId, ct);
 
-    private static async Task LockSubjectRowAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    /// <summary>
+    /// Holds the subject's row <c>FOR UPDATE</c> to the commit, against every write that inserts a row
+    /// naming the subject (<see cref="LockSubjectRowSharedAsync"/>): what account deletion takes before
+    /// any other lock (<see cref="MembershipLock"/>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         if (!db.Database.IsNpgsql())
             return;
@@ -30,9 +37,38 @@ internal static class TenantOwnerLock
     }
 
     /// <summary>
-    /// Takes the owner lock of every tenant the subject belongs to, then returns those whose owner the
-    /// subject is and where no other owner who can sign in would remain
-    /// (<see cref="TenantOwnerFilter.IsLastOwnerAsync"/>). The check reads after the locks, so it sees
+    /// Holds the subject's row against its deletion and against the <c>FOR UPDATE</c> that
+    /// <see cref="LockTenantsOfSubjectAsync"/> takes, to the commit: what a write that inserts a row
+    /// naming the subject takes first, so it orders ahead of the membership lock like those paths do
+    /// (<see cref="MembershipLock"/>). Takes the lock the row's foreign keys would take later, and does
+    /// not conflict with another <c>KEY SHARE</c>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowSharedAsync(this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    {
+        if (!db.Database.IsNpgsql())
+            return;
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A row lock is taken inside a transaction");
+
+        await db.Database.ExecuteSqlAsync($"SELECT 1 FROM subjects WHERE id = {subjectId} FOR KEY SHARE", ct);
+    }
+
+    /// <summary>
+    /// <see cref="LockSubjectRowSharedAsync"/> for each of <paramref name="subjectIds"/>, in ascending id, so
+    /// two writes that each lock several cannot each hold a row the other waits for.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    internal static async Task LockSubjectRowsSharedAsync(
+        this NocturneDbContext db, IEnumerable<Guid> subjectIds, CancellationToken ct)
+    {
+        foreach (var subjectId in subjectIds.Distinct().Order())
+            await db.LockSubjectRowSharedAsync(subjectId, ct);
+    }
+
+    /// <summary>
+    /// Takes the owner lock of every tenant the subject belongs to, then returns those whose last
+    /// owner the subject is (<see cref="TenantOwnerFilter.IsLastOwnerAsync"/>). The check reads after the locks, so it sees
     /// every write that held one first.
     /// </summary>
     /// <remarks>
@@ -45,7 +81,7 @@ internal static class TenantOwnerLock
     /// </remarks>
     /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
     internal static async Task<IReadOnlyList<LastOwnerTenant>> LockTenantsOfSubjectAsync(
-        this NocturneDbContext db, Guid subjectId, CancellationToken ct)
+        this NocturneDbContext db, Guid subjectId, IAccountLinkRoute linkRoute, CancellationToken ct)
     {
         await db.LockSubjectRowAsync(subjectId, ct);
 
@@ -60,7 +96,7 @@ internal static class TenantOwnerLock
         var lastOwnerOf = new List<Guid>();
         foreach (var membership in memberships)
         {
-            if (await db.TenantMembers.AsNoTracking().IsLastOwnerAsync(membership.TenantId, membership.Id, ct))
+            if (await db.IsLastOwnerAsync(membership.TenantId, membership.Id, linkRoute, ct))
                 lastOwnerOf.Add(membership.TenantId);
         }
 

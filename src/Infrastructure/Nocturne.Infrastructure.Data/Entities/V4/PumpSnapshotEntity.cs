@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -21,7 +22,7 @@ public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWrite
     /// uploader retries of the same loop cycle don't duplicate the snapshot.
     /// </summary>
     [Column("sync_identifier")]
-    [MaxLength(256)]
+    [MaxLength(RecordColumnLengths.SyncIdentifier)]
     public string? SyncIdentifier { get; set; }
 
     /// <summary>

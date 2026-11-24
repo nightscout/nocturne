@@ -22,7 +22,7 @@ namespace Nocturne.Connectors.Dexcom.Configurations;
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose],
     SensorReadingIntervalSeconds = 300,
-    DocumentationUrl = UrlConstants.External.DocsDexcom
+    LegacyIdPrefix = "dexcom"
 )]
 public class DexcomConnectorConfiguration : BaseConnectorConfiguration
 {

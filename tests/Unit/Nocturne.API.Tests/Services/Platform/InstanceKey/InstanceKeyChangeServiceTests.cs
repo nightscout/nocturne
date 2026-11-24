@@ -369,7 +369,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             new InstanceKeyCheck(root, _key),
             new OwnerNoticeLedger(root),
             new ActiveTenantSnapshot(new TenantRepository(snapshotContexts ?? root), _clock, NullLogger<ActiveTenantSnapshot>.Instance),
-            new TenantMembershipRepository(root),
+            new TenantMembershipRepository(root, AccountLinkRoutes.Off),
             _clock,
             _log);
     }
@@ -579,13 +579,24 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReplaceMetadataBySourceAsync(
+            string userId, string type, string sourceId, Dictionary<string, object> metadata,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> CreateNotificationUnlessActiveAsync(
+            string userId, string type, string title, string sourceId, NotificationCategory? category = null,
+            string? source = null, string? subtitle = null, Dictionary<string, object>? metadata = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<List<InAppNotificationDto>> GetActiveNotificationsAsync(string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<string?> GetNotificationTypeAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<bool> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
+        public Task<NotificationActionResult> ExecuteActionAsync(Guid notificationId, string actionId, string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<bool> MarkAsReadAsync(Guid notificationId, string userId, CancellationToken cancellationToken = default) =>
