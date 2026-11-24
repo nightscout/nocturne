@@ -121,6 +121,18 @@ public sealed class MemberRecoveryControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task An_inactive_caller_is_refused_and_no_code_is_issued()
+    {
+        new RequestMembership(_adminId, _tenantId, null) { SubjectIsInactive = true }
+            .StoreOn(_controller.ControllerContext.HttpContext);
+
+        var result = await _controller.IssueRecoveryCode(_orphanId, CancellationToken.None);
+
+        result.Should().BeOfType<ChallengeResult>();
+        NoCodeIssued();
+    }
+
+    [Fact]
     public async Task A_member_who_can_still_sign_in_cannot_be_given_a_code()
     {
         var result = await _controller.IssueRecoveryCode(_adminId, CancellationToken.None);

@@ -156,6 +156,9 @@ public class AlertRulesControllerChannelDestinationTests
     private static async Task LinkIdentityAsync(
         NocturneDbContext db, string platform, string platformUserId)
     {
+        if (!await db.Subjects.AnyAsync(s => s.Id == Subject))
+            db.Subjects.Add(new SubjectEntity { Id = Subject, Name = "Subject" });
+
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(),

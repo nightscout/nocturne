@@ -178,6 +178,9 @@ public class TeamsController(
     public async Task<IActionResult> CreateManagerInvite(
         Guid teamId, [FromBody] CreateTeamInviteRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
@@ -394,6 +397,9 @@ public class TeamsController(
     public async Task<IActionResult> CreateAccessLink(
         Guid teamId, [FromBody] CreateTeamAccessLinkRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (HttpContext.GetSubjectId() is not { } subjectId)
             return Unauthorized();
 
@@ -472,6 +478,9 @@ public class TeamsController(
         [FromServices] TeamAccessService access,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (ApproverCredential() is not { } caller)
             return Unauthorized();
 

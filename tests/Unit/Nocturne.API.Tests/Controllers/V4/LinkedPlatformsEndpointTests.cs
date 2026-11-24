@@ -39,6 +39,13 @@ public class LinkedPlatformsEndpointTests : IDisposable
 
     private NocturneDbContext CreateDbContext() => new(_dbOptions);
 
+    private static Guid SeedSubject(NocturneDbContext db)
+    {
+        var id = Guid.NewGuid();
+        db.Subjects.Add(new SubjectEntity { Id = id, Name = "Member" });
+        return id;
+    }
+
     private LinkedPlatformsController CreateController(
         ChatIdentityDirectoryService directory)
     {
@@ -72,7 +79,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "discord",
                     PlatformUserId = "user1",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "main",
                     DisplayName = "Main",
                     IsDefault = true,
@@ -84,7 +91,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "discord",
                     PlatformUserId = "user2",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "alt",
                     DisplayName = "Alt",
                     IsDefault = false,
@@ -96,7 +103,7 @@ public class LinkedPlatformsEndpointTests : IDisposable
                     Platform = "telegram",
                     PlatformUserId = "user3",
                     TenantId = _tenantId,
-                    NocturneUserId = Guid.NewGuid(),
+                    NocturneUserId = SeedSubject(db),
                     Label = "tg",
                     DisplayName = "Telegram",
                     IsDefault = true,

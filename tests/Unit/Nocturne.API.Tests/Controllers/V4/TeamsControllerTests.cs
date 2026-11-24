@@ -37,6 +37,10 @@ public class TeamsControllerTests
     private readonly Mock<ITenantMembershipRepository> _members = new();
     private readonly Mock<ITenantRoleService> _roles = new();
 
+    public TeamsControllerTests() =>
+        _subjects.Setup(s => s.GetSignInStateAsync(Caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectSignInState(IsActive: true, IsPlatformAdmin: false));
+
     private static IEnumerable<MethodInfo> Actions => typeof(TeamsController)
         .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
         .Where(m => m.GetCustomAttributes<HttpMethodAttribute>().Any());
@@ -251,6 +255,51 @@ public class TeamsControllerTests
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should()
             .Be(new TeamInviteDetails(TeamId, "Camp", "Sam", TeamMemberKind.Manager, false));
+    }
+
+    [Fact]
+    public async Task An_inactive_subject_is_refused_every_action_that_mints_a_link_and_nothing_is_stored()
+    {
+        _subjects.Setup(s => s.GetSignInStateAsync(Caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectSignInState(IsActive: false, IsPlatformAdmin: false));
+        var controller = Controller(Session());
+
+        IActionResult[] results =
+        [
+            await controller.CreateManagerInvite(TeamId, new CreateTeamInviteRequest(null), default),
+            await controller.CreateAccessLink(TeamId, new CreateTeamAccessLinkRequest(null, RoleSeeds.Caretaker, false, null), default),
+            await controller.ApproveAccessLink(
+                "token", new ApproveTeamAccessRequest(Guid.CreateVersion7(), [Guid.CreateVersion7()], false, null, null), Access(), default),
+        ];
+
+        results.Should().AllBeOfType<ChallengeResult>();
+        _teams.Invocations.Should().BeEmpty();
+        _members.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_subject_with_no_row_is_refused_as_inactive_and_nothing_is_stored()
+    {
+        _subjects.Setup(s => s.GetSignInStateAsync(Caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SubjectSignInState?)null);
+
+        var result = await Controller(Session()).CreateManagerInvite(TeamId, new CreateTeamInviteRequest(null), default);
+
+        result.Should().BeOfType<ChallengeResult>();
+        _teams.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_active_subject_is_not_refused_by_the_state_read()
+    {
+        _subjects.Setup(s => s.GetSignInStateAsync(Caller, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SubjectSignInState(IsActive: true, IsPlatformAdmin: false));
+        _teams.Setup(t => t.CreateInviteAsync(TeamId, Caller, It.IsAny<NewTeamInvite>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Guid.CreateVersion7());
+
+        var result = await Controller(Session()).CreateManagerInvite(TeamId, new CreateTeamInviteRequest(null), default);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
     }
 
     [Theory]

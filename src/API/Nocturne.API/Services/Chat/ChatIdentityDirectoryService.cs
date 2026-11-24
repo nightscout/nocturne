@@ -53,13 +53,13 @@ public sealed class ChatIdentityDirectoryService(
     private const int MaxCreateAttempts = 5;
 
     /// <summary>
-    /// Returns the active directory entries for a platform user whose subject still holds a
-    /// membership of the entry's tenant that has not ended, ordered by creation date.
+    /// Returns the active directory entries for a platform user whose subject is active and still
+    /// holds a membership of the entry's tenant that has not ended, ordered by creation date.
     /// </summary>
     /// <remarks>
     /// These are what the bot answers a command through, with the instance key, so an entry of an
-    /// ended membership would keep reading the tenant. The entry is kept rather than removed, so a
-    /// later end date restores it.
+    /// ended membership or a deactivated subject would keep reading the tenant. The entry is kept
+    /// rather than removed, so a later end date or reactivation restores it.
     /// </remarks>
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetCandidatesAsync(
         string platform, string platformUserId, CancellationToken ct)
@@ -67,7 +67,11 @@ public sealed class ChatIdentityDirectoryService(
         List<ChatIdentityDirectoryEntry> links;
         await using (var db = await contextFactory.CreatePlatformAsync(ct))
         {
-            links = await ActiveLinksOf(db, platform, platformUserId).AsNoTracking().OrderBy(d => d.CreatedAt).ToListAsync(ct);
+            links = await ActiveLinksOf(db, platform, platformUserId)
+                .WithActiveSubject(db)
+                .AsNoTracking()
+                .OrderBy(d => d.CreatedAt)
+                .ToListAsync(ct);
         }
 
         var now = time.GetUtcNow().UtcDateTime;
@@ -94,19 +98,40 @@ public sealed class ChatIdentityDirectoryService(
         => (await GetCandidatesAsync(platform, platformUserId, ct))
             .FirstOrDefault(d => d.IsDefault);
 
-    /// <summary>Returns all active directory entries for a tenant.</summary>
+    /// <summary>
+    /// Returns every active directory entry for a tenant, whatever its subject's state, for a list that
+    /// shows what holds each chat account (<see cref="LinksOfTenant"/>).
+    /// </summary>
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetByTenantAsync(
         Guid tenantId, CancellationToken ct)
     {
         await using var db = await contextFactory.CreatePlatformAsync(ct);
-        return await ActiveLinksOfTenant(db, tenantId)
+        return await LinksOfTenant(db, tenantId)
             .OrderBy(d => d.CreatedAt)
             .ToListAsync(ct);
     }
 
-    /// <summary>Every active entry linking a chat account to <paramref name="tenantId"/>, on a context of any tenant.</summary>
-    public static IQueryable<ChatIdentityDirectoryEntry> ActiveLinksOfTenant(NocturneDbContext db, Guid tenantId) =>
+    /// <summary>
+    /// Every active entry linking a chat account to <paramref name="tenantId"/>, on a context of any
+    /// tenant, whether or not its subject is active. For what only lists or names a link; a read that
+    /// delivers or routes through it uses <see cref="ReachableLinksOfTenant"/>.
+    /// </summary>
+    public static IQueryable<ChatIdentityDirectoryEntry> LinksOfTenant(NocturneDbContext db, Guid tenantId) =>
         db.ChatIdentityDirectory.Where(d => d.TenantId == tenantId && d.IsActive);
+
+    /// <summary>
+    /// The entries of <see cref="LinksOfTenant"/> whose subject is active (<see cref="ChatLinkSubjectFilter"/>),
+    /// which is who an alert may be delivered to.
+    /// </summary>
+    public static IQueryable<ChatIdentityDirectoryEntry> ReachableLinksOfTenant(NocturneDbContext db, Guid tenantId) =>
+        LinksOfTenant(db, tenantId).WithActiveSubject(db);
+
+    /// <summary>Whether the link's subject is active (<see cref="ChatLinkSubjectFilter"/>).</summary>
+    public async Task<bool> HasActiveSubjectAsync(Guid linkId, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreatePlatformAsync(ct);
+        return await db.ChatIdentityDirectory.Where(d => d.Id == linkId).WithActiveSubject(db).AnyAsync(ct);
+    }
 
     /// <summary>
     /// Returns a directory entry by its ID, or null if no entry with that ID is in
