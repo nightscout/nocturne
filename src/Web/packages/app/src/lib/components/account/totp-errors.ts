@@ -15,7 +15,7 @@ const RESTART_SETUP = "Start it again from your security settings.";
 /** Exhaustive: a failure the server can raise must have copy here. */
 const SETUP_FAILURES: Record<TotpSetupFailure, string> = {
   [TotpSetupFailure.InvalidCode]:
-    "That code wasn't accepted. Check your authenticator app and try again.",
+    "The code was not accepted. Type the current code from your app.",
   [TotpSetupFailure.ChallengeUnreadable]: `This two-factor setup is no longer valid. ${RESTART_SETUP}`,
   [TotpSetupFailure.ChallengeExpired]: `This two-factor setup took too long. ${RESTART_SETUP}`,
   [TotpSetupFailure.NoPrimaryFactor]:
