@@ -1098,6 +1098,13 @@ public class TreatmentDecomposerBatchTests : IDisposable
         public Task<HeldLegacyIds> GetHeldLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
             => keys.GetHeldLegacyIdsAsync(legacyIds, ct);
 
+        public Task<IReadOnlySet<string>> GetDeletedLegacyIdsAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+            => keys.GetDeletedLegacyIdsAsync(legacyIds, ct);
+
+        public Task StoreDeletedAsync(
+            IReadOnlyCollection<V4Models.IV4Record> records, IReadOnlyCollection<StateSpan> spans, CancellationToken ct = default)
+            => keys.StoreDeletedAsync(records, spans, ct);
+
         public Task<ClientIdRekey> RekeyClientIdsAsync(
             string source, IReadOnlyList<ClientIdEquivalent> equivalents, CancellationToken ct = default)
             => keys.RekeyClientIdsAsync(source, equivalents, ct);

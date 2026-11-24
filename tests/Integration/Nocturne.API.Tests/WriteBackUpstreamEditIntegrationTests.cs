@@ -29,9 +29,9 @@ namespace Nocturne.API.Tests.Integration;
 /// <summary>
 /// A treatment written back to Nightscout, then pulled back by the connector, against Postgres. The
 /// pulled copy of what write-back sent is its echo: it stores nothing, raises nothing and sends
-/// nothing. A copy edited upstream, such as AAPS changing a dose or marking it invalid, reaches
-/// Nocturne under the record's own data source and is not sent back, and the pull after it is an echo
-/// again.
+/// nothing. A copy edited upstream, such as AAPS changing a dose, reaches Nocturne under the record's
+/// own data source and is not sent back, and the pull after it is an echo again. A copy marked invalid
+/// upstream deletes the record.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
 [Trait("Category", "Integration")]
@@ -183,14 +183,8 @@ public class WriteBackUpstreamEditIntegrationTests(ApiIntegrationTestFixture fix
         { "15.0.6", "insulin" },
         { "15.0.8", "carbs" },
         { "15.0.6", "carbs" },
-        { "15.0.8", "isValid" },
-        { "15.0.6", "isValid" },
     };
 
-    /// <summary>
-    /// <c>isValid: false</c> ends as it does on a record write-back never sent: the pull stores nothing
-    /// for the flag, so the rows and events stay as they were, and only the fingerprint moves on.
-    /// </summary>
     [Theory]
     [MemberData(nameof(Edits))]
     public async Task AnUpstreamEdit_IsAppliedUnderTheRecordsOwnSource_IsNotSentBack_AndTheNextPullIsAnEcho(string version, string field)
@@ -199,12 +193,7 @@ public class WriteBackUpstreamEditIntegrationTests(ApiIntegrationTestFixture fix
         var upstream = new FakeNightscoutTreatments(version);
         await CreateAsync(upstream, Meal(legacyId, UniqueSlot()));
         var copy = Held(upstream).Single();
-        copy[field] = field switch
-        {
-            "insulin" => 3.5,
-            "carbs" => 55,
-            _ => false,
-        };
+        copy[field] = field == "insulin" ? 3.5 : 55;
         var writes = upstream.Writes.Count;
 
         var raised = await PullAsync(upstream, [copy]);
@@ -219,13 +208,46 @@ public class WriteBackUpstreamEditIntegrationTests(ApiIntegrationTestFixture fix
             row.WrittenLive.Should().BeTrue();
             row.SentFingerprint.Should().Be(FingerprintOf(copy));
         });
-        raised.Updated.Should().HaveCount(field == "isValid" ? 0 : 1);
+        raised.Updated.Should().ContainSingle();
         upstream.Writes.Count.Should().Be(writes);
 
         var again = await PullAsync(upstream, [copy]);
 
         again.Created.Should().BeEmpty();
         again.Updated.Should().BeEmpty();
+        upstream.Writes.Count.Should().Be(writes);
+    }
+
+    /// <summary>
+    /// <c>isValid: false</c> ends as it does on a record write-back never sent: the upload names the
+    /// record by its id, so the record is deleted. Write-back sends no delete, and the next pull stores
+    /// nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task AnUpstreamInvalidation_DeletesTheRecord_AndIsNotSentBack(string version)
+    {
+        var legacyId = MongoObjectId.NewObjectId();
+        var upstream = new FakeNightscoutTreatments(version);
+        await CreateAsync(upstream, Meal(legacyId, UniqueSlot()));
+        var copy = Held(upstream).Single();
+        copy["isValid"] = false;
+        var writes = upstream.Writes.Count;
+
+        var raised = await PullAsync(upstream, [copy]);
+
+        (await BolusesAsync(legacyId)).Should().BeEmpty();
+        (await CarbIntakesAsync(legacyId)).Should().BeEmpty();
+        raised.Created.Should().BeEmpty();
+        raised.Updated.Should().BeEmpty();
+        upstream.Writes.Count.Should().Be(writes);
+
+        var again = await PullAsync(upstream, [copy]);
+
+        again.Created.Should().BeEmpty();
+        again.Updated.Should().BeEmpty();
+        (await BolusesAsync(legacyId)).Should().BeEmpty();
         upstream.Writes.Count.Should().Be(writes);
     }
 
