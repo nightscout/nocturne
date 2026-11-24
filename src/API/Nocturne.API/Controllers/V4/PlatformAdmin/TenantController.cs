@@ -101,6 +101,9 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> AddMember(
         Guid id, [FromBody] AddMemberRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
@@ -164,6 +167,9 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> Provision(
         [FromBody] ProvisionRequest request, CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (request.Credential is null && request.OidcIdentity is null)
             return Problem(detail: "Either Credential or OidcIdentity must be provided", statusCode: 400, title: "Bad Request");
         if (request.Credential is not null && request.OidcIdentity is not null)
@@ -412,6 +418,9 @@ public class TenantController : ControllerBase
         Func<CancellationToken, Task<bool>> mayIssueFor,
         CancellationToken ct)
     {
+        if (await HttpContext.IsCallerSubjectInactiveAsync(ct))
+            return Challenge();
+
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 

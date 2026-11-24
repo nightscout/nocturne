@@ -636,19 +636,13 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <inheritdoc />
-    public async Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null)
+    public async Task<OidcLogoutResult> LogoutAsync(
+        string? refreshToken, RefreshTokenSession? signedIn, Guid? providerId = null)
     {
-        // Revoke the refresh token
-        var revoked = await _refreshTokenService.RevokeRefreshTokenAsync(
-            refreshToken,
-            "User logout"
-        );
-
-        if (!revoked)
-        {
-            // Token might already be revoked, which is fine
-            _logger.LogDebug("Refresh token not found or already revoked during logout");
-        }
+        var presented = string.IsNullOrEmpty(refreshToken) ? null : await _refreshTokenService.FindOwnerAsync(refreshToken);
+        foreach (var session in new[] { presented, signedIn }.OfType<RefreshTokenSession>()
+                     .DistinctBy(session => (session.SubjectId, session.SessionId)))
+            await _refreshTokenService.RevokeSessionForSubjectAsync(session.SubjectId, session.SessionId, "User logout");
 
         // Get provider logout URL if requested
         string? providerLogoutUrl = null;

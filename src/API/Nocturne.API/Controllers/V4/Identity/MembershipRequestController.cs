@@ -108,7 +108,7 @@ public class MembershipRequestController(
         [FromServices] TimeProvider time,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         var tenantId = tenantAccessor.TenantId;

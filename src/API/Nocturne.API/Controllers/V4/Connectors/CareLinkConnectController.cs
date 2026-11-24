@@ -213,14 +213,14 @@ public partial class CareLinkConnectController : ControllerBase
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(CareLinkDesktopTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult<CareLinkDesktopTokenResponse> DesktopToken()
+    public async Task<ActionResult<CareLinkDesktopTokenResponse>> DesktopToken(CancellationToken ct)
     {
         var auth = HttpContext.GetAuthContext();
         var tenantId = _tenantAccessor.Context?.TenantId;
         if (auth is not { IsAuthenticated: true, SubjectId: not null } || tenantId is null)
             return Unauthorized();
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         var subjectId = auth.SubjectId ?? throw new InvalidOperationException("Authenticated subject id is required.");
@@ -258,7 +258,8 @@ public partial class CareLinkConnectController : ControllerBase
     /// <see cref="Scope.TenantSettings"/> and not a connector scope an app can be given; or a desktop
     /// link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
-    /// <see cref="DesktopToken"/> mints only for an active caller that already held the permission.
+    /// <see cref="DesktopToken"/> mints only for an active caller whose session is live and that
+    /// already held the permission.
     /// </summary>
     private bool CanConfigureConnectors() =>
         Scope.Satisfies(

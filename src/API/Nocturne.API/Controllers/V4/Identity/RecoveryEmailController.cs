@@ -82,6 +82,8 @@ public class RecoveryEmailController(
         if (OwnAccountCaller.SubjectId(HttpContext) is not { } subjectId
             || HttpContext.GetTenantContext() is not { } tenant)
             return Forbid();
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
         if (!linkRoute.IsConfigured)
             return Unavailable();
 

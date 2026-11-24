@@ -125,7 +125,7 @@ public class MemberRecoveryController : ControllerBase
         if (HttpContext.CallerGrantCeiling() is null)
             return this.CallerAccessFromTeamProblem();
 
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         var tenantId = _tenantAccessor.TenantId;

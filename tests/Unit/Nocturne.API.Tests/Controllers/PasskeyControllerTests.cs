@@ -126,7 +126,10 @@ public class PasskeyControllerTests : IDisposable
             TimeProvider.System);
 
         // Set up HttpContext with response cookies
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = TestRequestServices.Build(clamped: false, s => s.AddActiveSubjects()),
+        };
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -198,14 +201,21 @@ public class PasskeyControllerTests : IDisposable
         await _dbContext.SaveChangesAsync();
     }
 
-    /// <summary>Puts an authenticated subject on the request, as the auth middleware would.</summary>
-    private void Authenticate(Guid? subjectId = null) =>
+    /// <summary>
+    /// Puts an authenticated subject on the request, as the auth middleware would, signed in with
+    /// <paramref name="sessionId"/>, a live session unless named otherwise.
+    /// </summary>
+    private void Authenticate(Guid? subjectId = null, string sessionId = LiveSession.Id) =>
         _controller.ControllerContext.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
             SubjectId = subjectId ?? _subjectId,
             TenantId = _tenantId,
+            SessionId = sessionId,
         };
+
+    private const string EndedSession = "ended-session";
 
     /// <summary>Mints a code of <paramref name="purpose"/> for the subject on this tenant.</summary>
     private async Task<string> IssueCodeAsync(
@@ -249,6 +259,143 @@ public class PasskeyControllerTests : IDisposable
         _passkeyService
             .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username, PasskeyRegistrationFlow.OwnAccount))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+    #region A factor is enrolled only from a live session
+
+    [Fact]
+    public async Task RegisterOptions_FromAnEndedSessionWithNoRecoverySession_IsAnsweredAsAnAnonymousCallerAndMintsNoChallenge()
+    {
+        var anonymous = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
+        Authenticate(sessionId: EndedSession);
+        StubRegistrationOptions(_subjectId, "testuser");
+
+        var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Should().BeEquivalentTo(anonymous.Result.Should().BeOfType<ObjectResult>().Subject);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<PasskeyRegistrationFlow>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterComplete_FromAnEndedSessionWithNoRecoverySession_IsAnsweredAsAnAnonymousCallerAndStoresNothing()
+    {
+        var anonymous = await CompleteRegistrationAsync();
+        Authenticate(sessionId: EndedSession);
+        StubRegistration(_subjectId);
+
+        var result = await CompleteRegistrationAsync();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Should().BeEquivalentTo(anonymous.Result.Should().BeOfType<ObjectResult>().Subject);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<PasskeyRegistrationFlow>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterOptions_FromAnEndedSessionWithARecoverySession_MintsTheChallengeForTheRecoverySubject()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(subjectId);
+        Authenticate(subjectId, EndedSession);
+        StubRegistrationOptions(subjectId, "owner");
+
+        var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "owner" });
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PasskeyOptionsResponse>()
+            .Which.ChallengeToken.Should().Be("token-data");
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RegisterComplete_FromAnEndedSessionWithARecoverySession_EnrolsUnderTheRecoverySessionAndSpendsIt()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(subjectId);
+        Authenticate(subjectId, EndedSession);
+        var credentialId = Guid.CreateVersion7();
+        StubRegistration(subjectId, credentialId);
+
+        var result = await CompleteRegistrationAsync();
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PasskeyRegisterCompleteResponse>()
+            .Which.CredentialId.Should().Be(credentialId);
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeFalse();
+        _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
+            .Single(header => header!.StartsWith($"{RecoverySession.CookieName}=", StringComparison.Ordinal))
+            .Should().Contain("expires=Thu, 01 Jan 1970");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_FromAnEndedSessionOfAnotherSubject_EnrolsOnlyTheRecoverySessionsSubject()
+    {
+        var recovering = await SeedMemberAsync("owner", withPasskey: true);
+        var session = await GiveRecoverySessionAsync(recovering);
+        Authenticate(_subjectId, EndedSession);
+        StubRegistration(recovering);
+
+        var result = await CompleteRegistrationAsync();
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PasskeyRegisterCompleteResponse>()
+            .Which.SubjectId.Should().Be(recovering);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<PasskeyRegistrationFlow>(), It.IsAny<Guid>(), _subjectId, It.IsAny<string?>()),
+            Times.Never);
+        (await IsLiveAsync(session, LoginCodePurpose.RecoverySession)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_FromAnEndedSession_IsChallengedAndMakesNoCodes()
+    {
+        Authenticate(sessionId: EndedSession);
+
+        var result = await _controller.RegenerateRecoveryCodes();
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_FromALiveSession_ReturnsTheNewCodes()
+    {
+        Authenticate();
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(_subjectId)).ReturnsAsync(["one", "two"]);
+
+        var result = await _controller.RegenerateRecoveryCodes();
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<RecoveryRegenerateResponse>()
+            .Which.Codes.Should().Equal("one", "two");
+    }
+
+    [Fact]
+    public async Task A_recovery_session_enrols_without_the_refusal_reading_any_signed_in_state()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        await GiveRecoverySessionAsync(subjectId);
+        StubRegistrationOptions(subjectId, "owner");
+        StubRegistration(subjectId);
+        _controller.HttpContext.RequestServices = new ServiceCollection().BuildServiceProvider();
+
+        var options = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "owner" });
+        var completed = await CompleteRegistrationAsync();
+
+        options.Result.Should().BeOfType<OkObjectResult>();
+        completed.Result.Should().BeOfType<OkObjectResult>();
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.OwnAccount, It.IsAny<Guid>(), subjectId, It.IsAny<string?>()),
+            Times.Once);
+    }
+
+    #endregion
 
     #region Passkey enrolment is bound to the caller
 

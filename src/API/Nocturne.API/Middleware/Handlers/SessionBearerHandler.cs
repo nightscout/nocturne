@@ -93,6 +93,7 @@ public class SessionBearerHandler : IAuthHandler
             RawToken = token,
             TokenId = claims.GrantId,
             ExpiresAt = claims.ExpiresAt,
+            SessionId = claims.SessionId,
             IsHandedOff = claims.HandedOff,
         };
 

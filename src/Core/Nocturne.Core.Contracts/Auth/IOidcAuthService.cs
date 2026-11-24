@@ -90,12 +90,16 @@ public interface IOidcAuthService
     );
 
     /// <summary>
-    /// End the session (logout)
+    /// Ends the sessions the caller signs out of, every token of each chain: the session the
+    /// presented refresh token belongs to, whether that token is live, rotated out or revoked, and
+    /// <paramref name="signedIn"/>. When both name one session it ends once. No other session of
+    /// the subject is touched.
     /// </summary>
-    /// <param name="refreshToken">Refresh token to revoke</param>
+    /// <param name="refreshToken">The refresh token the caller presents, if any.</param>
+    /// <param name="signedIn">The session the caller's access token names, if it is a session.</param>
     /// <param name="providerId">Provider ID for RP-initiated logout (optional)</param>
     /// <returns>Logout result with optional provider logout URL</returns>
-    Task<OidcLogoutResult> LogoutAsync(string refreshToken, Guid? providerId = null);
+    Task<OidcLogoutResult> LogoutAsync(string? refreshToken, RefreshTokenSession? signedIn, Guid? providerId = null);
 
     /// <returns>User info or null if not found</returns>
     Task<OidcUserInfo?> GetUserInfoAsync(Guid subjectId);

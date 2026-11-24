@@ -72,7 +72,7 @@ public class MigrationController : ControllerBase
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         // Validate request based on mode
@@ -125,7 +125,7 @@ public class MigrationController : ControllerBase
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
-        if (HttpContext.IsCallerInactive())
+        if (await HttpContext.IsCallerInactiveAsync(ct))
             return Challenge();
 
         var source = await NightscoutConnectorSource.ReadAsync(_connectorConfigService, connectorName, ct);
