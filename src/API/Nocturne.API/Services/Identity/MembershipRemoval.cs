@@ -16,11 +16,12 @@ namespace Nocturne.API.Services.Identity;
 /// Removes a membership's direct reason with what it leaves behind: its roles and their audit rows,
 /// the subject's chat links to the tenant, every live grant of the subject on it, every live guest
 /// link the subject made, whoever the link's data owner is, and every live member invite the subject
-/// made. A direct reason with an end date also stops, at once, what the subject made
-/// (<see cref="MemberCreations"/>); one without keeps it, as a member who never had an end date made
-/// it to last. A member whose only reason is direct loses the membership; one who also holds a
-/// team's reason keeps it for that reason, and loses the rest all the same, since it was made under
-/// the direct membership.
+/// made. A member whose only reason is direct loses the membership; one who also holds a team's
+/// reason keeps it for that reason, and loses the rest all the same, since it was made under the
+/// direct membership. What the subject made and does not lose (<see cref="MemberCreations"/>) lasts
+/// as long as their access: a kept membership caps it at the end it keeps, and a membership that
+/// goes stops it at once when its direct reason had an end date, and leaves it otherwise, as a member
+/// who never had an end date made it to last.
 /// </summary>
 /// <remarks>
 /// Chat identity directory rows are global and carry no membership join, so a link left behind
@@ -37,7 +38,7 @@ internal static class MembershipRemoval
 {
     /// <summary>
     /// Stages and saves the removal on <paramref name="unit"/>, inside its commit, and returns the
-    /// grants it revoked for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
+    /// grants it revoked or capped for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
     /// Nothing is staged when <see cref="ITenantMembershipRepository.RemoveMemberUnlessLastOwnerAsync"/>
     /// refuses, which it does with <see cref="OwnerGuardedChange.FromTeam"/> for a member with no
     /// direct reason. <paramref name="members"/> is a repository over <paramref name="unit"/>. The
@@ -57,10 +58,10 @@ internal static class MembershipRemoval
         var made = await MadeByStop.StageAsync(unit, tenantId, member.SubjectId, now, ct);
 
         var removal = await members.RemoveMemberUnlessLastOwnerAsync(tenantId, member.Id, how, now, ct);
-        if (removal != OwnerGuardedChange.Changed)
+        if (removal.Outcome != OwnerGuardedChange.Changed)
         {
             made.Unstage();
-            return (removal, []);
+            return (removal.Outcome, []);
         }
 
         var chatLinks = await context.ChatIdentityDirectory
@@ -68,11 +69,13 @@ internal static class MembershipRemoval
             .ToListAsync(ct);
         var owned = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(member.SubjectId, ct);
 
-        var directHadEnd = member.DirectReason?.AccessEndsAt is not null;
+        var capAt = removal.MembershipKept
+            ? removal.KeptAccessEndsAt
+            : member.DirectReason?.AccessEndsAt is not null ? now : null;
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        var revoked = await made.FinishAsync(grantRevocation, owned, capCreations: directHadEnd, ct);
+        var revoked = await made.FinishAsync(grantRevocation, owned, capAt, ct);
         await context.SaveChangesAsync(ct);
-        return (removal, revoked);
+        return (removal.Outcome, revoked);
     }
 
     /// <summary>
@@ -102,7 +105,7 @@ internal static class MembershipRemoval
 
         if (existing.HeldReasons.Any(r => r.Kind != MembershipReasonKind.Direct && !MembershipLiveness.HasEnded(r.AccessEndsAt, now)))
         {
-            if (await members.RemoveMemberUnlessLastOwnerAsync(tenantId, existing.Id, MembershipEndHow.Replaced, now, ct)
+            if ((await members.RemoveMemberUnlessLastOwnerAsync(tenantId, existing.Id, MembershipEndHow.Replaced, now, ct)).Outcome
                 != OwnerGuardedChange.Changed)
                 return null;
             await unit.Context.SaveChangesAsync(ct);

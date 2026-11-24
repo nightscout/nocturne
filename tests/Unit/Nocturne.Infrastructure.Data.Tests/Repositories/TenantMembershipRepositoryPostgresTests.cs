@@ -236,7 +236,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var removal = unit.CommitAsync(
             async ct =>
             {
-                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, DateTime.UtcNow, ct);
+                var outcome = (await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, DateTime.UtcNow, ct)).Outcome;
                 staged.TrySetResult();
                 await commit.Task;
                 await unit.Context.SaveChangesAsync(ct);
@@ -281,7 +281,7 @@ public class TenantMembershipRepositoryPostgresTests(TenantMembershipRepositoryP
         var removal = unit.CommitAsync(
             async ct =>
             {
-                var outcome = await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, DateTime.UtcNow, ct);
+                var outcome = (await new TenantMembershipRepository(unit, AccountLinkRoutes.Off).RemoveMemberUnlessLastOwnerAsync(seeded.Tenant, removedId, MembershipEndHow.Removed, DateTime.UtcNow, ct)).Outcome;
                 staged.TrySetResult();
                 await commit.Task;
                 await unit.Context.SaveChangesAsync(ct);
