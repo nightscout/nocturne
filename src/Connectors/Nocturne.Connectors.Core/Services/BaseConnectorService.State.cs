@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Services;
@@ -106,6 +108,50 @@ public abstract partial class BaseConnectorService<TConfig>
             ? state.SetVendorAsync(
                 ConnectorSource, key, value is null ? null : JsonSerializer.SerializeToNode(value), cancellationToken)
             : Task.CompletedTask;
+
+    /// <summary>
+    ///     Runs <paramref name="read"/> of connector state that the run can do without. A store that is
+    ///     down (<see cref="ConnectorStateUnavailableException"/>) or that times out
+    ///     (<see cref="ConnectorFaults.IsTimeout"/>) logs a warning and yields <paramref name="fallback"/>.
+    ///     Any other exception, and a cancellation <paramref name="cancellationToken"/> asked for, fails the run.
+    /// </summary>
+    /// <param name="description">What the read was for, as the end of "Could not ...".</param>
+    protected async Task<T> ReadStateBestEffortAsync<T>(
+        string description, T fallback, Func<Task<T>> read, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await read();
+        }
+        catch (Exception ex) when (ex is ConnectorStateUnavailableException
+                                   || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex, "[{ConnectorSource}] Could not {Description}", ConnectorSource, description);
+            return fallback;
+        }
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="write"/> of connector state that the run can do without, as
+    ///     <see cref="ReadStateBestEffortAsync{T}"/> does a read.
+    /// </summary>
+    /// <param name="description">What the write was for, as the end of "Could not ...".</param>
+    /// <returns>Whether the write was made.</returns>
+    protected async Task<bool> WriteStateBestEffortAsync(
+        string description, Func<Task> write, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await write();
+            return true;
+        }
+        catch (Exception ex) when (ex is ConnectorStateUnavailableException
+                                   || ConnectorFaults.IsTimeout(ex, cancellationToken))
+        {
+            _logger.LogWarning(ex, "[{ConnectorSource}] Could not {Description}", ConnectorSource, description);
+            return false;
+        }
+    }
 
     /// <summary>
     ///     Whether a cursor reset that re-pulls every data type the connector fetches also clears its

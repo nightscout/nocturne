@@ -171,20 +171,14 @@ public sealed class GoogleHealthConnectorService(
     private async Task TryReduceBackfillWindowAsync(GoogleHealthSyncWindow window)
     {
         var days = Math.Max(1, (int)Math.Ceiling((window.To - window.From).TotalDays / 2));
-        try
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
-            await SetVendorStateAsync<int?>(GoogleHealthState.BackfillChunkDays, days, cleanup.Token);
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30), Clock);
+        if (await WriteStateBestEffortAsync(
+                $"persist a smaller Google Health retry window for {window.From:O} to {window.To:O}",
+                () => SetVendorStateAsync<int?>(GoogleHealthState.BackfillChunkDays, days, cleanup.Token),
+                CancellationToken.None))
             logger.LogWarning(
                 "Google Health historical window {From} to {To} did not complete; retrying with at most {ChunkDays} day(s)",
                 window.From, window.To, days);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "Could not persist a smaller Google Health retry window for {From} to {To}",
-                window.From, window.To);
-        }
     }
 
     private async Task<DateTime?> LoadWatermarkAsync(CancellationToken ct) =>

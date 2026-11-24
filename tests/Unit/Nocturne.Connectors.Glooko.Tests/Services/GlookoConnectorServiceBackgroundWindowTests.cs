@@ -327,6 +327,60 @@ public class GlookoConnectorServiceBackgroundWindowTests
     }
 
     [Fact]
+    public async Task ScheduledRun_WhenTheStoreIsDownForTheScheduleRead_Walks()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
+        {
+            BeforeRead = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+        };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenTheStoreIsDownForTheWalkRecord_StillSucceeds()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore
+        {
+            BeforeWrite = _ => throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException()),
+        };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeTrue();
+        handler.WindowCount.Should().Be(FullWalkChunks());
+        store.Resume.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenReadingTheScheduleHitsADefect_FailsInsteadOfWalking()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore { BeforeRead = _ => throw new InvalidCastException("defect") };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeFalse();
+        handler.WindowCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ScheduledRun_WhenRecordingTheWalkHitsADefect_FailsInsteadOfCarryingOn()
+    {
+        var handler = new GlookoEndpointHandler();
+        var store = new InMemoryConnectorStateStore { BeforeWrite = _ => throw new InvalidCastException("defect") };
+
+        var result = await Scheduled(Service(handler, state: store), ScheduledConfig());
+
+        result.Success.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ScheduledRun_WhenTheCallerCancelsDuringTheScheduleRead_Propagates()
     {
         using var cancellation = new CancellationTokenSource();

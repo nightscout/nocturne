@@ -563,6 +563,37 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(fixture.State.Vendor.ContainsKey(GoogleHealthState.BackfillChunkDays));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_retry_window_save_that_the_store_refuses_leaves_the_sync_failing_for_its_own_reason(bool defect)
+    {
+        var weightRequests = 0;
+        Fixture? fixture = null;
+        fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") && ++weightRequests == 2 => FailAndRefuseWrites(),
+            var path when path.Contains("/weight/") => Json("""{"dataPoints":[]}"""),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        }, new FixedTimeProvider(Now));
+        HttpResponseMessage FailAndRefuseWrites()
+        {
+            fixture!.State.WriteHook = _ => defect
+                ? throw new InvalidCastException("defect")
+                : throw new ConnectorStateUnavailableException("connection refused", new InvalidOperationException());
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }
+        var config = fixture.Configuration();
+        config.HistoryDays = 7;
+
+        var result = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(defect ? "internal_sync" : "google_unavailable:weight", result.Errors.Single());
+        Assert.False(fixture.State.Vendor.ContainsKey(GoogleHealthState.BackfillChunkDays));
+    }
+
     [Fact]
     public async Task A_reconciliation_cleanup_that_outlasts_thirty_seconds_is_cancelled()
     {
