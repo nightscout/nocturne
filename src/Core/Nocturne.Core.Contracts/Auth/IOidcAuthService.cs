@@ -164,7 +164,11 @@ public interface IOidcAuthService
     /// pre-created subject, or adopts the subject that already holds it. It issues no session;
     /// the caller finishes setup and then the sign-in.
     /// </summary>
-    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(string code, string state, string expectedState);
+    /// <param name="tenantId">
+    /// The tenant being set up, whose setup the link or adoption claims. Fails with
+    /// <c>setup_already_complete</c> when another completion has claimed it first.
+    /// </param>
+    Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(string code, string state, string expectedState, Guid tenantId);
 }
 
 /// <summary>

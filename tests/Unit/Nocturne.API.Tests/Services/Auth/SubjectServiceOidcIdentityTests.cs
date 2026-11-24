@@ -170,6 +170,105 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         rows[0].SubjectId.Should().Be(subjectA);
     }
 
+    // -- AttachSetupOwnerOidcIdentityAsync ---------------------------------------
+
+    private async Task<Guid> SeedTenantRecordingAsync(Guid? setupOwner)
+    {
+        var id = Guid.CreateVersion7();
+        _db.Tenants.Add(new TenantEntity
+        {
+            Id = id, Slug = $"t-{id:N}"[..12], DisplayName = "Tenant", SetupOwnerSubjectId = setupOwner,
+        });
+        await _db.SaveChangesAsync();
+        return id;
+    }
+
+    private Task<Guid?> SetupOwnerRecordAsync(Guid tenantId) =>
+        _db.Tenants.AsNoTracking().Where(t => t.Id == tenantId).Select(t => t.SetupOwnerSubjectId).SingleAsync();
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AttachSetupOwnerOidcIdentityAsync_ForTheRecordedSubject_LinksItAndEndsTheRecord()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var providerId = await SeedProviderAsync();
+        var tenantId = await SeedTenantRecordingAsync(subjectId);
+
+        var outcome = await _service.AttachSetupOwnerOidcIdentityAsync(
+            tenantId, subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
+
+        outcome.Should().Be(OidcLinkOutcome.Created);
+        (await _db.SubjectOidcIdentities.AsNoTracking().SingleAsync()).SubjectId.Should().Be(subjectId);
+        (await SetupOwnerRecordAsync(tenantId)).Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AttachSetupOwnerOidcIdentityAsync_WhenTheRecordNamesAnotherSubject_LinksNothing()
+    {
+        var subjectId = await SeedSubjectAsync("alice");
+        var recorded = await SeedSubjectAsync("bob");
+        var providerId = await SeedProviderAsync();
+        var tenantId = await SeedTenantRecordingAsync(recorded);
+
+        var outcome = await _service.AttachSetupOwnerOidcIdentityAsync(
+            tenantId, subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
+
+        outcome.Should().BeNull();
+        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(0);
+        (await SetupOwnerRecordAsync(tenantId)).Should().Be(recorded);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AttachSetupOwnerOidcIdentityAsync_WhenTheSetupIsAlreadyClaimed_LinksNothing()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var providerId = await SeedProviderAsync();
+        var tenantId = await SeedTenantRecordingAsync(setupOwner: null);
+
+        var outcome = await _service.AttachSetupOwnerOidcIdentityAsync(
+            tenantId, subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
+
+        outcome.Should().BeNull();
+        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AttachSetupOwnerOidcIdentityAsync_WhenAnotherSubjectHoldsTheIdentity_AnswersSoAndKeepsTheRecord()
+    {
+        var subjectId = await SeedSubjectAsync("alice");
+        var holder = await SeedSubjectAsync("bob");
+        var providerId = await SeedProviderAsync();
+        await SeedIdentityAsync(holder, providerId, "ext-sub-1");
+        var tenantId = await SeedTenantRecordingAsync(subjectId);
+
+        var outcome = await _service.AttachSetupOwnerOidcIdentityAsync(
+            tenantId, subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
+
+        outcome.Should().Be(OidcLinkOutcome.AlreadyLinkedToOther);
+        (await _db.SubjectOidcIdentities.AsNoTracking().SingleAsync()).SubjectId.Should().Be(holder);
+        (await SetupOwnerRecordAsync(tenantId)).Should().Be(subjectId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AttachSetupOwnerOidcIdentityAsync_WhenTheSubjectAlreadyHoldsTheIdentity_AnswersTheSetupClaimed()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var providerId = await SeedProviderAsync();
+        await SeedIdentityAsync(subjectId, providerId, "ext-sub-1");
+        var tenantId = await SeedTenantRecordingAsync(subjectId);
+
+        var outcome = await _service.AttachSetupOwnerOidcIdentityAsync(
+            tenantId, subjectId, providerId, "ext-sub-1", "https://issuer.example", "a@b.com", emailVerified: false);
+
+        outcome.Should().BeNull();
+        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(1);
+        (await SetupOwnerRecordAsync(tenantId)).Should().Be(subjectId);
+    }
+
     // -- CountPrimaryAuthFactorsAsync --------------------------------------------
 
     [Fact]

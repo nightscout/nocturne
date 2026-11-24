@@ -1147,7 +1147,7 @@ public class SetupControllerTests : IDisposable
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state"))
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
             .ReturnsAsync(OidcSetupCallbackResult.Succeeded(subjectId, Guid.CreateVersion7(), "sid"));
 
         await _controller.OidcCallback(
@@ -1164,7 +1164,7 @@ public class SetupControllerTests : IDisposable
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Setup(s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
             .ReturnsAsync(OidcSetupCallbackResult.Failed("invalid_grant"));
 
         await _controller.OidcCallback(
@@ -1176,21 +1176,39 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task OwnerComplete_EndsTheSetupOwnerRecord()
+    public async Task OwnerComplete_WhenAnotherCompletionHasClaimedTheSetup_AnswersAsTheOpenCheckAndSignsNoOneIn()
     {
         var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         StubPasskeyCompletion(subjectId);
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), PasskeyRegistrationFlow.SetupOwner, tenantId, subjectId, It.IsAny<string?>()))
+            .ThrowsAsync(new SetupOwnerTakenException());
 
         var result = await CompleteOwnerSetupAsync();
 
-        result.Should().BeOfType<OkObjectResult>();
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
+        _recoveryCodeService.Verify(s => s.GenerateCodesAsync(It.IsAny<Guid>()), Times.Never);
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+        _auditService.VerifyNoOtherCalls();
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().BeEmpty();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeFalse();
+
+        await GiveOwnerAPasskeyAsync(subjectId);
+        var afterSetupClosed = await CompleteOwnerSetupAsync();
+        result.Should().BeOfType<ConflictObjectResult>();
+        afterSetupClosed.Should().BeOfType<ConflictObjectResult>();
+        System.Text.Json.JsonSerializer.Serialize(((ConflictObjectResult)result).Value)
+            .Should().Be(System.Text.Json.JsonSerializer.Serialize(((ConflictObjectResult)afterSetupClosed).Value))
+            .And.Be("""{"error":"owner_already_exists"}""");
     }
 
     [Fact]
-    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_HasAlreadyEndedTheSetupOwnerRecord()
+    public async Task OwnerComplete_WhenThePlatformAdminGrantThrows_IssuesNoSession()
     {
-        var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         StubPasskeyCompletion(subjectId);
         var failingSubjects = new Mock<ISubjectRepository>();
         failingSubjects
@@ -1216,28 +1234,40 @@ public class SetupControllerTests : IDisposable
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
         failingSubjects.Verify(s => s.AnyPlatformAdminAsync(It.IsAny<CancellationToken>()), Times.Once);
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId.Should().BeNull();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task OidcCallback_EndsTheSetupOwnerRecordOnlyWhenSetupCompletes(bool succeeds)
+    [Fact]
+    public async Task OidcCallback_ClaimsTheSetupOfTheTenantTheOpenCheckFound()
     {
         var (tenantId, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state"))
-            .ReturnsAsync(succeeds
-                ? OidcSetupCallbackResult.Succeeded(subjectId, Guid.CreateVersion7(), "sid")
-                : OidcSetupCallbackResult.Failed("invalid_grant"));
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", tenantId))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(subjectId, Guid.CreateVersion7(), "sid"));
 
-        await _controller.OidcCallback(
-            code: "auth-code", state: "expected-state", error: null, error_description: null,
-            ct: CancellationToken.None);
+        var result = await CallBackAsync(_controller);
 
-        (await FreshContext().Tenants.SingleAsync(t => t.Id == tenantId)).SetupOwnerSubjectId
-            .Should().Be(succeeds ? null : subjectId);
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup");
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenAnotherCompletionHasClaimedTheSetup_AnswersAsTheOpenCheckAndSignsNoOneIn()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Failed("setup_already_complete", "Another completion has claimed the setup"));
+
+        var result = await CallBackAsync(_controller);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/setup?error=setup_already_complete");
+        _controller.HttpContext.Response.Headers.SetCookie.ToString().Should().NotContain(".Nocturne.AccessToken");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _auditService.VerifyNoOtherCalls();
+        (await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId)).IsPlatformAdmin.Should().BeFalse();
     }
 
     [Fact]
@@ -1256,7 +1286,7 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Contain("setup_already_complete");
         _oidcAuthService.Verify(
-            s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            s => s.HandleSetupCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()),
             Times.Never);
     }
 
@@ -1276,7 +1306,7 @@ public class SetupControllerTests : IDisposable
 
         SetOidcStateCookieOnRequest("expected-state");
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state"))
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
             .ReturnsAsync(OidcSetupCallbackResult.Succeeded(bystanderId, Guid.CreateVersion7(), "sid"));
 
         await _controller.OidcCallback(
@@ -1706,8 +1736,8 @@ public class SetupControllerTests : IDisposable
     }
 
     /// <summary>
-    /// Stands in for the passkey proof for <paramref name="subjectId"/>: stores the passkey as the
-    /// real one does, which is what ends setup.
+    /// Stands in for the passkey proof for <paramref name="subjectId"/>: stores the passkey and ends
+    /// the setup owner record as the real store does, which is what ends setup.
     /// </summary>
     private void StubStoredPasskey(Guid subjectId, List<string>? steps = null) =>
         _passkeyService
@@ -1725,19 +1755,49 @@ public class SetupControllerTests : IDisposable
                     PublicKey = [],
                     SignCount = 0,
                 });
+                EndSetupOwnerRecord(db, subjectId);
                 db.SaveChanges();
                 return new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId);
             });
 
-    /// <summary>Makes the provider callback prove an identity for <paramref name="subjectId"/>.</summary>
+    /// <summary>
+    /// Makes the provider callback prove an identity for <paramref name="subjectId"/> and end the
+    /// setup owner record, as the real link does.
+    /// </summary>
     private Guid StubSetupCallback(SetupController controller, Guid subjectId)
     {
         var providerId = Guid.CreateVersion7();
         controller.HttpContext.Request.Headers.Cookie = ".Nocturne.OidcState=expected-state";
         _oidcAuthService
-            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state"))
-            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(subjectId, providerId, "sid"));
+            .Setup(s => s.HandleSetupCallbackAsync("auth-code", "expected-state", "expected-state", It.IsAny<Guid>()))
+            .ReturnsAsync(() =>
+            {
+                using var db = FreshContext();
+                EndSetupOwnerRecord(db, subjectId);
+                db.SaveChanges();
+                return OidcSetupCallbackResult.Succeeded(subjectId, providerId, "sid");
+            });
         return providerId;
+    }
+
+    private static void EndSetupOwnerRecord(NocturneDbContext db, Guid subjectId)
+    {
+        foreach (var tenant in db.Tenants.Where(t => t.SetupOwnerSubjectId == subjectId))
+            tenant.SetupOwnerSubjectId = null;
+    }
+
+    private async Task GiveOwnerAPasskeyAsync(Guid subjectId)
+    {
+        await using var db = FreshContext();
+        db.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            CredentialId = Guid.NewGuid().ToByteArray(),
+            PublicKey = [],
+            SignCount = 0,
+        });
+        await db.SaveChangesAsync();
     }
 
     private static Task<IActionResult> CallBackAsync(SetupController controller) =>

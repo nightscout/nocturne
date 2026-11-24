@@ -59,8 +59,10 @@ public interface ISubjectRepository
     /// tenant's.
     /// <para>
     /// Setup resumes the subject it recorded for this tenant and no other. The record is set in
-    /// the save that creates the subject and cleared when setup completes as it
-    /// (<see cref="ClearSetupOwnerAsync"/>) or when the subject is deleted.
+    /// the save that creates the subject and ended by the first credential store, which claims the
+    /// setup (<see cref="AddSetupOwnerOidcIdentityAsync"/>,
+    /// <see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>,
+    /// <see cref="AdoptForSetupAsync"/>), or when the subject is deleted.
     /// </para>
     /// <para>
     /// The recorded subject is then checked, because setup is first-come and the subject is about
@@ -84,12 +86,6 @@ public interface ISubjectRepository
     /// in one save, so no subject the step creates is left unrecorded.
     /// </summary>
     Task<Guid> CreateSetupOwnerAsync(Guid tenantId, NewSubject subject, CancellationToken ct);
-
-    /// <summary>
-    /// Ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>) of every tenant
-    /// that names <paramref name="subjectId"/>, once setup has completed as that subject.
-    /// </summary>
-    Task ClearSetupOwnerAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>
     /// The system subject the scope's tenant issues its API tokens to, or null when it has never
@@ -258,6 +254,15 @@ public interface ISubjectRepository
     Task<Guid> AddOidcIdentityAsync(NewSubjectOidcIdentity identity, CancellationToken ct);
 
     /// <summary>
+    /// Links the first-run setup owner's provider identity as the first credential store, which
+    /// claims the setup: only while <paramref name="tenantId"/>'s setup owner record
+    /// (<see cref="FindSetupOwnerCandidateAsync"/>) names the identity's subject, ending the record in
+    /// the same transaction. Returns the link's id, or null, with nothing linked, when the record no
+    /// longer names that subject because another completion claimed it.
+    /// </summary>
+    Task<Guid?> AddSetupOwnerOidcIdentityAsync(Guid tenantId, NewSubjectOidcIdentity identity, CancellationToken ct);
+
+    /// <summary>
     /// Makes <paramref name="holderId"/> the subject first-run setup completes, in place of the
     /// subject <paramref name="createdId"/> the owner step created: the created subject's membership,
     /// username, display name and global roles pass to the holder and the created subject is deleted.
@@ -277,7 +282,12 @@ public interface ISubjectRepository
     /// <see cref="TakeUnclaimedOidcIdentityAsync"/>: its one membership is of the tenant
     /// <paramref name="tenantSlug"/> names, the tenant this setup run is for, and holds the owner role;
     /// it holds no global role but admin; nothing else names it, and it holds no provider identity.
-    /// Deleting it ends the setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>).
+    /// <para>
+    /// The adoption is the first credential store, which claims the setup: it goes ahead only while
+    /// the tenant's setup owner record (<see cref="FindSetupOwnerCandidateAsync"/>) names
+    /// <paramref name="createdId"/>, and ends the record in its transaction, so it is refused once a
+    /// passkey or another provider identity has completed setup, and refuses those after it.
+    /// </para>
     /// </remarks>
     Task<bool> AdoptForSetupAsync(Guid createdId, Guid holderId, Guid identityId, string tenantSlug, CancellationToken ct);
 

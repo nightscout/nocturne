@@ -37,6 +37,10 @@ public interface IPasskeyService
     /// one the request supplied.
     /// </param>
     /// <param name="label">Optional user-assigned label for the credential.</param>
+    /// <exception cref="SetupOwnerTakenException">
+    /// <paramref name="flow"/> is <see cref="PasskeyRegistrationFlow.SetupOwner"/> and another
+    /// completion has claimed the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>).
+    /// </exception>
     Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId, Guid expectedSubjectId, string? label = null);
 
     /// <summary>
@@ -114,3 +118,10 @@ public record PasskeyCredentialResult(Guid CredentialId, Guid SubjectId);
 /// <param name="LastUsedAt">When the credential was last used for authentication, if ever.</param>
 /// <param name="AaGuid">Authenticator Attestation GUID identifying the authenticator model, if available.</param>
 public record PasskeyCredentialInfo(Guid Id, string? Label, DateTime CreatedAt, DateTime? LastUsedAt, Guid? AaGuid);
+
+/// <summary>
+/// Thrown when the first-run setup owner's passkey is not stored because another completion has
+/// already claimed the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>).
+/// </summary>
+public sealed class SetupOwnerTakenException()
+    : Exception("Another completion has claimed the setup.");

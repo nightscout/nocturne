@@ -494,7 +494,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
     {
         var site = await SiteAsync("adopt");
         var subjects = new SubjectRepository(site.Factory, AccountLinkRoutes.Off);
-        var created = await subjects.CreateAsync(new NewSubject("Owner", Username: $"owner-{Guid.NewGuid():N}"), Ct);
+        var created = await subjects.CreateSetupOwnerAsync(site.Tenant, new NewSubject("Owner", Username: $"owner-{Guid.NewGuid():N}"), Ct);
         var ownerRole = (await site.Members.FindRoleIdBySlugAsync(site.Tenant, RoleSeeds.Owner, Ct))!.Value;
         (await site.Members.AddMemberAsync(new NewTenantMember(site.Tenant, created, [ownerRole]) { How = MembershipJoinHow.Setup, By = null }, Ct))
             .Should().BeTrue();
