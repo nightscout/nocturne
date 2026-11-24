@@ -17,19 +17,19 @@
       Point us at your <em class="not-italic font-light text-primary">Nightscout</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-      Enter the URL and API secret for the Nightscout instance you want to copy
-      across. Nocturne only reads data. Your existing site is not modified.
+      Enter the address and API secret of your Nightscout site. Nocturne only
+      reads from it.
     </p>
   </div>
 
   <!-- Connector setup -->
   <ConnectorSetup
     connectorId="nightscout"
+    variant="setup"
     primaryAction="save-and-finish"
     saveLabel="Start import"
     showToggle={false}
     showDangerZone={false}
-    showCapabilities={true}
     onComplete={() => onComplete()}
   />
 </div>

@@ -6,3 +6,26 @@ export function withSearchParam(url: ReadonlyURL, name: string, value: string | 
   else next.searchParams.set(name, value);
   return next;
 }
+
+/** A path segment this long is taken to be a token, which some sites put in the path to skip sign-in. */
+const LONG_SEGMENT = 16;
+
+/**
+ * Host and path, with each long path segment cut to its first four characters so a list does not
+ * show the credential. A value that is not a web address comes back unchanged.
+ */
+export function maskedSourceUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return value;
+  const path = url.pathname
+    .split("/")
+    .map((segment) => (segment.length >= LONG_SEGMENT ? `${segment.slice(0, 4)}…` : segment))
+    .join("/")
+    .replace(/\/+$/, "");
+  return `${url.host}${path}`;
+}

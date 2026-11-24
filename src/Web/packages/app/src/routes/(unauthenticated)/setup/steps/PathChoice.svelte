@@ -16,7 +16,6 @@
   const PATHS = $derived([
     {
       value: "fresh",
-      tag: "Fresh start",
       icon: Sprout,
       title: "Start with a blank slate",
       description:
@@ -33,7 +32,6 @@
     },
     {
       value: "migration",
-      tag: "Coming from Nightscout",
       icon: Cable,
       title:
         voice.kind === "self"
@@ -66,9 +64,8 @@
       How are you <em class="not-italic font-light text-primary">arriving</em>?
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-      Both roads end in the same place. We just want to know whether to carry
-      existing Nightscout data over, or give you a clean notebook to start
-      in.
+      Nocturne can copy the history from a Nightscout site, or start with no
+      data.
     </p>
   </div>
 
@@ -90,17 +87,7 @@
                 : 'border-border'}"
             ></span>
 
-            <span
-              class="inline-flex self-start rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-2xs uppercase tracking-wider text-primary"
-            >
-              {option.tag}
-            </span>
-
-            <span
-              class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
-            >
-              <option.icon class="h-6 w-6 text-primary" />
-            </span>
+            <option.icon class="size-6 text-primary" aria-hidden="true" />
 
             <span class="font-brand text-xl font-normal leading-snug text-foreground">
               {option.title}
