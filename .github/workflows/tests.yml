@@ -649,6 +649,9 @@ jobs:
           dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
             --filter "$(tests/quarantine.sh exclude)" \
             --logger "trx;LogFileName=integration-api.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --test-adapter-path .coverlet \
             --results-directory TestResults/integration-api
       # tests/quarantine.txt: tests failing on a known product bug. Run so they stay visible, and
       # never fail the job; a quarantined test that passes means its line can go.
@@ -660,6 +663,13 @@ jobs:
             --filter "$(tests/quarantine.sh include)" \
             --logger "trx;LogFileName=integration-api-quarantine.trx" \
             --results-directory TestResults/integration-api-quarantine
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-dotnet-integration-api
+          path: TestResults/integration-api/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
@@ -804,7 +814,7 @@ jobs:
   # request's sticky comment, and applies the patch coverage gate. A fork's pull request runs with
   # a read-only token, so its comment is posted by coverage-comment.yml from the uploaded report.
   coverage:
-    needs: [changes, unit, integration-db, web-static, web-app-tests, desktop-rust]
+    needs: [changes, unit, integration-db, integration-api, web-static, web-app-tests, desktop-rust]
     if: >-
       ${{ !cancelled() && (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true'
       || needs.changes.outputs.desktop == 'true') }}

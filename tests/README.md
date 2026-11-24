@@ -213,13 +213,14 @@ A difference that is a Nocturne bug is quarantined instead.
 
 ## Coverage
 
-CI collects Cobertura coverage from the .NET jobs (`--settings tests/coverage.runsettings
---collect "XPlat Code Coverage"`, which excludes test assemblies, migrations and generated code)
-and from the web vitest suites (`--coverage`, the v8 provider). The `coverage` job merges the
-.NET reports with ReportGenerator and runs `.github/scripts/coverage-report.mjs`, which writes
-line and branch coverage per area (API, Infrastructure, Core, Connectors, Services, app, bot,
-portal, bridge, cms), the change against the last baseline main uploaded, and the coverage of the
-lines the pull request adds. The report goes to the job summary and to one comment on the pull
+CI collects Cobertura coverage from the .NET jobs (`unit`, `integration-db` and `integration-api`;
+`--settings tests/coverage.runsettings --collect "XPlat Code Coverage"`, which excludes test
+assemblies, migrations and generated code). The quarantined run in `integration-api` collects none.
+CI also collects coverage from the web vitest suites (`--coverage`, the v8 provider). The
+`coverage` job merges the .NET reports with ReportGenerator and runs
+`.github/scripts/coverage-report.mjs`, which writes line and branch coverage per area (API,
+Infrastructure, Core, Connectors, Services, app, bot, portal, bridge, cms), the change against
+the last baseline main uploaded, and the coverage of the lines the pull request adds. The report goes to the job summary and to one comment on the pull
 request that is updated on every push. The `coverage` job posts it for a pull request from this
 repository. A fork's pull request runs with a read-only token, so `coverage-comment.yml` posts it
 instead, on `workflow_run` with a write token; it never checks out the pull request and only
