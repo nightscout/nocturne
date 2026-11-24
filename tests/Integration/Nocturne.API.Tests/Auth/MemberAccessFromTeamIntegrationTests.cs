@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// The member page's actions over HTTP for a member who holds a team's reason, written straight to the
-/// tables since no product path gives one yet: a member who holds only the team's is refused each
+/// tables with the staff rows it stands on: a member who holds only the team's is refused each
 /// change with 409 <c>member_access_from_team</c>, and removing a member who holds both takes only
 /// the direct reason, so the list then shows the team's alone.
 /// </summary>
@@ -78,8 +78,8 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
     }
 
     /// <summary>
-    /// Gives a new team access to the tenant giving caretaker, makes <paramref name="staff"/> hold only
-    /// its reason and <paramref name="mixed"/> hold it beside a direct reason that gives what their row
+    /// Gives a new team access to the tenant giving caretaker, with both subjects as its approved staff,
+    /// makes <paramref name="staff"/> hold only its reason and <paramref name="mixed"/> hold it beside a direct reason that gives what their row
     /// gave, with each row the sum of its reasons; returns the team.
     /// </summary>
     private async Task<Guid> TeamReasonsAsync(Guid staff, Guid mixed)
@@ -95,6 +95,11 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
             SELECT set_config('app.current_tenant_id', @tenant::text, false);
             INSERT INTO teams (id, name) VALUES (@team, 'Clinic');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours) VALUES (@access, @team, @tenant, false);
+            INSERT INTO team_tenant_access_roles (id, team_tenant_access_id, tenant_role_id) VALUES (gen_random_uuid(), @access, @caretaker);
+            INSERT INTO team_members (id, team_id, subject_id, kind, limit_to_24_hours)
+            SELECT gen_random_uuid(), @team, s, 'staff', false FROM unnest(ARRAY[@staff, @mixed]) AS s;
+            INSERT INTO team_site_staff (id, team_tenant_access_id, team_member_id, status)
+            SELECT gen_random_uuid(), @access, tm.id, 'approved' FROM team_members tm WHERE tm.team_id = @team;
 
             DELETE FROM tenant_member_reasons r USING tenant_members m
              WHERE r.tenant_member_id = m.id AND m.tenant_id = @tenant AND m.subject_id IN (@staff, @mixed);

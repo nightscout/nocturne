@@ -181,9 +181,9 @@ public class MembershipAccessEndPostgresTests(MembershipAccessEndPostgresTests.D
         (await directory.GetByTenantAsync(seeded.Tenant, CancellationToken.None))
             .Should().ContainSingle("the link is kept for the settings list, so a later end restores it");
 
-        (await new TenantMembershipRepository(seeded.Contexts, AccountLinkRoutes.Off).SetAccessEndUnlessOwnerAsync(
-            seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id, Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime,
-            CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
+        (await OwnerGuardedWrites.SetAccessEndUnlessOwnerAsync(
+            seeded.Contexts, AccountLinkRoutes.Off, seeded.Tenant, (await MembershipRowsAsync(seeded)).Single().Id,
+            Now.UtcDateTime.AddDays(7), clock.GetUtcNow().UtcDateTime, CancellationToken.None)).Should().Be(OwnerGuardedChange.Changed);
         (await directory.GetCandidatesAsync("discord", platformUser, CancellationToken.None))
             .Select(l => l.Label).Should().BeEquivalentTo(["ending", "staying"]);
     }

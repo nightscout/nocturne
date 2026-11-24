@@ -674,17 +674,32 @@ public class MemberInviteServiceTests : IDisposable
             [_followerRoleId],
             null,
             maxUses: 1);
-        var unknownSubject = Guid.CreateVersion7();
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "CREATE TRIGGER refuse_members BEFORE INSERT ON tenant_members BEGIN SELECT RAISE(ABORT, 'refused'); END;");
 
-        var act = () => _service.AcceptInviteAsync(FakeToken, unknownSubject, _tenantId);
+        var act = () => _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         await act.Should().ThrowAsync<DbUpdateException>();
         (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).UseCount.Should().Be(0);
-        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == unknownSubject)).Should().BeFalse();
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == _acceptorSubjectId)).Should().BeFalse();
 
+        await _dbContext.Database.ExecuteSqlRawAsync("DROP TRIGGER refuse_members;");
         var retry = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         retry.Success.Should().BeTrue("the single use is still there for the next accept");
+    }
+
+    [Fact]
+    public async Task AcceptInviteAsync_byAnAccountThatNoLongerExists_isRefusedAndLeavesTheUseUnclaimed()
+    {
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null, maxUses: 1);
+        var gone = Guid.CreateVersion7();
+
+        var result = await _service.AcceptInviteAsync(FakeToken, gone, _tenantId);
+
+        result.Should().Match<AcceptMemberInviteResult>(r => !r.Success && r.ErrorCode == "not_found");
+        (await _dbContext.MemberInvites.AsNoTracking().SingleAsync()).UseCount.Should().Be(0);
+        (await _dbContext.TenantMembers.AnyAsync(m => m.SubjectId == gone)).Should().BeFalse();
     }
 
     /// <summary>

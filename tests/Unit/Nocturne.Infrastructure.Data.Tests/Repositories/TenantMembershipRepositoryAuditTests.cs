@@ -336,8 +336,9 @@ public class TenantMembershipRepositoryAuditTests : IDisposable
     {
         await SeedMemberAsync();
 
-        await Repository(new TestAuditActor { SubjectId = _actor })
-            .RemoveMemberUnlessLastOwnerAsync(_tenant, _member, MembershipEndHow.Removed, Now, CancellationToken.None);
+        await OwnerGuardedWrites.RemoveMemberUnlessLastOwnerAsync(
+            new TestNocturneDbContextFactory(Context(new TestAuditActor { SubjectId = _actor })), AccountLinkRoutes.Off,
+            _tenant, _member, MembershipEndHow.Removed, Now, CancellationToken.None);
 
         var rows = await RowsAsync();
         rows.Should().OnlyContain(a => (a.EventType == AuthAuditEventType.RoleRemoved || a.EventType == AuthAuditEventType.MemberRemoved)

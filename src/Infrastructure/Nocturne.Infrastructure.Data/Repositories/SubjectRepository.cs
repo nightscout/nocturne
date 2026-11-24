@@ -864,6 +864,10 @@ public class SubjectRepository : ISubjectRepository
         {
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            // The membership it adds names the holder, so the holder's row comes before the setup and
+            // membership locks (MembershipLock): a deletion of the holder either finishes first, and the
+            // retry finds no holder, or waits for this commit.
+            await db.LockSubjectRowSharedAsync(holderId, ct);
 
             var tenantId = await db.Tenants.AsNoTracking()
                 .Where(t => t.Slug == tenantSlug).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);

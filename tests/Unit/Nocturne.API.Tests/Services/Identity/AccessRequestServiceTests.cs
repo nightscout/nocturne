@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -50,7 +52,8 @@ public sealed class AccessRequestServiceTests : IDisposable
             _roles.Object,
             _notifications.Object,
             TimeProvider.System,
-            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off);
+            NullLogger<AccessRequestService>.Instance, AccountLinkRoutes.Off,
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
 
         _dbContext.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
         _dbContext.SaveChanges();

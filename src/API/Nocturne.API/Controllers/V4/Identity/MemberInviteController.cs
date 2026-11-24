@@ -450,7 +450,7 @@ public class MemberInviteController : ControllerBase
                 member, rolesAfter.Concat(direct.DirectPermissions ?? []).Concat(member.PermissionsBesideDirect), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
-        switch (await _members.ReplaceRolesUnlessLastOwnerAsync(tenantId, member.Id, removed, added, DateTime.UtcNow, ct))
+        switch (await _tenantService.ReplaceMemberRolesAsync(tenantId, member.Id, removed, added, ct))
         {
             case OwnerGuardedChange.LastOwner:
                 return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
@@ -511,8 +511,8 @@ public class MemberInviteController : ControllerBase
 
         var removed = direct.Roles.Where(r => r.RoleId != caretaker).ToList();
         var assigned = direct.Roles.All(r => r.RoleId != caretaker);
-        return await _members.ReplaceRolesUnlessLastOwnerAsync(
-                tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], DateTime.UtcNow, ct) switch
+        return await _tenantService.ReplaceMemberRolesAsync(
+                tenantId, member.Id, removed.Select(r => r.RoleId).ToList(), assigned ? [caretaker] : [], ct) switch
         {
             OwnerGuardedChange.LastOwner => Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400),
             OwnerGuardedChange.FromTeam => AccessFromTeamProblem(),
