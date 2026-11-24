@@ -48888,3 +48888,7 @@ msgstr "Staff cannot have this role ceiling. Choose another role."
 #: src/lib/teams/problem-messages.svelte.ts
 msgid "The end date that this invite gives has passed. Ask a manager of the team for a new link."
 msgstr "The end date that this invite gives has passed. Ask a manager of the team for a new link."
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Time zone <0/> <1/>"
+msgstr "Time zone <0/> <1/>"

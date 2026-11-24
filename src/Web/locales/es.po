@@ -49827,3 +49827,7 @@ msgstr ""
 #: src/lib/teams/problem-messages.svelte.ts
 msgid "The end date that this invite gives has passed. Ask a manager of the team for a new link."
 msgstr ""
+
+#: src/lib/components/connectors/ConnectionDetailDialog.svelte
+msgid "Time zone <0/> <1/>"
+msgstr ""
