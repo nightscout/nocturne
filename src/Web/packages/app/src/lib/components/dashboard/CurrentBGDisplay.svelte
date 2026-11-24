@@ -502,16 +502,22 @@
     }
   }
 
+  /* main.css keeps the reading and the clock side by side at this width. */
   @container (max-width: 750px) {
     .ns-primary {
-      flex-direction: column-reverse;
-      align-items: stretch;
+      gap: 0;
     }
     .ns-bg-status {
-      padding-right: 0;
+      width: 50%;
+      padding: 0 0 20px 0;
+    }
+    .ns-bg-button {
+      margin: 5px 0;
     }
     .ns-status {
+      flex: 1;
       width: auto;
+      min-width: 0;
     }
     .ns-current-bg {
       font-size: 70px;
@@ -523,15 +529,39 @@
     }
     .ns-major-pills {
       font-size: 15px;
-      line-height: 18px;
+      line-height: 17px;
     }
     .ns-minor-pills,
     .ns-status-pills {
       font-size: 12px;
-      line-height: 15px;
+      line-height: 13px;
     }
     .ns-clock {
+      padding-top: 0;
       font-size: 50px;
+    }
+    .ns-focus-range,
+    .ns-focus-range :global(button) {
+      font-size: 14px;
+    }
+  }
+
+  /* Phones: two columns stay, and the 12-hour clock still fits half the width. */
+  @container (max-width: 450px) {
+    .ns-current-bg {
+      font-size: 56px;
+      line-height: 56px;
+    }
+    .ns-direction {
+      font-size: 40px;
+      line-height: 40px;
+    }
+    .ns-clock {
+      font-size: 34px;
+    }
+    .ns-focus-range {
+      flex-wrap: wrap;
+      gap: 0 2px;
     }
   }
 </style>
