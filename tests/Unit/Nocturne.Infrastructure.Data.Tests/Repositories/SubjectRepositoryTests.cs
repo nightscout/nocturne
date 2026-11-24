@@ -84,12 +84,32 @@ public class SubjectRepositoryTests : IDisposable
         Subjects().AddOidcIdentityAsync(new NewSubjectOidcIdentity(subject, provider, sub, issuer, "a@b.example", Now), CancellationToken.None);
 
     [Fact]
+    public async Task RolesThatDifferOnlyByCaseAreTwoRolesAndASubjectGivenBothHoldsBoth()
+    {
+        using (var db = _db.CreateContext())
+        {
+            db.Roles.Add(new RoleEntity { Id = Guid.CreateVersion7(), Name = "Admin", Permissions = ["treatments:read"] });
+            db.SaveChanges();
+        }
+
+        var both = await CreateAsync(new NewSubject("Both", RoleNames: ["Admin", "admin"]));
+        var upper = await CreateAsync(new NewSubject("Upper", RoleNames: ["Admin"]));
+        var lower = await CreateAsync(new NewSubject("Lower", RoleNames: ["admin"]));
+        var neither = await CreateAsync(new NewSubject("Neither", RoleNames: ["ADMIN"]));
+
+        (await GetAsync(both)).Roles.Select(r => r.Name).Should().BeEquivalentTo("Admin", "admin");
+        (await GetAsync(upper)).Roles.Select(r => r.Name).Should().Equal("Admin");
+        (await GetAsync(lower)).Roles.Select(r => r.Name).Should().Equal("admin");
+        (await GetAsync(neither)).Roles.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ACreatedSubjectReadsBackWithItsRolesAndTheIdItAsked()
     {
         var wanted = Guid.CreateVersion7();
         var id = await CreateAsync(new NewSubject(
             "Rhys", Username: "rhys", Email: "r@x.example", Notes: "n", Id: wanted,
-            RoleNames: [" admin", "ADMIN", "public", "missing"]));
+            RoleNames: [" admin", "admin", "public", "missing"]));
 
         id.Should().Be(wanted);
         var subject = await GetAsync(id);

@@ -221,14 +221,6 @@ public class AuthContext
 
         return false;
     }
-
-    /// <summary>
-    /// Check if this context has a specific role (case-insensitive).
-    /// </summary>
-    /// <param name="role">The role name to check (e.g., <c>admin</c>, <c>readable</c>).</param>
-    /// <returns><c>true</c> if the context includes the specified <see cref="Role"/>.</returns>
-    public bool HasRole(string role) =>
-        Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
 
 public enum AuthType

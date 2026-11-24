@@ -33,6 +33,7 @@ public class MigrationSubjectGrantTests
     private const string AdminMongoId = "5f1a00000000000000000002";
     private const string DeniedMongoId = "5f1a00000000000000000003";
     private const string OperatorMongoId = "5f1a00000000000000000004";
+    private const string CasedMongoId = "5f1a00000000000000000005";
 
     // Tokens are built the way the source instance built them, from the digest rather than from
     // thin air: DeriveDigest self-checks the reconstruction against the token it was issued with,
@@ -46,6 +47,7 @@ public class MigrationSubjectGrantTests
     private static readonly string AdminToken = $"boss-{AdminDigest[..16]}";
     private static readonly string DeniedToken = $"gone-{DeniedDigest[..16]}";
     private static readonly string OperatorToken = $"operator-{Digest(OperatorMongoId)[..16]}";
+    private static readonly string CasedToken = $"cased-{Digest(CasedMongoId)[..16]}";
 
     private static string Digest(string mongoId) => Convert.ToHexStringLower(
         System.Security.Cryptography.SHA1.HashData(
@@ -67,7 +69,8 @@ public class MigrationSubjectGrantTests
                       { "name": "readable", "permissions": ["*:*:read"] },
                       { "name": "admin", "permissions": ["*"] },
                       { "name": "logger", "permissions": ["api:treatments:*"] },
-                      { "name": "Platform_Admin", "permissions": ["api:entries:read"] }
+                      { "name": "Platform_Admin", "permissions": ["api:entries:read"] },
+                      { "name": "Admin", "permissions": ["api:entries:read"] }
                     ]
                     """,
                 "/api/v2/authorization/subjects" => $$"""
@@ -95,6 +98,12 @@ public class MigrationSubjectGrantTests
                         "name": "Operator",
                         "roles": ["Platform_Admin"],
                         "accessToken": "{{OperatorToken}}"
+                      },
+                      {
+                        "_id": "{{CasedMongoId}}",
+                        "name": "Cased",
+                        "roles": ["Admin"],
+                        "accessToken": "{{CasedToken}}"
                       }
                     ]
                     """,
@@ -417,6 +426,25 @@ public class MigrationSubjectGrantTests
     }
 
     [Fact]
+    public async Task Source_roles_that_differ_only_by_case_each_keep_their_own_permissions()
+    {
+        await using var provider = BuildProvider();
+        var tenantId = await RunSubjectMigrationAsync(provider);
+
+        using var scope = provider.CreateScope();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+
+        // The source lists "admin" as everything and "Admin" as entries read only. Nightscout looks
+        // a role up by exact name, so neither definition may stand in for the other.
+        (await GrantForAsync(db, tenantId, "Boss"))!.Scopes.Should().Equal(Scope.FullAccess);
+        (await GrantForAsync(db, tenantId, "Cased"))!.Scopes.Should().Equal(Scope.GlucoseRead);
+
+        var roles = await db.Roles.ToListAsync();
+        roles.Single(r => r.Name == "admin").Permissions.Should().Equal("*");
+        roles.Single(r => r.Name == "Admin").Permissions.Should().Equal("api:entries:read");
+    }
+
+    [Fact]
     public async Task A_denied_subject_gets_no_grant()
     {
         await using var provider = BuildProvider();
@@ -442,7 +470,7 @@ public class MigrationSubjectGrantTests
         // The holder is created on demand and is not a person, so an import during first-run setup
         // is not blocked on somebody having claimed the site yet.
         (await db.OAuthGrants.IgnoreQueryFilters()
-            .CountAsync(g => g.TenantId == tenantId)).Should().Be(3);
+            .CountAsync(g => g.TenantId == tenantId)).Should().Be(4);
     }
 
     [Fact]

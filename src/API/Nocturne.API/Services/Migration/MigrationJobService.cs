@@ -3017,7 +3017,7 @@ internal class MigrationJob
     private async Task<Dictionary<string, List<string>>> FetchNightscoutRolePermissionsAsync(
         HttpClient httpClient, CancellationToken ct)
     {
-        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         try
         {
