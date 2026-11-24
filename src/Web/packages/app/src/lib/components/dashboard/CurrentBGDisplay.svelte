@@ -209,6 +209,7 @@
   initialRows={pillRows?.mobile}
   onTrackerComplete={handleTrackerComplete}
   hideWhenEmpty
+  collapsible
   class="mt-2 @md:hidden"
   testid="status-pills-mobile"
 />
