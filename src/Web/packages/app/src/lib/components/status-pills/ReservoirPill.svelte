@@ -11,4 +11,4 @@
   const display = $derived(`${reservoir.toFixed(1)} U`);
 </script>
 
-<StatusPill value={display} label="Reservoir" level="none" />
+<StatusPill value={display} label="Reservoir level" level="none" />

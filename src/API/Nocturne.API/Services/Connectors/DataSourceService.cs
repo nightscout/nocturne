@@ -1124,6 +1124,10 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <inheritdoc />
+    public Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default) =>
+        _demoPurge.HoldsDataAsync(cancellationToken);
+
+    /// <inheritdoc />
     public async Task<DataSourceStats> GetDataSourceStatsAsync(
         string dataSource,
         CancellationToken cancellationToken = default

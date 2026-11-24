@@ -93,6 +93,41 @@ public class NightscoutWriteBackSinkEndpointTests
             .Which.Should().Be(new Uri("https://httpbin.example.com/api/v1/entries"));
     }
 
+    /// <summary>
+    /// A site readable and writable without a secret (one behind a proxy that admits a secret
+    /// path) is sent no <c>api-secret</c>: the hash of an empty secret is a wrong secret.
+    /// </summary>
+    [Fact]
+    public async Task EntrySink_WithNoSecret_SendsNoSecretHeader()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            WriteBackEnabled = true,
+        };
+
+        await EntrySink(handler, config).OnCreatedAsync(new Entry { Id = "1", Sgv = 120, DataSource = "nocturne" });
+
+        handler.CarriedApiSecret.Should().ContainSingle().Which.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EntrySink_UnderASubPathWithAQuery_KeepsBoth()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=writer-abc123",
+            WriteBackEnabled = true,
+        };
+
+        await EntrySink(handler, config).OnCreatedAsync(new Entry { Id = "1", Sgv = 120, DataSource = "nocturne" });
+
+        handler.Uris.Should().ContainSingle().Which.Should().Be(new Uri(
+            "https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/api/v1/entries?token=writer-abc123"));
+    }
+
     [Fact]
     public async Task EntrySink_PostsToV1Entries()
     {

@@ -8,9 +8,11 @@
         "h-full w-full flex-1 translate-x-(--progress-offset) transition-all",
     },
     variants: {
-      // `in-range` is a share of time in range: the in-range glucose token.
+      // `in-range` is a share of time in range: the in-range glucose token. `warning` is a run
+      // that stopped or left records out.
       tone: {
         default: { root: "bg-primary/20", indicator: "bg-primary" },
+        warning: { root: "bg-warning/20", indicator: "bg-warning" },
         "in-range": {
           root: "bg-(--glucose-in-range)/20",
           indicator: "bg-(--glucose-in-range)",

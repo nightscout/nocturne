@@ -137,10 +137,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     {
         try
         {
-            using var request = new HttpRequestMessage(method, ResolveAbsoluteUrl(config.Url, pathAndQuery));
-            request.Headers.Add(
-                "api-secret",
-                NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
+            using var request = NewRequest(config, method, pathAndQuery);
 
             using var response = await _httpClient.SendAsync(request, ct);
             response.EnsureSuccessStatusCode();
@@ -197,8 +194,14 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return config;
     }
 
-    private static string ResolveAbsoluteUrl(string configUrl, string endpoint)
-        => $"{ConnectorUrl.ResolveBase(configUrl, "Nightscout")}{endpoint}";
+    private static HttpRequestMessage NewRequest(
+        NightscoutConnectorConfiguration config, HttpMethod method, string pathAndQuery)
+    {
+        var request = new HttpRequestMessage(method, NightscoutAddress.Resolve(config.Url).For(pathAndQuery));
+        if (NightscoutConnectorService.ApiSecretHeaderValue(config.ApiSecret) is { } secret)
+            request.Headers.Add("api-secret", secret);
+        return request;
+    }
 
     private List<T> FilterItems(IReadOnlyList<T> items)
     {
@@ -303,10 +306,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     {
         try
         {
-            using var request = new HttpRequestMessage(method, ResolveAbsoluteUrl(config.Url, Endpoint));
-            request.Headers.Add(
-                "api-secret",
-                NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
+            using var request = NewRequest(config, method, Endpoint);
             request.Content = JsonContent.Create(payload, options: options);
 
             using var response = await _httpClient.SendAsync(request, ct);

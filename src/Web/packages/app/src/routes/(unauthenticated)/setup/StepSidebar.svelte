@@ -18,17 +18,6 @@
 </script>
 
 <nav class="flex flex-col gap-4 @4xl/wizard:gap-8">
-  <p
-    class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-primary"
-  >
-    <span class="inline-block h-1.5 w-1.5 rounded-full bg-primary"></span>
-    {#if path === "fresh"}
-      Welcome to Nocturne
-    {:else}
-      Migrating from Nightscout
-    {/if}
-  </p>
-
   <h2
     class="font-brand text-2xl @4xl/wizard:text-4xl font-hairline leading-tight tracking-tight text-foreground"
   >

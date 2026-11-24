@@ -125,6 +125,7 @@ describe("StatusRail", () => {
     expect(trackerPills(DESKTOP)).toEqual(["tracker-pill", "legacy-age-pill"]);
 
     await page.viewport(400, 900);
+    await page.getByTestId(MOBILE).getByRole("button", { name: "Show all" }).click();
     await expect
       .element(page.getByTestId(MOBILE).getByRole("button", { name: /Infusion site/ }))
       .toBeVisible();
@@ -224,6 +225,53 @@ describe("StatusRail", () => {
 
     await expect.element(page.getByTestId(DESKTOP)).toBeInTheDocument();
     expect(page.getByTestId(MOBILE).elements()).toHaveLength(0);
+  });
+
+  it("shows the first four items on a phone and the rest after Show all", async () => {
+    await page.viewport(400, 900);
+    render(CurrentBGDisplay);
+
+    const mobile = page.getByTestId(MOBILE);
+    const toggle = mobile.getByRole("button", { name: "Show all" });
+    await expect.element(mobile.getByText("COB")).toBeVisible();
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect.element(mobile.getByText("Reservoir level")).not.toBeVisible();
+    expect(mobile.getByRole("button", { name: /Sensor/ }).elements()).toHaveLength(0);
+
+    await toggle.click();
+
+    await expect.element(mobile.getByText("Reservoir level")).toBeVisible();
+    await expect.element(mobile.getByRole("button", { name: /Sensor/ })).toBeVisible();
+    await expect
+      .element(mobile.getByRole("button", { name: "Show fewer" }))
+      .toHaveAttribute("aria-expanded", "true");
+    expect(railItems(MOBILE)).toEqual([Cob, Basal, Iob, Loop, Reservoir, Trackers]);
+  });
+
+  it("shows trackers in front on a phone while one gives a warning", async () => {
+    await page.viewport(400, 900);
+    store.trackerInstances = [
+      {
+        ...SENSOR_INSTANCE,
+        schedule: [
+          { urgency: "Warn", firesAt: new Date(now - 3600_000).toISOString() },
+        ],
+      },
+    ];
+    render(CurrentBGDisplay);
+
+    const mobile = page.getByTestId(MOBILE);
+    await expect.element(mobile.getByRole("button", { name: /Sensor/ })).toBeVisible();
+    await expect.element(mobile.getByText("Reservoir level")).not.toBeVisible();
+  });
+
+  it("shows every desktop item without a Show all button", async () => {
+    render(CurrentBGDisplay);
+
+    await expect.element(page.getByTestId(DESKTOP).getByText("Reservoir level")).toBeVisible();
+    expect(
+      page.getByTestId(DESKTOP).getByRole("button", { name: "Show all" }).elements()
+    ).toHaveLength(0);
   });
 
   it("hides the mobile layout at desktop width", async () => {

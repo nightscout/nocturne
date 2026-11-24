@@ -182,7 +182,7 @@ describe("settings/migration completion moment", () => {
     render(MigrationPage, {});
     await openHistory();
 
-    await expect.element(page.getByText("https://mynightscout.example")).toBeVisible();
+    await expect.element(page.getByText("mynightscout.example")).toBeVisible();
     await expect.element(moment()).not.toBeInTheDocument();
   });
 });

@@ -24,7 +24,7 @@ export const connectorPropertyMeta = {
   TimezoneOffset: {
     label: 'Timezone offset',
     description: 'Hours offset from UTC for timestamp adjustments',
-    category: 'General',
+    category: 'Advanced',
   },
   Enabled: {
     label: 'Enabled',
@@ -231,7 +231,7 @@ export const connectorPropertyMeta = {
   },
   ApiSecret: {
     label: 'API secret',
-    description: 'Nightscout API_SECRET for authentication',
+    description: 'The API_SECRET of the site',
     category: 'Credentials',
   },
   MaxCount: {
@@ -396,7 +396,7 @@ export const connectorPropertyMeta = {
   GlucoseProcessing: {
     label: 'Glucose processing',
     description: 'How the connector labels its glucose readings (smoothed or unsmoothed)',
-    category: 'General',
+    category: 'Advanced',
   },
 } satisfies Record<string, PropertyMeta>;
 

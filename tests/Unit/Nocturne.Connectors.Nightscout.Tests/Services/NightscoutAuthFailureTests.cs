@@ -113,7 +113,8 @@ public class NightscoutAuthFailureTests
         result.Success.Should().BeFalse();
         result.Message.Should().Be(NightscoutMessages.ApiSecretRejected);
         result.Errors.Should().ContainSingle().Which.Should().Be(NightscoutMessages.ApiSecretRejected);
-        result.Message.Should().NotContain("blank", "this connector will not sync without a secret");
+        result.Message.Should().NotContain("blank",
+            "the connector form reads a blank secret as keeping the stored one, so the advice cannot be followed");
     }
 
     /// <summary>
@@ -168,13 +169,13 @@ public class NightscoutAuthFailureTests
     }
 
     /// <summary>
-    ///     A manual sync reaches the connector whatever its configuration says: the loader's
-    ///     incomplete-configuration gate stands in front of the scheduled poll only.
+    ///     With no secret configured, only Nightscout's refusal says one is needed, and then a
+    ///     rejected secret would be the wrong thing to name.
     /// </summary>
     [Fact]
-    public async Task RequestedSync_WithNoSecretConfigured_AsksForTheSecret()
+    public async Task RequestedSync_WithNoSecretConfigured_AsksForTheSecretOnlyWhenRefused()
     {
-        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+        var service = NewService(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
 
         var result = await service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Glucose] },
@@ -183,6 +184,7 @@ public class NightscoutAuthFailureTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be(NightscoutMessages.ApiSecretMissing);
+        result.Message.Should().NotContain("rejected");
     }
 
     /// <summary>

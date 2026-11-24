@@ -60,23 +60,18 @@
   );
 </script>
 
-<div class="flex flex-col gap-2.5">
+<ul class="flex flex-col divide-y">
   {#each lanes as lane (lane.key)}
     {@const touched = lane.isDone || lane.isActive || lane.migrated > 0}
-    <div
-      class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border bg-card"
+    <li
+      class="flex flex-col gap-2 py-3"
       data-testid="collection-lane-{lane.key}"
     >
-      <div class="grid grid-cols-[36px_1fr_auto] gap-3 items-center">
-        <div
-          class="flex h-9 w-9 items-center justify-center rounded-lg {touched
-            ? 'bg-primary/10'
-            : 'bg-muted'}"
-        >
-          <lane.icon
-            class="h-[18px] w-[18px] {touched ? 'text-primary' : 'text-muted-foreground'}"
-          />
-        </div>
+      <div class="grid grid-cols-[auto_1fr_auto] gap-3 items-center">
+        <lane.icon
+          class="size-4 {touched ? 'text-primary' : 'text-muted-foreground'}"
+          aria-hidden="true"
+        />
 
         <div class="flex flex-col">
           <span class="text-sm font-medium">{lane.label}</span>
@@ -156,6 +151,6 @@
           {/if}
         </div>
       {/if}
-    </div>
+    </li>
   {/each}
-</div>
+</ul>

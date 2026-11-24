@@ -95,6 +95,12 @@ export function calculatedBasalInjection(): V4BasalInjectionStatus | undefined {
 export interface DisplayedGlucose {
   readonly mills: number | undefined;
   readonly currentBG: number;
+  /**
+   * The reading's value in mg/dL. Null when there is no reading, or when the newest reading has
+   * no value (stored as 0, as a legacy `sgv` entry without one is), so a surface shows
+   * no reading rather than a reading of 0.
+   */
+  readonly value: number | null;
   readonly bgDelta: number | null;
   readonly direction: string;
   readonly status: GlucoseStatus | undefined;
@@ -120,7 +126,7 @@ interface GlucoseSource {
 export function displayedGlucose(
   store: GlucoseSource | null | undefined
 ): DisplayedGlucose {
-  let lastPaired = $state.raw<Omit<DisplayedGlucose, "status"> & {
+  let lastPaired = $state.raw<Omit<DisplayedGlucose, "status" | "value"> & {
     mills: number;
     status: GlucoseStatus;
   }>();
@@ -205,6 +211,10 @@ export function displayedGlucose(
     },
     get currentBG() {
       return held()?.currentBG ?? store?.currentBG ?? 0;
+    },
+    get value() {
+      const mgdl = this.currentBG;
+      return mgdl > 0 ? mgdl : null;
     },
     get bgDelta() {
       const pair = held();

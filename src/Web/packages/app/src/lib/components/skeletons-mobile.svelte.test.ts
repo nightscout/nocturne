@@ -30,17 +30,19 @@ function overflowing(frame: HTMLElement) {
 }
 
 describe("calendar skeleton on a phone", () => {
-  it("fits the viewport and scrolls its grid like the calendar does", async () => {
+  it("fits all seven days in the viewport, as the calendar does", async () => {
     await page.viewport(PHONE_WIDTH, 800);
     const { container } = render(CalendarSkeleton);
 
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(PHONE_WIDTH);
     expect(overflowing(container)).toEqual([]);
 
-    const scroller = container.querySelector<HTMLElement>(".overflow-x-auto")!;
-    expect(scroller.getBoundingClientRect().right).toBeLessThanOrEqual(PHONE_WIDTH);
-    expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth);
-    expect(container.querySelectorAll(".grid-rows-6 > *")).toHaveLength(6);
+    const weeks = container.querySelectorAll<HTMLElement>(".grid-rows-6 > *");
+    expect(weeks).toHaveLength(6);
+    for (const week of weeks) {
+      expect(week.getBoundingClientRect().right).toBeLessThanOrEqual(PHONE_WIDTH);
+      expect(week.scrollWidth).toBeLessThanOrEqual(week.clientWidth);
+    }
   });
 });
 
