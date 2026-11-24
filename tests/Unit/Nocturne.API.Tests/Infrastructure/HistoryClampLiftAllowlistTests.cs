@@ -37,6 +37,8 @@ public class HistoryClampLiftAllowlistTests
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.ClearedBeforeTheClampAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/DndWindowRepository.cs: DndWindowRepository.CreateAsync",
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/TrackerRepository.cs: TrackerRepository.CompleteInstanceAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/DecomposedTreatmentKeys.cs: DecomposedTreatmentKeys.GetSentUpstreamAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/V4/DecomposedTreatmentKeys.cs: DecomposedTreatmentKeys.StampAsync",
         // A keyed upsert finds the row its key holds even when the clamp hides it, since the unique index spans
         // the tenant, and overwrites it with the writer's record. The answer carries only what the writer sent.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/ActivityRecordRepository.cs: ActivityRecordRepository.WriteHealthSeriesAsync",

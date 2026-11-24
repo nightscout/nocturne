@@ -236,14 +236,14 @@ internal class TreatmentReadService : ITreatmentStore
             RecordInvalidated();
             List<Treatment> unread = [treatments[failedAt]];
             if (Wrote(decomposition.Of(failedAt)))
-                stored?.Add(new StoredTreatment.Unnamed(treatments[failedAt]));
+                stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[failedAt]), decomposition, failedAt));
             for (var j = failedAt + 1; j < treatments.Count; j++)
             {
                 var later = decomposition.Of(j);
                 if (later.StoredRecords.Any())
                     unread.Add(treatments[j]);
                 if (Wrote(later))
-                    stored?.Add(new StoredTreatment.Unnamed(treatments[j]));
+                    stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[j]), decomposition, j));
             }
             throw new TreatmentBatchFailedException(
                 new BulkWrite<Treatment>([.. results, .. unread], decomposition.SkippedDeleted) { Rejected = rejected },
@@ -262,7 +262,7 @@ internal class TreatmentReadService : ITreatmentStore
             {
                 results.Add(created[k].Created);
                 if (Wrote(decomposition.Of(accepted[k])))
-                    stored?.Add(created[k] with { Updated = updated.Contains(accepted[k]) });
+                    stored?.Add(Marked(created[k], decomposition, accepted[k]) with { Updated = updated.Contains(accepted[k]) });
             }
         }
 
@@ -291,7 +291,7 @@ internal class TreatmentReadService : ITreatmentStore
                 {
                     written.Add(treatments[i]);
                     if (Wrote(of))
-                        stored?.Add(new StoredTreatment.Unnamed(treatments[i]));
+                        stored?.Add(Marked(new StoredTreatment.Unnamed(treatments[i]), committed, i));
                 }
                 else if (failedIndex is null && !committed.StoresNothing(i))
                 {
@@ -314,21 +314,22 @@ internal class TreatmentReadService : ITreatmentStore
     private async Task ReportCommittedAsync(
         IReadOnlyList<Treatment> treatments, TreatmentDecomposition decomposition, ICollection<StoredTreatment> stored)
     {
-        var wrote = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
+        var indices = Enumerable.Range(0, Math.Min(treatments.Count, decomposition.Groups.Count))
             .Where(i => Wrote(decomposition.Of(i)))
-            .Select(i => (treatments[i], decomposition.Of(i)))
             .ToList();
+        var wrote = indices.Select(i => (treatments[i], decomposition.Of(i))).ToList();
         try
         {
-            foreach (var created in await _store.ToCreatedAsync(wrote, CancellationToken.None))
-                stored.Add(created);
+            var created = await _store.ToCreatedAsync(wrote, CancellationToken.None);
+            for (var k = 0; k < created.Count; k++)
+                stored.Add(Marked(created[k], decomposition, indices[k]));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex, "Stored treatments {Ids} could not be read back", wrote.Select(w => w.Item1.Id));
-            foreach (var (treatment, _) in wrote)
-                stored.Add(new StoredTreatment.Unnamed(treatment));
+            foreach (var i in indices)
+                stored.Add(Marked(new StoredTreatment.Unnamed(treatments[i]), decomposition, i));
         }
     }
 
@@ -351,6 +352,9 @@ internal class TreatmentReadService : ITreatmentStore
 
         return served;
     }
+
+    private static StoredTreatment Marked(StoredTreatment stored, TreatmentDecomposition decomposition, int index) =>
+        stored with { UpstreamEdit = decomposition.IsUpstreamEdit(index) };
 
     /// <summary>A failure that ends the batch, rather than one treatment's refusal.</summary>
     private static bool Stops(Exception ex) =>

@@ -312,7 +312,7 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
                 "other-tenant", "absent", "imported", "imported-then-edited", "two-tombstones"],
             "nightscout-connector", CancellationToken.None);
 
-        sendable.Should().BeEquivalentTo("dexcom-live", "dexcom-deleted", "unsourced", "imported-then-edited");
+        sendable.Select(s => s.LegacyId).Should().BeEquivalentTo("dexcom-live", "dexcom-deleted", "unsourced", "imported-then-edited");
     }
 
     private Task<bool> WrittenLiveAsync(Guid tenant, Guid id) =>
@@ -422,11 +422,11 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
             [MongoObjectId.FromGuid(live.Id), imported.Id.ToString(), MongoObjectId.FromGuid(connector.Id), shadowed.Id.ToString()],
             "nightscout-connector", CancellationToken.None);
 
-        found.Should().BeEquivalentTo(new[]
+        found.Select(f => (f.WireId, f.WriteBackMaySend)).Should().BeEquivalentTo(new[]
         {
-            new UnkeyedOwnId(MongoObjectId.FromGuid(live.Id), WriteBackMaySend: true),
-            new UnkeyedOwnId(imported.Id.ToString(), WriteBackMaySend: false),
-            new UnkeyedOwnId(MongoObjectId.FromGuid(connector.Id), WriteBackMaySend: false),
+            (MongoObjectId.FromGuid(live.Id), true),
+            (imported.Id.ToString(), false),
+            (MongoObjectId.FromGuid(connector.Id), false),
         });
         (await ReadingsAsync(tenant)).Where(r => r.LegacyId is not null).Should().ContainSingle();
     }

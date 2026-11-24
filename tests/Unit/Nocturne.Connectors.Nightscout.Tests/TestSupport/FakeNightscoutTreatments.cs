@@ -107,7 +107,14 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
         Writes.Add(request.Method);
 
-        var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+        if (request.Method == HttpMethod.Delete)
+        {
+            var removed = Find(request.RequestUri!) ?? [];
+            Documents.RemoveAll(d => removed.Contains(d.Document));
+            return Json(HttpStatusCode.OK, new JsonObject { ["n"] = removed.Count });
+        }
+
+        var body =JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         var docs = body is JsonArray array ? array.Select(d => d!.AsObject()).ToList() : [body.AsObject()];
         foreach (var doc in docs)
         {

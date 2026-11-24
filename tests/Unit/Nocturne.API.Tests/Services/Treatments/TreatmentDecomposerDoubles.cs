@@ -109,9 +109,11 @@ internal static class PerTreatmentDecomposerExtensions
     /// <summary>
     /// Answers <see cref="ITreatmentDecomposer.DecomposeBatchAsync"/> treatment by treatment: a refusal
     /// rejects only its treatment, any other failure ends the batch with what the treatments before it
-    /// committed, and each treatment's records join its own group.
+    /// committed, and each treatment's records join its own group. A treatment
+    /// <paramref name="upstreamEdit"/> picks is applied as an upstream edit.
     /// </summary>
-    public static Mock<IPerTreatmentDecomposer> AnswersBatchPerTreatment(this Mock<IPerTreatmentDecomposer> mock)
+    public static Mock<IPerTreatmentDecomposer> AnswersBatchPerTreatment(
+        this Mock<IPerTreatmentDecomposer> mock, Func<Treatment, bool>? upstreamEdit = null)
     {
         mock.Setup(d => d.DecomposeBatchAsync(
                 It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
@@ -148,6 +150,8 @@ internal static class PerTreatmentDecomposerExtensions
                     Join(one.UnchangedRecords, result.UnchangedRecords, groups[i], result);
                     result.SkippedDeleted += one.SkippedDeleted;
                     result.SkippedUnsupported += one.SkippedUnsupported;
+                    if (upstreamEdit?.Invoke(treatments[i]) == true)
+                        result.AppliesUpstreamEdit(i);
                 }
 
                 return result;

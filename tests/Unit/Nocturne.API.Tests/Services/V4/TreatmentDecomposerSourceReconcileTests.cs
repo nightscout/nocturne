@@ -47,7 +47,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context = _db.CreateContext();
 
         _decomposer = new(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System),
             EmptyLegacyKeyed.Of<IBolusRepository, Nocturne.Core.Models.V4.Bolus>(),
             EmptyLegacyKeyed.Of<ITempBasalRepository, Nocturne.Core.Models.V4.TempBasal>(),
             EmptyLegacyKeyed.Of<ICarbIntakeRepository, Nocturne.Core.Models.V4.CarbIntake>(),
@@ -65,7 +65,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             new AuditContext { IsSystem = true },
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
     }
 
     public void Dispose()

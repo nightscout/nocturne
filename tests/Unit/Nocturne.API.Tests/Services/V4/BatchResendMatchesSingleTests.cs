@@ -95,7 +95,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var decomposer = new TreatmentDecomposer(
-            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory()),
+            _context.AsFactory(), new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -113,7 +113,7 @@ public class BatchResendMatchesSingleTests : IDisposable
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
             _audit,
-            NullLogger<TreatmentDecomposer>.Instance);
+            NullLogger<TreatmentDecomposer>.Instance, TimeProvider.System);
 
         Treatment Carbs(double carbs) => new()
         {
