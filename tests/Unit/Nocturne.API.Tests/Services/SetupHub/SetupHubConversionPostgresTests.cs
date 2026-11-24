@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
@@ -93,7 +94,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
                     Id = Guid.NewGuid(), EventType = DeviceEventType.SiteChange, Timestamp = DateTime.UtcNow.AddHours(-20),
                 });
             ConsumableTrackerWriter Writer() => new(
-                deviceEvents.Object, Mock.Of<ITrackerAlertRuleSyncService>(), Mock.Of<IDeviceEventReactor>(),
+                deviceEvents.Object, Mock.Of<ITrackerAlertRuleSyncService>(), Rearms.Unannounced(), Mock.Of<IDeviceEventReactor>(),
                 Mock.Of<ISignalRBroadcastService>(), TimeProvider.System, NullLogger<ConsumableTrackerWriter>.Instance);
 
             var hub = new DeviceSetupService(

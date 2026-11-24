@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Alerts;
@@ -222,7 +223,7 @@ public class AlertRulesControllerWebhookSecretTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             encryption,
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>(), TimeProvider.System);
 

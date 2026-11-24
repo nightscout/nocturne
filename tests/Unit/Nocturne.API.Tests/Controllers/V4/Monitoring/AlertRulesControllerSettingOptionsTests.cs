@@ -40,7 +40,7 @@ public class AlertRulesControllerSettingOptionsTests
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IAlertRuleConditionValidator>(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate()),
+            Rearms.Unannounced(),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>(), Mock.Of<IUnevaluableRuleNotice>()),
             Mock.Of<ILogger<AlertRulesController>>(),
             TimeProvider.System);
