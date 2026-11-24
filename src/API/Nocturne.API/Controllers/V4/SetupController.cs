@@ -202,14 +202,15 @@ public partial class SetupController : ControllerBase
 
     /// <summary>
     /// Complete passkey registration for the first owner account.
-    /// Verifies attestation, ends setup, generates recovery codes, and signs the owner in.
+    /// Verifies attestation, ends setup, signs the owner in, and generates recovery codes.
     /// </summary>
     /// <remarks>
     /// Setup closes when the passkey is stored (<see cref="IInstanceSetupState.TenantHasCredentialedMemberAsync"/>),
     /// and the store claims the setup (<see cref="IPasskeyCredentialRepository.CreateForSetupOwnerAsync"/>), so
     /// of two completions under way at once only one stores a passkey; the other is answered as a
     /// completion that arrives after setup closed. A failure after the store leaves an owner who
-    /// signs in with the passkey on the login page.
+    /// signs in with the passkey on the login page, and that sign-in gives them their codes
+    /// (<see cref="IRecoveryCodeService.GenerateFirstCodesAsync"/>).
     /// </remarks>
     [HttpPost("owner/complete")]
     [EnableRateLimiting("setup")]
@@ -259,14 +260,13 @@ public partial class SetupController : ControllerBase
 
         await GrantFirstOwnerPlatformAdminAsync(credResult.SubjectId);
 
-        var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
-
         var outcome = await SignInOwnerAsync(
             credResult.SubjectId, tenant!, SignInMethod.Passkey, "Setup Passkey");
 
         switch (outcome)
         {
             case SignInOutcome.SignedIn signedIn:
+                var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
                 _logger.LogInformation(
                     "Setup complete: first owner {SubjectId} registered with passkey for tenant {TenantId}",
                     credResult.SubjectId, tenant!.Id);

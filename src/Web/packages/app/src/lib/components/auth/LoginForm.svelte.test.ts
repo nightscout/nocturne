@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { page as appState } from "$app/state";
 import type { LastSignIn } from "./last-sign-in";
@@ -30,7 +30,7 @@ vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", async () => ({
       return { enabled: providers.length > 0, providers };
     },
   }),
-  setAuthCookies: vi.fn(),
+  setAuthCookies: (request: unknown) => signIn.setAuthCookies(request),
   signInWithAuthenticator: {
     pending: 0,
     enhance: () => ({}),
@@ -56,10 +56,37 @@ vi.mock("#lib/api/generated/totps.generated.remote.js", () => ({
 vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   discoverableLoginOptions: vi.fn(),
   loginOptions: vi.fn(),
-  loginComplete: vi.fn(),
+  loginComplete: (request: unknown) => signIn.loginComplete(request),
+}));
+
+const signIn = vi.hoisted(() => {
+  const state = {
+    result: {} as Record<string, unknown>,
+    loginComplete: vi.fn(async (_request: unknown) => state.result),
+    setAuthCookies: vi.fn(async (_request: unknown): Promise<unknown> => ({ success: true })),
+    goToReturnUrl: vi.fn(async (_url: string, _options?: unknown) => {}),
+    invalidateAll: vi.fn(async () => {}),
+  };
+  return state;
+});
+
+vi.mock("./passkey-login", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./passkey-login")>()),
+  runPasskeyAssertion: async (
+    _options: unknown,
+    submit: (assertion: { assertionResponseJson: string; challengeToken: string }) => Promise<unknown>
+  ) => submit({ assertionResponseJson: "{}", challengeToken: "login-token" }),
+}));
+vi.mock("#lib/navigation/return-url.js", () => ({
+  goToReturnUrl: (url: string, options?: unknown) => signIn.goToReturnUrl(url, options),
+}));
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/navigation")>()),
+  invalidateAll: () => signIn.invalidateAll(),
 }));
 
 import LoginForm from "./LoginForm.svelte";
+import LoginDialog from "./login-dialog.svelte";
 
 /** The layout server load puts the parsed hint cookie here; the form only reads it. */
 function setLastSignIn(hint: LastSignIn | null) {
@@ -236,5 +263,108 @@ describe("LoginForm after an identity provider asks for the authenticator code",
       .element(page.getByRole("button", { name: "Sign in with Example SSO" }))
       .toBeVisible();
     await expect.element(page.getByText("Authenticator code")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A passkey sign-in for a member who has never held recovery codes answers with their first set,
+ * which the API shows nowhere else, so the form keeps them on screen until they are saved.
+ */
+describe("LoginForm after a passkey sign-in that issued the first recovery codes", () => {
+  beforeEach(() => {
+    providersLoading = false;
+    providers = [];
+    setLastSignIn(null);
+    signIn.goToReturnUrl.mockClear();
+    signIn.invalidateAll.mockClear();
+    signIn.loginComplete.mockClear();
+    signIn.setAuthCookies.mockReset();
+    signIn.setAuthCookies.mockImplementation(async () => ({ success: true }));
+  });
+
+  it("asks for the first codes, since it shows them", async () => {
+    signIn.result = { success: true, accessToken: "t" };
+    render(LoginForm, { props: { returnUrl: "/reports" } });
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+
+    await vi.waitFor(() =>
+      expect(signIn.loginComplete).toHaveBeenCalledWith(expect.objectContaining({ showsRecoveryCodes: true }))
+    );
+  });
+
+  it("shows the codes and moves on only once they are saved", async () => {
+    signIn.result = { success: true, accessToken: "t", recoveryCodes: ["AAAAA-BBBBB", "CCCCC-DDDDD"] };
+    render(LoginForm, { props: { returnUrl: "/reports" } });
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeVisible();
+    await expect.element(page.getByText("CCCCC-DDDDD")).toBeVisible();
+    const next = page.getByRole("button", { name: "Continue" });
+    await expect.element(next).toBeDisabled();
+    expect(signIn.goToReturnUrl).not.toHaveBeenCalled();
+    expect(signIn.invalidateAll).not.toHaveBeenCalled();
+
+    await page.getByRole("checkbox").click();
+    await next.click();
+
+    await vi.waitFor(() => expect(signIn.goToReturnUrl).toHaveBeenCalledWith("/reports", { refreshAll: true }));
+  });
+
+  it("refreshes the page data before handing a dialog's sign-in back, once the codes are saved", async () => {
+    signIn.result = { success: true, accessToken: "t", recoveryCodes: ["AAAAA-BBBBB"] };
+    const onSuccess = vi.fn();
+    render(LoginForm, { props: { onSuccess } });
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeVisible();
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    await page.getByRole("checkbox").click();
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(signIn.invalidateAll).toHaveBeenCalled();
+  });
+
+  it("still shows the codes when the session cookies could not be set, since they are stored and shown nowhere else", async () => {
+    signIn.setAuthCookies.mockRejectedValue(new Error("network"));
+    signIn.result = { success: true, accessToken: "t", recoveryCodes: ["AAAAA-BBBBB"] };
+    render(LoginForm, { props: { returnUrl: "/reports" } });
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeVisible();
+    expect(signIn.setAuthCookies).toHaveBeenCalled();
+    await expect.element(page.getByText(/sign-in failed/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the sign-in dialog open while the codes are on screen", async () => {
+    signIn.result = { success: true, accessToken: "t", recoveryCodes: ["AAAAA-BBBBB"] };
+    const onCancel = vi.fn();
+    render(LoginDialog, { props: { open: true, onCancel } });
+    await expect.element(page.getByRole("button", { name: "Close" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeVisible();
+
+    await expect.element(page.getByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]')!, {
+      position: { x: 5, y: 5 },
+    });
+    await expect.element(page.getByText("AAAAA-BBBBB")).toBeVisible();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("moves straight on when the sign-in issued no codes", async () => {
+    signIn.result = { success: true, accessToken: "t" };
+    render(LoginForm, { props: { returnUrl: "/reports" } });
+
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+
+    await vi.waitFor(() => expect(signIn.goToReturnUrl).toHaveBeenCalledWith("/reports", { refreshAll: true }));
+    await expect.element(page.getByText("Recovery codes")).not.toBeInTheDocument();
   });
 });
