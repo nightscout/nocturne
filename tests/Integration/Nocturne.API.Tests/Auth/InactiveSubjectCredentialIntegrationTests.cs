@@ -529,6 +529,27 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
             () => CountAlertInvitesOfAsync(conn, subjectId));
     }
 
+    [Fact]
+    public async Task A_deactivated_subject_is_issued_no_desktop_link_token_and_is_answered_as_an_anonymous_caller_is()
+    {
+        await using var conn = await OpenAsync();
+        var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Desktop Linking Member");
+        using var _ = session;
+        var anonymous = await ShapeOfAsync(await AnonymousClient().PostAsync(DesktopTokenPath, null));
+
+        await SetActiveAsync(conn, subjectId, false);
+        try
+        {
+            (await ShapeOfAsync(await session.PostAsync(DesktopTokenPath, null))).Should().Be(anonymous);
+        }
+        finally
+        {
+            await SetActiveAsync(conn, subjectId, true);
+        }
+
+        (await DesktopLinkTokenAsync(session)).Should().NotBeNullOrEmpty();
+    }
+
     /// <summary>
     /// Deactivated, the caller is answered as an anonymous caller is and changes nothing
     /// <paramref name="state"/> reads; reactivated, the action itself answers <paramref name="activeStatus"/>.
@@ -756,6 +777,18 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
             JOIN oauth_clients c ON c.id = a.client_entity_id
             WHERE c.client_id = @key;
             """, clientId);
+
+    private const string DesktopTokenPath = "/api/v4/connectors/carelink/connect/desktop-token";
+
+    /// <summary>The bearer token a desktop link code carries.</summary>
+    private static async Task<string?> DesktopLinkTokenAsync(HttpClient session)
+    {
+        var response = await session.PostAsync(DesktopTokenPath, null);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var linkCode = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync())
+            .GetProperty("linkCode").GetString()!;
+        return System.Web.HttpUtility.ParseQueryString(new Uri(linkCode).Query)["token"];
+    }
 
     private static Task<long> CountGrantsMadeByAsync(NpgsqlConnection conn, Guid subjectId) =>
         ScalarAsync<long>(conn, "SELECT count(*) FROM oauth_grants WHERE created_by_subject_id = @key;", subjectId);
