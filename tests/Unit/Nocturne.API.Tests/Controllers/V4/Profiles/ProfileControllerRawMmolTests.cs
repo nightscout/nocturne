@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Tests.Infrastructure;
@@ -22,7 +23,7 @@ public class ProfileControllerRawMmolTests
     [InlineData(Scope.TherapyRead)]
     [InlineData(Scope.GlucoseReadWrite)]
     public void TheIsfDismiss_IsRefusedWithoutTherapyReadWrite(string scope) =>
-        Gate(nameof(ProfileController.DismissRawMmolIsf), scope).Should().BeOfType<ForbidResult>();
+        Gate(nameof(ProfileController.DismissRawMmolIsf), scope).Should().BeOfType<ScopeForbiddenResult>();
 
     [Fact]
     public void TheIsfDismiss_IsAdmittedWithTherapyReadWrite() =>
