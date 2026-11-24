@@ -54,7 +54,7 @@
 
   // Collapsed state needs basic BG info
   const glucose = displayedGlucose(realtimeStore);
-  const rawCurrentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
     getGlucoseTileVariant(glucose.status)
@@ -64,17 +64,19 @@
 
   const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
   const isLoading = $derived(
-    rawCurrentBG === 0 && (realtimeStore?.entries.length ?? 0) === 0
+    value === null && !(realtimeStore?.currentReadingLoaded ?? true)
   );
   const units = $derived(glucoseUnits.current);
-  const displayBG = $derived(formatGlucoseValue(rawCurrentBG, units));
+  const displayBG = $derived(
+    value === null ? "—" : formatGlucoseValue(value, units)
+  );
 
   // Trend metadata
   const bgDelta = $derived(glucose.bgDelta);
   const direction = $derived(glucose.direction);
   const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
-  const hasData = $derived(!isLoading && rawCurrentBG > 0);
+  const hasData = $derived(value !== null);
 
 
   // Smoothly animate the trend arrow rotation
@@ -89,6 +91,9 @@
 <div class="group-data-[collapsible=icon]:hidden">
   <div class="flex flex-col justify-center gap-2">
     <div class="flex items-center justify-center gap-2">
+      {#if !hasData && !isLoading}
+        <span class="sr-only">No glucose reading</span>
+      {/if}
       <GlucoseValueIndicator
         displayValue={displayBG}
         variant={tileVariant}
@@ -146,6 +151,9 @@
 
 <!-- Collapsed state: BG + small arrow + delta -->
 <div class="hidden group-data-[collapsible=icon]:flex flex-col items-center gap-0.5">
+  {#if !hasData && !isLoading}
+    <span class="sr-only">No glucose reading</span>
+  {/if}
   <GlucoseValueIndicator
     displayValue={displayBG}
     variant={tileVariant}

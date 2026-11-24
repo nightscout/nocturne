@@ -37,7 +37,7 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const now = $derived(realtimeStore.now);
 
-  const isLoading = $derived(glucose.currentBG === 0 && realtimeStore.entries.length === 0);
+  const isLoading = $derived(glucose.value === null && !realtimeStore.currentReadingLoaded);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
@@ -152,7 +152,7 @@
       ])}
     >
       <GlucoseValueIndicator
-        displayValue={formatGlucoseValue(glucose.currentBG, units)}
+        displayValue={glucose.value === null ? "—" : formatGlucoseValue(glucose.value, units)}
         variant={tileVariant}
         {isLoading}
         {isStale}
