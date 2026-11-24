@@ -7,7 +7,6 @@ using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -23,22 +22,6 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     : IClassFixture<TenantMembershipRepositoryPostgresTests.Database>
 {
     private static readonly DateTime Start = new(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
-
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
 
     private NocturneDbContext Context(Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
@@ -64,7 +47,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var factory = new Factory(Context, tenant);
+        var factory = new SuppliedContextFactory(() => Context(tenant));
         var subjects = new SubjectRepository(factory, AccountLinkRoutes.Off);
         var member = await subjects.CreateAsync(new NewSubject($"{slug}-member"), CancellationToken.None);
         var actor = await subjects.CreateAsync(new NewSubject($"{slug}-actor"), CancellationToken.None);
@@ -164,7 +147,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     public async Task TheMemberFilterMatchesTheTargetAndDropsRoleChangesWithNoTarget()
     {
         var s = await SeedAsync("hd");
-        var other = await new SubjectRepository(new Factory(Context, s.Tenant), AccountLinkRoutes.Off)
+        var other = await new SubjectRepository(new SuppliedContextFactory(() => Context(s.Tenant)), AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject("hd-other"), CancellationToken.None);
         var mine = await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Tenant("role", "viewer"), s.Member, s.Actor);
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Tenant("role", "viewer"), other, s.Actor);
@@ -241,7 +224,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     public async Task TheRealWritersAccessEndRowsReadBackAsSetThenCleared()
     {
         var s = await SeedAsync("hl");
-        var factory = new Factory(Context, s.Tenant);
+        var factory = new SuppliedContextFactory(() => Context(s.Tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(s.Tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(s.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -299,7 +282,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     public async Task NamesResolveAndADeletedSubjectGivesANullName()
     {
         var s = await SeedAsync("hh");
-        var gone = await new SubjectRepository(new Factory(Context, s.Tenant), AccountLinkRoutes.Off)
+        var gone = await new SubjectRepository(new SuppliedContextFactory(() => Context(s.Tenant)), AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject("hh-gone"), CancellationToken.None);
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Tenant("role", "viewer"), s.Member, s.Actor, minute: 1);
         await AddAsync(s.Tenant, AuthAuditEventType.RoleAssigned, Tenant("role", "viewer"), gone, gone, minute: 2);
@@ -320,7 +303,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
     public async Task TheRealWritersRowsReadBackWithEachKindMemberActorAndInvite()
     {
         var s = await SeedAsync("hj");
-        var factory = new Factory(Context, s.Tenant);
+        var factory = new SuppliedContextFactory(() => Context(s.Tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         await members.SeedRolesAsync(s.Tenant, CancellationToken.None);
         var caretaker = (await members.FindRoleIdBySlugAsync(s.Tenant, RoleSeeds.Caretaker, CancellationToken.None))!.Value;
@@ -514,7 +497,7 @@ public class MemberHistoryReaderPostgresTests(TenantMembershipRepositoryPostgres
         var s = await SeedAsync("je");
         var now = new DateTime(2026, 11, 23, 8, 0, 0, DateTimeKind.Utc);
         DateTime? end = daysFromNow is { } days ? now.AddDays(days) : null;
-        (await new TenantMembershipRepository(new Factory(Context, s.Tenant), AccountLinkRoutes.Off)
+        (await new TenantMembershipRepository(new SuppliedContextFactory(() => Context(s.Tenant)), AccountLinkRoutes.Off)
             .AddMemberAsync(new NewTenantMember(s.Tenant, s.Member, [], AccessEndsAt: end) { How = MembershipJoinHow.Direct, By = null }, CancellationToken.None)).Should().BeTrue();
 
         var narrowed = await s.Reader.GetAsync(s.Tenant, s.Member, 25, 0, now, CancellationToken.None);

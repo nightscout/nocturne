@@ -50,26 +50,6 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(connectionString)
@@ -77,7 +57,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             .Options) { TenantId = tenant };
 
     private sealed record Seeded(
-        Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
+        Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner, Guid OwnerRole, Guid ViewerRole,
         Guid CaretakerRole);
 
     private async Task<Seeded> SeedTenantAsync(string slug, string? connectionString = null)
@@ -89,7 +69,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-reasons', true, now(), now());
             """, Migrator(app));
 
-        var factory = new Factory(t => Context(app, t), tenant);
+        var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         var owner = await new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject($"{slug}-owner"), Ct);
         await members.SeedRolesAsync(tenant, Ct);

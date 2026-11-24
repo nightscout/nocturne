@@ -47,26 +47,6 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : INocturneDbContextFactory
-    {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create(scope));
-
-        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-
-        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
-        {
-            var context = create(Guid.Empty);
-            context.SubjectId = subjectId;
-            return ValueTask.FromResult(context);
-        }
-
-        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => ValueTask.FromResult(create(Guid.Empty));
-
-        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) =>
-            ValueTask.FromResult(create(tenantId));
-    }
-
     private static NocturneDbContext Context(string connectionString, Guid tenant) =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(connectionString)
@@ -74,7 +54,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             .Options) { TenantId = tenant };
 
     private sealed record Site(
-        string App, string Migrator, Guid Tenant, Factory Factory, TenantMembershipRepository Members, Guid Owner,
+        string App, string Migrator, Guid Tenant, SuppliedContextFactory Factory, TenantMembershipRepository Members, Guid Owner,
         Guid ViewerRole, Guid CaretakerRole);
 
     private sealed record Lapsing(Guid Subject, Guid Member);
@@ -88,7 +68,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
             VALUES ('{tenant}', '{slug}-{tenant:N}', 'membership-lapse', true, now(), now());
             """);
 
-        var factory = new Factory(t => Context(app, t), tenant);
+        var factory = new SuppliedContextFactory(() => Context(app, tenant));
         var members = new TenantMembershipRepository(factory, AccountLinkRoutes.Off);
         var owner = await NewSubjectAsync(factory, $"{slug}-owner");
         await members.SeedRolesAsync(tenant, Ct);
@@ -100,7 +80,7 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         return new Site(app, migrator, tenant, factory, members, owner, viewerRole, caretakerRole);
     }
 
-    private static Task<Guid> NewSubjectAsync(Factory factory, string name) =>
+    private static Task<Guid> NewSubjectAsync(SuppliedContextFactory factory, string name) =>
         new SubjectRepository(factory, AccountLinkRoutes.Off).CreateAsync(new NewSubject(name), Ct);
 
     /// <summary>

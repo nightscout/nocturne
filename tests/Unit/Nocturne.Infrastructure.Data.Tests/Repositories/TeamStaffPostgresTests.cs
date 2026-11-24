@@ -42,12 +42,6 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create());
-    }
-
     private sealed record Site(Guid Id, IReadOnlyDictionary<string, Guid> Roles);
 
     private static readonly DateTime Now = WholeMicroseconds(DateTime.UtcNow);
@@ -67,7 +61,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options) { TenantId = tenant ?? Guid.Empty }.ActingAs(actor);
 
-    private Factory Contexts(Guid? actor = null) =>
+    private SuppliedContextFactory Contexts(Guid? actor = null) =>
         new(() => Context(actor is { } id ? new TestAuditActor { SubjectId = id } : null));
 
     private TeamRepository Teams(Guid? actor = null) => new(Contexts(actor));

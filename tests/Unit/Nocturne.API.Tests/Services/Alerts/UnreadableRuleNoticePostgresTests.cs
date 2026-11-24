@@ -48,14 +48,11 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
 
     private static readonly DateTime Now = new(2026, 11, 22, 8, 0, 0, DateTimeKind.Utc);
 
-    private sealed class Factory(string connectionString, Guid tenant) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
-                .AddInterceptors(new TenantConnectionInterceptor())
-                .Options) { TenantId = tenant });
-    }
+    private NocturneDbContext Context(Guid tenant) =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.AppConnectionString)
+            .AddInterceptors(new TenantConnectionInterceptor())
+            .Options) { TenantId = tenant };
 
     private sealed class Harness
     {
@@ -83,7 +80,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(database.AppConnectionString, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var repository = new AlertRepository(contexts);
 
         var accessor = new Mock<ITenantAccessor>();

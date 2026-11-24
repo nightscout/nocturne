@@ -47,12 +47,6 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<Guid, NocturneDbContext> create, Guid scope) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create(scope));
-    }
-
     /// <summary>Runs <paramref name="beforeStamp"/> once a poll has read its code and before it stamps the poll.</summary>
     private sealed class StageableRepository(INocturneDbContextFactory contexts, Func<Guid, Task> beforeStamp)
         : OAuthTokenRepository(contexts)
@@ -106,7 +100,7 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
                 : [new TenantConnectionInterceptor(), staged])
             .Options) { TenantId = tenant };
 
-    private sealed record Seeded(Guid Tenant, Guid CodeId, Factory Contexts);
+    private sealed record Seeded(Guid Tenant, Guid CodeId, SuppliedContextFactory Contexts);
 
     private async Task<Seeded> SeedPendingCodeAsync()
     {
@@ -124,14 +118,14 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var contexts = new Factory(Context, tenant);
+        var contexts = new SuppliedContextFactory(() => Context(tenant));
         var codeId = await new OAuthTokenRepository(contexts).StoreDeviceCodeAsync(
             new NewDeviceCode(ClientId, DeviceCodeHash, "BCDFGHJK", ["glucose.read"], Now.UtcDateTime.AddMinutes(15), 5),
             CancellationToken.None);
         return new Seeded(tenant, codeId, contexts);
     }
 
-    private static OAuthTokenService ServiceOver(IOAuthTokenRepository tokens, Factory contexts)
+    private static OAuthTokenService ServiceOver(IOAuthTokenRepository tokens, SuppliedContextFactory contexts)
     {
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.HashRefreshToken(DeviceCode)).Returns(DeviceCodeHash);
@@ -173,9 +167,8 @@ public class OAuthDeviceCodePollPostgresTests(OAuthDeviceCodePollPostgresTests.D
     {
         var seeded = await SeedPendingCodeAsync();
         var deleter = new OAuthTokenRepository(seeded.Contexts);
-        var polling = new Factory(
-            tenant => Context(tenant, new BeforePollStamp(() => deleter.DeleteDeviceCodeAsync(seeded.CodeId, CancellationToken.None))),
-            seeded.Tenant);
+        var polling = new SuppliedContextFactory(
+            () => Context(seeded.Tenant, new BeforePollStamp(() => deleter.DeleteDeviceCodeAsync(seeded.CodeId, CancellationToken.None))));
 
         var poll = await ServiceOver(new OAuthTokenRepository(polling), seeded.Contexts).ExchangeDeviceCodeAsync(DeviceCode, ClientId);
 

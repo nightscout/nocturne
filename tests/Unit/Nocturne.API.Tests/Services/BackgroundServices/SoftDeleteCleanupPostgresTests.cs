@@ -38,17 +38,11 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(create());
-    }
-
     /// <summary>Runs the job for <paramref name="tenant"/> in a scope resolved to it.</summary>
     private async Task RunForAsync(Guid tenant)
     {
         await using var services = new ServiceCollection()
-            .AddSingleton<INocturneDbContextFactory>(new Factory(() =>
+            .AddSingleton<INocturneDbContextFactory>(new SuppliedContextFactory(() =>
             {
                 var context = Context();
                 context.TenantId = tenant;
