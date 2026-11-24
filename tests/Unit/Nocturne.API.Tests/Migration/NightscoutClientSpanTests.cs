@@ -81,17 +81,21 @@ public class NightscoutClientSpanTests
         var site = new EngineIoPollingSite();
         await using var app = await StartSiteAsync(site.AnswerAsync);
 
-        var (spans, port) = await ObserveAsync(app, async (services, port) =>
-        {
-            using var client = NightscoutConnectorBackgroundService.NewClient(
-                NightscoutAddress.Resolve($"http://127.0.0.1:{port}/{Secret}/?token={Token}"),
-                services.GetRequiredService<IHttpClientFactory>());
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var (spans, port) = await ObserveAsync(
+            app,
+            async (services, port, polled) =>
+            {
+                using var client = NightscoutConnectorBackgroundService.NewClient(
+                    NightscoutAddress.Resolve($"http://127.0.0.1:{port}/{Secret}/?token={Token}"),
+                    services.GetRequiredService<IHttpClientFactory>());
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            await client.ConnectAsync(deadline.Token);
+                await client.ConnectAsync(deadline.Token);
+                await polled.WaitAsync(deadline.Token);
 
-            client.Connected.Should().BeTrue();
-        });
+                client.Connected.Should().BeTrue();
+            },
+            spans => spans.Any(span => span.DisplayName == "GET") && spans.Any(span => span.DisplayName == "POST"));
 
         spans.Select(span => span.DisplayName).Should().Contain(["GET", "POST"]);
         spans.Should().AllSatisfy(span =>
@@ -118,9 +122,19 @@ public class NightscoutClientSpanTests
         response.EnsureSuccessStatusCode();
     }
 
+    private static Task<(List<Activity> Spans, int Port)> ObserveAsync(
+        WebApplication site,
+        Func<IServiceProvider, int, Task> act) =>
+        ObserveAsync(site, (services, port, _) => act(services, port), until: _ => true);
+
+    /// <summary>
+    /// A request a client sends in the background can stop after <paramref name="act"/>'s own await returns, so
+    /// <paramref name="act"/> takes a task that completes once the spans collected so far satisfy <paramref name="until"/>.
+    /// </summary>
     private static async Task<(List<Activity> Spans, int Port)> ObserveAsync(
         WebApplication site,
-        Func<IServiceProvider, int, Task> act)
+        Func<IServiceProvider, int, Task, Task> act,
+        Func<IReadOnlyList<Activity>, bool> until)
     {
         var port = new Uri(site.Urls.Single()).Port;
 
@@ -143,6 +157,7 @@ public class NightscoutClientSpanTests
         _ = host.Services.GetRequiredService<TracerProvider>();
 
         var spans = new List<Activity>();
+        var satisfied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "System.Net.Http",
@@ -151,12 +166,16 @@ public class NightscoutClientSpanTests
             {
                 if (activity.GetTagItem("server.port") is int p && p == port)
                     lock (spans)
+                    {
                         spans.Add(activity);
+                        if (until(spans))
+                            satisfied.TrySetResult();
+                    }
             },
         };
         ActivitySource.AddActivityListener(listener);
 
-        await act(host.Services, port);
+        await act(host.Services, port, satisfied.Task);
 
         lock (spans)
             return (spans.ToList(), port);
