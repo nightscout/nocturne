@@ -66,7 +66,8 @@ public class ProfileControllerSettingsDefaultTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<ILoopClosedLoopStamper>()
+            Mock.Of<ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>()
         );
     }
 

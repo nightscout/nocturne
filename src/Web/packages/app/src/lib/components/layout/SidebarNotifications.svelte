@@ -128,6 +128,12 @@
       return;
     }
 
+    if (notification.type === "profile.raw_mmol_values" && actionId === "review") {
+      markRead(notification.id);
+      goto(resolve("settings/profile"));
+      return;
+    }
+
     if (notification.type?.startsWith("system.instance_key_changed")) {
       if (actionId === "open_connectors") {
         markRead(notification.id);

@@ -82,7 +82,8 @@ public class V4ListSortTests
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution(),
-            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>());
+            Mock.Of<Nocturne.API.Services.V4.ILoopClosedLoopStamper>(),
+            Mock.Of<IRawMmolProfileDetector>());
         foreach (var controller in new ControllerBase[] { spans, sleep, carbIntakes, tempBasal, profile })
             controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
 
