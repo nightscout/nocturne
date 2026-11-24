@@ -175,8 +175,8 @@ public class NightscoutTreatmentReconcileTests
         var result = await harness.SyncAsync();
 
         result.Success.Should().BeTrue();
-        harness.Crawled.Select(t => t.Id).Should().Equal(LoopKept);
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, LoopGone]);
+        harness.CrawledIds.Should().Equal(LoopKept);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, LoopGone]);
         harness.Republished.Should().OnlyContain(t => t.DataSource == Source);
     }
 
@@ -191,7 +191,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, MongoIdB]);
+        harness.RepublishedIds.Should().BeEquivalentTo([MongoIdA, MongoIdB]);
         harness.Republished.Should().OnlyContain(t => TreatmentClientId.Of(t) == TrioKept);
         harness.Lookups.Should().BeEmpty("a row stored under the id the read carries is not missing");
         harness.Deleted.Should().BeEmpty();
@@ -275,7 +275,7 @@ public class NightscoutTreatmentReconcileTests
 
         harness.TreatmentReads.Should().Be(1);
         harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-15));
-        harness.Republished.Select(t => t.Id).Should().Equal(MongoIdA);
+        harness.RepublishedIds.Should().Equal(MongoIdA);
         harness.FullReconcileRecorded.Should().BeEmpty();
     }
 
@@ -374,8 +374,8 @@ public class NightscoutTreatmentReconcileTests
         {
             Upstream =
             [
-                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
                 Trio(MongoIdB, TrioKept, Now.AddMinutes(-20)),
+                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
             ],
             Stored = [ownKey, TrioKept, missingKey],
             AlsoUpstreamByIdentifier = [missingKey],
@@ -386,6 +386,7 @@ public class NightscoutTreatmentReconcileTests
         harness.Deleted.Should().BeEmpty();
         harness.Lookups.Should().ContainInOrder(
             $"find[id]={missingKey}", $"find[identifier][$in]={missingKey},{MongoObjectId.Coerce(missingKey)}");
+        harness.Lookups.Should().NotContain(l => l.Contains(ownKey), "the read served it as an identifier, so it is neither missing nor the canary");
     }
 
     /// <summary>
@@ -450,8 +451,13 @@ public class NightscoutTreatmentReconcileTests
         public DateTime? LastFullReconcile { get; init; }
         public int? Written { get; init; }
 
-        public List<Treatment> Crawled { get; } = [];
         public List<Treatment> Republished { get; } = [];
+
+        /// <summary>The ids the crawl offered the store, as the source served them.</summary>
+        public List<string?> CrawledIds { get; } = [];
+
+        /// <summary>The ids the reconcile offered the store, as the source served them.</summary>
+        public List<string?> RepublishedIds { get; } = [];
         public List<IReadOnlySet<string>> Deleted { get; } = [];
         public List<string> DeletedFrom { get; } = [];
         public List<string> StoredAskedOf { get; } = [];
@@ -525,6 +531,13 @@ public class NightscoutTreatmentReconcileTests
             return Task.FromResult(ReadFails ? Failure() : Json(Upstream));
         }
 
+        /// <summary>The store names each treatment it keeps by an id of its own, which the source does not know.</summary>
+        private static void RenameAsStored(IEnumerable<Treatment> published)
+        {
+            foreach (var treatment in published)
+                treatment.Id = Guid.CreateVersion7().ToString();
+        }
+
         private NightscoutConnectorService NewService()
         {
             var treatments = new Mock<ITreatmentPublisher>();
@@ -534,12 +547,23 @@ public class NightscoutTreatmentReconcileTests
             treatments
                 .Setup(p => p.PublishTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Crawled.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    CrawledIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync(true);
             treatments
                 .Setup(p => p.PublishRecentTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => Republished.AddRange(batch))
+                .Callback<IEnumerable<Treatment>, string, WriteOrigin, CancellationToken>((batch, _, _, _) =>
+                {
+                    var list = batch.ToList();
+                    Republished.AddRange(list);
+                    RepublishedIds.AddRange(list.Select(t => t.Id));
+                    RenameAsStored(list);
+                })
                 .ReturnsAsync((IEnumerable<Treatment> batch, string _, WriteOrigin _, CancellationToken _) =>
                     Written ?? batch.Count());
             treatments

@@ -81,7 +81,7 @@ public partial class NightscoutConnectorServiceBase<TConfig>
                 var present = due
                     .Where(span => found.Any(t => Names(t, span.LegacyId)))
                     .Select(span => (span.LegacyId, span.At))
-                    .Concat(recent?.Served ?? []);
+                    .Concat(recent?.Served.Select(s => (s.Key, s.Value)) ?? []);
                 gone = await ConfirmGoneAsync(missing, present, found, cancellationToken);
             }
         }

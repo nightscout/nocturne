@@ -581,11 +581,14 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
 
     /// <summary>
     ///     What a catch-up's read of one collection returned from <see cref="ReadFrom"/> on, for
-    ///     <see cref="PublishUncrawledAsync{T}"/>.
+    ///     <see cref="PublishUncrawledAsync{T}"/>, and for the treatment delete pass and the open-span
+    ///     recheck, which match stored rows against <see cref="Served"/>.
     /// </summary>
     /// <param name="Full">Whether this is the hourly full treatment reconcile, which may extend the read.</param>
     /// <param name="TimeOf">The time the collection is read and crawled on.</param>
-    private sealed record RecentRecords<T>(DateTime WindowStart, bool Full, Func<T, DateTime?> TimeOf)
+    /// <param name="KeysOf">The keys a stored row can be matched to a served record by; none are kept when null.</param>
+    private sealed record RecentRecords<T>(
+        DateTime WindowStart, bool Full, Func<T, DateTime?> TimeOf, Func<T, IEnumerable<string?>>? KeysOf = null)
         where T : ProcessableDocumentBase
     {
         public DateTime ReadFrom => WindowStart - ReconcileReadMargin;
@@ -593,18 +596,26 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
         public List<T> Records { get; } = [];
 
         /// <summary>
-        ///     When set, the id and time of each identified record as the source served it. A publish
-        ///     can rewrite a record's id to the one it is stored under, which the source does not know.
+        ///     Each key of a record as the source served it, with the record's time. The first record
+        ///     served keeps its time, and insertion order is kept because the canary is the first key of
+        ///     its kind. A publish rewrites a record's id to the one it is stored under, which the source
+        ///     does not know, so a match against the source reads this and never <see cref="Records"/>.
         /// </summary>
-        public List<(string LegacyId, DateTime At)>? Served { get; init; }
+        public Dictionary<string, DateTime> Served { get; } = [];
 
         public void Collect(IEnumerable<T> page)
         {
             foreach (var record in page.Where(r => TimeOf(r) is not { } at || at >= ReadFrom))
             {
                 Records.Add(record);
-                if (Served is not null && record.Id is { Length: > 0 } id && TimeOf(record) is { } at)
-                    Served.Add((id, at));
+                if (TimeOf(record) is not { } at)
+                    continue;
+
+                foreach (var key in KeysOf?.Invoke(record) ?? [])
+                {
+                    if (key is { Length: > 0 })
+                        Served.TryAdd(key, at);
+                }
             }
         }
 
@@ -651,11 +662,20 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
     {
         var lastFull = await LastFullReconcileAsync(cancellationToken);
         return lastFull is { } last && last <= now && now - last < FullReconcileEvery
-            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime) { Served = [] }
-            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime) { Served = [] };
+            ? new RecentRecords<Treatment>(crawlFrom - RecentReconcileWindow, Full: false, TreatmentTime, TreatmentKeys)
+            : new RecentRecords<Treatment>(now - FullReconcileWindow, Full: true, TreatmentTime, TreatmentKeys);
     }
 
     private static DateTime? TreatmentTime(Treatment treatment) => ParseCreatedAt(treatment.CreatedAt)?.UtcDateTime;
+
+    /// <summary>
+    ///     The keys a stored treatment can be matched to its served document by: its <c>_id</c>, its
+    ///     uploader's <c>id</c>, and the <c>identifier</c> write-back gave it, which is where a treatment
+    ///     Nocturne wrote back and stores under that key is recognised although the source gave it an
+    ///     <c>_id</c> of its own.
+    /// </summary>
+    private static IEnumerable<string?> TreatmentKeys(Treatment treatment) =>
+        [treatment.Id, TreatmentClientId.Of(treatment), treatment.UpstreamIdentifier];
 
     /// <summary>
     ///     Catches up on what the event-time crawl cannot see, from the treatments the crawl's own read
@@ -680,21 +700,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
         if (!republished.Success)
             return republished;
 
-        var read = new Dictionary<string, DateTime>();
-        foreach (var treatment in recent.Records.Where(t => t.Id is { Length: > 0 }))
-        {
-            if (TreatmentTime(treatment) is not { } at)
-                continue;
-
-            read.TryAdd(treatment.Id!, at);
-            if (TreatmentClientId.Of(treatment) is { Length: > 0 } clientId)
-                read.TryAdd(clientId, at);
-            if (treatment.UpstreamIdentifier is { Length: > 0 } identifier)
-                read.TryAdd(identifier, at);
-        }
-
         // Not a publish: the delete pass reads and removes stored rows, which no route covers.
-        await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, read, cancellationToken);
+        await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, recent.Served, cancellationToken);
 
         return republished;
     }
@@ -709,9 +716,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
     ///     <see cref="MaxLookupsPerSync"/> or <see cref="FewMissing"/> allow.
     /// </summary>
     /// <param name="read">
-    ///     The ids, client ids and identifiers the read returned, each with its created_at. The
-    ///     identifier is where write-back put a record's own key, so a treatment Nocturne wrote back
-    ///     and stores under that key is recognised although the source gave it an <c>_id</c> of its own.
+    ///     The keys the read returned (<see cref="TreatmentKeys"/>), each with its created_at, as
+    ///     <see cref="RecentRecords{T}.Served"/> holds them.
     /// </param>
     private async Task DeleteTreatmentsGoneUpstreamAsync(
         ITreatmentPublisher treatments,
@@ -797,8 +803,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
     ///     an ObjectId is therefore looked up by <c>id</c>. Asking for it by <c>_id</c> is an error on
     ///     Nightscout releases that cast the value to an ObjectId. An ObjectId-shaped id is looked up by
     ///     <c>_id</c> and then by <c>id</c>. Either is then looked up by <c>identifier</c>, where
-    ///     write-back put the key of a treatment Nocturne stores under it (see the <c>read</c> of
-    ///     <see cref="DeleteTreatmentsGoneUpstreamAsync"/>), in one query: as it is, and as
+    ///     write-back put the key of a treatment Nocturne stores under it (see
+    ///     <see cref="TreatmentKeys"/>), in one query: as it is, and as
     ///     <see cref="MongoObjectId.Coerce"/> of it, the uuid prefix or hash write-back has created under
     ///     since. A row relabelled to the connector still holds the key it was stored under before. None
     ///     of these fields is indexed, so the lookup is bounded to the
