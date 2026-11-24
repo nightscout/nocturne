@@ -25,7 +25,8 @@ internal sealed class FakeGitHub : HttpMessageHandler
 
     public List<Recorded> Requests { get; } = [];
 
-    public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 11, 16, 9, 0, 0, TimeSpan.Zero));
+    /// <summary>Starts at the real time: <see cref="AppBuildInstallState"/>'s protector checks its expiry against the system clock.</summary>
+    public FakeTimeProvider Time { get; } = new(DateTimeOffset.UtcNow);
 
     public RSA Key { get; } = RSA.Create(2048);
 

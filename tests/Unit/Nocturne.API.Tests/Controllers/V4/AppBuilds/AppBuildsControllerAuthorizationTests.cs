@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.AppBuilds;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -32,7 +33,7 @@ public class AppBuildsControllerAuthorizationTests
     public async Task A_member_without_tenant_settings_is_refused()
     {
         (await Authorize(Caller(AuthType.SessionCookie, [Scope.GlucoseRead, Scope.TreatmentsReadWrite])))
-            .Should().BeOfType<ForbidResult>();
+            .Should().BeOfType<ScopeForbiddenResult>();
     }
 
     [Theory]

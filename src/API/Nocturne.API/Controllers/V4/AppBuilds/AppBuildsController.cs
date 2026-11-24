@@ -29,6 +29,8 @@ namespace Nocturne.API.Controllers.V4.AppBuilds;
 [ApiController, Authorize]
 [RequireScope(Scope.TenantSettings), DenyDemoSubject, RequireInteractiveSession, RefuseHistoryClamped]
 [Route("api/v4/app-builds")]
+[Tags("TenantAdmin")]
+[ErrorEnvelope]
 [ProducesResponseType(typeof(ProblemDetails), 400)]
 [ProducesResponseType(typeof(ProblemDetails), 403)]
 [ProducesResponseType(typeof(ProblemDetails), 404)]
