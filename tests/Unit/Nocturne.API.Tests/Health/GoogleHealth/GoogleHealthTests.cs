@@ -65,7 +65,7 @@ public class GoogleHealthTests : IDisposable
         db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
         {
             Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-            SyncCursorsJson = "{\"googleHealthProgress\":" + progress + "}"
+            VendorStateJson = "{\"googleHealthProgress\":" + progress + "}"
         });
         await db.SaveChangesAsync();
         var services = new ServiceCollection();

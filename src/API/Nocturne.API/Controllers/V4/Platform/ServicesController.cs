@@ -535,12 +535,13 @@ public class ServicesController : ControllerBase
     /// Re-ingested records are deduplicated. The request runs synchronously: a full-history re-pull can take minutes and may exceed proxy or browser timeouts, so limit it with <c>from</c> or <c>dataTypes</c>.
     /// </summary>
     /// <remarks>
-    /// Nocturne does not persist a sync cursor — each data type resumes from the latest record
-    /// already stored. This endpoint forces a fresh ingest of history by running an explicit-range
-    /// sync (an upper bound of "now" bypasses the per-type catch-up cursors), so the effect is a
-    /// cursor reset. Re-ingested records are deduplicated on their idempotency keys (see the
-    /// "Syncing" guide), so it is safe to run after fixing a connector bug to push corrected data
-    /// to a tenant.
+    /// The connector re-pulls the window up to now. Once it has signed in to its source, it
+    /// forgets how far earlier syncs reached in each data type it re-pulls, and the sync schedule
+    /// of those types. It keeps the record of older history an earlier import has still to fetch,
+    /// so that import continues after the reset, and it keeps its vendor state. A reset whose
+    /// sign-in is refused changes nothing. Re-ingested records are deduplicated on their
+    /// idempotency keys (see the "Syncing" guide), so it is safe to run after fixing a connector
+    /// bug to push corrected data to a tenant.
     ///
     /// <para><b>Latency:</b> this runs synchronously. A full-history re-pull with no lower bound
     /// re-ingests every data type over the connector's entire history (glucose can be tens of
@@ -581,15 +582,8 @@ public class ServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(id))
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
 
-        // Setting To forces "explicit range" mode in the connectors, bypassing the per-type
-        // catch-up cursors so history is genuinely re-pulled rather than resumed from the latest
-        // stored record. A null From means no lower bound — re-pull everything available.
-        var syncRequest = new Nocturne.Connectors.Core.Models.SyncRequest
-        {
-            From = request.From,
-            To = DateTime.UtcNow,
-            DataTypes = request.DataTypes ?? [],
-        };
+        var syncRequest = Nocturne.Connectors.Core.Models.SyncRequest.Reset(
+            request.From, DateTime.UtcNow, request.DataTypes);
 
         if (syncRequest.WindowError() is { } windowError)
             return Problem(detail: windowError, statusCode: 400, title: "Bad Request");

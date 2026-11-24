@@ -487,7 +487,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             seed.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
             {
                 Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-                SyncCursorsJson = "{\"progress\":{\"kept\":true}}"
+                VendorStateJson = "{\"progress\":{\"kept\":true}}"
             });
             await seed.SaveChangesAsync();
         }
@@ -561,7 +561,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             """);
         await coordinator.CompleteAsync(tenantId);
         db.ChangeTracker.Clear();
-        Assert.Equal("{}", await db.ConnectorConfigurations.Select(row => row.SyncCursorsJson).SingleAsync());
+        Assert.Equal("{}", await db.ConnectorConfigurations.Select(row => row.VendorStateJson).SingleAsync());
     }
 
     private async Task SeedConnectorAsync(string cursorJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}")
@@ -571,7 +571,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
         {
             Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-            SyncCursorsJson = cursorJson
+            VendorStateJson = cursorJson
         });
         await db.SaveChangesAsync();
     }

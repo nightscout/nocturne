@@ -8,6 +8,9 @@ public interface IConnectorPublisher
     IDevicePublisher Device { get; }
     IMetadataPublisher Metadata { get; }
 
+    /// <summary>The state the publishing connector keeps between runs.</summary>
+    IConnectorStateStore State { get; }
+
     /// <summary>
     /// Records this publisher's scope has left unwritten so far because the user had deleted them.
     /// Cumulative, so a run reads the difference across itself.

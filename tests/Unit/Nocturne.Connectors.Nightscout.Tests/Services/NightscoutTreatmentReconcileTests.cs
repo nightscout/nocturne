@@ -10,6 +10,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
@@ -211,6 +212,53 @@ public class NightscoutTreatmentReconcileTests
         harness.FullReconcileRecorded.Should().Equal(Now.UtcDateTime);
     }
 
+    private static readonly List<SyncDataType> EveryTreatmentType =
+    [
+        SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
+        SyncDataType.BolusCalculations, SyncDataType.Notes, SyncDataType.DeviceEvents,
+    ];
+
+    /// <summary>
+    /// A reset of every treatment type forgets the last full reconcile, so the catch-up after it
+    /// reconciles in full however recent the last one was. The reset run itself is bounded and
+    /// reconciles nothing.
+    /// </summary>
+    [Fact]
+    public async Task The_catch_up_after_a_reset_reconciles_in_full_whenever_the_last_reconcile_was()
+    {
+        var harness = new Harness
+        {
+            LastFullReconcile = Now.UtcDateTime.AddMinutes(-20),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+        };
+
+        await harness.SyncAsync(SyncRequest.Reset(Now.UtcDateTime.AddMinutes(-5), Now.UtcDateTime, EveryTreatmentType));
+        harness.FullReconcileRecorded.Should().Equal([(DateTime?)null], "the reset removed the stamp");
+        await harness.SyncAsync();
+
+        harness.FullReconcileRecorded.Should().Equal(null, Now.UtcDateTime);
+    }
+
+    /// <summary>
+    /// The reconcile stamp schedules every treatment type, so a reset of only some of them keeps it
+    /// and the catch-up after it reconciles as it would have.
+    /// </summary>
+    [Fact]
+    public async Task A_reset_of_one_treatment_type_keeps_the_last_full_reconcile()
+    {
+        var harness = new Harness
+        {
+            LastFullReconcile = Now.UtcDateTime.AddMinutes(-20),
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-30))],
+        };
+
+        await harness.SyncAsync(SyncRequest.Reset(Now.UtcDateTime.AddMinutes(-5), Now.UtcDateTime, [SyncDataType.CarbIntake]));
+        await harness.SyncAsync();
+
+        harness.FullReconcileRecorded.Should().BeEmpty("the reset kept the stamp and the catch-up ran no full reconcile");
+        harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-5), "a full reconcile reads back 25 hours");
+    }
+
     [Fact]
     public async Task Between_full_reconciles_the_window_comes_from_the_crawls_own_download()
     {
@@ -397,6 +445,8 @@ public class NightscoutTreatmentReconcileTests
         public bool ReadFails { get; init; }
         public bool LookupFails { get; init; }
         public bool LookupFindsNothing { get; init; }
+        private const string FullReconcileKey = "TreatmentsFullReconcile";
+
         public DateTime? LastFullReconcile { get; init; }
         public int? Written { get; init; }
 
@@ -408,6 +458,27 @@ public class NightscoutTreatmentReconcileTests
         public List<string> Lookups { get; } = [];
         public List<string> LookupUrls { get; } = [];
         public List<DateTime?> FullReconcileRecorded { get; } = [];
+
+        /// <summary>The connector's state, kept across this harness's runs; seeded on first use.</summary>
+        private InMemoryConnectorStateStore State => _state ??= NewState();
+
+        private InMemoryConnectorStateStore? _state;
+
+        private InMemoryConnectorStateStore NewState()
+        {
+            InMemoryConnectorStateStore state = null!;
+            state = new InMemoryConnectorStateStore
+            {
+                OnWrite = key =>
+                {
+                    if (key == FullReconcileKey)
+                        FullReconcileRecorded.Add(state.Resume.TryGetValue(key, out var at) ? at : null);
+                },
+            };
+            if (LastFullReconcile is { } last)
+                state.Resume[FullReconcileKey] = last;
+            return state;
+        }
         public int TreatmentReads { get; private set; }
         public DateTime? CrawlLowerBound { get; private set; }
 
@@ -491,22 +562,8 @@ public class NightscoutTreatmentReconcileTests
             publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
             publisher.Setup(p => p.Treatments).Returns(treatments.Object);
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
-            var metadata = new Mock<IMetadataPublisher>();
-            metadata
-                .Setup(m => m.GetBackfillLowWaterMarksAsync(Source, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => LastFullReconcile is { } at
-                    ? new Dictionary<string, DateTime> { ["TreatmentsFullReconcile"] = at }
-                    : new Dictionary<string, DateTime>());
-            metadata
-                .Setup(m => m.SetBackfillLowWaterMarksAsync(
-                    Source, It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
-                .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
-                {
-                    if (changes.TryGetValue("TreatmentsFullReconcile", out var at))
-                        FullReconcileRecorded.Add(at);
-                })
-                .Returns(Task.CompletedTask);
-            publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+            publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+            publisher.Setup(p => p.State).Returns(State);
 
             var registration = new Mock<IConnectorRegistration<NightscoutConnectorConfiguration>>();
             registration.Setup(r => r.Defaults).Returns(new NightscoutConnectorConfiguration());

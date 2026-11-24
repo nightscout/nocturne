@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 
@@ -63,17 +64,6 @@ public class NightscoutPerTypeCursorTests
         var metadata = new Mock<IMetadataPublisher>();
         metadata.Setup(p => p.GetLatestActivityTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestActivity);
-        var marks = new Dictionary<string, DateTime>();
-        metadata.Setup(p => p.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new Dictionary<string, DateTime>(marks));
-        metadata.Setup(p => p.SetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, DateTime?>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, IReadOnlyDictionary<string, DateTime?>, CancellationToken>((_, changes, _) =>
-            {
-                foreach (var (key, mark) in changes)
-                    if (mark is { } at) marks[key] = at;
-                    else marks.Remove(key);
-            })
-            .Returns(Task.CompletedTask);
 
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
@@ -81,6 +71,7 @@ public class NightscoutPerTypeCursorTests
         publisher.Setup(p => p.Treatments).Returns(treatments.Object);
         publisher.Setup(p => p.Device).Returns(device.Object);
         publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+        publisher.Setup(p => p.State).Returns(new InMemoryConnectorStateStore());
 
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri(config.Url) };
 

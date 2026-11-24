@@ -9,21 +9,18 @@ public class FullWalkScheduleTests
     private static readonly DateTimeOffset Now = new(2026, 9, 9, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Interval = TimeSpan.FromDays(1);
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not a timestamp")]
-    public void IsDue_WalksWhenNoWalkHasEverCompleted(string? stamp)
+    [Fact]
+    public void IsDue_WalksWhenNoWalkHasEverCompleted()
     {
-        FullWalkSchedule.IsDue(stamp, Interval, Now).Should().BeTrue();
+        FullWalkSchedule.IsDue(null, Interval, Now).Should().BeTrue();
     }
 
     [Fact]
     public void IsDue_SkipsTheWalkUntilTheIntervalHasElapsed()
     {
-        var justNow = FullWalkSchedule.Stamp(Now.AddMinutes(-30));
-        var onTheInterval = FullWalkSchedule.Stamp(Now - Interval);
-        var oneMinuteShort = FullWalkSchedule.Stamp(Now - Interval + TimeSpan.FromMinutes(1));
+        var justNow = Now.AddMinutes(-30).UtcDateTime;
+        var onTheInterval = (Now - Interval).UtcDateTime;
+        var oneMinuteShort = (Now - Interval + TimeSpan.FromMinutes(1)).UtcDateTime;
 
         FullWalkSchedule.IsDue(justNow, Interval, Now).Should().BeFalse();
         FullWalkSchedule.IsDue(oneMinuteShort, Interval, Now).Should().BeFalse();
@@ -33,20 +30,16 @@ public class FullWalkScheduleTests
     [Fact]
     public void IsDue_WalksWhenTheStoredTimeIsInTheFuture()
     {
-        var ahead = FullWalkSchedule.Stamp(Now.AddDays(3));
-
-        FullWalkSchedule.IsDue(ahead, Interval, Now).Should().BeTrue();
+        FullWalkSchedule.IsDue(Now.AddDays(3).UtcDateTime, Interval, Now).Should().BeTrue();
     }
 
     [Fact]
-    public void Stamp_RoundTripsThroughIsDueWithTheInstantIntact()
+    public void IsDue_ReadsAStoredTimeAsUtcWhateverItsKind()
     {
-        // A stamp in another zone still compares as the instant it names.
-        var completedAt = new DateTimeOffset(2026, 9, 9, 22, 0, 0, TimeSpan.FromHours(10));
-        var stamp = FullWalkSchedule.Stamp(completedAt);
+        var unspecified = DateTime.SpecifyKind(Now.AddMinutes(-30).UtcDateTime, DateTimeKind.Unspecified);
+        var tenHoursAhead = new DateTimeOffset(2026, 9, 9, 22, 0, 0, TimeSpan.FromHours(10));
 
-        stamp.Should().Be("2026-09-09T22:00:00.0000000+10:00");
-        FullWalkSchedule.IsDue(stamp, Interval, Now).Should().BeFalse("12:00Z is the same instant, not a day later");
-        FullWalkSchedule.IsDue(stamp, Interval, Now.AddDays(1)).Should().BeTrue();
+        FullWalkSchedule.IsDue(unspecified, Interval, tenHoursAhead).Should().BeFalse(
+            "11:30 stored without a kind is 11:30Z, half an hour before 22:00+10:00");
     }
 }

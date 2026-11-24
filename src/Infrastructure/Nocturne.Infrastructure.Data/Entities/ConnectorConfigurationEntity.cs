@@ -125,20 +125,19 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     public bool IsHealthy { get; set; } = true;
 
     /// <summary>
-    /// Per-resource incremental-sync cursors as a JSON object keyed by resource name
-    /// (e.g. <c>{"cgm/egvs":{"lastUpdatedAt":"...","lastGuid":"..."}}</c>). Connector runtime state,
-    /// written after each successful sync; null until a connector runs its first cursor-based sync.
+    /// The connector's vendor state (<c>ConnectorStateSlots.Vendor</c>): a JSON object of values the
+    /// connector names and the base does not interpret, such as a vendor's scan cursors. The column
+    /// keeps its earlier name so an older image still reads the table.
     /// </summary>
     [Column("sync_cursors", TypeName = "jsonb")]
-    public string? SyncCursorsJson { get; set; }
+    public string? VendorStateJson { get; set; }
 
     /// <summary>
-    /// Per-collection backfill low-water marks, serialized as a JSON map of collection key
-    /// (e.g. "Glucose") to the oldest successfully published record time. A key means an
-    /// earlier backfill crawl of that collection stopped before reaching the source's
-    /// beginning; the connector resumes below the mark on its next sync. Runtime sync state
-    /// like <see cref="LastSuccessfulSync"/> — never part of the user-editable configuration.
+    /// The connector's resume state (<c>ConnectorStateSlots.Resume</c>): a JSON map of named UTC times,
+    /// the connector's schedule stamps and the base's crawl marks. Runtime sync state like
+    /// <see cref="LastSuccessfulSync"/>, never part of the user-editable configuration. The column
+    /// keeps its earlier name so an older image still reads the table.
     /// </summary>
     [Column("backfill_low_water_marks", TypeName = "jsonb")]
-    public string? BackfillLowWaterMarks { get; set; }
+    public string? ResumeStateJson { get; set; }
 }

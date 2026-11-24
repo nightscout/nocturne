@@ -121,25 +121,4 @@ public interface IMetadataPublisher
     Task<DateTime?> GetLatestStateSpanTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Reads <paramref name="source"/>'s persisted crawl state: a map of named times that a
-    /// connector's crawls keep across runs (see
-    /// <see cref="Services.BaseConnectorService{TConfig}.CrawlAndPublishAsync{T}"/>). Empty when
-    /// none is held.
-    /// </summary>
-    /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
-    Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(
-        string source,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Applies <paramref name="changes"/> to <paramref name="source"/>'s crawl state in one write:
-    /// a key with a time is stored, a key with <c>null</c> removed, and every other key kept.
-    /// </summary>
-    /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
-    Task SetBackfillLowWaterMarksAsync(
-        string source,
-        IReadOnlyDictionary<string, DateTime?> changes,
-        CancellationToken cancellationToken = default);
 }

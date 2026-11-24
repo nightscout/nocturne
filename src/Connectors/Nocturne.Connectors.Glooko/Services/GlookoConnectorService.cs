@@ -28,7 +28,6 @@ public class GlookoConnectorService
     private readonly IMealMatchLinker? _mealMatchLinker;
     private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly IDeviceClockService? _deviceClockService;
-    private readonly IConnectorSyncCursorStore? _cursorStore;
     private readonly ILogger<GlookoConnectorService> _glookoLogger;
     private readonly TimeSpan _endpointPause;
 
@@ -46,7 +45,6 @@ public class GlookoConnectorService
         IMealMatchLinker? mealMatchLinker = null,
         ITimezoneTimelineService? timezoneTimelineService = null,
         IDeviceClockService? deviceClockService = null,
-        IConnectorSyncCursorStore? cursorStore = null,
         TimeProvider? timeProvider = null,
         TimeSpan? endpointPause = null
     )
@@ -55,7 +53,6 @@ public class GlookoConnectorService
         _mealMatchLinker = mealMatchLinker;
         _timezoneTimelineService = timezoneTimelineService;
         _deviceClockService = deviceClockService;
-        _cursorStore = cursorStore;
         _endpointPause = endpointPause ?? DefaultEndpointPause;
         _glookoLogger = logger;
     }
@@ -417,15 +414,22 @@ public class GlookoConnectorService
         }
     }
 
+    /// <remarks>The schedule's stamps choose the window of every type a scheduled run reads.</remarks>
+    protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps =>
+        new Dictionary<string, IReadOnlyCollection<SyncDataType>>
+        {
+            [GlookoConstants.FullWalkStamp] = SupportedDataTypes,
+            [GlookoConstants.FullWalkAttemptStamp] = SupportedDataTypes,
+            [GlookoConstants.LookbackReadStamp] = SupportedDataTypes,
+        };
+
     /// <summary>
-    ///     What the scheduled run's window reads: SSV2's glucose point, or, without a cursor store,
-    ///     the glucose and treatment points <see cref="RunScheduledAsync"/> starts from. A tiered
-    ///     window and a caller's bound read none.
+    ///     What the scheduled run's window reads: SSV2's glucose point. A tiered window and a caller's
+    ///     bound read none.
     /// </summary>
     protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, GlookoConnectorConfiguration config) =>
         !request.Resume.Scheduled ? []
         : config.UseSsv2Sync ? WindowResumesFrom(request, ResumeFamily.Glucose)
-        : _cursorStore is null ? [ResumeFamily.Glucose, ResumeFamily.Treatments]
         : [];
 
     /// <summary>
@@ -446,10 +450,7 @@ public class GlookoConnectorService
     ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
     ///     <para>
     ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
-    ///     so it takes the base's points. A service without a cursor store has nowhere to remember a
-    ///     walk, so it resumes instead, from the oldest of the glucose and treatment resume points:
-    ///     every family is fetched inside the one window, and the glucose point alone would leave
-    ///     treatments that a failed chunk never published below every later run's bound.
+    ///     so it takes the base's points.
     ///     </para>
     /// </remarks>
     protected override async Task<SyncResult> RunScheduledAsync(
@@ -460,11 +461,6 @@ public class GlookoConnectorService
     {
         if (config.UseSsv2Sync)
             return await run(resume);
-
-        if (_cursorStore is null)
-            return await run(resume.StartingAt(ResumeFrom(
-                resume.Point(ResumeFamily.Glucose),
-                resume.Point(ResumeFamily.Treatments))));
 
         var now = Clock.GetUtcNow().UtcDateTime;
         var tier = await ResolveWindowTierAsync(now, cancellationToken);
@@ -480,16 +476,16 @@ public class GlookoConnectorService
             ConnectorSource, from, tier);
 
         if (tier == WindowTier.FullWalk)
-            await RecordStampAsync(GlookoConstants.FullWalkAttemptCursorResource, now, cancellationToken);
+            await RecordStampAsync(GlookoConstants.FullWalkAttemptStamp, now, cancellationToken);
 
         var result = await run(resume.StartingAt(from));
 
         if (result.Success)
         {
             if (tier == WindowTier.FullWalk)
-                await RecordStampAsync(GlookoConstants.FullWalkCursorResource, now, cancellationToken);
+                await RecordStampAsync(GlookoConstants.FullWalkStamp, now, cancellationToken);
             if (tier != WindowTier.Short)
-                await RecordStampAsync(GlookoConstants.LookbackReadCursorResource, now, cancellationToken);
+                await RecordStampAsync(GlookoConstants.LookbackReadStamp, now, cancellationToken);
         }
 
         return result;
@@ -513,19 +509,16 @@ public class GlookoConnectorService
     {
         try
         {
-            var completed = await _cursorStore!.GetAsync(
-                ServiceName, GlookoConstants.FullWalkCursorResource, cancellationToken);
-            if (FullWalkSchedule.IsDue(completed?.LastUpdatedAt, GlookoConstants.FullWalkInterval, now))
+            var completed = await ResumeStampAsync(GlookoConstants.FullWalkStamp, cancellationToken);
+            if (FullWalkSchedule.IsDue(completed, GlookoConstants.FullWalkInterval, now))
             {
-                var attempted = await _cursorStore.GetAsync(
-                    ServiceName, GlookoConstants.FullWalkAttemptCursorResource, cancellationToken);
-                if (FullWalkSchedule.IsDue(attempted?.LastUpdatedAt, GlookoConstants.FullWalkRetryInterval, now))
+                var attempted = await ResumeStampAsync(GlookoConstants.FullWalkAttemptStamp, cancellationToken);
+                if (FullWalkSchedule.IsDue(attempted, GlookoConstants.FullWalkRetryInterval, now))
                     return WindowTier.FullWalk;
             }
 
-            var lookback = await _cursorStore.GetAsync(
-                ServiceName, GlookoConstants.LookbackReadCursorResource, cancellationToken);
-            return FullWalkSchedule.IsDue(lookback?.LastUpdatedAt, GlookoConstants.LookbackReadInterval, now)
+            var lookback = await ResumeStampAsync(GlookoConstants.LookbackReadStamp, cancellationToken);
+            return FullWalkSchedule.IsDue(lookback, GlookoConstants.LookbackReadInterval, now)
                 ? WindowTier.Lookback
                 : WindowTier.Short;
         }
@@ -538,23 +531,20 @@ public class GlookoConnectorService
     }
 
     /// <summary>
-    ///     Stamps <paramref name="resource"/> with <paramref name="at"/>. A store that cannot be
+    ///     Stamps <paramref name="stamp"/> with <paramref name="at"/>. A store that cannot be
     ///     written does not fail the sync; while it stays unwritable the schedule cannot remember the
     ///     read it stamps and every scheduled run repeats it, which is what the warning is for.
     /// </summary>
-    private async Task RecordStampAsync(string resource, DateTime at, CancellationToken cancellationToken)
+    private async Task RecordStampAsync(string stamp, DateTime at, CancellationToken cancellationToken)
     {
         try
         {
-            await _cursorStore!.SetAsync(
-                ServiceName, resource,
-                new ConnectorSyncCursor(FullWalkSchedule.Stamp(new DateTimeOffset(at, TimeSpan.Zero)), null),
-                cancellationToken);
+            await SetResumeStampAsync(stamp, at, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex,
-                "[{ConnectorSource}] Could not record the sync stamp ({Resource})", ConnectorSource, resource);
+                "[{ConnectorSource}] Could not record the sync stamp ({Stamp})", ConnectorSource, stamp);
         }
     }
 
@@ -1099,8 +1089,8 @@ public class GlookoConnectorService
     {
         EnsureAuthenticatedAndGetCode(context);
 
-        var stored = incremental && _cursorStore != null
-            ? await _cursorStore.GetAsync(ServiceName, resource)
+        var stored = incremental
+            ? await VendorStateAsync<GlookoSsv2Cursor>(resource, context.CancellationToken)
             : null;
 
         var initialUpdatedAt = stored?.LastUpdatedAt ?? GlookoConstants.Ssv2InitialLastUpdatedAt;
@@ -1147,9 +1137,8 @@ public class GlookoConnectorService
 
         // Held for incremental scans only, and only when the cursor actually advanced from where this
         // run started (so a no-op pass never rewrites the stored watermark or the epoch default).
-        if (incremental && _cursorStore != null
-            && (lastUpdatedAt != initialUpdatedAt || lastGuid != initialGuid))
-            context.PendingSsv2Cursors[resource] = new ConnectorSyncCursor(lastUpdatedAt, lastGuid);
+        if (incremental && (lastUpdatedAt != initialUpdatedAt || lastGuid != initialGuid))
+            context.PendingSsv2Cursors[resource] = new GlookoSsv2Cursor(lastUpdatedAt, lastGuid);
 
         _logger.LogInformation("[{ConnectorSource}] SSV2 {Resource} fetched {Count} records (incremental={Incremental})",
             ConnectorSource, resource, all.Count, incremental);
@@ -1164,12 +1153,12 @@ public class GlookoConnectorService
     private async Task CommitSsv2CursorsAsync(
         GlookoSyncContext context, bool landed, params string[] resources)
     {
-        if (!landed || _cursorStore is null) return;
+        if (!landed) return;
 
         foreach (var resource in resources)
         {
             if (context.PendingSsv2Cursors.Remove(resource, out var cursor))
-                await _cursorStore.SetAsync(ServiceName, resource, cursor);
+                await SetVendorStateAsync(resource, cursor, context.CancellationToken);
         }
     }
 

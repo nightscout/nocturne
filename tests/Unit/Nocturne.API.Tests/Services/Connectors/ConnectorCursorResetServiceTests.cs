@@ -98,6 +98,7 @@ public class ConnectorCursorResetServiceTests
         captured.Should().OnlyContain(c => c.Request.To == time.GetUtcNow().UtcDateTime);
         captured.Should().OnlyContain(c => c.Request.From == from);
         captured.Should().OnlyContain(c => c.Request.DataTypes.Contains(SyncDataType.Boluses));
+        captured.Should().OnlyContain(c => c.Request.IsReset, "each sync clears the connector's state before it reads");
 
         // The scope was opened on the target tenant by the caller; the engine leaves it there.
         tenantAccessor.Verify(a => a.SetTenant(It.IsAny<TenantContext>()), Times.Never);

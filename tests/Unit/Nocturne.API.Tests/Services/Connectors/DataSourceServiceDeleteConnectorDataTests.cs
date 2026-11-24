@@ -80,6 +80,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _ = typeof(NightscoutConnectorConfiguration);
         _ = typeof(GoogleHealthConnectorConfiguration);
         _ = typeof(GlookoConnectorConfiguration);
+        _ = typeof(Nocturne.Connectors.Tandem.Configurations.TandemConnectorConfiguration);
         _deviceId = ConnectorMetadataService.GetByConnectorId(ConnectorId)?.DataSourceId
             ?? throw new InvalidOperationException("Nightscout connector metadata failed to load");
 
@@ -550,7 +551,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     /// <summary>
     /// A connector keeps crawl state beside its configuration — among it how far its crawls reached,
     /// which outranks an empty store as a resume point. Left behind by a purge, it would answer the
-    /// promised re-import with only what arrived since.
+    /// promised re-import with only what arrived since. The vendor state goes for the same reason.
     /// </summary>
     [Fact]
     public async Task DeleteConnectorData_AllowingReimport_LeavesTheNextSyncToCrawlTheWholeHistory()
@@ -562,11 +563,12 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
                 Id = Guid.CreateVersion7(),
                 TenantId = TenantId,
                 ConnectorName = ConnectorId,
-                BackfillLowWaterMarks = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, DateTime>
+                ResumeStateJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, DateTime>
                 {
                     ["DeviceStatus.Through"] = DateTime.UtcNow.AddHours(-1),
                     ["DeviceStatus"] = DateTime.UtcNow.AddYears(-1),
                 }),
+                VendorStateJson = """{"kept":"value"}""",
             });
             await seed.SaveChangesAsync();
         }
@@ -578,25 +580,85 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
                 .Success.Should().BeTrue();
 
         (await DeviceStatusCrawlAsync()).Should().NotContain("$gte");
+        await using (var read = NewContext())
+            (await read.ConnectorConfigurations.SingleAsync(c => c.ConnectorName == ConnectorId))
+                .VendorStateJson.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Glooko's SSV2 positions and Tandem's published-profile fingerprints live in the vendor state.
+    /// A purge that allows re-import clears it, so the next sync reads each SSV2 resource from the
+    /// start and publishes the profile again (pinned by <c>GlookoSsv2SyncTests</c> and
+    /// <c>TandemE2eSyncTests</c> over a cleared state); one that does not keeps it.
+    /// </summary>
+    [Theory]
+    [InlineData("glooko", "Glooko", true)]
+    [InlineData("glooko", "Glooko", false)]
+    [InlineData("tandem", "Tandem", true)]
+    [InlineData("tandem", "Tandem", false)]
+    public async Task DeleteConnectorData_ClearsTheVendorStateOnlyWhenItAllowsReimport(
+        string row, string connector, bool allowReimport)
+    {
+        await SeedStateAsync(row);
+
+        await using (var ctx = NewContext())
+            (await CreateService(ctx).DeleteConnectorDataAsync(connector, allowReimport)).Success.Should().BeTrue();
+
+        await using var read = NewContext();
+        var stored = await read.ConnectorConfigurations.SingleAsync(c => c.ConnectorName == row);
+        stored.ResumeStateJson.Should().BeNull();
+        stored.VendorStateJson.Should().Be(allowReimport ? null : VendorState);
+    }
+
+    /// <summary>
+    /// GoogleHealth's vendor state also holds its sync coordinator's progress and disconnect keys, so
+    /// no purge clears it.
+    /// </summary>
+    [Fact]
+    public async Task DeleteConnectorData_GoogleHealth_AllowingReimport_KeepsItsVendorState()
+    {
+        await SeedStateAsync("googlehealth");
+
+        await using (var ctx = NewContext())
+            (await CreateService(ctx, [GoogleHealthSleepPurge().Object], GoogleHealthGuard(InMemoryGoogleHealthCoordinator.Create()))
+                .DeleteConnectorDataAsync(GoogleHealthConnectorService.ConnectorName, allowReimport: true))
+                .Success.Should().BeTrue();
+
+        await using var read = NewContext();
+        var stored = await read.ConnectorConfigurations.SingleAsync(c => c.ConnectorName == "googlehealth");
+        stored.ResumeStateJson.Should().BeNull();
+        stored.VendorStateJson.Should().Be(VendorState);
+    }
+
+    private const string VendorState = """{"kept":"value"}""";
+
+    private async Task SeedStateAsync(string row)
+    {
+        await using var seed = NewContext();
+        seed.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            ConnectorName = row,
+            ResumeStateJson = """{"full-walk":"2026-11-20T03:04:05Z"}""",
+            VendorStateJson = VendorState,
+        });
+        await seed.SaveChangesAsync();
     }
 
     /// <summary>The device-status request a Nightscout sync makes over the crawl state stored here.</summary>
     private async Task<string> DeviceStatusCrawlAsync()
     {
-        var metadata = new Mock<IMetadataPublisher>();
-        metadata
-            .Setup(m => m.GetBackfillLowWaterMarksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(async (string source, CancellationToken ct) =>
-            {
-                await using var ctx = NewContext();
-                return await new ConnectorConfigurationRepository(ctx.AsFactory()).GetBackfillLowWaterMarksAsync(source, ct);
-            });
+        await using var ctx = NewContext();
+        var state = new ConnectorStateStore(
+            new ConnectorConfigurationRepository(ctx.AsFactory()), NullLogger<ConnectorStateStore>.Instance);
         var publisher = new Mock<IConnectorPublisher>();
         publisher.Setup(p => p.IsAvailable).Returns(true);
         publisher.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
         publisher.Setup(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
         publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
-        publisher.Setup(p => p.Metadata).Returns(metadata.Object);
+        publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+        publisher.Setup(p => p.State).Returns(state);
 
         var config = new NightscoutConnectorConfiguration { Url = "https://ns.example", ApiSecret = "secret" };
         var handler = new RecordingHandler();

@@ -14,6 +14,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
 using Nocturne.Connectors.Tandem.Services;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4;
@@ -227,7 +228,7 @@ public class TandemE2eSyncTests
 
         await fixture.RunAsync();
 
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()
             .Should().BeEquivalentTo(new ConnectorTimeZone
             {
@@ -246,7 +247,7 @@ public class TandemE2eSyncTests
         fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
         tenant.Verify(
             t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()
             .Should().BeEquivalentTo(new ConnectorTimeZone
             {
@@ -264,7 +265,7 @@ public class TandemE2eSyncTests
         await fixture.RunAsync();
 
         fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 0, 1, 0));
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()
             .Should().BeEquivalentTo(new ConnectorTimeZone { Id = "UTC", Source = ConnectorTimeZoneSource.Utc });
         logger.Verify(
@@ -306,7 +307,7 @@ public class TandemE2eSyncTests
         pub.DeviceEvents.Single(e => e.EventType == DeviceEventType.CannulaChange)
             .Timestamp.Should().Be(Utc(2026, 5, 16, 7, 14, 9));
         pub.TempBasals[1].EndTimestamp.Should().Be(Utc(2026, 5, 18, 17, 19, 55));
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()
             .Should().BeEquivalentTo(new ConnectorTimeZone
             {
@@ -346,7 +347,7 @@ public class TandemE2eSyncTests
         await fixture.RunAsync();
 
         fixture.Publisher.TempBasals[0].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()!.Source.Should().Be(ConnectorTimeZoneSource.TenantZone);
     }
 
@@ -370,7 +371,7 @@ public class TandemE2eSyncTests
         await fixture.RunAsync();
         await fixture.RunAsync();
 
-        fixture.Cursors.JsonWrites.Should().Be(1);
+        fixture.ZoneWrites.Should().Be(1);
     }
 
     [Fact]
@@ -378,7 +379,7 @@ public class TandemE2eSyncTests
     {
         var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
         await fixture.RunAsync();
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)] =
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey] =
             JsonSerializer.SerializeToNode(new ConnectorTimeZone
             {
                 Id = "America/Chicago", Source = ConnectorTimeZoneSource.TenantZone,
@@ -386,9 +387,32 @@ public class TandemE2eSyncTests
 
         await fixture.RunAsync();
 
-        fixture.Cursors.JsonWrites.Should().Be(2);
-        fixture.Cursors.Json[(TandemConstants.ConnectorName, ConnectorTimeZone.CursorResource)]
+        fixture.ZoneWrites.Should().Be(2);
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
             .Deserialize<ConnectorTimeZone>()!.Id.Should().Be("America/New_York");
+    }
+
+    /// <summary>
+    /// A purge that allows re-import clears the vendor state, the zone in use with it, and the next
+    /// run writes the zone again.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_allowing_reimport_clears_the_zone_and_the_next_run_writes_it_again()
+    {
+        var fixture = new Fixture(timezoneOffset: 0, therapySettings: TenantZone("America/New_York").Object);
+        await fixture.RunAsync();
+
+        await fixture.State.ClearAsync("tconnectsync-connector", ConnectorStateSlots.Vendor);
+        fixture.State.Vendor.Should().NotContainKey(ConnectorTimeZone.VendorStateKey);
+        await fixture.RunAsync();
+
+        fixture.ZoneWrites.Should().Be(2);
+        fixture.State.Vendor[ConnectorTimeZone.VendorStateKey]
+            .Deserialize<ConnectorTimeZone>()
+            .Should().BeEquivalentTo(new ConnectorTimeZone
+            {
+                Id = "America/New_York", Source = ConnectorTimeZoneSource.TenantZone,
+            });
     }
 
     private static Mock<ITherapySettingsResolver> TenantZone(string? zoneId)
@@ -565,6 +589,35 @@ public class TandemE2eSyncTests
             [nameof(SensorGlucose), nameof(Bolus), nameof(CarbIntake), nameof(TempBasal), nameof(DeviceEvent)]);
         store.Offered.Should().BeEquivalentTo(offered.ToDictionary(o => o.Key, o => o.Value * 2));
         store.Unkeyed.Should().BeEmpty();
+        store.Stored.Keys.Should().BeEquivalentTo(stored);
+    }
+
+    /// <summary>
+    /// A reset keeps the vendor state, the published-profile fingerprints and the zone in use, so the
+    /// run after it offers every record of the window again, stores none of them twice and does not
+    /// publish the unchanged profile again.
+    /// </summary>
+    [Fact]
+    public async Task A_reset_run_offers_the_window_again_and_keeps_the_published_profile()
+    {
+        var store = new StoringConnectorPublisher();
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000), publisher: store);
+        var from = Utc(2026, 5, 14, 0, 0, 0);
+        var to = Utc(2026, 5, 18, 23, 59, 59);
+
+        (await fixture.RunAsync(new SyncRequest { From = from, To = to })).Success.Should().BeTrue();
+        var stored = store.Stored.Keys.ToList();
+        var offered = store.Offered;
+        var vendor = ((InMemoryConnectorStateStore)store.State).Vendor.ToDictionary(v => v.Key, v => v.Value.ToJsonString());
+        (await fixture.RunAsync(SyncRequest.Reset(from, to, null))).Success.Should().BeTrue();
+
+        vendor.Keys.Where(key => key.StartsWith("profile:")).Should().ContainSingle();
+        vendor.Keys.Should().Contain(ConnectorTimeZone.VendorStateKey);
+        ((InMemoryConnectorStateStore)store.State).Vendor
+            .ToDictionary(v => v.Key, v => v.Value.ToJsonString())
+            .Should().Equal(vendor);
+        store.Offered.Should().BeEquivalentTo(offered.ToDictionary(
+            o => o.Key, o => o.Key == nameof(Profile) ? o.Value : o.Value * 2));
         store.Stored.Keys.Should().BeEquivalentTo(stored);
     }
 
@@ -841,6 +894,24 @@ public class TandemE2eSyncTests
     }
 
     /// <summary>
+    /// A purge that allows re-import clears the vendor state with the fingerprints in it, so the next
+    /// sync publishes the unchanged settings again in place of the purged profile.
+    /// </summary>
+    [Fact]
+    public async Task Unchanged_pump_settings_are_published_again_after_a_purge_allowing_reimport()
+    {
+        var fixture = new Fixture(PumperWithSettings(basalRate: 1000));
+
+        await fixture.RunAsync(ProfilesOnly);
+        await fixture.Publisher.State.ClearAsync(
+            "tconnectsync-connector", ConnectorStateSlots.Resume | ConnectorStateSlots.Vendor);
+        var result = await fixture.RunAsync(ProfilesOnly);
+
+        fixture.Publisher.Profiles.Should().HaveCount(2);
+        result.ItemsSynced[SyncDataType.Profiles].Should().Be(1);
+    }
+
+    /// <summary>
     /// A scheduled run's window starts at the glucose watermark, so one that cannot be read stops the
     /// run before it asks the pump for anything. A requested run reads it only where it sets its own
     /// window, after the pump's settings are published.
@@ -913,11 +984,11 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
-    public async Task A_cursor_store_that_times_out_still_lets_the_profile_publish()
+    public async Task A_state_store_that_times_out_still_lets_the_profile_publish()
     {
         var fixture = new Fixture(
             PumperWithSettings(basalRate: 1000),
-            cursorStoreOnGet: _ => throw new TaskCanceledException("The store timed out."));
+            stateOnRead: _ => throw new TaskCanceledException("The store timed out."));
 
         var result = await fixture.RunAsync(ProfilesOnly);
 
@@ -926,13 +997,13 @@ public class TandemE2eSyncTests
     }
 
     [Fact]
-    public async Task A_cursor_store_read_cancelled_by_the_run_propagates()
+    public async Task A_state_store_read_cancelled_by_the_run_propagates()
     {
         using var cancellation = new CancellationTokenSource();
         var fixture = new Fixture(
             PumperWithSettings(basalRate: 1000),
             cancellation: cancellation,
-            cursorStoreOnGet: token =>
+            stateOnRead: token =>
             {
                 cancellation.Cancel();
                 token.ThrowIfCancellationRequested();
@@ -1069,38 +1140,6 @@ public class TandemE2eSyncTests
                 new Dictionary<string, string> { [PumperIdKey] = "pumper-1", [AccountIdKey] = "account-1" }));
     }
 
-    private sealed class InMemoryCursorStore(Action<CancellationToken>? onGet = null) : IConnectorSyncCursorStore
-    {
-        private readonly Dictionary<(string, string), ConnectorSyncCursor> _cursors = [];
-        public Dictionary<(string, string), JsonNode> Json { get; } = [];
-        public int JsonWrites { get; private set; }
-
-        public Task<ConnectorSyncCursor?> GetAsync(string connectorName, string resource, CancellationToken cancellationToken = default)
-        {
-            onGet?.Invoke(cancellationToken);
-            return Task.FromResult(_cursors.GetValueOrDefault((connectorName, resource)));
-        }
-
-        public Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
-        {
-            _cursors[(connectorName, resource)] = cursor;
-            return Task.CompletedTask;
-        }
-
-        public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Json.GetValueOrDefault((connectorName, resource)));
-
-        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default)
-        {
-            Json[(connectorName, resource)] = value;
-            JsonWrites++;
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
-
     /// <summary>Records every published record; the Nocturne analog of upstream's FakeNightscout.</summary>
     private sealed class RecordingPublisher(DateTime? latestEntry, DateTime? latestTreatment)
         : IConnectorPublisher, IGlucosePublisher, ITreatmentPublisher, IDevicePublisher, IMetadataPublisher
@@ -1133,6 +1172,7 @@ public class TandemE2eSyncTests
             SystemEvents.Count + Profiles.Count > 0;
 
         public bool IsAvailable => true;
+        public IConnectorStateStore State { get; init; } = new InMemoryConnectorStateStore();
         public IGlucosePublisher Glucose => this;
         public ITreatmentPublisher Treatments => this;
         public IDevicePublisher Device => this;
@@ -1233,10 +1273,6 @@ public class TandemE2eSyncTests
             Task.FromResult<DateTime?>(null);
         public Task<DateTime?> GetLatestStateSpanTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
-        public Task<IReadOnlyDictionary<string, DateTime>> GetBackfillLowWaterMarksAsync(string source, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
-        public Task SetBackfillLowWaterMarksAsync(string source, IReadOnlyDictionary<string, DateTime?> changes, CancellationToken ct = default) =>
-            Task.CompletedTask;
     }
 
     private sealed class Fixture
@@ -1248,7 +1284,11 @@ public class TandemE2eSyncTests
         private readonly Dictionary<string, string> _responses;
         private readonly CancellationTokenSource? _cancellation;
 
-        public InMemoryCursorStore Cursors { get; }
+        /// <summary>The connector's state when the fixture's own publisher is used.</summary>
+        public InMemoryConnectorStateStore State { get; }
+
+        /// <summary>How many times a run wrote the zone in use.</summary>
+        public int ZoneWrites { get; private set; }
 
         public Fixture(
             string pumperJson = PumperJson,
@@ -1259,7 +1299,7 @@ public class TandemE2eSyncTests
             TimeProvider? clock = null,
             string? timesOutOn = null,
             CancellationTokenSource? cancellation = null,
-            Action<CancellationToken>? cursorStoreOnGet = null,
+            Action<CancellationToken>? stateOnRead = null,
             bool watermarksFollowPublishes = false,
             bool glucoseWatermarkFails = false,
             IConnectorPublisher? publisher = null,
@@ -1285,10 +1325,20 @@ public class TandemE2eSyncTests
                 TimeZoneId = timeZoneId,
             };
 
+            State = new InMemoryConnectorStateStore
+            {
+                BeforeRead = stateOnRead,
+                OnWrite = key =>
+                {
+                    if (key == ConnectorTimeZone.VendorStateKey)
+                        ZoneWrites++;
+                },
+            };
             Publisher = new RecordingPublisher(latestEntry, latestTreatment)
             {
                 FollowsPublishes = watermarksFollowPublishes,
                 GlucoseWatermarkFails = glucoseWatermarkFails,
+                State = State,
             };
             _responses = new Dictionary<string, string>
             {
@@ -1304,7 +1354,6 @@ public class TandemE2eSyncTests
                 Mock.Of<IRetryDelayStrategy>(),
                 new FakeTandemAuthTokenProvider(),
                 publisher ?? Publisher,
-                Cursors = new InMemoryCursorStore(cursorStoreOnGet),
                 clock,
                 therapySettings,
                 timezoneTimeline);

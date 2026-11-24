@@ -115,9 +115,17 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         return await RunWithProgressAsync(
             progressReporter,
             cancellationToken,
-            async () => await EnsureAuthenticatedAsync(config, cancellationToken)
-                ? await RunAsync(request.From, request.To, request.DataTypes, scheduled: false, config, cancellationToken)
-                : AuthenticationFailedResult());
+            async () =>
+            {
+                _pendingReset = request.IsReset ? request : null;
+                if (!await EnsureAuthenticatedAsync(config, cancellationToken))
+                    return AuthenticationFailedResult();
+
+                if (SignsInBeforeSync)
+                    await SignedInAsync(config, cancellationToken);
+
+                return await RunAsync(request.From, request.To, request.DataTypes, scheduled: false, config, cancellationToken);
+            });
     }
 
     /// <summary>
@@ -125,6 +133,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     the tenant's configuration in hand. Connectors that must authenticate before they can fetch
     ///     override this rather than an entry point, so a rejected credential still passes through
     ///     <see cref="RunWithProgressAsync"/> and produces the run's one terminal progress message.
+    ///     One that does also sets <see cref="SignsInBeforeSync"/>.
     /// </summary>
     protected virtual Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
@@ -163,7 +172,10 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     )
     {
         _progressReporter = progressReporter;
-        _marks = null;
+        _resumeState = null;
+        _resetCrawled = null;
+        _pendingReset = null;
+        _resumedFrom = null;
         var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         var refusedBefore = _publisher?.Refused ?? 0;
         try

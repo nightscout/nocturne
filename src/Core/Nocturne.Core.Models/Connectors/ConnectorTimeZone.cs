@@ -31,12 +31,12 @@ public enum ConnectorTimeZoneSource
 public class ConnectorTimeZone
 {
     /// <summary>
-    /// Where a connector keeps its <see cref="ConnectorTimeZone"/> among its sync cursors, for the
+    /// The key a connector keeps its <see cref="ConnectorTimeZone"/> under in its vendor state, for the
     /// connection list to read.
     /// </summary>
-    public const string CursorResource = "timeZone";
+    public const string VendorStateKey = "timeZone";
 
-    /// <summary>The zone stored under <see cref="CursorResource"/>, or null when none is stored or it cannot be read.</summary>
+    /// <summary>The zone stored under <see cref="VendorStateKey"/>, or null when none is stored or it cannot be read.</summary>
     public static ConnectorTimeZone? FromStored(JsonNode? stored)
     {
         try { return stored?.Deserialize<ConnectorTimeZone>(); }

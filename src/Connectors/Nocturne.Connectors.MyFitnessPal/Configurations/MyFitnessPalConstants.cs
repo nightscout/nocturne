@@ -80,6 +80,9 @@ public static class MyFitnessPalConstants
     /// </summary>
     public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
 
+    /// <summary>The resume-state key under which the last completed full walk is recorded.</summary>
+    public const string FullWalkStamp = "full-walk";
+
     /// <summary>
     ///     How many consecutive pages lying entirely before the window are read before the walk
     ///     gives up. Pages are ordered by modification rather than diary date, so recently edited

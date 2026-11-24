@@ -49,7 +49,7 @@ public class ConnectorSyncCursorStoreTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = _tenantId,
             ConnectorName = "glooko",
-            SyncCursorsJson = syncCursorsJson,
+            VendorStateJson = syncCursorsJson,
         });
         await db.SaveChangesAsync();
     }
@@ -72,7 +72,7 @@ public class ConnectorSyncCursorStoreTests : IDisposable
         await store.SetAsync("glooko", "other", new(null, "new"));
         (await store.GetAsync("glooko", "health"))!.LastGuid.Should().Be("retained");
         (await store.GetAsync("glooko", "other"))!.LastGuid.Should().Be("new");
-        using var json = JsonDocument.Parse((await db.ConnectorConfigurations.SingleAsync()).SyncCursorsJson!);
+        using var json = JsonDocument.Parse((await db.ConnectorConfigurations.SingleAsync()).VendorStateJson!);
         json.RootElement.GetProperty("googleHealthProgress").GetRawText().Should().Be(progress);
     }
 
