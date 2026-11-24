@@ -399,7 +399,10 @@
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="api-secret">API secret</Label>
+                  <Label for="api-secret">
+                    API secret
+                    <span class="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
                   <Input
                     id="api-secret"
                     type="password"

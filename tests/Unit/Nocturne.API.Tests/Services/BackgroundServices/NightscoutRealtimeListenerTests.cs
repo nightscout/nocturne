@@ -403,7 +403,7 @@ public class NightscoutRealtimeListenerTests
         var config = new NightscoutConnectorConfiguration
         {
             Enabled = true,
-            Url = $"http://127.0.0.1:{port}/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123",
+            Url = $"http://127.0.0.1:{port}/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123&key=a+b%2Bc",
         };
 
         var clock = new FakeTimeProvider();
@@ -422,7 +422,10 @@ public class NightscoutRealtimeListenerTests
         await start.WaitAsync(TimeSpan.FromSeconds(10));
 
         requestLine.Should().StartWith("GET /AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io/");
-        requestLine.Should().Contain("token=reader-abc123");
+        requestLine.Should().Contain("&token=reader-abc123&key=a+b%2Bc ",
+            "the handshake carries the query exactly as the reads send it, a + included");
+        NightscoutAddress.Resolve(config.Url).For("api/v1/status")
+            .Should().EndWith("?token=reader-abc123&key=a+b%2Bc");
     }
 
     [Fact]

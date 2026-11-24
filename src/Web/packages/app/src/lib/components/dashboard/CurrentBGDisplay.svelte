@@ -53,7 +53,7 @@
   const readingInWidget = $derived(showsCurrentGlucoseWidget(dashboardTopWidgets.current));
 
   const glucose = displayedGlucose(realtimeStore);
-  const rawCurrentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const rawBgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const tileVariant = $derived(
@@ -62,8 +62,8 @@
 
   // Format values based on user's unit preference
   const units = $derived(glucoseUnits.current);
-  const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
-  const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
+  const displayCurrentBG = $derived(value === null ? "—" : formatGlucoseValue(value, units));
+  const displayBgDelta = $derived(value === null ? "" : formatGlucoseDelta(rawBgDelta, units));
   const displayDemoMode = $derived(realtimeStore.demoMode);
 
   // Current time state (updated every second) from shared store
@@ -75,10 +75,7 @@
   );
   const isDisconnected = $derived(realtimeStore.connectionUnavailable);
 
-  // Loading state - no data received yet
-  const isLoading = $derived(
-    rawCurrentBG === 0 && realtimeStore.entries.length === 0
-  );
+  const isLoading = $derived(value === null && !realtimeStore.currentReadingLoaded);
   // Over the flat range fill, so the tile reads the same until it arrives.
   const tileWash = stillArtwork(() => import("./GlucoseTileWash.svelte"));
   trackUnwashedFill(() => ({
@@ -158,6 +155,9 @@
   <div class="hidden @md:flex flex-wrap items-center gap-x-6 gap-y-3">
     {#if !readingInWidget}
       <div class="flex shrink-0 items-center gap-3">
+        {#if value === null && !isLoading}
+          <span class="sr-only">No glucose reading</span>
+        {/if}
         <GlucoseValueIndicator
           displayValue={displayCurrentBG}
           variant={tileVariant}

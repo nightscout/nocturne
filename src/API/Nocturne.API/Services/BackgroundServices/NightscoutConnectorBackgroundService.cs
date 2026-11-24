@@ -5,6 +5,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
+using System.Collections.Specialized;
 using System.Net.WebSockets;
 using System.Web;
 using SocketIOClient;
@@ -159,9 +160,10 @@ public class NightscoutConnectorBackgroundService
             client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
 
         // Nightscout sends data events only to a socket that has authorized with read access, and
-        // forgets it on every reconnect.
+        // forgets it on every reconnect. It answers authorize with a full dataUpdate, so each
+        // (re)connect syncs once: the catch-up for whatever changed while the socket was down.
         var authorize = AuthorizeMessage(config.ApiSecret, address.Token);
-        client.OnConnected += (_, _) => _ = AuthorizeAsync(client, authorize, tenantSlug);
+        client.OnConnected += (_, _) => Observe(AuthorizeAsync(client, authorize, tenantSlug), tenantSlug);
 
         try
         {
@@ -181,7 +183,7 @@ public class NightscoutConnectorBackgroundService
             Logger.LogWarning(
                 ex,
                 "Failed to connect Socket.IO for tenant {TenantSlug} at {Url}, will rely on polling",
-                tenantSlug, address.Base);
+                tenantSlug, address.Origin);
 
             return;
         }
@@ -212,10 +214,19 @@ public class NightscoutConnectorBackgroundService
             ReconnectionDelayMax = ReconnectionDelayMaxMs,
         };
         if (address.Query is { } query)
-            options.Query = HttpUtility.ParseQueryString(query);
+            options.Query = HandshakeQuery(query);
 
         return new SocketIO(new Uri(address.Origin), options);
     }
+
+    /// <summary>
+    /// <paramref name="query"/> as SocketIOClient takes it. The client ignores a query on the URL it
+    /// is given and form-encodes each value of <see cref="SocketIOOptions.Query"/> (a space as
+    /// <c>+</c>, a <c>+</c> as <c>%2B</c>), so each value is form-decoded here and the handshake
+    /// carries the bytes the reads send, up to the case of a percent escape. A key given twice is
+    /// the one shape it cannot carry: the client joins its values with a comma.
+    /// </summary>
+    internal static NameValueCollection HandshakeQuery(string query) => HttpUtility.ParseQueryString(query);
 
     /// <summary>
     /// The <c>authorize</c> message Nightscout's own web client sends: the SHA-1 of the API secret
@@ -238,8 +249,11 @@ public class NightscoutConnectorBackgroundService
         {
             await client.EmitAsync("authorize", [message]);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or IOException
-                                       or HttpRequestException or WebSocketException or OperationCanceledException)
+        catch (Exception ex) when (ex is SocketIOClient.Exceptions.ConnectionException
+                                       or SocketIOClient.Session.ConnectionFailedException
+                                       or InvalidOperationException or ObjectDisposedException or IOException
+                                       or HttpRequestException or WebSocketException or TimeoutException
+                                       or OperationCanceledException)
         {
             Logger.LogWarning(
                 ex,
@@ -247,6 +261,20 @@ public class NightscoutConnectorBackgroundService
                 tenantSlug);
         }
     }
+
+    /// <summary>
+    /// Logs a fault of <paramref name="authorizing"/> that <see cref="AuthorizeAsync"/> did not
+    /// expect. It runs from an event handler that nothing awaits, so the fault is observed here.
+    /// </summary>
+    private void Observe(Task authorizing, string tenantSlug) =>
+        authorizing.ContinueWith(
+            faulted => Logger.LogWarning(
+                faulted.Exception,
+                "Authorizing the Socket.IO listener for tenant {TenantSlug} failed, will rely on polling",
+                tenantSlug),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static async Task DisconnectAndDisposeAsync(SocketIO client)
     {

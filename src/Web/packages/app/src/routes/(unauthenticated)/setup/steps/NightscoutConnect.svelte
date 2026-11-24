@@ -17,8 +17,9 @@
       Point us at your <em class="not-italic font-light text-primary">Nightscout</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-      Enter the address and API secret of your Nightscout site. Nocturne only
-      reads from it.
+      Enter the address of your Nightscout site. If the site needs an API
+      secret to show its data, also enter the API secret. Nocturne only reads
+      from the site.
     </p>
   </div>
 

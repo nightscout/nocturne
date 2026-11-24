@@ -303,12 +303,27 @@ describe("ConnectorConfigForm", () => {
 			});
 
 			await expect.element(page.getByText("URL", { exact: true })).toBeVisible();
-			await expect.element(page.getByText("API secret", { exact: true })).toBeVisible();
+			await expect.element(page.getByText("API secret")).toBeVisible();
+			await expect.element(page.getByText("(optional)")).toBeVisible();
 			await expect.element(page.getByText("Timezone offset")).not.toBeInTheDocument();
 			await expect.element(page.getByText("Glucose processing")).not.toBeInTheDocument();
 			await expect.element(page.getByText("Sync glucose")).not.toBeInTheDocument();
 			await expect.element(page.getByText(/CONNECT_NIGHTSCOUT/)).not.toBeInTheDocument();
 			expect(page.getByTestId("connector-credentials").elements()).toHaveLength(0);
+		});
+
+		it("does not call a required secret optional", async () => {
+			render(ConnectorConfigForm, {
+				props: {
+					schema: { ...setupSchema, required: ["apiSecret"] },
+					configuration: {},
+					variant: "setup",
+					onSave: vi.fn(),
+				},
+			});
+
+			await expect.element(page.getByText("API secret")).toBeVisible();
+			await expect.element(page.getByText("(optional)")).not.toBeInTheDocument();
 		});
 
 		it("shows a required field of any category", async () => {

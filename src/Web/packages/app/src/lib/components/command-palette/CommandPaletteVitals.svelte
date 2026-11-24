@@ -15,20 +15,20 @@
 
   const units = $derived(glucoseUnits.current);
   const glucose = displayedGlucose(realtimeStore);
-  const currentBG = $derived(glucose.currentBG);
+  const value = $derived(glucose.value);
   const bgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
-  const displayBG = $derived(formatGlucoseValue(currentBG, units));
+  const displayBG = $derived(value === null ? "" : formatGlucoseValue(value, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isDimmed = $derived(isStale || isDisconnected);
-  const hasData = $derived(currentBG > 0);
+  const hasData = $derived(value !== null);
 
   const statusClass = $derived(
     getGlucoseStatusClass(glucose.status)

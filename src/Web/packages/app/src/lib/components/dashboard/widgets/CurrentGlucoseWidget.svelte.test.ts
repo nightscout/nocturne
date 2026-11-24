@@ -47,6 +47,7 @@ const store = $state({
   connectionStatus: "connected",
   entries: [{ mills: 0, sgv: 123 }],
   direction: "Flat",
+  currentReadingLoaded: true,
 });
 mocked.store = store;
 
@@ -124,6 +125,14 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(tile()).toHaveTextContent(/^123\s*stable\s*mg\/dL$/);
     await expect.element(page.getByText("+4", { exact: true })).toBeVisible();
     await expect.element(page.getByText(/2\s?m(in\.?)? ago/)).toBeVisible();
+  });
+
+  it("shows no reading, with no trend or change, when the newest reading has no value", async () => {
+    store.currentBG = 0;
+    render(CurrentGlucoseWidget);
+
+    await expect.element(tile()).toHaveTextContent(/^No glucose reading\s*—$/);
+    await expect.element(page.getByText("+4", { exact: true })).not.toBeInTheDocument();
   });
 
   it("drops the trend and change of a stale reading but keeps its age", async () => {

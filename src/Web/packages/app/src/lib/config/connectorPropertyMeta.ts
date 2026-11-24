@@ -231,7 +231,7 @@ export const connectorPropertyMeta = {
   },
   ApiSecret: {
     label: 'API secret',
-    description: 'Nightscout API_SECRET for authentication',
+    description: 'The API_SECRET of the site',
     category: 'Credentials',
   },
   MaxCount: {

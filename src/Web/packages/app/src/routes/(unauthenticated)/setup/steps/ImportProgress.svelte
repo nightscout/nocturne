@@ -67,6 +67,7 @@
 
   const hasCollections = $derived(Object.keys(collections).length > 0);
   const nothingToShow = $derived(error !== null && !hasCollections);
+  const faulted = $derived(failed || (done && caveatIsFault));
 
   $effect(() => {
     let active = true;
@@ -289,11 +290,18 @@
   {:else}
     <div class="flex flex-col gap-3">
       <span
-        class="font-brand font-hairline tabular-nums text-5xl @lg:text-6xl text-primary"
+        class="font-brand font-hairline tabular-nums text-5xl @lg:text-6xl {faulted
+          ? 'text-warning'
+          : 'text-primary'}"
       >
         {Math.round(progress)}%
       </span>
-      <Progress value={progress} aria-label="Import progress" />
+      <Progress
+        value={progress}
+        tone={faulted ? "warning" : "default"}
+        aria-label="Import progress"
+        data-testid="import-progress"
+      />
       <p class="text-sm text-muted-foreground">
         {#if error}
           <span class="text-warning">{error}</span>

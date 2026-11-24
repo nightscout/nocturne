@@ -199,17 +199,17 @@
                 variant="segmented"
                 size="sm"
                 aria-label="Window length"
-                value={Math.round(windowLength / DAY_MS).toString()}
-                onValueChange={(days: string) => {
-                  if (days) view.wd = Number(days);
-                }}
+                bind:value={
+                  () => Math.round(windowLength / DAY_MS).toString(),
+                  // A second click on the selected segment clears it; the window stays as it is.
+                  (days: string) => {
+                    if (days) view.wd = Number(days);
+                  }
+                }
               >
                 {#each WINDOW_DAYS.filter((d) => d === 1 || d <= Math.ceil(rangeDays)) as days (days)}
-                  <ToggleGroup.Item
-                    value={days.toString()}
-                    aria-label="{days} {days === 1 ? 'day' : 'days'}"
-                  >
-                    {days}d
+                  <ToggleGroup.Item value={days.toString()}>
+                    {days}d<span class="sr-only">, {days} {days === 1 ? "day" : "days"}</span>
                   </ToggleGroup.Item>
                 {/each}
               </ToggleGroup.Root>

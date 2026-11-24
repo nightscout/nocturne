@@ -11,9 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services;
 ///     import read a site through this one model.
 /// </summary>
 /// <remarks>
-///     User info and fragment are dropped. <see cref="Base"/> and <see cref="Origin"/> carry no
-///     credential and may be logged; <see cref="Query"/>, <see cref="Token"/> and
-///     <see cref="BaseUri"/> may carry one and must not be stored or shown.
+///     User info and fragment are dropped. Only <see cref="Origin"/> is free of credentials and may
+///     be logged. <see cref="Base"/>, <see cref="SocketIoPath"/>, <see cref="Query"/>,
+///     <see cref="Token"/> and <see cref="BaseUri"/> may each carry one: the path, the query, or both.
 /// </remarks>
 public sealed class NightscoutAddress
 {

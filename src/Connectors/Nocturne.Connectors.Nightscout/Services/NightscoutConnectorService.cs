@@ -68,7 +68,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         _logger.LogDebug(
             "[{ConnectorSource}] Authenticating with Nightscout at {Url} ({Credential})",
             ConnectorSource,
-            _address.Base,
+            _address.Origin,
             _apiSecretHash is null ? "no API secret" : "API secret");
 
         try
@@ -86,7 +86,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
-                        _address.Base);
+                        _address.Origin);
                     TrackFailedAuthentication(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
@@ -125,7 +125,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
-                _address.Base);
+                _address.Origin);
             return false;
         }
     }

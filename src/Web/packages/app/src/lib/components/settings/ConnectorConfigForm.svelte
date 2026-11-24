@@ -364,7 +364,12 @@
   {@const secretMeta = getPropertyMeta(name)}
   {@const propSchema = schema.properties[name]}
   <div class="space-y-2">
-    <Label>{secretMeta.label}</Label>
+    <Label>
+      {secretMeta.label}
+      {#if !(schema.required ?? []).includes(name)}
+        <span class="font-normal text-muted-foreground">(optional)</span>
+      {/if}
+    </Label>
     <div class="flex gap-2">
       <Input
         type={visibleSecrets.has(name) ? "text" : "password"}

@@ -27,6 +27,12 @@ public interface IDemoDataPurge
     Task<DemoPurgeCounts> PurgeAsync(CancellationToken ct);
 
     /// <summary>
+    /// Whether <see cref="PurgeAsync"/> has a row to delete, read as the scope's reader over the same
+    /// tables. Demo rows in a table the purge does not reach do not count.
+    /// </summary>
+    Task<bool> HoldsDataAsync(CancellationToken ct);
+
+    /// <summary>
     /// Purges the glucose group of <paramref name="tenant"/>, reporting the write as that tenant, for a
     /// caller whose own scope resolved none.
     /// </summary>

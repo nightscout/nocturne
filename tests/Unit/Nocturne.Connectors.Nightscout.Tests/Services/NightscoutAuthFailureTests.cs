@@ -111,9 +111,10 @@ public class NightscoutAuthFailureTests
         var result = await service.SyncDataAsync(NewConfig(), CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Message.Should().StartWith(NightscoutMessages.ApiSecretRejected);
-        result.Errors.Should().ContainSingle().Which.Should().StartWith(NightscoutMessages.ApiSecretRejected);
-        result.Message.Should().Contain("leave it blank", "this connector reads without a secret");
+        result.Message.Should().Be(NightscoutMessages.ApiSecretRejected);
+        result.Errors.Should().ContainSingle().Which.Should().Be(NightscoutMessages.ApiSecretRejected);
+        result.Message.Should().NotContain("blank",
+            "the connector form reads a blank secret as keeping the stored one, so the advice cannot be followed");
     }
 
     /// <summary>

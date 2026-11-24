@@ -27,6 +27,19 @@ describe("MobileHeader", () => {
     // The header shows only below the md breakpoint.
     await page.viewport(400, 800);
     store.connectionUnavailable = false;
+    store.currentBG = 123;
+    store.currentEntry = { mills: store.now, sgv: 123 };
+  });
+
+  it("shows no reading, not 0 or a skeleton, when the newest reading has no value", async () => {
+    store.currentBG = 0;
+    store.currentEntry = { mills: store.now, sgv: 0 };
+
+    render(Harness);
+
+    await expect.element(page.getByText("No glucose reading")).toBeInTheDocument();
+    await expect.element(page.getByText("—", { exact: true })).toBeVisible();
+    expect(page.getByText("0", { exact: true }).elements()).toHaveLength(0);
   });
 
   it("shows the current reading", async () => {

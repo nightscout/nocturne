@@ -87,8 +87,7 @@ public interface IDataSourceService
     Task<DataSourceDeleteResult> DeleteDemoDataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Whether any record table holds a row the demo service wrote, so <see cref="DeleteDemoDataAsync"/>
-    /// has something to delete.
+    /// Whether <see cref="DeleteDemoDataAsync"/> has something to delete (<see cref="IDemoDataPurge.HoldsDataAsync"/>).
     /// </summary>
     Task<bool> HoldsDemoDataAsync(CancellationToken cancellationToken = default);
 
