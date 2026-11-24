@@ -25,6 +25,10 @@ public static class PurgeExtensions
     ///
     /// Unaudited, as the purge paths this serves have always been. Retiring a live record belongs on
     /// the audited soft-delete path (<see cref="AuditedBulkDeleteExtensions"/>) instead.
+    ///
+    /// A purge of state spans first undoes the supersession they gave the spans that stay
+    /// (<see cref="StateSpanSupersessionExtensions.ReopenSupersededAsync"/>), in the purge's
+    /// transaction, which the foreign key's <c>SetNull</c> would only half do.
     /// </remarks>
     /// <param name="rows">The set to purge from.</param>
     /// <param name="predicate">Row filter, or <c>null</c> for the tenant's whole table.</param>
@@ -38,20 +42,32 @@ public static class PurgeExtensions
     {
         var purgeable = rows.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
         var selected = predicate is null ? purgeable : purgeable.Where(predicate);
+        var context = (NocturneDbContext)rows.GetService<ICurrentDbContext>().Context;
+        if (typeof(TEntity) != typeof(StateSpanEntity))
+            return await DeleteAsync(ct);
 
-        // A deduplicated row's links go first: a purge that stops between the two statements then
-        // leaves a record with no link, which matching reads as a group of its own, rather than a
-        // link with no record (see LinkedRecordTypes.DeleteOrphanedLinksAsync).
-        if (DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is { } recordType)
+        return await context.ExecuteInTransactionAsync(async token =>
         {
-            var key = RecordTypeKeys.Key(recordType);
-            var context = (NocturneDbContext)rows.GetService<ICurrentDbContext>().Context;
-            var purgedIds = selected.Select(e => EF.Property<Guid>(e, "Id"));
-            await context.LinkedRecords
-                .Where(lr => lr.RecordType == key && purgedIds.Contains(lr.RecordId))
-                .ExecuteDeleteAsync(ct);
-        }
+            var ids = await selected.Select(e => EF.Property<Guid>(e, "Id")).ToListAsync(token);
+            await context.ReopenSupersededAsync(ids, purged: true, token);
+            return await DeleteAsync(token);
+        }, ct: ct);
 
-        return await selected.ExecuteDeleteAsync(ct);
+        async Task<int> DeleteAsync(CancellationToken token)
+        {
+            // A deduplicated row's links go first: a purge that stops between the two statements then
+            // leaves a record with no link, which matching reads as a group of its own, rather than a
+            // link with no record (see LinkedRecordTypes.DeleteOrphanedLinksAsync).
+            if (DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is { } recordType)
+            {
+                var key = RecordTypeKeys.Key(recordType);
+                var purgedIds = selected.Select(e => EF.Property<Guid>(e, "Id"));
+                await context.LinkedRecords
+                    .Where(lr => lr.RecordType == key && purgedIds.Contains(lr.RecordId))
+                    .ExecuteDeleteAsync(token);
+            }
+
+            return await selected.ExecuteDeleteAsync(token);
+        }
     }
 }

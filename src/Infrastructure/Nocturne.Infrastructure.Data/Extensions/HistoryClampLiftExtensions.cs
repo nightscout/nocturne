@@ -16,9 +16,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// back once the write returns, so a statement the transaction runs afterwards is clamped again. A
 /// lifted statement filters and returns rows as an unclamped reader would, so a write lifted here
 /// inserts, or targets rows the clamp already shows its caller, and reads back only the rows it
-/// wrote. The exceptions are writes that must reach hidden rows, set one bookkeeping column and
-/// return only a count: a referential clean-up
-/// (<see cref="StateSpanSupersessionExtensions.ClearSupersededByAsync"/>), the duplicate flag
+/// wrote. The exceptions are writes that must reach hidden rows and return only a count: the supersession
+/// a removed or arrived span leaves (<see cref="StateSpanSupersessionExtensions"/>), which sets the end and
+/// pointer of the spans it ends from a lifted read of their successors and answers them only to a restore,
+/// which takes them onto the rows it gives back, the duplicate flag
 /// (<see cref="DuplicateGroupPrimaries.SetPrimariesAsync"/>) and the stream flag
 /// (<see cref="GlucoseStreamFlags"/>), which reads the whole of each bucket it decides, and the stamp of a
 /// promoted copy (<see cref="DuplicateGroupPrimaries.TouchAsync"/>). A lifted statement may also be a read
