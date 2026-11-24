@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -182,18 +183,16 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
 
     #region Helpers
 
-    private async Task<MigrationJobStatus> PollUntilAsync(Guid jobId, Func<MigrationJobStatus, bool> done)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (true)
-        {
-            var status = await AuthenticatedClient.GetFromJsonAsync<MigrationJobStatus>(
-                $"/api/v4/migration/{jobId}/status", JsonOptions);
-            if (done(status!) || DateTime.UtcNow > deadline)
-                return status!;
-            await Task.Delay(100);
-        }
-    }
+    private Task<MigrationJobStatus> PollUntilAsync(Guid jobId, Func<MigrationJobStatus, bool> done) =>
+        Eventually.ValueAsync(
+            "the migration job to reach the expected state",
+            async () =>
+            {
+                var status = await AuthenticatedClient.GetFromJsonAsync<MigrationJobStatus>(
+                    $"/api/v4/migration/{jobId}/status", JsonOptions);
+                return done(status!) ? status : null;
+            },
+            step: TimeSpan.FromMilliseconds(100));
 
     private async Task<List<JsonElement>> GetV3RecordsAsync(string collection)
     {
@@ -226,21 +225,9 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
     {
         await MigrationJobPump.RunAsync(Fixture);
 
-        MigrationJobStatus? status = null;
-        for (var i = 0; i < 120; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobId}/status");
-            status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-
-            if (status!.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        status.Should().NotBeNull();
-        if (status!.State == MigrationJobState.Failed)
+        var status = await PollUntilAsync(
+            jobId, s => s.State is MigrationJobState.Completed or MigrationJobState.Failed);
+        if (status.State == MigrationJobState.Failed)
         {
             Log($"Migration failed: {status.ErrorMessage}");
         }

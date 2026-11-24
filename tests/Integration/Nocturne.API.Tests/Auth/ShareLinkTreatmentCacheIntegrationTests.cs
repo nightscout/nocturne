@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -144,22 +145,22 @@ public class ShareLinkTreatmentCacheIntegrationTests : ApiIntegrationTestBase
         _share = Fixture.CreateApexClient();
         _share.DefaultRequestHeaders.Host = new Uri(url).Authority;
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (true)
-        {
-            using var probe = await _share.GetAsync(UncachedRead);
-            if (probe.StatusCode == HttpStatusCode.OK)
-                return _share;
-
-            if (DateTime.UtcNow > deadline)
+        var share = _share;
+        var last = "no response";
+        await Eventually.UntilAsync(
+            "the share host to serve treatments",
+            async () =>
             {
-                throw new InvalidOperationException(
-                    $"The share host never served treatments: {(int)probe.StatusCode} "
-                    + await probe.Content.ReadAsStringAsync());
-            }
+                using var probe = await share.GetAsync(UncachedRead);
+                if (probe.StatusCode == HttpStatusCode.OK)
+                    return true;
 
-            await Task.Delay(250);
-        }
+                last = $"{(int)probe.StatusCode} {await probe.Content.ReadAsStringAsync()}";
+                return false;
+            },
+            step: TimeSpan.FromMilliseconds(250),
+            lastSeen: () => last);
+        return share;
     }
 
     private static async Task<List<JsonObject>> GetTreatmentsAsync(HttpClient client, string url)

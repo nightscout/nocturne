@@ -165,7 +165,7 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
         _configured = true;
         var written = _clock.GetUtcNow();
         nudge.Invalidate("pollertest", tenant);
-        await WaitForAsync(async () => await DueAtAsync(tenant) == written + TimeSpan.FromMinutes(1));
+        await WaitForDueAtAsync(tenant, due => due == written + TimeSpan.FromMinutes(1));
         _clock.SetUtcNow(written + TimeSpan.FromMinutes(1));
         (await RunDueAsync(scheduler)).Should().Be(1, "the configuration write made the parked row due a minute later");
         poller.Syncs.Select(s => s.Tenant).Should().Equal(tenant);
@@ -194,7 +194,7 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
             last = _clock.GetUtcNow();
             nudge.Invalidate("pollertest", tenant);
             var written = last;
-            await WaitForAsync(async () => await DueAtAsync(tenant) == written + TimeSpan.FromMinutes(1));
+            await WaitForDueAtAsync(tenant, due => due == written + TimeSpan.FromMinutes(1));
             (await RunDueAsync(scheduler)).Should().Be(0, "a sync started mid-flow would compete with it");
             _clock.Advance(TimeSpan.FromSeconds(3));
         }
@@ -229,14 +229,14 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
             _clock.SetUtcNow(write + TimeSpan.FromSeconds(offset));
             nudge.Invalidate("pollertest", tenant);
             var expected = write + TimeSpan.FromSeconds(offset) + TimeSpan.FromMinutes(1);
-            await WaitForAsync(async () => await DueAtAsync(tenant) == expected);
+            await WaitForDueAtAsync(tenant, due => due == expected);
         }
 
         _clock.SetUtcNow(enrolledDue);
         (await RunDueAsync(scheduler)).Should().Be(0, "the writes deferred the row past its enrolment time");
         _clock.SetUtcNow(write + TimeSpan.FromSeconds(20));
         poller.ListenerEvent(tenant);
-        await WaitForAsync(async () => await DueAtAsync(tenant) == write + TimeSpan.FromSeconds(20));
+        await WaitForDueAtAsync(tenant, due => due == write + TimeSpan.FromSeconds(20));
         (await RunDueAsync(scheduler)).Should().Be(1, "a listener's event overrides the settle");
         poller.Syncs.Should().HaveCount(1);
     }
@@ -257,7 +257,7 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
             _clock.SetUtcNow(write + TimeSpan.FromSeconds(offset));
             nudge.Invalidate("pollertest", tenant);
             var expected = write + TimeSpan.FromSeconds(offset) + TimeSpan.FromMinutes(1);
-            await WaitForAsync(async () => await DueAtAsync(tenant) == expected);
+            await WaitForDueAtAsync(tenant, due => due == expected);
             (await RunDueAsync(scheduler)).Should().Be(0);
         }
 
@@ -282,9 +282,9 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
         (await RunDueAsync(scheduler)).Should().Be(1);
 
         nudge.Invalidate("pollertest", tenant);
-        await WaitForAsync(async () => await DueAtAsync(tenant) == _clock.GetUtcNow() + TimeSpan.FromMinutes(1));
+        await WaitForDueAtAsync(tenant, due => due == _clock.GetUtcNow() + TimeSpan.FromMinutes(1));
         poller.ListenerEvent(tenant);
-        await WaitForAsync(async () => await DueAtAsync(tenant) <= _clock.GetUtcNow());
+        await WaitForDueAtAsync(tenant, due => due <= _clock.GetUtcNow());
 
         (await RunDueAsync(scheduler)).Should().Be(1);
     }
@@ -304,16 +304,11 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
         (await DueAtAsync(tenant)).Should().Be(_clock.GetUtcNow() + TimeSpan.FromHours(1));
     }
 
-    private static async Task WaitForAsync(Func<Task<bool>> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (!await condition())
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The condition did not hold within 30 seconds.");
-            await Task.Delay(20);
-        }
-    }
+    private Task WaitForDueAtAsync(Guid tenant, Func<DateTimeOffset, bool> holds) =>
+        Eventually.UntilAsync(
+            "the poller row's due time to reach the expected value",
+            async () => holds(await DueAtAsync(tenant)),
+            step: TimeSpan.FromMilliseconds(20));
 
     private static TimeSpan PhaseOf(Guid tenant) => JobPhase.Of(PollerName, tenant, TimeSpan.FromMinutes(1));
 

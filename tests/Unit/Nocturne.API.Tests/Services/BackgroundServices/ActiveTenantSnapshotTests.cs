@@ -17,8 +17,6 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
     /// <summary>The two connector listeners and the five sweeps that read the snapshot.</summary>
     private const int ReaderCount = 7;
 
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
-
     private readonly QueryGate _gate = new();
     private readonly SqliteTestDatabase _db;
     private readonly FakeTimeProvider _time = new();
@@ -44,7 +42,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
             .Select(_ => _sut.GetAsync(CancellationToken.None))
             .ToList();
 
-        await _gate.QueryStarted(1).WaitAsync(Patience);
+        await _gate.QueryStarted(1).WaitAsync(Eventually.DefaultPatience);
         _gate.Release();
         var results = await Task.WhenAll(reads);
 
@@ -75,7 +73,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
         _time.Advance(ActiveTenantSnapshot.Ttl);
 
         var first = _sut.GetAsync(CancellationToken.None);
-        await _gate.QueryStarted(2).WaitAsync(Patience);
+        await _gate.QueryStarted(2).WaitAsync(Eventually.DefaultPatience);
         var duringRefresh = _sut.GetAsync(CancellationToken.None);
 
         first.IsCompletedSuccessfully.Should().BeTrue();
@@ -98,7 +96,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
 
         _time.Advance(ActiveTenantSnapshot.Ttl);
         var served = await _sut.GetAsync(CancellationToken.None);
-        await WaitUntilAsync(() => _logger.Entries.Count > 0);
+        await Eventually.UntilAsync("the failed refresh to be logged", () => _logger.Entries.Count > 0);
 
         served.Select(t => t.Slug).Should().Equal("active");
         _logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
@@ -140,7 +138,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
 
         var abandoned = _sut.GetAsync(cancelled.Token);
         var waiting = _sut.GetAsync(CancellationToken.None);
-        await _gate.QueryStarted(1).WaitAsync(Patience);
+        await _gate.QueryStarted(1).WaitAsync(Eventually.DefaultPatience);
 
         await cancelled.CancelAsync();
         var abandon = () => abandoned;
@@ -148,7 +146,7 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
         waiting.IsCompleted.Should().BeFalse();
 
         _gate.Release();
-        (await waiting.WaitAsync(Patience)).Select(t => t.Slug).Should().Equal("active");
+        (await waiting.WaitAsync(Eventually.DefaultPatience)).Select(t => t.Slug).Should().Equal("active");
         (await _sut.GetAsync(CancellationToken.None)).Select(t => t.Slug).Should().Equal("active");
         _gate.Queries.Should().Be(1);
     }
@@ -156,21 +154,10 @@ public sealed class ActiveTenantSnapshotTests : IDisposable
     private async Task<IReadOnlyList<ActiveTenant>> ReadUntilAsync(Func<IReadOnlyList<ActiveTenant>, bool> done)
     {
         IReadOnlyList<ActiveTenant> tenants = [];
-        await WaitUntilAsync(async () => done(tenants = await _sut.GetAsync(CancellationToken.None)));
+        await Eventually.UntilAsync(
+            "the snapshot to serve the expected tenants",
+            async () => done(tenants = await _sut.GetAsync(CancellationToken.None)));
         return tenants;
-    }
-
-    private static Task WaitUntilAsync(Func<bool> condition) => WaitUntilAsync(() => Task.FromResult(condition()));
-
-    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
-    {
-        var deadline = DateTime.UtcNow + Patience;
-        while (!await condition())
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The condition did not hold in time.");
-            await Task.Delay(10);
-        }
     }
 
     /// <summary>Counts the queries the snapshot sends, and can hold them in flight or fail them.</summary>

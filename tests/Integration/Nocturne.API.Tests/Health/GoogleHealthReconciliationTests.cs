@@ -457,10 +457,11 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var coordinator = Coordinator(provider);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cancellation = new CancellationTokenSource(Eventually.DefaultPatience);
         await using var requests = coordinator.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
         var next = requests.MoveNextAsync().AsTask();
-        while (tenants.Invocations.Count == 0) await Task.Delay(10, cancellation.Token);
+        await Eventually.UntilAsync(
+            "the coordinator to list the tenants", () => tenants.Invocations.Count > 0);
         Assert.False(next.IsCompleted);
 
         Assert.True(await coordinator.QueueAsync(tenantId, 1, cancellation.Token));

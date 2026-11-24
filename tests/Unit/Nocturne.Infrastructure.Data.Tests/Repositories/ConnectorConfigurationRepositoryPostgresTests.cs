@@ -256,7 +256,7 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
         }
 
         var toggle = Task.Run(() => Configurations(a).SetActiveAsync("glooko", false, "rhys", CancellationToken.None));
-        await WaitForAWriterBlockedByAsync(saver);
+        await PostgresLockWaits.UntilBlockedByAsync(database.MigratorConnectionString, saver.ProcessID, toggle);
         await save.CommitAsync();
         var toggled = await toggle;
 
@@ -358,30 +358,13 @@ public class ConnectorConfigurationRepositoryPostgresTests(ConnectorConfiguratio
 
         var save = Task.Run(() => Configurations(a).SaveConfigurationAsync(
             "glooko", """{"enabled":true,"region":"us"}""", "erik", CancellationToken.None));
-        await WaitForAWriterBlockedByAsync(toggler);
+        await PostgresLockWaits.UntilBlockedByAsync(database.MigratorConnectionString, toggler.ProcessID, save);
         await toggle.CommitAsync();
         var saved = await save;
 
         var config = JsonNode.Parse(saved.ConfigurationJson)!.AsObject();
         config["region"]!.GetValue<string>().Should().Be("us");
         config["enabled"]!.GetValue<bool>().Should().BeFalse();
-    }
-
-    private async Task WaitForAWriterBlockedByAsync(NpgsqlConnection blocker)
-    {
-        await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM pg_stat_activity WHERE @blocker = ANY(pg_blocking_pids(pid))";
-        cmd.Parameters.Add(new NpgsqlParameter("@blocker", blocker.ProcessID));
-
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        while ((long)(await cmd.ExecuteScalarAsync())! == 0)
-        {
-            if (DateTime.UtcNow > deadline)
-                throw new TimeoutException("The writer never waited on the blocking transaction's row lock.");
-            await Task.Delay(25);
-        }
     }
 
     [Fact]
