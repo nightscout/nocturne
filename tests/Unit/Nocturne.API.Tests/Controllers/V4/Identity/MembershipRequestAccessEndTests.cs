@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -42,7 +43,7 @@ public sealed class MembershipRequestAccessEndTests
         new RequestMembership(
                 _approverId,
                 _tenantId,
-                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, approverAccessEndsAt), null))
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, approverAccessEndsAt), new TenantMemberAccess(new HashSet<string> { Scope.MembersManage }, false, approverAccessEndsAt), null))
             .StoreOn(http);
         var controller = new MembershipRequestController(_service.Object, accessor.Object)
         {
@@ -92,6 +93,59 @@ public sealed class MembershipRequestAccessEndTests
         var (result, _) = await ApproveAsync(approverAccessEndsAt: null, Now);
 
         ShouldRefuse(result, StatusCodes.Status400BadRequest, AccessEndRequest.PastDetail);
+        _service.Invocations.Should().BeEmpty();
+    }
+    private async Task<(IActionResult Result, IReadOnlyCollection<string>? Scopes, DateTime? End, bool? Clamped)> ApproveAsMixedMemberAsync(GrantCeiling? ceiling)
+    {
+        (IReadOnlyCollection<string>? Scopes, DateTime? End, bool? Clamped) passed = default;
+        _service
+            .Setup(s => s.ApproveRequestAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<Guid>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback(new InvocationAction(i => passed = (
+                (IReadOnlyCollection<string>)i.Arguments[4], (DateTime?)i.Arguments[5], (bool)i.Arguments[6])))
+            .ReturnsAsync(new DecideMembershipRequestResult(true, null));
+        var accessor = new Mock<ITenantAccessor>();
+        accessor.SetupGet(a => a.TenantId).Returns(_tenantId);
+        var sum = new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead, Scope.TreatmentsRead };
+
+        var http = new DefaultHttpContext();
+        http.Items["GrantedScopes"] = (IReadOnlySet<string>)sum;
+        http.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = _approverId, TenantId = _tenantId };
+        new RequestMembership(
+                _approverId, _tenantId,
+                new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(sum, false, null), ceiling is null ? null : new TenantMemberAccess(ceiling.Scopes, ceiling.HistoryClamped, ceiling.AccessEndsAt), null))
+            .StoreOn(http);
+        http.SetGrantCeiling(ceiling);
+        var controller = new MembershipRequestController(_service.Object, accessor.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = http },
+        };
+
+        var result = await controller.ApproveRequest(
+            Guid.CreateVersion7(), new ApproveMembershipRequestRequest([Guid.CreateVersion7()]), new FakeTimeProvider(Now), CancellationToken.None);
+        return (result, passed.Scopes, passed.End, passed.Clamped);
+    }
+
+    [Fact]
+    public async Task A_mixed_member_approves_within_the_direct_reason_alone()
+    {
+        var directEnd = Now.UtcDateTime.AddDays(5);
+        var ceiling = new GrantCeiling(new HashSet<string> { Scope.MembersManage, Scope.GlucoseRead }, directEnd, true);
+
+        var (_, scopes, end, clamped) = await ApproveAsMixedMemberAsync(ceiling);
+
+        scopes.Should().BeEquivalentTo(ceiling.Scopes);
+        end.Should().Be(directEnd);
+        clamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_team_only_member_approves_nothing()
+    {
+        var (result, _, _, _) = await ApproveAsMixedMemberAsync(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(result);
         _service.Invocations.Should().BeEmpty();
     }
 }

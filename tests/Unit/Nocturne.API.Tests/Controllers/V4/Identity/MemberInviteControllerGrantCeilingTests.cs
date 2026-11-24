@@ -784,6 +784,194 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
     }
 
+    /// <summary>A mixed member: the sum holds the Administrator role, the direct reason less.</summary>
+    private MemberInviteController BuildMixedController(GrantCeiling? ceiling)
+    {
+        var controller = BuildController(AdministratorScopes);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+        return controller;
+    }
+
+    private static readonly GrantCeiling DirectMembersManage = new(
+        new HashSet<string> { Scope.MembersManage, Scope.MembersInvite, Scope.GlucoseRead }, null, false);
+
+    [Fact]
+    public async Task MixedMember_mayNotGiveAPermissionOnlyTheTeamGives()
+    {
+        var controller = BuildMixedController(DirectMembersManage);
+
+        var result = await controller.SetMemberPermissions(
+            _targetMemberId, new SetMemberPermissionsRequest([Scope.GlucoseRead, Scope.TreatmentsRead]), _publicAccessCache, CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, "Cannot grant 'treatments.read' because the caller does not hold it.");
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task MixedMember_mayGiveWhatTheDirectReasonHolds()
+    {
+        var controller = BuildMixedController(DirectMembersManage);
+
+        var result = await controller.SetMemberPermissions(
+            _targetMemberId, new SetMemberPermissionsRequest([Scope.GlucoseRead, Scope.MembersInvite]), _publicAccessCache, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task MixedMember_whoseDirectReasonIsClamped_mayNotLiftAClamp()
+    {
+        var target = await _dbContext.TenantMembers.FirstAsync(m => m.Id == _targetMemberId);
+        target.LimitTo24Hours = true;
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var controller = BuildMixedController(DirectMembersManage with { HistoryClamped = true });
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _targetMemberId, new SetMemberLimitTo24HoursRequest(false), _publicAccessCache, CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HistoryCeilingReason);
+        (await TargetClampAsync()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MixedMember_whoseDirectReasonEnds_mayNotRemoveAMemberWhoOutlastsIt()
+    {
+        var controller = BuildMixedController(DirectMembersManage with { AccessEndsAt = AccessEndNow.UtcDateTime.AddDays(3) });
+
+        var result = await controller.RemoveMember(_targetSubjectId, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        (await _dbContext.TenantMembers.AsNoTracking().AnyAsync(m => m.Id == _targetMemberId)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A mixed member's direct reason: less than the Administrator sum, with an end the sum lacks and
+    /// the 24-hour limit the sum lacks.
+    /// </summary>
+    private static GrantCeiling MixedCeiling(DateTime directEnd, params string[] extraScopes) =>
+        new(DirectMembersManage.Scopes.Concat(extraScopes).ToHashSet(), directEnd, true);
+
+    private MemberInviteController BuildMixedController(IMemberInviteService invites, GrantCeiling ceiling)
+    {
+        var controller = BuildController(invites, AdministratorScopes);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+        return controller;
+    }
+
+    [Fact]
+    public async Task CreateInvite_byAMixedMember_givesOnlyTheDirectReasonsScopesEndAndLimit()
+    {
+        var ceiling = MixedCeiling(DateTime.UtcNow.Date.AddDays(30));
+        var invites = new Mock<IMemberInviteService>();
+        IEnumerable<string>? granter = null;
+        DateTime? end = null;
+        bool? limited = null;
+        invites.Setup(i => i.CreateInviteAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<DateTime?>(), It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(),
+                It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
+            .Callback((Guid _, Guid _, IEnumerable<string> g, List<Guid> _, DateTime? e, List<string>? _, string? _, int _, int? _, bool l, string? _) =>
+            {
+                granter = g;
+                end = e;
+                limited = l;
+            })
+            .ReturnsAsync((MemberInviteResult)null!);
+
+        var result = await BuildMixedController(invites.Object, ceiling).CreateInvite(
+            new CreateMemberInviteRequest { RoleIds = [_caretakerRoleId], LimitTo24Hours = false }, AccessEndClock);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+        granter.Should().BeSameAs(ceiling.Scopes, "a role or permission only the team gives is beyond what the invite may give");
+        granter.Should().NotContain(Scope.TreatmentsRead);
+        end.Should().Be(ceiling.AccessEndsAt);
+        limited.Should().BeTrue("a limited direct reason makes the invite limited while the team reason is not");
+    }
+
+    [Fact]
+    public async Task CreateInvite_byAMixedMember_refusesAnEndPastTheDirectEnd()
+    {
+        var directEnd = DateTime.UtcNow.Date.AddDays(30);
+        var invites = new Mock<IMemberInviteService>();
+
+        var result = await BuildMixedController(invites.Object, MixedCeiling(directEnd)).CreateInvite(
+            new CreateMemberInviteRequest { RoleIds = [_caretakerRoleId], AccessEndsAt = directEnd.AddDays(1) }, AccessEndClock);
+
+        ShouldRefuse(result, StatusCodes.Status403Forbidden, HttpContextExtensions.AccessEndCeilingDetail);
+        invites.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SetMemberRoles_byAMixedMember_givesOnlyARoleTheDirectReasonHolds()
+    {
+        var directEnd = DateTime.UtcNow.Date.AddDays(30);
+        await GiveTargetAccessEndAsync(directEnd.AddDays(-10));
+
+        var refused = await BuildMixedController(Mock.Of<IMemberInviteService>(), MixedCeiling(directEnd)).SetMemberRoles(
+            _targetMemberId, new SetMemberRolesRequest([_caretakerRoleId]), _publicAccessCache, CancellationToken.None);
+
+        refused.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        (await TargetRoleIdsAsync()).Should().BeEmpty();
+
+        var given = await BuildMixedController(
+                Mock.Of<IMemberInviteService>(), MixedCeiling(directEnd, [.. RoleSeeds.Permissions[RoleSeeds.Caretaker]]))
+            .SetMemberRoles(_targetMemberId, new SetMemberRolesRequest([_caretakerRoleId]), _publicAccessCache, CancellationToken.None);
+
+        given.Should().BeOfType<NoContentResult>();
+        (await TargetRoleIdsAsync()).Should().BeEquivalentTo([_caretakerRoleId]);
+    }
+
+    [Fact]
+    public async Task SetMemberAccessEnd_byAMixedMember_refusesAnEndPastTheDirectEnd()
+    {
+        var directEnd = DateTime.UtcNow.Date.AddDays(30);
+        await GiveTargetAccessEndAsync(directEnd.AddDays(-10));
+        var controller = BuildMixedController(Mock.Of<IMemberInviteService>(), MixedCeiling(directEnd));
+
+        ShouldRefuse(
+            await SetTargetAccessEndAsync(controller, new DateTimeOffset(directEnd.AddDays(1), TimeSpan.Zero)),
+            StatusCodes.Status403Forbidden, HttpContextExtensions.AccessEndCeilingDetail);
+        (await TargetAccessEndAsync()).Should().Be(directEnd.AddDays(-10));
+
+        var within = new DateTimeOffset(directEnd.AddDays(-5), TimeSpan.Zero);
+        (await SetTargetAccessEndAsync(controller, within)).Should().BeOfType<NoContentResult>();
+        (await TargetAccessEndAsync()).Should().Be(within.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task RevokeInvite_byATeamOnlyMember_givesNothing()
+    {
+        var invite = InviteEndingAt(null);
+        var invites = InviteService(invite);
+        var controller = BuildController(invites.Object, Scope.MembersInvite);
+        controller.HttpContext.SetGrantCeiling(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.RevokeInvite(invite.Id));
+        invites.Verify(i => i.RevokeInviteAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task TeamOnlyMember_givesNothing()
+    {
+        var controller = BuildMixedController(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.SetMemberPermissions(
+            _targetMemberId, new SetMemberPermissionsRequest([Scope.GlucoseRead]), _publicAccessCache, CancellationToken.None));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.SetMemberRoles(
+            _targetMemberId, new SetMemberRolesRequest([_caretakerRoleId]), _publicAccessCache, CancellationToken.None));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.SetMemberLimitTo24Hours(
+            _targetMemberId, new SetMemberLimitTo24HoursRequest(true), _publicAccessCache, CancellationToken.None));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await SetTargetAccessEndAsync(controller, AccessEndNow.AddDays(30)));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.RemoveMember(_targetSubjectId, CancellationToken.None));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.CreateInvite(
+            new CreateMemberInviteRequest { RoleIds = [_caretakerRoleId] }, TimeProvider.System));
+
+        (await TargetPermissionsAsync()).Should().BeEquivalentTo([Scope.GlucoseRead]);
+        (await TargetAccessEndAsync()).Should().BeNull();
+        (await TargetClampAsync()).Should().BeFalse();
+    }
+
     private static readonly DateTimeOffset AccessEndNow = new(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly FakeTimeProvider AccessEndClock = new(AccessEndNow);
@@ -793,7 +981,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         new RequestMembership(
                 _callerSubjectId,
                 _tenantId,
-                new MembershipFacts(_callerMemberId, new TenantMemberAccess(AdministratorScopes.ToHashSet(), false, accessEndsAt), null))
+                new MembershipFacts(_callerMemberId, new TenantMemberAccess(AdministratorScopes.ToHashSet(), false, accessEndsAt), new TenantMemberAccess(AdministratorScopes.ToHashSet(), false, accessEndsAt), null))
             .StoreOn(controller.HttpContext);
 
     private async Task GiveTargetAccessEndAsync(DateTime? accessEndsAt)

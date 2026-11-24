@@ -88,7 +88,10 @@ public class MemberInviteController : ControllerBase
         if (HttpContext.IsCallerInactive())
             return Challenge();
 
-        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        var limitTo24Hours = HttpContext.InheritGivenHistoryClamp(request.LimitTo24Hours);
 
         var accessEndsAt = HttpContext.InheritAccessEnd(AccessEndRequest.Instant(request.AccessEndsAt));
         if (AccessEndRequest.Refusal(HttpContext, accessEndsAt, time.GetUtcNow().UtcDateTime) is (var status, var detail))
@@ -108,7 +111,7 @@ public class MemberInviteController : ControllerBase
             var result = await _memberInviteService.CreateInviteAsync(
                 _tenantAccessor.TenantId,
                 subjectId.Value,
-                HttpContext.GetGrantedScopes(),
+                ceiling.Scopes,
                 request.RoleIds,
                 accessEndsAt,
                 request.DirectPermissions,
@@ -147,7 +150,10 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvite(Guid inviteId)
     {
-        if (HttpContext.CallerAccessEndsAt() is not null
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        if (ceiling.AccessEndsAt is not null
             && (await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId))
                 .FirstOrDefault(i => i.Id == inviteId) is { } invite
             && HttpContext.OutlastsCallerAccess(invite.AccessEndsAt))
@@ -175,7 +181,10 @@ public class MemberInviteController : ControllerBase
         if (IsCallersOwnMembership(subjectId))
             return Problem(detail: SelfRemovalDetail, statusCode: 400);
 
-        if (HttpContext.CallerAccessEndsAt() is not null
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        if (ceiling.AccessEndsAt is not null
             && await _members.FindMemberAsync(_tenantAccessor.TenantId, subjectId, ct) is { } member
             && this.MemberOutlastsCallerRefusal(member.AccessEndsAt) is { } outlasts)
             return outlasts;
@@ -305,7 +314,7 @@ public class MemberInviteController : ControllerBase
         if (tenant == null)
             return NotFound();
 
-        var managesMembers = Scope.Satisfies(HttpContext.GetGrantedScopes(), Scope.MembersManage);
+        var managesMembers = HttpContext.HasScope(Scope.MembersManage);
         return Ok(tenant.Members
             .Select(m => m with
             {
@@ -394,6 +403,9 @@ public class MemberInviteController : ControllerBase
         if (HttpContext.IsCallerInactive())
             return Challenge();
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -424,7 +436,7 @@ public class MemberInviteController : ControllerBase
         var held = direct.Roles.Select(r => r.RoleId).ToList();
         var added = request.RoleIds.Except(held).ToList();
         var removed = held.Except(request.RoleIds).ToList();
-        var grantedScopes = HttpContext.GetGrantedScopes();
+        var grantedScopes = ceiling.Scopes;
 
         var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(tenantId, added, grantedScopes, ct);
         if (!roleGrant.Ok)
@@ -461,9 +473,9 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The one self-edit allowed past <see cref="IsCallersOwnMembership"/> and
-    /// <see cref="SelfEditDetail"/>. It can only narrow: it is refused unless caretaker is within the
-    /// caller's direct reason, which it writes. The caller's scopes are not enough, since they also sum
-    /// what a team gives, and caretaker written from them would outlive the team's access.
+    /// <see cref="SelfEditDetail"/>. It can only narrow: it is refused unless caretaker is within what
+    /// the caller may give (<see cref="HttpContextExtensions.CallerGrantCeiling"/>) and within the
+    /// direct reason it writes.
     /// </remarks>
     [HttpPost("members/self/step-down")]
     [RequireInteractiveSession]
@@ -488,8 +500,11 @@ public class MemberInviteController : ControllerBase
         if (member.DirectReason is not { } direct)
             return AccessFromTeamProblem();
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
         if (!(await _tenantRoleService.ValidateRoleGrantAsync(
-                tenantId, [caretaker], HttpContext.GetGrantedScopes(), ct)).Ok
+                tenantId, [caretaker], ceiling.Scopes, ct)).Ok
             || !(await _tenantRoleService.ValidateRoleGrantAsync(
                 tenantId, [caretaker], Scope.NormalizeMemberPermissions(direct.EffectivePermissions()), ct)).Ok)
             return Problem(detail: "Cannot step down to a role with more access than you have.", statusCode: 403);
@@ -524,6 +539,9 @@ public class MemberInviteController : ControllerBase
     {
         if (HttpContext.IsCallerInactive())
             return Challenge();
+
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
 
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
@@ -570,8 +588,7 @@ public class MemberInviteController : ControllerBase
         }
         else
         {
-            var violation = Scope.ValidateGrant(
-                request.DirectPermissions, HttpContext.GetGrantedScopes());
+            var violation = Scope.ValidateGrant(request.DirectPermissions, ceiling.Scopes);
             if (violation != null)
                 return GrantProblem(violation);
         }
@@ -628,6 +645,9 @@ public class MemberInviteController : ControllerBase
         if (HttpContext.IsCallerInactive())
             return Challenge();
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
 
@@ -651,7 +671,7 @@ public class MemberInviteController : ControllerBase
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
 
-        if (!request.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
+        if (!request.LimitTo24Hours && ceiling.HistoryClamped)
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         if (request.LimitTo24Hours
@@ -696,6 +716,9 @@ public class MemberInviteController : ControllerBase
     {
         if (HttpContext.IsCallerInactive())
             return Challenge();
+
+        if (HttpContext.CallerGrantCeiling() is null)
+            return this.CallerAccessFromTeamProblem();
 
         var tenantId = _tenantAccessor.TenantId;
         var member = await _members.GetMemberAsync(tenantId, id, ct);
@@ -747,12 +770,12 @@ public class MemberInviteController : ControllerBase
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions
     /// that exempt it (<see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>), lifting the
-    /// clamp sideways. See <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
+    /// clamp sideways. See <see cref="HttpContextExtensions.CallerGrantCeiling"/>.
     /// </summary>
     private async Task<bool> WouldExemptAClampedMemberAsync(
         TenantMemberRecord member, IEnumerable<string> permissionsAfter, CancellationToken ct) =>
         member.LimitTo24Hours
-        && HttpContext.IsCallerHistoryClamped()
+        && HttpContext.CallerGrantCeiling() is not { HistoryClamped: false }
         && MemberScopeResolver.IsExemptFromHistoryClamp(permissionsAfter)
         && !MemberScopeResolver.IsExemptFromHistoryClamp(
             await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct));

@@ -106,6 +106,12 @@ public sealed class TeamAccessService(
     /// The active sites where the caller's membership is in force and holds the owner role, with the
     /// scopes it resolves to on the caller's credential and whether it reads only the last 24 hours.
     /// </summary>
+    /// <remarks>
+    /// Read from the row, the sum of the caller's reasons, since this subject-pinned read cannot see
+    /// them. The owner role is only ever held directly, so the sum differs from the direct reason only
+    /// in an end a team reason outlasts; the approval holds the approver to the direct reason
+    /// (<see cref="ITeamRepository.ApproveAccessAsync"/>).
+    /// </remarks>
     private async Task<IReadOnlyList<OwnedSite>> OwnedSitesAsync(
         TeamAccessApproverCredential caller, DateTime now, CancellationToken ct) =>
         (await members.ListMembershipsOfSubjectAsync(caller.SubjectId, now, ct))

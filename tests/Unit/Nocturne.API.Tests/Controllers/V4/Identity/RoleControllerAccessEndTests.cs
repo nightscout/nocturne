@@ -128,7 +128,7 @@ public sealed class RoleControllerAccessEndTests : IDisposable
         new RequestMembership(
                 _callerSubjectId,
                 _tenantId,
-                new MembershipFacts(_callerMemberId, new TenantMemberAccess(scopes, false, callerEnd), null))
+                new MembershipFacts(_callerMemberId, new TenantMemberAccess(scopes, false, callerEnd), new TenantMemberAccess(scopes, false, callerEnd), null))
             .StoreOn(httpContext);
 
         return new RoleController(
@@ -313,6 +313,62 @@ public sealed class RoleControllerAccessEndTests : IDisposable
 
         result.Should().BeOfType<OkObjectResult>();
         PublicAccessIsCached().Should().BeTrue();
+    }
+
+    private RoleController BuildMixedController(GrantCeiling? ceiling)
+    {
+        var controller = BuildController(null);
+        controller.HttpContext.SetGrantCeiling(ceiling);
+        return controller;
+    }
+
+    [Fact]
+    public async Task MixedMember_mayNotPutAPermissionOnlyTheTeamGivesInARole()
+    {
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.RolesManage }, null, false));
+
+        var created = await controller.CreateRole(new CreateRoleRequest("Helpers", null, [Scope.GlucoseRead]), CancellationToken.None);
+        var updated = await controller.UpdateRole(_heldByNobody, Edit(_heldByNobody), PublicAccess(), CancellationToken.None);
+
+        ShouldRefuse(created, "Cannot grant 'glucose.read' because the caller does not hold it.");
+        ShouldRefuse(updated, "Cannot grant 'glucose.read' because the caller does not hold it.");
+    }
+
+    [Fact]
+    public async Task MixedMember_whoseDirectReasonEnds_mayNotChangeARoleAMemberWhoOutlastsItHolds()
+    {
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.RolesManage, Scope.GlucoseRead }, CallerEnd, false));
+        var before = await RoleStateAsync(_heldByLongerMember);
+
+        ShouldRefuse(await ChangeAsync(controller, "update", _heldByLongerMember, PublicAccess()));
+        (await RoleStateAsync(_heldByLongerMember)).Should().Be(before);
+    }
+
+    [Fact]
+    public async Task MixedMember_mayPutWhatTheDirectReasonHoldsInARole()
+    {
+        var controller = BuildMixedController(new GrantCeiling(new HashSet<string> { Scope.RolesManage, Scope.GlucoseRead }, null, false));
+
+        var result = await controller.CreateRole(new CreateRoleRequest("Helpers", null, [Scope.GlucoseRead]), CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+    }
+
+    [Fact]
+    public async Task TeamOnlyMember_givesNothing()
+    {
+        var controller = BuildMixedController(null);
+        var before = await RoleStateAsync(_heldByNobody);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(
+            await controller.CreateRole(new CreateRoleRequest("Helpers", null, [Scope.GlucoseRead]), CancellationToken.None));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await ChangeAsync(controller, "update", _heldByNobody, PublicAccess()));
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await ChangeAsync(controller, "delete", _heldByNobody, PublicAccess()));
+        (await RoleStateAsync(_heldByNobody)).Should().Be(before);
+
+        var roles = (await controller.GetRoles(new TenantMembershipRepository(_dbContext.AsFactory(), AccountLinkRoutes.Off), TimeProvider.System, CancellationToken.None))
+            .Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeAssignableTo<List<TenantRoleDto>>().Subject;
+        roles.Should().OnlyContain(r => !r.CanGrant);
     }
 
     public void Dispose()

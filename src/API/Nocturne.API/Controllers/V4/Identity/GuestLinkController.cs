@@ -62,6 +62,9 @@ public class GuestLinkController : ControllerBase
         if (HttpContext.IsCallerInactive())
             return Challenge();
 
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
         var baseUrl = $"{Request.PublicScheme()}://{Request.Host}";
 
@@ -72,10 +75,10 @@ public class GuestLinkController : ControllerBase
                 auth.SubjectId.Value,
                 request.Label,
                 baseUrl,
-                HttpContext.GetGrantedScopes(),
-                HttpContext.CallerAccessEndsAt(),
+                ceiling.Scopes,
+                ceiling.AccessEndsAt,
                 request.Scopes,
-                limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
+                limitTo24Hours: ceiling.HistoryClamped,
                 ct: ct);
 
             return Ok(result);
@@ -109,7 +112,7 @@ public class GuestLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<GuestLinkScopeOptions> GetGuestLinkScopeOptions()
     {
-        return Ok(GuestLinkService.ScopeOptions(HttpContext.GetGrantedScopes()));
+        return Ok(GuestLinkService.ScopeOptions((HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing).Scopes));
     }
 
     /// <summary>

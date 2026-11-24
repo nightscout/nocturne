@@ -705,12 +705,12 @@ public class TenantMembershipRepository : ITenantMembershipRepository
         Guid subjectId, Guid tenantId, DateTime now, CancellationToken ct) =>
         MembershipReasons.ReadInForceAsync(_contexts, tenantId, now, async (inForce, token) =>
         {
-            var row = await ReadSubjectMembershipRowAsync(subjectId, tenantId, inForce, token);
-            return (row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.IsActive, row.Facts()), subjectId, row?.NextReasonLapseAt);
+            var row = await ReadSubjectMembershipRowAsync(subjectId, tenantId, now, inForce, token);
+            return (row is null ? null : new SubjectMembershipRead(row.IsPlatformAdmin, row.IsActive, row.Facts(now)), subjectId, row?.NextReasonLapseAt);
         }, ct);
 
     private async Task<MembershipRow?> ReadSubjectMembershipRowAsync(
-        Guid subjectId, Guid tenantId, Expression<Func<TenantMemberEntity, bool>> inForce, CancellationToken ct)
+        Guid subjectId, Guid tenantId, DateTime now, Expression<Func<TenantMemberEntity, bool>> inForce, CancellationToken ct)
     {
         await using var lease = await OpenForTenantAsync(tenantId, ct);
         var db = lease.Context;
@@ -734,6 +734,9 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                     AccessEndsAt = m.AccessEndsAt,
                     NextReasonLapseAt = m.NextReasonLapseAt,
                     LastUsedAt = m.LastUsedAt,
+                    Reasons = m.Reasons.AsQueryable()
+                        .Where(r => r.TenantMember.NextReasonLapseAt == null || r.TenantMember.NextReasonLapseAt > now)
+                        .Select(MembershipReasonColumns.Of).ToList(),
                 })
             .FirstOrDefaultAsync(ct);
     }
@@ -759,15 +762,19 @@ public class TenantMembershipRepository : ITenantMembershipRepository
 
         public DateTime? LastUsedAt { get; init; }
 
-        public TenantMembershipFacts? Facts() => MemberId is { } id
-            ? new TenantMembershipFacts(
-                id,
-                new TenantMemberAccess(
-                    MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
-                    LimitTo24Hours == true,
-                    AccessEndsAt),
-                LastUsedAt)
-            : null;
+        public List<MembershipReasonColumns> Reasons { get; init; } = [];
+
+        public TenantMembershipFacts? Facts(DateTime now)
+        {
+            if (MemberId is not { } id)
+                return null;
+
+            var access = new TenantMemberAccess(
+                MemberPermissions.Effective(RolePermissions, DirectPermissions).ToHashSet(),
+                LimitTo24Hours == true,
+                AccessEndsAt);
+            return new TenantMembershipFacts(id, access, MembershipReasonColumns.DirectAccess(Reasons, access, now), LastUsedAt);
+        }
     }
 
     /// <inheritdoc/>

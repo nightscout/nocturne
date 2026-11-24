@@ -26,11 +26,11 @@ public class ConnectorSecretsSaveResult
 
 /// <summary>
 /// The caller saving a connector's secrets, as far as adopting a Nightscout API secret goes: the
-/// maker of the credential it would become, and what the caller holds on the site.
+/// maker of the credential it would become, and what the caller may give on the site.
 /// </summary>
 /// <param name="Maker">The member the adopted credential is stamped with.</param>
-/// <param name="GrantedScopes">The caller's resolved scopes on the site.</param>
-/// <param name="HistoryClamped">Whether the caller's reads are limited to the last 24 hours.</param>
+/// <param name="GrantedScopes">The scopes the caller may give: those of its direct reason, not a team's.</param>
+/// <param name="HistoryClamped">Whether what the caller gives must read only the last 24 hours.</param>
 public sealed record ConnectorSecretSaver(CredentialMaker Maker, IReadOnlySet<string> GrantedScopes, bool HistoryClamped)
 {
     /// <summary>

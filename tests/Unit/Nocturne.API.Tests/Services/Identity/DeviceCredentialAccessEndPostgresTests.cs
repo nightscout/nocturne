@@ -725,7 +725,7 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
         var context = Presenting(seeded, seeded.Maker, key);
         new RequestMembership(
                 seeded.Maker, seeded.Tenant,
-                new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), null))
+                new MembershipFacts(Guid.NewGuid(), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), new TenantMemberAccess(new HashSet<string> { Scope.FullAccess }, false, Now.UtcDateTime.AddDays(3)), null))
             .StoreOn(context);
 
         (await context.CredentialMakerAsync(CancellationToken.None)).Should().Be(new CredentialMaker(seeded.Maker, keyExpires));

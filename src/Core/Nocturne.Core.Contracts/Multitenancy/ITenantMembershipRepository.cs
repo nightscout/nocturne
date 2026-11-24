@@ -356,8 +356,12 @@ public interface ITenantMembershipRepository
 /// <summary>A membership as the authentication of a request reads it.</summary>
 /// <param name="Id">The membership row.</param>
 /// <param name="Access">What the membership grants on its tenant.</param>
+/// <param name="Direct">
+/// What its direct reason grants, which bounds what the member may give anyone else; null when the
+/// member holds no direct reason in force.
+/// </param>
 /// <param name="LastUsedAt">When the membership was last stamped as used.</param>
-public sealed record TenantMembershipFacts(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt);
+public sealed record TenantMembershipFacts(Guid Id, TenantMemberAccess Access, TenantMemberAccess? Direct, DateTime? LastUsedAt);
 
 /// <summary>A subject's platform-admin standing, active state and membership of the resolved tenant, as the authentication of a request reads them.</summary>
 /// <param name="IsPlatformAdmin">Whether the subject holds platform admin and is active.</param>

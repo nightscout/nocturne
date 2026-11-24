@@ -209,7 +209,8 @@ public class ServicesController : ControllerBase
         if (!ConnectorConfigurationService.AdoptsSecret(id))
             return Ok(capabilities);
 
-        if (ConnectorSecretSaver.MayAdoptFor(HttpContext.GetGrantedScopes(), HttpContext.IsCallerHistoryClamped()))
+        var ceiling = HttpContext.CallerGrantCeiling() ?? GrantCeiling.Nothing;
+        if (ConnectorSecretSaver.MayAdoptFor(ceiling.Scopes, ceiling.HistoryClamped))
             capabilities.SavedSecretStopsAt = HttpContext.CallerAccessEndsAt();
         else
             capabilities.SavedSecretMakesNoCredential = true;

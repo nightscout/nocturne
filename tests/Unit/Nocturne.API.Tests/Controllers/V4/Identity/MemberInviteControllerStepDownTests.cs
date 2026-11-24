@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -128,6 +130,51 @@ public sealed class MemberInviteControllerStepDownTests : IDisposable
             .DirectPermissions.Should().Equal(Scope.GlucoseRead);
         (await _db.TenantMembers.AsNoTracking().OwnersOf(_tenantId).Select(m => m.SubjectId).ToListAsync())
             .Should().Equal(_recipientSubjectId);
+    }
+
+    /// <summary>
+    /// A mixed member: the sum is an owner's, while the direct reason gives only
+    /// <paramref name="directScopes"/>, ends in a week and reads the last 24 hours.
+    /// </summary>
+    private MemberInviteController MixedController(IEnumerable<string> directScopes)
+    {
+        var controller = Controller(Scope.FullAccess);
+        controller.HttpContext.SetGrantCeiling(
+            new GrantCeiling(directScopes.ToHashSet(), DateTime.UtcNow.AddDays(7), true));
+        return controller;
+    }
+
+    [Fact]
+    public async Task RefusesAMixedMemberWhoseDirectReasonCouldNotGiveCaretaker()
+    {
+        AddRecipientAsOwner();
+
+        var result = await MixedController([Scope.GlucoseRead, Scope.MembersManage]).StepDown(CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
+    }
+
+    [Fact]
+    public async Task StepsDownAMixedMemberWhoseDirectReasonCouldGiveCaretaker()
+    {
+        AddRecipientAsOwner();
+
+        var result = await MixedController(RoleSeeds.Permissions[RoleSeeds.Caretaker]).StepDown(CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Caretaker);
+    }
+
+    [Fact]
+    public async Task RefusesATeamOnlyMember()
+    {
+        AddRecipientAsOwner();
+        var controller = Controller(Scope.FullAccess);
+        controller.HttpContext.SetGrantCeiling(null);
+
+        GrantCeilingAssertions.ShouldRefuseAsAccessFromTeam(await controller.StepDown(CancellationToken.None));
+        (await HelperRoleSlugsAsync()).Should().Equal(RoleSeeds.Owner);
     }
 
     [Fact]

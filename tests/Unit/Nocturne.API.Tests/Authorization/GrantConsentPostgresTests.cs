@@ -401,7 +401,7 @@ public class GrantConsentPostgresTests(GrantConsentPostgresTests.Database databa
             TimeProvider.System,
             NullLogger<OAuthGrantService>.Instance);
 
-        var edited = await service.UpdateGrantAsync(grant, seeded.Subject, scopes: ["glucose.read"]);
+        var edited = await service.UpdateGrantAsync(grant, seeded.Subject, new GrantScopeBounds(new HashSet<string> { Scope.FullAccess }, new HashSet<string> { Scope.FullAccess }), scopes: ["glucose.read"]);
 
         merged.Should().NotBeNull("the consent merged while the edit was paused before its save");
         merged!.Created.Should().BeFalse();
