@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Connectors;
+using Nocturne.API.Middleware;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Contracts.Auth;
@@ -145,6 +146,20 @@ public sealed class CareLinkConnectControllerTests
     {
         var result = Build(tenant: null, Auth()).DesktopToken();
         result.Result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
+    public void DesktopToken_is_refused_to_an_inactive_caller_and_mints_nothing()
+    {
+        var auth = Auth();
+        auth.TenantId = TenantId;
+        var controller = Build(Tenant(), auth);
+        new RequestMembership(SubjectId, TenantId, null) { SubjectIsInactive = true }.StoreOn(controller.HttpContext);
+
+        var result = controller.DesktopToken();
+
+        result.Result.Should().BeOfType<ChallengeResult>();
+        _jwtService.VerifyNoOtherCalls();
     }
 
     /// <summary>

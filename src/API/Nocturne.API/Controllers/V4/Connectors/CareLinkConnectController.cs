@@ -220,6 +220,9 @@ public partial class CareLinkConnectController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null } || tenantId is null)
             return Unauthorized();
 
+        if (HttpContext.IsCallerInactive())
+            return Challenge();
+
         var subjectId = auth.SubjectId ?? throw new InvalidOperationException("Authenticated subject id is required.");
 
         var token = _jwtService.GenerateAccessToken(
@@ -255,7 +258,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// <see cref="Scope.TenantSettings"/> and not a connector scope an app can be given; or a desktop
     /// link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
-    /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
+    /// <see cref="DesktopToken"/> mints only for an active caller that already held the permission.
     /// </summary>
     private bool CanConfigureConnectors() =>
         Scope.Satisfies(

@@ -84,6 +84,7 @@ public class CredentialWriterGuardTests
         "IShareLinkService.SetScopesAsync",
         "IShareLinkService.SetFullHistoryAsync",
         "IMigrationJobService.StartMigrationAsync",
+        "IJwtService.GenerateAccessToken",
     ];
 
     /// <summary>
@@ -145,10 +146,15 @@ public class CredentialWriterGuardTests
             ["SetupController.OwnerOptions"] = FirstRunGate,
             ["SetupController.OwnerOidc"] = FirstRunGate,
             ["MemberInviteController.StepDown"] = "it only narrows the caller's own roles to caretaker and gives nothing",
+            ["PlatformAccessController.Access"] = PlatformAdminStanding,
         };
 
     private const string PlatformAdminGate =
         "the platform_admin role is read on every request and needs an active subject, so an inactive one is refused at the gate";
+
+    private const string PlatformAdminStanding =
+        "it mints only for a caller whose platform_admin standing this request read, which needs an active subject, "
+        + "and PlatformAccessCookieHandler reads that standing again on every use of what it mints";
 
     private const string DevOnlyGate =
         "it lives in the .DevOnly namespace, which is dropped from controller discovery outside Development";
@@ -213,6 +219,25 @@ public class CredentialWriterGuardTests
             .ToList();
 
         ungated.Should().BeEmpty("the reason holds only where [Authorize(Roles = \"platform_admin\")] stands in front of the action");
+    }
+
+    [Fact]
+    public void EveryPlatformAdminStandingEntryReadsThatStanding()
+    {
+        var entries = RefusedElsewhere.Where(entry => entry.Value == PlatformAdminStanding).Select(entry => entry.Key).ToList();
+
+        var unread = entries
+            .Where(key => !RepoSources.Under(ControllersDirectory)
+                .SelectMany(file => file.Tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
+                .Where(type => type.Identifier.ValueText == key.Split('.')[0])
+                .SelectMany(type => type.Members.OfType<MethodDeclarationSyntax>())
+                .Where(method => method.Identifier.ValueText == key.Split('.')[1])
+                .Any(method => method.DescendantNodes().OfType<MemberAccessExpressionSyntax>()
+                    .Any(access => access.Name.Identifier.ValueText == "IsPlatformAdmin")))
+            .ToList();
+
+        entries.Should().NotBeEmpty();
+        unread.Should().BeEmpty("the reason holds only for an action that reads the caller's IsPlatformAdmin");
     }
 
     [Fact]
@@ -297,6 +322,8 @@ public class CredentialWriterGuardTests
             "MemberInviteController.SetMemberRoles",
             "OAuthController.UpdateGrant",
             "MigrationController.StartMigration",
+            "CareLinkConnectController.DesktopToken",
+            "PlatformAccessController.Access",
         ]);
 
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/teams/{teamId}/invites", "POST")
@@ -326,12 +353,17 @@ public class CredentialWriterGuardTests
         "IDirectGrantService.CreateAsync")]
     [InlineData("class C { IDirectGrantService _g; [HttpPost] public async Task A() { Func<Task> f = () => _g.CreateAsync(); } }",
         "IDirectGrantService.CreateAsync")]
+    [InlineData("class C { IJwtService _j; [HttpPost] public IActionResult A() { var t = _j.GenerateAccessToken(s, [], [], scopes: [x], tenantId: id); } }",
+        "IJwtService.GenerateAccessToken")]
+    [InlineData("class C(IJwtService jwtService) { [HttpGet] public IActionResult A() { var g = jwtService.GenerateAccessToken(s, [], [], []); } }",
+        "IJwtService.GenerateAccessToken")]
     [InlineData("class C { [HttpPost] public async Task A() { var invite = new AlertInviteEntity { Id = id }; } }",
         "AlertInviteEntity")]
     [InlineData("class C { [HttpPost] public async Task A() { AlertInviteEntity invite = new() { Id = id }; } }",
         "AlertInviteEntity")]
     [InlineData("class C { IDirectGrantService _g; [HttpPost] public async Task A() { await _g.RevokeAsync(); } }", "")]
     [InlineData("class C { IContextFactory _f; [HttpPost] public async Task A() { await _f.CreateAsync(); } }", "")]
+    [InlineData("class C { IJwtService _j; [HttpPost] public IActionResult A() { var v = _j.ValidateAccessToken(t); } }", "")]
     [InlineData("class C { IDirectGrantService _g; [HttpPost] public async Task A() { await other.CreateAsync(); } }", "")]
     [InlineData("class C { IDirectGrantService _g; public async Task A() { await _g.CreateAsync(); } }", "")]
     [InlineData("class C { IDirectGrantService _g; [HttpPost] public async Task A() { await Elsewhere.Mint(); } }", "")]
