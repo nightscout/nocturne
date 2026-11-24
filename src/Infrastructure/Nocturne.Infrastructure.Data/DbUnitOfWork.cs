@@ -46,8 +46,9 @@ public sealed class DbUnitOfWork : IAsyncDisposable
         new(await contexts.CreatePlatformAsync(ct));
 
     /// <summary>
-    /// Takes ownership of <paramref name="context"/>, for a test that runs a writer on a context it
-    /// built by hand. Disposing the unit disposes it.
+    /// Takes ownership of <paramref name="context"/>, for a writer run on a context built by hand: a
+    /// test's, or the startup membership check's under the migrator role
+    /// (<see cref="Services.MembershipReasons.ReconcileAsync"/>). Disposing the unit disposes it.
     /// </summary>
     internal static DbUnitOfWork Own(NocturneDbContext context) => new(context);
 

@@ -4,9 +4,11 @@ using Nocturne.Core.Models.Authorization;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// Keeps what a member made from outlasting their access. The end-date change and removal both call
-/// <see cref="CapAsync"/>, so a new kind of thing a member can make is capped here. An end that the
-/// reason projection writes (<see cref="Services.MembershipReasons"/>) does not call it yet.
+/// Keeps what a member made from outlasting their access. A write that lowers a membership's end, or
+/// gives it one, calls <see cref="CapAsync"/> at that end on the unit that commits it; the reason
+/// projection (<see cref="Services.MembershipReasons"/>) reports the end it lowered. A new kind of
+/// thing a member can make is capped here. A lapse never moves an end
+/// (<see cref="Core.Models.Identity.MembershipSum"/>), so nothing caps on one.
 /// </summary>
 /// <remarks>
 /// It caps the guest links and device credentials the member made

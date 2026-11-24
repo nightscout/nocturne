@@ -277,6 +277,12 @@ public sealed record PlatformAdminDirectory(IReadOnlyList<PlatformAdminMembershi
 /// </summary>
 public sealed record SubjectMembershipsRemoval(int Removed, IReadOnlyList<LastOwnerTenant> TenantsLeftWithoutOwner);
 
+/// <summary>What removing a membership's direct reason did.</summary>
+/// <param name="Outcome">Whether it was removed, or why not.</param>
+/// <param name="MembershipKept">Whether the membership stays for another reason; false when it went with the direct reason.</param>
+/// <param name="KeptAccessEndsAt">The end of the membership that stays; null when it has none or did not stay.</param>
+public sealed record DirectReasonRemoval(OwnerGuardedChange Outcome, bool MembershipKept, DateTime? KeptAccessEndsAt);
+
 /// <summary>What a membership change that may not leave the tenant without an owner found.</summary>
 public enum OwnerGuardedChange
 {

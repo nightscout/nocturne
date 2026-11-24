@@ -142,13 +142,17 @@ public interface ITenantMembershipRepository
     /// when <c>TenantOwnerFilter.IsLastOwnerAsync</c> says it is the last owner, and with
     /// <see cref="OwnerGuardedChange.FromTeam"/> when it holds no direct reason. A membership whose only
     /// reason it is goes with it; one that also holds a team's reason stays, projected at
-    /// <paramref name="now"/> from what is left. Its removed row records <paramref name="how"/>.
+    /// <paramref name="now"/> from what is left, and says the end it keeps.
+    /// Its removed row records <paramref name="how"/>.
     /// </summary>
     /// <remarks>
     /// The check and the removal hold the tenant's owner lock. Over a unit, call it inside the
-    /// unit's commit, which then holds the lock until it commits the removal.
+    /// unit's commit, which then holds the lock until it commits the removal. The caller caps what
+    /// the member made at <see cref="DirectReasonRemoval.KeptAccessEndsAt"/> on that same unit, in
+    /// the same commit (<c>MemberCreations.CapAsync</c>), so call it over a unit: without one it
+    /// commits the kept end before anything can be capped.
     /// </remarks>
-    Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(
+    Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
         Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct);
 
     /// <summary>

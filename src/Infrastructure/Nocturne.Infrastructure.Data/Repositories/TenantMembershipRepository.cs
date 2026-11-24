@@ -215,19 +215,31 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     /// <summary>
     /// Stages the removal of the reason a team's access to the tenant (<paramref name="teamAccessId"/>)
     /// gives <paramref name="subjectId"/> through <see cref="MembershipReasons.RemoveTeamReasonAsync"/>, with
-    /// the rows of what it gave, attributed to <paramref name="source"/>; false when they hold none.
+    /// the rows of what it gave, attributed to <paramref name="source"/>, on <paramref name="unit"/>, which
+    /// must be pinned to <paramref name="tenantId"/>. A membership it leaves with an earlier end has what
+    /// the subject made capped at that end (<see cref="MemberCreations.CapAsync"/>) on the same unit.
+    /// When it is the member's only reason, the membership is removed and nothing they made is revoked
+    /// or capped here: the caller must revoke and cap what the member made, as <c>MembershipRemoval</c>
+    /// does for a direct removal.
     /// </summary>
-    internal static async Task<bool> StageRemoveTeamReasonAsync(
-        NocturneDbContext db, Guid tenantId, Guid subjectId, Guid teamAccessId, MemberAccessSource source, DateTime now,
+    /// <returns>
+    /// The grants the cap lowered, for the caller to evict their sessions once the unit commits; null
+    /// when they hold no such reason.
+    /// </returns>
+    internal static async Task<IReadOnlyList<OAuthGrantRecord>?> StageRemoveTeamReasonAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid subjectId, Guid teamAccessId, MemberAccessSource source, DateTime now,
         CancellationToken ct)
     {
+        var db = unit.Context;
         await db.LockMembershipAsync(tenantId, subjectId, ct);
         var member = await db.TenantMembers.FirstOrDefaultAsync(m => m.TenantId == tenantId && m.SubjectId == subjectId, ct);
         if (member is null || await MembershipReasons.TeamGrantAsync(db, member, teamAccessId, now, ct) is not { } grant)
-            return false;
+            return null;
 
         await StageGrantRemovedRowsAsync(db, tenantId, subjectId, grant, source, ct);
-        return await MembershipReasons.RemoveTeamReasonAsync(db, member, teamAccessId, source, now, ct);
+        return await MembershipReasons.RemoveTeamReasonAsync(db, member, teamAccessId, source, now, ct) is { } end
+            ? await MemberCreations.CapAsync(unit, subjectId, end, now, ct)
+            : [];
     }
 
     /// <summary>
@@ -460,10 +472,14 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
-    public virtual Task<OwnerGuardedChange> RemoveMemberUnlessLastOwnerAsync(
-        Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct) =>
-        UnderOwnersLockAsync(tenantId, async (db, token) =>
+    public virtual async Task<DirectReasonRemoval> RemoveMemberUnlessLastOwnerAsync(
+        Guid tenantId, Guid memberId, MembershipEndHow how, DateTime now, CancellationToken ct)
+    {
+        var kept = false;
+        DateTime? keptEnd = null;
+        var outcome = await UnderOwnersLockAsync(tenantId, async (db, token) =>
         {
+            (kept, keptEnd) = (false, null);
             if (await db.IsLastOwnerAsync(tenantId, memberId, _linkRoute, token))
                 return OwnerGuardedChange.LastOwner;
 
@@ -474,9 +490,12 @@ public class TenantMembershipRepository : ITenantMembershipRepository
                 return OwnerGuardedChange.FromTeam;
 
             await StageGrantRemovedRowsAsync(db, tenantId, member.SubjectId, direct, source: null, token);
-            await MembershipReasons.RemoveDirectReasonAsync(db, member, how, now, token);
+            kept = await MembershipReasons.RemoveDirectReasonAsync(db, member, how, now, token);
+            keptEnd = kept ? member.AccessEndsAt : null;
             return OwnerGuardedChange.Changed;
         }, ct);
+        return new DirectReasonRemoval(outcome, kept, keptEnd);
+    }
 
     /// <inheritdoc/>
     public virtual async Task<SubjectMembershipsRemoval> RemoveMembershipsOfSubjectAsync(Guid subjectId, CancellationToken ct)

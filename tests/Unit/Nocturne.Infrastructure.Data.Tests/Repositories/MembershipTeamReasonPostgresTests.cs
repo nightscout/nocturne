@@ -218,6 +218,17 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         return result;
     }
 
+    private async Task<T> InUnitAsync<T>(Site site, Func<DbUnitOfWork, Task<T>> work)
+    {
+        await using var unit = DbUnitOfWork.Own(Context(site.Tenant));
+        return await unit.CommitAsync(async token =>
+        {
+            var result = await work(unit);
+            await unit.Context.SaveChangesAsync(token);
+            return result;
+        }, ct: Ct);
+    }
+
     [Fact]
     public async Task Letting_a_team_only_member_in_directly_adds_a_direct_reason_with_a_new_members_rows_and_the_sum_holds_both()
     {
@@ -308,7 +319,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var before = (await RowsAsync(site, subject)).Count;
 
         (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
-            .Should().Be(OwnerGuardedChange.Changed);
+            .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var rows = (await RowsAsync(site, subject)).Skip(before).ToList();
         rows.Select(r => r.EventType).Should().Equal(
@@ -332,7 +343,7 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var audit = await AuditCountAsync(site);
 
         (await site.Members.RemoveMemberUnlessLastOwnerAsync(site.Tenant, member, MembershipEndHow.Removed, Now, Ct))
-            .Should().Be(OwnerGuardedChange.FromTeam);
+            .Outcome.Should().Be(OwnerGuardedChange.FromTeam);
         (await site.Members.SetAccessEndUnlessOwnerAsync(site.Tenant, member, Ends, Now, Ct)).Should().Be(OwnerGuardedChange.FromTeam);
         (await site.Members.ReplaceRolesUnlessLastOwnerAsync(site.Tenant, member, [site.CaretakerRole], [site.ViewerRole], Now, Ct))
             .Should().Be(OwnerGuardedChange.FromTeam);
@@ -464,8 +475,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         member.DirectReason.Should().BeNull();
         member.Roles.Select(r => r.RoleId).Should().Equal(site.CaretakerRole);
 
-        (await InTransactionAsync(site, db => TenantMembershipRepository.StageRemoveTeamReasonAsync(
-            db, site.Tenant, subject, access, bySelf, Now, Ct))).Should().BeTrue();
+        (await InUnitAsync(site, unit => TenantMembershipRepository.StageRemoveTeamReasonAsync(
+            unit, site.Tenant, subject, access, bySelf, Now, Ct))).Should().BeEmpty();
 
         var rows = await RowsAsync(site, subject);
         rows.Select(r => r.EventType).Should().Equal(
@@ -482,8 +493,8 @@ public class MembershipTeamReasonPostgresTests(MembershipTeamReasonPostgresTests
         var site = await SiteAsync("team-end-mixed");
         var (subject, member, access) = await MixedAsync(site, "team-end-mixed-member");
 
-        (await InTransactionAsync(site, db => TenantMembershipRepository.StageRemoveTeamReasonAsync(
-            db, site.Tenant, subject, access, MemberAccessSource.System, Now, Ct))).Should().BeTrue();
+        (await InUnitAsync(site, unit => TenantMembershipRepository.StageRemoveTeamReasonAsync(
+            unit, site.Tenant, subject, access, MemberAccessSource.System, Now, Ct))).Should().BeEmpty();
 
         (await ReasonsAsync(member)).Should().Equal((MembershipReasonKind.Direct, (Guid?)null));
         await RowIsTheSumAsync(site, member);

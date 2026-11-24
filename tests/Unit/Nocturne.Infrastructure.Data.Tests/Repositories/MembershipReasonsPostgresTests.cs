@@ -187,7 +187,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reason_roles WHERE tenant_role_id = '{s.CaretakerRole}'")).Should().Be(0);
 
-        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Should().Be(OwnerGuardedChange.Changed);
+        (await s.Members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, member, MembershipEndHow.Removed, Now, Ct)).Outcome.Should().Be(OwnerGuardedChange.Changed);
         await AssertEveryMemberMatchesAsync(s);
         (await CountAsync(database.MigratorConnectionString,
             $"SELECT count(*) FROM tenant_member_reasons WHERE tenant_member_id = '{member}'")).Should().Be(0);
@@ -228,7 +228,7 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
             var members = new TenantMembershipRepository(unit, AccountLinkRoutes.Off);
             await unit.CommitAsync(async token =>
             {
-                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, Now, token)).Should().Be(OwnerGuardedChange.Changed);
+                (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, ended, MembershipEndHow.Removed, Now, token)).Outcome.Should().Be(OwnerGuardedChange.Changed);
                 await unit.Context.SaveChangesAsync(token);
                 (await members.AddMemberAsync(new NewTenantMember(s.Tenant, subject, [s.CaretakerRole], ["glucose.read"]) { How = MembershipJoinHow.Direct, By = null }, token))
                     .Should().BeTrue();

@@ -50,7 +50,7 @@ internal sealed class MadeByStop
     /// <summary>
     /// Stages and saves on <paramref name="unit"/>, inside its commit, the whole stop of what
     /// <paramref name="subjectId"/> made on <paramref name="tenantId"/>, device credentials and alert
-    /// channels included, and returns the grants it revoked for
+    /// channels included, and returns the grants it revoked or capped for
     /// <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
     /// </summary>
     public static async Task<IReadOnlyList<OAuthGrantRecord>> StopAsync(
@@ -62,7 +62,7 @@ internal sealed class MadeByStop
         CancellationToken ct)
     {
         var stop = await StageAsync(unit, tenantId, subjectId, now, ct);
-        var revoked = await stop.FinishAsync(grantRevocation, [], capCreations: true, ct);
+        var revoked = await stop.FinishAsync(grantRevocation, [], capAt: now, ct);
         await unit.Context.SaveChangesAsync(ct);
         return revoked;
     }
@@ -96,21 +96,25 @@ internal sealed class MadeByStop
 
     /// <summary>
     /// Stages the revocation of <paramref name="alsoRevoke"/> and the guest links with every
-    /// consequence, then, when <paramref name="capCreations"/>, the cap of what else the subject made
-    /// at the stop's moment. Saves nothing.
+    /// consequence, then, when <paramref name="capAt"/> is set, the cap of what else the subject made
+    /// at that instant. Saves nothing.
     /// </summary>
-    /// <returns>The grants it revoked, for <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.</returns>
+    /// <returns>
+    /// The grants it revoked and the grants the cap lowered, for
+    /// <see cref="GrantRevocationService.EvictSessions"/> once the unit commits.
+    /// </returns>
     public async Task<IReadOnlyList<OAuthGrantRecord>> FinishAsync(
         GrantRevocationService grantRevocation,
         IReadOnlyCollection<OAuthGrantRecord> alsoRevoke,
-        bool capCreations,
+        DateTime? capAt,
         CancellationToken ct)
     {
         var revoked = alsoRevoke.Concat(_guestLinks.ExceptBy(alsoRevoke.Select(g => g.Id), g => g.Id)).ToList();
         await grantRevocation.StageAsync(_unit, revoked, _now, ct);
-        if (capCreations)
-            await MemberCreations.CapAsync(_unit, _subjectId, _now, _now, ct);
-        return revoked;
+        IReadOnlyList<OAuthGrantRecord> capped = capAt is { } end
+            ? await MemberCreations.CapAsync(_unit, _subjectId, end, _now, ct)
+            : [];
+        return [.. revoked, .. capped];
     }
 
     private static List<AuthAuditLogEntity> AddedAuditRows(NocturneDbContext context) =>

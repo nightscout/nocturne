@@ -249,7 +249,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
         (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
-            .Should().Be(OwnerGuardedChange.Changed);
+            .Outcome.Should().Be(OwnerGuardedChange.Changed);
         (await StoredAsync(s, id)).RevokedAt.Should().BeNull();
 
         (await InviteService(Contexts(s.Tenant)).AcceptInviteAsync(token, s.Joiner, s.Tenant)).ErrorCode.Should().Be("revoked");
@@ -265,7 +265,7 @@ public class MemberInviteMakerPostgresTests(MemberInviteMakerPostgresTests.Datab
         var members = new TenantMembershipRepository(Contexts(s.Tenant), AccountLinkRoutes.Off);
         var maker = (await members.FindMemberAsync(s.Tenant, s.Maker, Ct))!;
         (await members.RemoveMemberUnlessLastOwnerAsync(s.Tenant, maker.Id, MembershipEndHow.Removed, Now.UtcDateTime, Ct))
-            .Should().Be(OwnerGuardedChange.Changed);
+            .Outcome.Should().Be(OwnerGuardedChange.Changed);
 
         var service = InviteService(Contexts(s.Tenant), new MakerStillReadsAsMember(Contexts(s.Tenant), s.Maker));
 
