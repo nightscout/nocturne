@@ -6,11 +6,18 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
-  import { bg, bgLabel, convertFromDisplayUnits } from "#lib/utils/formatting.js";
+  import {
+    bg,
+    bgLabel,
+    convertFromDisplayUnits,
+    convertRateFromDisplayUnits,
+    convertRateToDisplayUnits,
+  } from "#lib/utils/formatting.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import AdvancedSection from "../AdvancedSection.svelte";
   import RuleBuilder from "../RuleBuilder.svelte";
   import type { RuleEditorState } from "../types";
+  import { valueStep } from "../valueStep";
   import NumberField from "./NumberField.svelte";
   import {
     ageDays,
@@ -42,9 +49,8 @@
     return minutes === 0 ? "At once" : `After ${minutesText(minutes)}`;
   }
 
-  const glucoseStep = $derived(glucoseUnits.current === "mmol" ? 0.1 : 1);
-  const rateStep = $derived(glucoseUnits.current === "mmol" ? 0.01 : 0.1);
   const fromGlucose = (shown: number) => convertFromDisplayUnits(shown, glucoseUnits.current);
+  const fromRate = (shown: number) => convertRateFromDisplayUnits(shown, glucoseUnits.current);
 
   const ageLabel = $derived(
     draft.template === "site_change_due"
@@ -74,7 +80,7 @@
           ? "Alert when glucose is above"
           : "Alert when glucose is below"}
         suffix={bgLabel()}
-        step={glucoseStep}
+        step={valueStep("threshold")}
         value={payload.value ?? 0}
         toDisplay={(v) => String(bg(v))}
         fromDisplay={fromGlucose}
@@ -88,10 +94,10 @@
           ? "Alert when glucose increases this fast, or faster"
           : "Alert when glucose decreases this fast, or faster"}
         suffix={`${bgLabel()} per minute`}
-        step={rateStep}
+        step={valueStep("rate_of_change")}
         value={payload.rate ?? 0}
-        toDisplay={(v) => String(bg(v))}
-        fromDisplay={fromGlucose}
+        toDisplay={(v) => String(convertRateToDisplayUnits(v, glucoseUnits.current))}
+        fromDisplay={fromRate}
         onChange={(v) => (payload.rate = v)}
       />
     {:else if leaf.signal_loss}
@@ -109,7 +115,7 @@
         id="alert-level"
         label="Alert when the forecast goes below"
         suffix={bgLabel()}
-        step={glucoseStep}
+        step={valueStep("predicted")}
         value={payload.value ?? 0}
         toDisplay={(v) => String(bg(v))}
         fromDisplay={fromGlucose}

@@ -12,7 +12,6 @@
     getGlucoseUnits,
     setGlucoseUnits,
   } from "#lib/stores/appearance-store.svelte.js";
-  import { userPrefersMode } from "mode-watcher";
   import {
     paletteItemsFor,
     groupMeta,
@@ -45,6 +44,15 @@
   let { open = $bindable(false), tenantless = false }: Props = $props();
 
   let searchValue = $state("");
+  let highlighted = $state("");
+  let restoreHighlightTo: string | null = null;
+
+  // A toggled item registers again under its new label, and bits-ui then selects the first item,
+  // more than once. Until the person moves again, a selection goes to the toggled item.
+  function setHighlighted(next: string) {
+    const kept = visibleItems.find((item) => item.id === restoreHighlightTo)?.label;
+    highlighted = kept ?? next;
+  }
 
   const realtimeStore = getRealtimeStore();
 
@@ -133,29 +141,11 @@
   }
 
   function getItemLabel(item: CommandPaletteItem): string {
-    if (item.group === "quick-settings") {
-      return getQuickSettingLabel(item.id) || item.label;
-    }
     if (item.group === "stats") {
       const value = getStatValue(item.id);
       return value ? `${item.label}: ${value}` : item.label;
     }
     return item.label;
-  }
-
-  function getQuickSettingLabel(itemId: string): string {
-    switch (itemId) {
-      case "qs-dark-mode": {
-        const mode = userPrefersMode.current;
-        return `Dark mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
-      }
-      case "qs-glucose-units":
-        return `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`;
-      case "qs-chart-lookback":
-        return `Chart lookback: ${glucoseChartLookback.current}h`;
-      default:
-        return "";
-    }
   }
 
   function handleSelect(item: CommandPaletteItem) {
@@ -171,6 +161,7 @@
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
+      if (item.group === "quick-settings") restoreHighlightTo = item.id;
     }
   }
 
@@ -211,6 +202,7 @@
   $effect(() => {
     if (!open) {
       searchValue = "";
+      restoreHighlightTo = null;
     }
   });
 </script>
@@ -270,7 +262,13 @@
   </div>
 {/snippet}
 
-<Command.Dialog bind:open>
+<svelte:window
+  onkeydowncapture={() => (restoreHighlightTo = null)}
+  onpointermovecapture={() => (restoreHighlightTo = null)}
+  oninputcapture={() => (restoreHighlightTo = null)}
+/>
+
+<Command.Dialog bind:open bind:value={() => highlighted, setHighlighted}>
   <Command.Input placeholder="Search commands..." bind:value={searchValue} />
 
   <!-- The vitals strip reads one tenant's live glucose. -->

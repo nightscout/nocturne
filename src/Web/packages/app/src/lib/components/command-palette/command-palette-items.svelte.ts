@@ -1,5 +1,10 @@
 import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 import {
+	getColorScheme,
+	getGlucoseUnits,
+	glucoseChartLookback,
+} from "#lib/stores/appearance-store.svelte.js";
+import {
 	estimatedA1cTitle,
 	reportTitle,
 	withEnglishWords,
@@ -119,8 +124,8 @@ const ENGLISH_PALETTE_KEYWORDS = {
 	pageCommunity: ["community", "github", "discord", "documentation", "foundation"],
 	pageTranslations: ["translations", "translate", "language", "locale"],
 	qsDarkMode: ["dark mode", "light mode", "theme", "toggle"],
-	qsGlucoseUnits: ["glucose units", "mg/dl", "mmol/l", "units"],
-	qsChartLookback: ["lookback", "time range", "chart period", "hours"],
+	qsGlucoseUnits: ["glucose units", "mg/dl", "mmol/l", "units", "switch"],
+	qsChartLookback: ["lookback", "time range", "chart period", "hours", "change"],
 	actionAddTreatment: ["add treatment", "log", "bolus", "carbs"],
 	actionAddFood: ["add food", "nutrition", "new food"],
 	actionManualSync: ["sync", "refresh", "fetch", "update"],
@@ -210,9 +215,9 @@ export function paletteKeywordWords(): Record<PaletteKeywordKey, string[]> {
 		// @wc-include
 		qsDarkMode: ["dark mode", "light mode", "theme", "toggle"],
 		// @wc-include
-		qsGlucoseUnits: ["glucose units", "mg/dL", "mmol/L", "units"],
+		qsGlucoseUnits: ["glucose units", "mg/dL", "mmol/L", "units", "switch"],
 		// @wc-include
-		qsChartLookback: ["lookback", "time range", "chart period", "hours"],
+		qsChartLookback: ["lookback", "time range", "chart period", "hours", "change"],
 		// @wc-include
 		actionAddTreatment: ["add treatment", "log", "bolus", "carbs"],
 		// @wc-include
@@ -225,6 +230,11 @@ export function paletteKeywordWords(): Record<PaletteKeywordKey, string[]> {
 /** An entry's search words. */
 function paletteKeywords(key: PaletteKeywordKey, translated: Partial<Record<PaletteKeywordKey, string[]>>): string[] {
 	return withEnglishWords(translated[key] ?? [], ENGLISH_PALETTE_KEYWORDS[key]);
+}
+
+function darkModeState(): string {
+	const scheme = getColorScheme();
+	return scheme === "dark" ? "On" : scheme === "light" ? "Off" : "System";
 }
 
 /**
@@ -550,7 +560,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		// ─── Quick Settings ──────────────────────────────────────────────────
 		{
 			id: "qs-dark-mode",
-			label: "Toggle dark mode",
+			label: `Dark mode: ${darkModeState()}`,
 			group: "quick-settings",
 			description: "Switch between light and dark themes",
 			keywords: paletteKeywords("qsDarkMode", words),
@@ -558,7 +568,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		},
 		{
 			id: "qs-glucose-units",
-			label: "Switch glucose units",
+			label: `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`,
 			group: "quick-settings",
 			description: "Toggle between mg/dL and mmol/L",
 			keywords: paletteKeywords("qsGlucoseUnits", words),
@@ -566,7 +576,7 @@ export function paletteItems(words: Partial<Record<PaletteKeywordKey, string[]>>
 		},
 		{
 			id: "qs-chart-lookback",
-			label: "Change chart lookback",
+			label: `Chart lookback: ${glucoseChartLookback.current}h`,
 			group: "quick-settings",
 			description: "Adjust the time window for charts",
 			keywords: paletteKeywords("qsChartLookback", words),
