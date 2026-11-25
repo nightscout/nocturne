@@ -18891,15 +18891,15 @@ msgstr "In den USA steuerlich absetzbar · Unterstützt die gesamte Community"
 #~ msgid "Nocturne Demo"
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Germany"
 msgstr "Deutschland"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Commercial"
 msgstr "Kommerziell"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "The official managed Nocturne instance, run by the creator of the project. Automatic updates, daily backups, and zero maintenance. Just connect your CGM and go."
 msgstr "Die offizielle verwaltete Nocturne-Instanz, betrieben vom Entwickler des Projekts. Automatische Updates, tägliche Backups und keinerlei Wartungsaufwand. Verbinde einfach dein CGM und leg los."
 
@@ -18915,34 +18915,34 @@ msgid "Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or an e
 msgstr "Verwende einen verwalteten PostgreSQL-Dienst (RDS, Cloud SQL, Supabase, Neon) oder eine vorhandene gemeinsam genutzte Datenbankinstanz. Erfordert eine einmalige Einrichtung der Rollen."
 
 #. 0: provider.license
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "{0} license"
 msgstr "{0}-Lizenz"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Server's physical location"
 msgstr "Physischer Standort des Servers"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "AGPL code repository link (if not commercially licensed)"
 msgstr "Link zum AGPL-Code-Repository (falls keine kommerzielle Lizenz vorliegt)"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Link to homepage"
 msgstr "Link zur Homepage"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Blurb (50 words max)"
 msgstr "Kurzbeschreibung (max. 50 Wörter)"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Email address for core maintainer"
 msgstr "E-Mail-Adresse der Projektleitung"
 
 #~ msgid "We welcome Nocturne-as-a-Service providers. To request a listing, please provide the following:"
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "Submit your request by opening an issue on the <0>Nocturne GitHub repository</0>."
 msgstr "Reiche deine Anfrage ein, indem du ein Issue im <0>Nocturne-GitHub-Repository</0> öffnest."
 
@@ -18955,7 +18955,7 @@ msgstr "Reiche deine Anfrage ein, indem du ein Issue im <0>Nocturne-GitHub-Repos
 #~ msgid "Don't want to self-host? These Nocturne-as-a-Service providers handle the infrastructure so you can focus on your diabetes management."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "<0/> Want to list your service here?"
 msgstr "<0/> Möchtest du deinen Dienst hier eintragen?"
 
@@ -29664,9 +29664,8 @@ msgstr "<0>Arbeitsspeicher.</0> Diese sechs benötigen im Leerlauf zusammen etwa
 #~ msgid "<0>Storage.</0> The container images account for about 2.5 GB before any data. A single CGM writes roughly 105,000 glucose readings a year, which with indexes and write-ahead logs comes to well under 1 GB per year. 10 GB fits the images and several years of one person's data. 20 GB is for households, longer history, or an imported Nightscout database."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Prefer not to self-host? These Nocturne-as-a-Service providers handle the infrastructure so you can focus on your diabetes management."
-msgstr "Du möchtest nicht selbst hosten? Diese Nocturne-as-a-Service-Anbieter kümmern sich um die Infrastruktur, damit du dich auf dein Diabetesmanagement konzentrieren kannst."
+#~ msgid "Prefer not to self-host? These Nocturne-as-a-Service providers handle the infrastructure so you can focus on your diabetes management."
+#~ msgstr "Du möchtest nicht selbst hosten? Diese Nocturne-as-a-Service-Anbieter kümmern sich um die Infrastruktur, damit du dich auf dein Diabetesmanagement konzentrieren kannst."
 
 #~ msgid "What is the name of this alert?"
 #~ msgstr ""
@@ -36609,7 +36608,7 @@ msgstr "Zurück zu den Einstellungen"
 msgid "Bring your own reverse proxy"
 msgstr "Eigenen Reverse-Proxy verwenden"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
 msgid "We welcome Nocturne-as-a-Service providers. To request a listing, provide the following:"
 msgstr "Anbieter von Nocturne-as-a-Service sind willkommen. Gib für eine Listungsanfrage Folgendes an:"
 
@@ -36621,9 +36620,8 @@ msgstr "Systemanforderungen"
 msgid "Choose your platform"
 msgstr "Wähle deine Plattform"
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "Managed instances"
-msgstr "Verwaltete Instanzen"
+#~ msgid "Managed instances"
+#~ msgstr "Verwaltete Instanzen"
 
 #: ../portal/src/routes/docs/installation/+page.svelte
 msgid "Platform notes"
@@ -40242,9 +40240,8 @@ msgstr "Führe dieselben Schritte manuell mit Docker Compose aus. Nutze diese An
 msgid "No server yet? One command in the browser makes a free one and runs the install script on it. No SSH or Docker knowledge needed."
 msgstr "Noch kein Server? Ein Befehl im Browser erstellt einen kostenlosen und führt das Installationsskript darauf aus. Keine SSH- oder Docker-Kenntnisse erforderlich."
 
-#: ../portal/src/routes/docs/installation/+page.svelte
-msgid "If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
-msgstr "Wenn du einen Linux-Server hast, verwende das Installationsskript. Die anderen Anleitungen sind für einen Server, den du noch nicht hast, oder für ein Setup, das du selbst verwaltest. Alle Methoden verwenden dieselben Docker-Images und Konfigurationen."
+#~ msgid "If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
+#~ msgstr "Wenn du einen Linux-Server hast, verwende das Installationsskript. Die anderen Anleitungen sind für einen Server, den du noch nicht hast, oder für ein Setup, das du selbst verwaltest. Alle Methoden verwenden dieselben Docker-Images und Konfigurationen."
 
 #: ../portal/src/routes/docs/installation/install-script/+page.svelte
 msgid "Point your domain at the server"
@@ -50342,4 +50339,72 @@ msgstr ""
 #. 0: name
 #: src/lib/components/alerts/channelState.svelte.ts
 msgid "{0} did not get the test alert."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingOnly.svelte
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+#: ../portal/src/routes/docs/+page.svelte
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "Managed service"
+msgstr ""
+
+#: ../portal/src/routes/docs/+page.svelte
+msgid "Providers that run Nocturne for you. Sign up and get your own site, with no server to look after."
+msgstr ""
+
+#: ../portal/src/routes/docs/getting-started/+page.svelte
+msgid "Managed service providers <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/+page.svelte
+msgid "These guides are for when you run Nocturne on your own server. If you have a Linux server, use the install script. The other guides are for a server that you do not have yet, or for a setup that you manage yourself. All methods use the same Docker images and configuration."
+msgstr ""
+
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "With a managed service, a provider runs Nocturne for you. You do not need a server, a domain or Docker. You sign up with the provider and get your own site at an address that they give you. For example, a site on nocturne.run is at <0/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "Providers"
+msgstr ""
+
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "These Nocturne-as-a-Service providers handle the infrastructure so you can focus on your diabetes management."
+msgstr ""
+
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "After you sign up"
+msgstr ""
+
+#: ../portal/src/routes/docs/managed-service/+page.svelte
+msgid "Open your site and connect a data source. The <0>quick start</0> shows how. The rest of these docs apply to your site too, except the installation guides and the server configuration, which the provider looks after."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingOnly.svelte
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "Self-host"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "A provider runs Nocturne for you. You sign up and use your site."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "You run Nocturne on your own server, VPS or Raspberry Pi."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "How do you run Nocturne?"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "The page now shows only the steps for a managed service. See <0>the providers</0>."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "The page now shows only the steps to self-host. See <0>the installation guide</0>."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/hosting/HostingPicker.svelte
+msgid "Select one, and the page shows only the steps for it."
 msgstr ""
