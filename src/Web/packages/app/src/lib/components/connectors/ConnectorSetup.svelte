@@ -156,6 +156,10 @@
   );
 
   const existingConfig = $derived(configQuery?.current ?? null);
+  const storedConfiguration = $derived.by((): Record<string, unknown> => {
+    const data = existingConfig?.configuration?.rootElement ?? existingConfig?.configuration;
+    return data && typeof data === "object" ? { ...data } : {};
+  });
   const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
   const dataSummary = $derived(dataSummaryQuery?.current ?? null);
   const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
@@ -247,10 +251,8 @@
     const id = activeId;
     if (!s || !id || configQuery?.loading || seededConnectorId === id) return;
 
-    const config = existingConfig;
-    const configData = config?.configuration?.rootElement ?? config?.configuration;
-    if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
-      configuration = { ...configData };
+    if (Object.keys(storedConfiguration).length > 0) {
+      configuration = { ...storedConfiguration };
     } else {
       configuration = getDefaultsFromSchema(s);
     }
@@ -503,6 +505,7 @@
           {showEnvVarHints}
           {saveLabel}
           lockedKeys={existingConfig?.lockedKeys ?? []}
+          {storedConfiguration}
           {variant}
           onSave={handleSave}
         />

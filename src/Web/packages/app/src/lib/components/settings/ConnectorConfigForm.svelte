@@ -29,9 +29,10 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Lock from "@lucide/svelte/icons/lock";
-  import type {
-    JsonSchema,
-    JsonSchemaProperty,
+  import {
+    isAddress,
+    type JsonSchema,
+    type JsonSchemaProperty,
   } from "#lib/utils/connector-json-schema.js";
   import {
     getPropertyMeta,
@@ -54,6 +55,12 @@
     /** The keys the viewer may not change, as the API reports them (`lockedKeys`). */
     lockedKeys?: readonly string[];
     /**
+     * The stored configuration as the API returns it, each address masked. An address is shown from
+     * here, and the save leaves it out until the viewer presses "Change address", so the API keeps
+     * the stored one.
+     */
+    storedConfiguration: Record<string, unknown>;
+    /**
      * `setup` shows only what connecting needs (the General and Credentials categories and any
      * required field) as one flat list, for a form that sits inside a setup or migration step.
      */
@@ -70,6 +77,7 @@
     showEnvVarHints = true,
     saveLabel,
     lockedKeys = [],
+    storedConfiguration,
     variant = "settings",
     onSave,
   }: Props = $props();
@@ -88,6 +96,39 @@
 
   // Track which secret fields are visible
   const visibleSecrets = new SvelteSet<string>();
+
+  const changingAddresses = new SvelteSet<string>();
+
+  function shownAddress(propName: string): string {
+    const shown = storedConfiguration[propName];
+    return typeof shown === "string" ? shown : "";
+  }
+
+  /** With no stored address there is nothing to keep, so the field is an input from the start. */
+  function isChangingAddress(propName: string): boolean {
+    return (
+      changingAddresses.has(propName) ||
+      (shownAddress(propName) === "" && !lockedKeys.includes(propName))
+    );
+  }
+
+  function changeAddress(propName: string) {
+    changingAddresses.add(propName);
+    setPropertyValue(propName, "");
+  }
+
+  function keepAddress(propName: string) {
+    changingAddresses.delete(propName);
+    setPropertyValue(propName, initialConfiguration[propName]);
+  }
+
+  function sentConfiguration(): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(configuration).filter(
+        ([key]) => !isAddress(schema.properties[key]) || isChangingAddress(key)
+      )
+    );
+  }
 
   // Track initial configuration for unsaved change detection
   let initialConfiguration = $state<Record<string, unknown>>({});
@@ -312,11 +353,12 @@
       for (const [key, value] of Object.entries(secrets)) {
         if (value && value.trim()) nonEmptySecrets[key] = value;
       }
-      await onSave(configuration, nonEmptySecrets);
+      await onSave(sentConfiguration(), nonEmptySecrets);
       // onSave resolves after loadConnectorData runs in the parent,
       // so configuration now has the latest backend values
       initialConfiguration = { ...configuration };
       secrets = {};
+      changingAddresses.clear();
     } catch {
       // The parent has shown the failure; the form stays dirty for a retry.
     } finally {
@@ -328,6 +370,7 @@
     configuration = { ...initialConfiguration };
     secrets = {};
     visibleSecrets.clear();
+    changingAddresses.clear();
   }
 
 </script>
@@ -409,10 +452,62 @@
   </div>
 {/snippet}
 
+{#snippet addressField(propName: string, propSchema: JsonSchemaProperty)}
+  {@const meta = getPropertyMeta(propName)}
+  {@const shown = shownAddress(propName)}
+  {@const locked = lockedKeys.includes(propName)}
+  <div class="flex flex-wrap items-center gap-2">
+    <Label for={isChangingAddress(propName) ? `address-${propName}` : undefined}>{meta.label}</Label>
+    {#if !setup && hasUnsavedChanges(propName)}
+      <Badge variant="default">Unsaved</Badge>
+    {/if}
+  </div>
+  {#if isChangingAddress(propName)}
+    <div class="flex flex-wrap items-center gap-2">
+      <Input
+        id="address-{propName}"
+        type="url"
+        value={String(configuration[propName] ?? "")}
+        placeholder="https://..."
+        class="min-w-0 flex-1"
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+          setPropertyValue(propName, e.currentTarget.value)}
+      />
+      {#if shown}
+        <Button variant="ghost" size="sm" onclick={() => keepAddress(propName)}>
+          Keep current address
+        </Button>
+      {/if}
+    </div>
+  {:else}
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="min-w-0 break-all text-sm" data-testid="address-{propName}">
+        {shown || "No address"}
+      </span>
+      {#if !locked}
+        <Button variant="outline" size="sm" onclick={() => changeAddress(propName)}>
+          Change address
+        </Button>
+      {/if}
+    </div>
+  {/if}
+  {#if locked}
+    <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
+      Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it.
+    </p>
+  {/if}
+  {#if meta.description}
+    <p class="text-sm text-muted-foreground">{meta.description}</p>
+  {/if}
+  {@render envVarHint(propSchema["x-envVar"])}
+{/snippet}
+
 {#snippet propertyField(propName: string, propSchema: JsonSchemaProperty)}
   {@const meta = getPropertyMeta(propName)}
   <div class="space-y-2">
-    {#if propSchema.type === "boolean"}
+    {#if isAddress(propSchema)}
+      {@render addressField(propName, propSchema)}
+    {:else if propSchema.type === "boolean"}
       <!-- Boolean: Switch -->
       <div class="flex items-center justify-between gap-4">
         <div class="space-y-0.5 min-w-0">
@@ -511,22 +606,14 @@
         {@render changeStatus(propName)}
       </div>
       <Input
-        type={propSchema.format === "uri" ? "url" : "text"}
+        type="text"
         value={String(getPropertyValue(propName) ?? "")}
-        placeholder={propSchema.format === "uri" ? "https://..." : undefined}
         minlength={propSchema.minLength}
         maxlength={propSchema.maxLength}
         pattern={propSchema.pattern}
-        disabled={lockedKeys.includes(propName)}
-        aria-describedby={lockedKeys.includes(propName) ? `${propName}-locked` : undefined}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
           setPropertyValue(propName, e.currentTarget.value)}
       />
-      {#if lockedKeys.includes(propName)}
-        <p id="{propName}-locked" class="text-sm text-muted-foreground" data-testid="locked-{propName}">
-          Only members who can manage this site's settings can change this address while a secret is saved or data is sent to it.
-        </p>
-      {/if}
       {#if meta.description}
         <p class="text-sm text-muted-foreground">{meta.description}</p>
       {/if}

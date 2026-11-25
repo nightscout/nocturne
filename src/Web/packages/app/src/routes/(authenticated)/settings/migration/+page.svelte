@@ -71,6 +71,7 @@
   // Form state
   let mode = $state<MigrationMode>(MigrationMode.Api);
   let nightscoutUrl = $state("");
+  let changingUrl = $state(false);
   let nightscoutApiSecret = $state("");
   let mongoConnectionString = $state("");
   let mongoDatabaseName = $state("");
@@ -89,9 +90,16 @@
     source: string;
   } | null>(null);
 
+  /**
+   * The server's address, masked. The form sends no URL until the viewer presses "Change address",
+   * and the API then reads the server's own.
+   */
+  const configuredUrl = $derived(pendingConfig?.nightscoutUrl ?? "");
+  const usesConfiguredUrl = $derived(configuredUrl !== "" && !changingUrl);
+
   const sourceKey = $derived(
     mode === MigrationMode.Api
-      ? `api\n${nightscoutUrl}\n${nightscoutApiSecret}`
+      ? `api\n${usesConfiguredUrl}\n${nightscoutUrl}\n${nightscoutApiSecret}`
       : `mongo\n${mongoConnectionString}\n${mongoDatabaseName}`
   );
   const shownTestResult = $derived(
@@ -121,9 +129,6 @@
       if (configResult?.hasPendingConfig) {
         if (configResult.mode !== undefined && configResult.mode !== null) {
           mode = configResult.mode;
-        }
-        if (configResult.nightscoutUrl) {
-          nightscoutUrl = configResult.nightscoutUrl;
         }
         if (configResult.mongoDatabaseName) {
           mongoDatabaseName = configResult.mongoDatabaseName;
@@ -271,7 +276,7 @@
   // Nightscout can be readable without an API secret, so the secret is optional.
   const isFormValid = $derived(
     (mode === MigrationMode.Api
-      ? nightscoutUrl.trim() !== ""
+      ? usesConfiguredUrl || nightscoutUrl.trim() !== ""
       : mongoConnectionString.trim() !== "" && mongoDatabaseName.trim() !== "") && isRangeValid
   );
 </script>
@@ -390,12 +395,38 @@
             {#if mode === MigrationMode.Api}
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="nightscout-url">Nightscout URL</Label>
-                  <Input
-                    id="nightscout-url"
-                    placeholder="https://your-nightscout.herokuapp.com"
-                    bind:value={nightscoutUrl}
-                  />
+                  <Label for={usesConfiguredUrl ? undefined : "nightscout-url"}>Nightscout URL</Label>
+                  {#if usesConfiguredUrl}
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="min-w-0 break-all text-sm" data-testid="configured-nightscout-url">
+                        {configuredUrl}
+                      </span>
+                      <Button variant="outline" size="sm" onclick={() => (changingUrl = true)}>
+                        Change address
+                      </Button>
+                    </div>
+                  {:else}
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Input
+                        id="nightscout-url"
+                        placeholder="https://your-nightscout.herokuapp.com"
+                        class="min-w-0 flex-1"
+                        bind:value={nightscoutUrl}
+                      />
+                      {#if configuredUrl}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onclick={() => {
+                            changingUrl = false;
+                            nightscoutUrl = "";
+                          }}
+                        >
+                          Keep current address
+                        </Button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
                 <div class="space-y-2">
                   <Label for="api-secret">
@@ -516,7 +547,9 @@
               >
                 <input {...testConnectionForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...testConnectionForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...testConnectionForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
@@ -559,7 +592,9 @@
               >
                 <input {...startMigrationForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {#if !usesConfiguredUrl}
+                    <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  {/if}
                   <input {...startMigrationForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
                   <input {...startMigrationForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />

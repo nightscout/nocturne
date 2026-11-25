@@ -110,8 +110,9 @@ public sealed class NightscoutAddress
     /// <summary>
     ///     The base of <paramref name="nightscoutUrl"/> with no trailing slash, query, fragment or user
     ///     info. A value that does not read as an address is cut at its query or fragment, and loses
-    ///     any user info before its host. It still carries the path, so it is given back only to a
-    ///     form that edits the URL; what is otherwise stored or shown is <see cref="Masked"/>.
+    ///     any user info before its host. It still carries the path, so it is neither stored nor
+    ///     shown: it is what <see cref="Masked"/> shortens and what a migration source's digest is
+    ///     taken over.
     /// </summary>
     public static string Display(string nightscoutUrl)
     {

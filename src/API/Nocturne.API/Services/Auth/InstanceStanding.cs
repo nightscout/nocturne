@@ -1,3 +1,4 @@
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Auth;
@@ -17,5 +18,23 @@ internal static class InstanceStanding
     {
         var listed = await tenants.ListNonDemoAsync(2, ct);
         return listed.Count == 1 && listed[0].Id == tenantId;
+    }
+
+    /// <summary>
+    /// Whether the caller of <paramref name="httpContext"/> holds standing over the instance: a
+    /// platform admin (<see cref="Nocturne.Core.Models.Authorization.AuthContext.IsPlatformAdmin"/>,
+    /// which the instance key carries), or a caller on the instance's only tenant
+    /// (<see cref="IsOnlyTenantAsync"/>). It does not judge the caller's access on that tenant, which
+    /// the action requires on its own.
+    /// </summary>
+    public static async Task<bool> HeldByAsync(HttpContext httpContext)
+    {
+        if (httpContext.GetAuthContext()?.IsPlatformAdmin == true)
+            return true;
+
+        var tenant = httpContext.RequestServices.GetRequiredService<ITenantAccessor>();
+        return tenant.IsResolved
+            && await IsOnlyTenantAsync(
+                httpContext.RequestServices.GetRequiredService<ITenantRepository>(), tenant.TenantId, httpContext.RequestAborted);
     }
 }

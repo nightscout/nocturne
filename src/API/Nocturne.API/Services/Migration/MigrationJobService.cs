@@ -61,7 +61,22 @@ public interface IMigrationJobService
         TestMigrationConnectionRequest request,
         CancellationToken ct = default
     );
-    PendingMigrationConfig GetPendingConfig();
+    /// <summary>
+    /// The instance's configured migration source, with its URL masked, to a caller with
+    /// <paramref name="instanceStanding"/>; no pending source to any other.
+    /// </summary>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    PendingMigrationConfig GetPendingConfig(bool instanceStanding);
+
+    /// <summary>
+    /// The Nightscout URL an API-mode request reads: <paramref name="requested"/>, or the configured
+    /// source's when it is blank and the caller has <paramref name="instanceStanding"/>.
+    /// <see cref="GetPendingConfig"/> gives a form only the masked form of the configured URL, so a
+    /// form that keeps it sends none.
+    /// </summary>
+    /// <param name="requested">The URL the request names.</param>
+    /// <param name="instanceStanding">Whether the caller holds <see cref="Auth.InstanceStanding.HeldByAsync"/>.</param>
+    string? ResolveNightscoutUrl(string? requested, bool instanceStanding);
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
@@ -488,31 +503,27 @@ public class MigrationJobService : IMigrationJobService
         };
     }
 
-    public PendingMigrationConfig GetPendingConfig()
-    {
-        var migrationMode = _configuration["MIGRATION_MODE"];
+    /// <inheritdoc />
+    public PendingMigrationConfig GetPendingConfig(bool instanceStanding) =>
+        instanceStanding && ConfiguredMigrationSource.Read(_configuration) is { } source
+            ? new PendingMigrationConfig
+            {
+                HasPendingConfig = true,
+                Mode = source.Mode,
+                NightscoutUrl = source.NightscoutUrl is { } url ? NightscoutAddress.Masked(url) : null,
+                HasApiSecret = source.HasApiSecret,
+                HasMongoConnectionString = source.MongoConnectionString is not null,
+                MongoDatabaseName = source.MongoDatabaseName,
+            }
+            : new PendingMigrationConfig { HasPendingConfig = false };
 
-        if (string.IsNullOrEmpty(migrationMode))
-        {
-            return new PendingMigrationConfig { HasPendingConfig = false };
-        }
-
-        var mode = migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase)
-            ? MigrationMode.MongoDb
-            : MigrationMode.Api;
-
-        return new PendingMigrationConfig
-        {
-            HasPendingConfig = true,
-            Mode = mode,
-            NightscoutUrl = _configuration["MIGRATION_NS_URL"] is { Length: > 0 } url ? NightscoutAddress.Display(url) : null,
-            HasApiSecret = !string.IsNullOrEmpty(_configuration["MIGRATION_NS_API_SECRET"]),
-            HasMongoConnectionString = !string.IsNullOrEmpty(
-                _configuration["MIGRATION_MONGO_CONNECTION_STRING"]
-            ),
-            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"],
-        };
-    }
+    /// <inheritdoc />
+    public string? ResolveNightscoutUrl(string? requested, bool instanceStanding) =>
+        string.IsNullOrWhiteSpace(requested)
+        && instanceStanding
+        && ConfiguredMigrationSource.Read(_configuration)?.NightscoutUrl is { } configured
+            ? configured
+            : requested;
 
     public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
         Guid tenantId,

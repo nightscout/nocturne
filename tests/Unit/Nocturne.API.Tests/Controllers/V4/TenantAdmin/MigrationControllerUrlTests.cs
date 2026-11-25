@@ -118,7 +118,9 @@ public class MigrationControllerUrlTests
             new StartMigrationRequest { Mode = MigrationMode.Api, NightscoutUrl = url }, CancellationToken.None);
 
         ShouldBeRefused(response.Result);
-        _migrations.VerifyNoOtherCalls();
+        _migrations.Verify(
+            m => m.StartMigrationAsync(It.IsAny<StartMigrationRequest>(), It.IsAny<TenantContext?>(), It.IsAny<CredentialMaker?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Theory]
