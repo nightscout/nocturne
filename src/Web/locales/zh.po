@@ -41090,6 +41090,7 @@ msgid "Send a test alert to the places you chose. It is marked as a test."
 msgstr ""
 
 #: src/lib/components/alerts/wizard/CheckStep.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "<0/> Test alert sent. Make sure that it arrived."
 msgstr ""
 
@@ -47251,24 +47252,17 @@ msgstr ""
 msgid "{0} channels are not sending."
 msgstr ""
 
-#: src/lib/components/alerts/channelState.svelte.ts
-msgid "A channel would not send."
-msgstr ""
+#~ msgid "A channel would not send."
+#~ msgstr ""
 
-#. 0: name
-#: src/lib/components/alerts/channelState.svelte.ts
-msgid "{0} would not send: it has no recipient."
-msgstr ""
+#~ msgid "{0} would not send: it has no recipient."
+#~ msgstr ""
 
-#. 0: name
-#: src/lib/components/alerts/channelState.svelte.ts
-msgid "{0} would not send: it has stopped."
-msgstr ""
+#~ msgid "{0} would not send: it has stopped."
+#~ msgstr ""
 
-#. 0: name
-#: src/lib/components/alerts/channelState.svelte.ts
-msgid "{0} would not send."
-msgstr ""
+#~ msgid "{0} would not send."
+#~ msgstr ""
 
 #: src/lib/components/alerts/channelState.svelte.ts
 msgid "A channel"
@@ -47308,17 +47302,15 @@ msgstr ""
 msgid "Edit this alert"
 msgstr ""
 
-#: src/lib/components/alerts/wizard/CheckStep.svelte
+#: src/lib/components/alerts/ChannelsNotSent.svelte
 msgid "The test alert did not go to every channel."
 msgstr ""
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
-msgid "Channels that do not send did not get it."
-msgstr ""
+#~ msgid "Channels that do not send did not get it."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
-msgid "<0/> Test alert sent. Make sure that it arrived. <1/>"
-msgstr ""
+#~ msgid "<0/> Test alert sent. Make sure that it arrived. <1/>"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectionDetailDialog.svelte
 msgid "Connection kept."
@@ -50326,4 +50318,28 @@ msgstr ""
 #. 0: ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 msgid "Rising fast: {0}"
+msgstr ""
+
+#. 0: testNotSent.ruleName
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "The test alert for {0} did not go to every channel."
+msgstr ""
+
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "A channel did not get the test alert."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} did not get the test alert. This channel has no recipient."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} did not get the test alert. This channel has stopped."
+msgstr ""
+
+#. 0: name
+#: src/lib/components/alerts/channelState.svelte.ts
+msgid "{0} did not get the test alert."
 msgstr ""
