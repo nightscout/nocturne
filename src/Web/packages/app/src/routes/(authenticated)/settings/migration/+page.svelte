@@ -91,8 +91,8 @@
   } | null>(null);
 
   /**
-   * The server's address, masked. The form sends no URL until the viewer presses "Change address",
-   * and the API then reads the server's own.
+   * The server's address, shown with its path hidden. The form sends no URL until the viewer
+   * presses "Change address", and the API then reads the server's own.
    */
   const configuredUrl = $derived(pendingConfig?.nightscoutUrl ?? "");
   const usesConfiguredUrl = $derived(configuredUrl !== "" && !changingUrl);

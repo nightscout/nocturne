@@ -190,6 +190,37 @@ public class NightscoutAddressTests
     }
 
     [Theory]
+    [InlineData("https://ns.example.com", "ns.example.com")]
+    [InlineData("https://ns.example.com/", "ns.example.com")]
+    [InlineData("https://NS.example.com:443/", "ns.example.com")]
+    [InlineData("http://ns.example.com:80", "ns.example.com")]
+    [InlineData("http://ns.example.com:1337", "ns.example.com:1337")]
+    [InlineData("https://ns.example.com/s3cr3t", "ns.example.com/…")]
+    [InlineData("https://ns.example.com/s3cr3t/", "ns.example.com/…")]
+    [InlineData("https://ns.example.com:8443/s3cr3t/api", "ns.example.com:8443/…")]
+    [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI", "ns.example.com/…")]
+    [InlineData("https://ns.example.com/?token=synthetic-token", "ns.example.com")]
+    [InlineData("https://ns.example.com/s3cr3t?token=synthetic-token#x", "ns.example.com/…")]
+    [InlineData("https://user:pass@ns.example.com/s3cr3t", "ns.example.com/…")]
+    [InlineData("https://user:pass@ns.example.com", "ns.example.com")]
+    [InlineData("ns.example.com", "ns.example.com")]
+    [InlineData("ns.example.com:1337/s3cr3t", "ns.example.com:1337/…")]
+    [InlineData("not an address", "not an address")]
+    [InlineData("user:pass@not an address/s3cr3t?token=synthetic-token", "not an address/…")]
+    [InlineData("ftp://user:pass@ns.example.com/s3cr3t", "ns.example.com/…")]
+    [InlineData(@"https://ns.example.com\s3cr3t", "ns.example.com/…")]
+    [InlineData(@"ns.example.com\s3cr3t", "ns.example.com/…")]
+    [InlineData(@"ftp://ns.example.com\s3cr3t", "ns.example.com/…")]
+    public void Shown_keeps_host_and_port_and_marks_any_path_without_showing_it(string configured, string expected)
+    {
+        var shown = NightscoutAddress.Shown(configured);
+
+        shown.Should().Be(expected);
+        shown.Should().NotContainAny("s3cr3t", "AGYL", "token", "user", "pass", "?", "#", @"\");
+        shown.Split('/').Skip(1).Should().HaveCountLessThanOrEqualTo(1).And.OnlyContain(path => path == "…");
+    }
+
+    [Theory]
     [InlineData("https://ns.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/api", "ns.example.com/AGYL…/api")]
     [InlineData("https://ns.example.com/", "ns.example.com")]
     [InlineData("http://ns.example.com:1337/api/v1", "ns.example.com:1337/api/v1")]

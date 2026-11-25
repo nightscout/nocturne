@@ -345,7 +345,7 @@ public record PendingMigrationConfig
     public MigrationMode? Mode { get; init; }
 
     /// <summary>
-    /// <c>MIGRATION_NS_URL</c> in its <c>NightscoutAddress.Masked</c> form, never the URL itself: its
+    /// <c>MIGRATION_NS_URL</c> in its <c>NightscoutAddress.Shown</c> form, never the URL itself: its
     /// path or query can be the credential. An API-mode request that sends no URL reads the
     /// configured one (<see cref="IMigrationJobService.ResolveNightscoutUrl"/>).
     /// </summary>
@@ -383,7 +383,7 @@ public record MigrationSourceDto
     public required MigrationMode Mode { get; init; }
 
     /// <summary>
-    /// The Nightscout URL masked, with no scheme and each long path segment cut (for API mode)
+    /// The Nightscout URL in its <c>NightscoutAddress.Shown</c> form (for API mode)
     /// </summary>
     public string? NightscoutUrl { get; init; }
 
