@@ -780,6 +780,7 @@ public static class TeamProblemCodes
     public const string StaffCeilingInvalid = "team_staff_ceiling_invalid";
     public const string StaffEndInvalid = "team_staff_end_invalid";
     public const string StaffInviteEndPassed = "team_staff_invite_end_passed";
+    public const string StaffDecisionNotOwner = "team_staff_decision_not_owner";
 }
 
 public sealed record TeamInviteAccepted(Guid TeamId);

@@ -349,6 +349,75 @@ public class MemberInviteController : ControllerBase
         await access.StopAsync(_tenantAccessor.TenantId, teamId, ct) ? NoContent() : NotFound();
 
     /// <summary>
+    /// Approves a staff member of a team with access to the current tenant, so they reach it through the
+    /// team. Lifts a decline. Only an owner may.
+    /// </summary>
+    [HttpPost("team-access/{teamId:guid}/staff/{subjectId:guid}/approve")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ApproveTeamStaff(
+        Guid teamId, Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.ApproveStaffAsync(_tenantAccessor.TenantId, teamId, callerId, subjectId, ct));
+    }
+
+    /// <summary>
+    /// Declines a staff member of a team with access to the current tenant, approved or waiting, so they do
+    /// not reach it through the team, whatever the team changes, until an owner approves them. Only an
+    /// owner may.
+    /// </summary>
+    [HttpPost("team-access/{teamId:guid}/staff/{subjectId:guid}/decline")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeclineTeamStaff(
+        Guid teamId, Guid subjectId, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(await access.DeclineStaffAsync(_tenantAccessor.TenantId, teamId, callerId, subjectId, ct));
+    }
+
+    /// <summary>
+    /// Turns "the team manages its own staff" on or off for a team with access to the current tenant.
+    /// Off keeps the staff already approved, and each new or widened staff member waits for an owner.
+    /// On approves every waiting staff member at once and keeps the declined declined. Only an owner may.
+    /// </summary>
+    [HttpPut("team-access/{teamId:guid}/staff-rule")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SetTeamStaffRule(
+        Guid teamId, [FromBody] SetTeamStaffRuleRequest request, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId)
+            return Unauthorized();
+
+        return StaffDecisionResult(
+            await access.SetStaffRuleAsync(_tenantAccessor.TenantId, teamId, callerId, request.TeamManagesStaff, ct));
+    }
+
+    /// <summary>
     /// A page of the changes to what the current tenant's members can read, newest first: members
     /// joining and leaving, roles and direct permissions given or taken, history limits, end dates, and
     /// the permissions a role grants. Narrow it to one member with <c>memberSubjectId</c>, which also
@@ -767,6 +836,17 @@ public class MemberInviteController : ControllerBase
     private ObjectResult AccessFromTeamProblem() =>
         this.ProblemWithCode(MemberAccessFromTeam.Code, MemberAccessFromTeam.Detail, StatusCodes.Status409Conflict);
 
+    private IActionResult StaffDecisionResult(OwnerDecision decision) => decision switch
+    {
+        OwnerDecision.Decided => NoContent(),
+        OwnerDecision.AccessFromTeam => this.CallerAccessFromTeamProblem(),
+        OwnerDecision.NotOwner => this.ProblemWithCode(
+            TeamProblemCodes.StaffDecisionNotOwner,
+            "Only an owner of the site can decide which of a team's staff have access to it.",
+            StatusCodes.Status403Forbidden),
+        _ => NotFound(),
+    };
+
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions
     /// that exempt it (<see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>), lifting the
@@ -839,6 +919,9 @@ public class CreateMemberInviteRequest
 public record SetMemberRolesRequest(List<Guid> RoleIds);
 public record SetMemberPermissionsRequest(List<string>? DirectPermissions);
 public record SetMemberLimitTo24HoursRequest(bool LimitTo24Hours);
+
+/// <param name="TeamManagesStaff">Whether the team's staff are approved at the site as they join.</param>
+public record SetTeamStaffRuleRequest(bool TeamManagesStaff);
 
 /// <param name="AccessEndsAt">When the membership ends; null when it does not.</param>
 public record SetMemberAccessEndRequest(DateTimeOffset? AccessEndsAt);

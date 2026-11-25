@@ -480,7 +480,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     /// test's list of the same subject's teams.
     /// </summary>
     private static readonly string[] TeamTables =
-        ["team_site_staff", "team_tenant_access_roles", "team_tenant_access", "team_access_links", "team_invites", "team_members", "team_staff_invites", "teams"];
+        ["team_site_declines", "team_site_staff", "team_tenant_access_roles", "team_tenant_access", "team_access_links", "team_invites", "team_members", "team_staff_invites", "teams"];
 
     /// <summary>The tables holding credentials, which the fixture restores its own into.</summary>
     private static readonly string[] CredentialTables =

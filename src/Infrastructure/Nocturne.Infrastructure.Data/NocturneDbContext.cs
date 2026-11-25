@@ -301,6 +301,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<TeamSiteStaffEntity> TeamSiteStaff { get; set; } = null!;
 
+    public DbSet<TeamSiteDeclineEntity> TeamSiteDeclines { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }

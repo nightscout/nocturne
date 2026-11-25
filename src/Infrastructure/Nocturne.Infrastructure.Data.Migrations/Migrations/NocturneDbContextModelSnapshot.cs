@@ -5743,6 +5743,37 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TeamTenantAccessId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_tenant_access_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("TeamTenantAccessId", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("team_site_declines");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteStaffEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5785,7 +5816,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.ToTable("team_site_staff", t =>
                         {
-                            t.HasCheckConstraint("ck_team_site_staff_status", "status IN ('pending', 'approved')");
+                            t.HasCheckConstraint("ck_team_site_staff_status", "status IN ('pending', 'approved', 'declined')");
                         });
                 });
 
@@ -12043,6 +12074,25 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Subject");
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteDeclineEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessEntity", "TeamTenantAccess")
+                        .WithMany()
+                        .HasForeignKey("TeamTenantAccessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Subject");
+
+                    b.Navigation("TeamTenantAccess");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamSiteStaffEntity", b =>

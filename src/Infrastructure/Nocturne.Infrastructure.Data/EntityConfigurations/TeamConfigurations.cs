@@ -181,6 +181,26 @@ internal sealed class TeamSiteStaffEntityConfiguration : IEntityTypeConfiguratio
 
         entity.ToTable(t => t.HasCheckConstraint(
             "ck_team_site_staff_status",
-            $"status IN ('{TeamSiteStaffStatus.Pending}', '{TeamSiteStaffStatus.Approved}')"));
+            $"status IN ('{TeamSiteStaffStatus.Pending}', '{TeamSiteStaffStatus.Approved}', '{TeamSiteStaffStatus.Declined}')"));
+    }
+}
+
+internal sealed class TeamSiteDeclineEntityConfiguration : IEntityTypeConfiguration<TeamSiteDeclineEntity>
+{
+    public void Configure(EntityTypeBuilder<TeamSiteDeclineEntity> entity)
+    {
+        entity.HasOne(e => e.TeamTenantAccess)
+            .WithMany()
+            .HasForeignKey(e => e.TeamTenantAccessId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.Subject)
+            .WithMany()
+            .HasForeignKey(e => e.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasIndex(e => new { e.TeamTenantAccessId, e.SubjectId }).IsUnique();
+
+        entity.HasIndex(e => e.SubjectId);
     }
 }

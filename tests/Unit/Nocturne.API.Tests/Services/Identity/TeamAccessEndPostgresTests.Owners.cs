@@ -94,6 +94,18 @@ public partial class TeamAccessEndPostgresTests
         return owner;
     }
 
+    /// <summary>Ends <paramref name="subject"/>'s direct reason, and their row with it, a day ago, as the sweep finds it.</summary>
+    private async Task LapseDirectReasonAsync(Site site, Guid subject)
+    {
+        var lapsed = Now.AddDays(-1);
+        await ExecuteAsync($"""
+            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
+            UPDATE tenant_member_reasons SET access_ends_at = '{lapsed:O}'
+             WHERE kind = 'direct' AND tenant_member_id = (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{subject}');
+            UPDATE tenant_members SET access_ends_at = '{lapsed:O}' WHERE tenant_id = '{site.Tenant}' AND subject_id = '{subject}';
+            """);
+    }
+
     private async Task<string> InviteAsync(Site site, Guid role)
     {
         var token = Guid.NewGuid().ToString("N");
@@ -240,13 +252,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var (site, team, access, _) = await SiteAndTeamAsync("owner-lapsed");
         var owner = await SecondOwnerAsync(site);
-        var lapsed = Now.AddDays(-1);
-        await ExecuteAsync($"""
-            SELECT set_config('app.current_tenant_id', '{site.Tenant}', false);
-            UPDATE tenant_member_reasons SET access_ends_at = '{lapsed:O}'
-             WHERE kind = 'direct' AND tenant_member_id = (SELECT id FROM tenant_members WHERE tenant_id = '{site.Tenant}' AND subject_id = '{owner}');
-            UPDATE tenant_members SET access_ends_at = '{lapsed:O}' WHERE tenant_id = '{site.Tenant}' AND subject_id = '{owner}';
-            """);
+        await LapseDirectReasonAsync(site, owner);
 
         await JoinStaffAsync(team, owner);
 

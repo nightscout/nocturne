@@ -123,27 +123,7 @@ public partial class TeamRepository
         if (await AccessLinkRefusalAsync(db, link, now, ct) is { } refusal)
             return (Refused(refusal), null);
 
-        var membership = await db.TenantMembers.AsNoTracking()
-            .LiveAt(now)
-            .Where(m => m.TenantId == grant.TenantId && m.SubjectId == approver.SubjectId && m.Tenant!.IsActive)
-            .Select(m => new
-            {
-                m.AccessEndsAt,
-                m.LimitTo24Hours,
-                m.DirectPermissions,
-                Roles = m.MemberRoles.Select(r => new { r.TenantRole!.Slug, r.TenantRole.Permissions }).ToList(),
-                Reasons = m.Reasons.AsQueryable().Select(MembershipReasonColumns.Of).ToList(),
-            })
-            .FirstOrDefaultAsync(ct);
-        if (membership is null || !membership.Roles.Any(r => r.Slug == RoleSeeds.Owner))
-            return (Refused(TeamAccessRefusal.NotOwner), null);
-
-        var row = new TenantMemberAccess(
-            MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions).ToHashSet(),
-            membership.LimitTo24Hours,
-            membership.AccessEndsAt);
-        // The owner role is held only directly, so an owner with no direct reason in force owns nothing.
-        if (MembershipReasonColumns.DirectAccess(membership.Reasons, row, now) is not { } direct)
+        if (await DirectOwnerAsync(db, grant.TenantId, approver.SubjectId, now, ct) is not (OwnerDecision.Decided, { } direct))
             return (Refused(TeamAccessRefusal.NotOwner), null);
 
         if (await db.TeamTenantAccess.AnyAsync(a => a.TeamId == id && a.TenantId == grant.TenantId, ct))
@@ -192,16 +172,59 @@ public partial class TeamRepository
 
         var staff = await db.TeamMembers.AsNoTracking()
             .Where(m => m.TeamId == id && m.Kind == TeamMemberKind.Staff)
-            .Select(m => m.Id)
+            .Select(m => new { m.Id, m.SubjectId })
             .ToListAsync(ct);
-        foreach (var memberId in staff)
-            db.TeamSiteStaff.Add(NewSiteStaff(access.Id, memberId, grant.TeamManagesStaff));
+        foreach (var member in staff)
+            db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, member.SubjectId, grant.TeamManagesStaff, ct));
 
         var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
         TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
         await db.SaveChangesAsync(ct);
         return (new TeamAccessApproval(access.Id, null), await TeamReasonChanges.SyncAsync(
             unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="subjectId"/> is an owner of the active site <paramref name="tenantId"/> at
+    /// <paramref name="now"/> by a direct reason in force, and what that reason gives: the one owner check
+    /// of every owner's decision about a team, read under the site's owners lock the caller holds.
+    /// <see cref="OwnerDecision.AccessFromTeam"/> when the subject is a member with no direct reason in
+    /// force, who gives nothing, and <see cref="OwnerDecision.NotOwner"/> otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The owner role is held only directly, so an owner with no direct reason in force owns nothing.
+    /// Approving the team's access is bounded further by what the direct reason gives
+    /// (<see cref="TeamAccessRules"/>). A decision about the team's staff is not: it lets a staff member
+    /// through to only what the access already gives, and an owner bounded that when they approved it.
+    /// </remarks>
+    internal static async Task<(OwnerDecision Outcome, TenantMemberAccess? Direct)> DirectOwnerAsync(
+        NocturneDbContext db, Guid tenantId, Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        var membership = await db.TenantMembers.AsNoTracking()
+            .LiveAt(now)
+            .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId && m.Tenant!.IsActive)
+            .Select(m => new
+            {
+                m.AccessEndsAt,
+                m.LimitTo24Hours,
+                m.DirectPermissions,
+                Roles = m.MemberRoles.Select(r => new { r.TenantRole!.Slug, r.TenantRole.Permissions }).ToList(),
+                Reasons = m.Reasons.AsQueryable().Select(MembershipReasonColumns.Of).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
+        if (membership is null)
+            return (OwnerDecision.NotOwner, null);
+
+        var row = new TenantMemberAccess(
+            MemberPermissions.Effective(membership.Roles.Select(r => r.Permissions), membership.DirectPermissions).ToHashSet(),
+            membership.LimitTo24Hours,
+            membership.AccessEndsAt);
+        if (MembershipReasonColumns.DirectAccess(membership.Reasons, row, now) is not { } direct)
+            return (OwnerDecision.AccessFromTeam, null);
+
+        return membership.Roles.Any(r => r.Slug == RoleSeeds.Owner)
+            ? (OwnerDecision.Decided, direct)
+            : (OwnerDecision.NotOwner, null);
     }
 
     private static Task<List<Guid>> StaffSubjectsAsync(NocturneDbContext db, Guid teamId, CancellationToken ct) =>
@@ -232,6 +255,21 @@ public partial class TeamRepository
                 a.ApprovedBySubjectId,
                 ApprovedByName = a.ApprovedBy == null ? null : a.ApprovedBy.Name,
                 a.SysCreatedAt,
+                a.TeamManagesStaff,
+                Staff = db.TeamSiteStaff
+                    .Where(s => s.TeamTenantAccessId == a.Id && s.TeamMember!.Kind == TeamMemberKind.Staff)
+                    .OrderBy(s => s.TeamMember!.SysCreatedAt)
+                    .ThenBy(s => s.TeamMemberId)
+                    .Select(s => new
+                    {
+                        s.TeamMember!.SubjectId,
+                        DisplayName = s.TeamMember.Subject!.Name,
+                        s.Status,
+                        s.TeamMember.RoleCeilingSlug,
+                        s.TeamMember.LimitTo24Hours,
+                        s.TeamMember.EndsAt,
+                    })
+                    .ToList(),
             })
             .ToListAsync(ct);
         return rows.Select(r => new TenantTeamAccess(
@@ -243,7 +281,14 @@ public partial class TeamRepository
             MembershipLiveness.HasEnded(r.AccessEndsAt, now),
             r.ApprovedBySubjectId,
             r.ApprovedByName,
-            DateTime.SpecifyKind(r.SysCreatedAt, DateTimeKind.Utc))).ToList();
+            DateTime.SpecifyKind(r.SysCreatedAt, DateTimeKind.Utc),
+            r.TeamManagesStaff,
+            r.Staff.Select(s => new TenantTeamStaff(
+                s.SubjectId,
+                s.DisplayName,
+                s.Status,
+                new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
+                MembershipLiveness.HasEnded(s.EndsAt, now))).ToList())).ToList();
     }
 
     /// <inheritdoc/>
@@ -323,12 +368,16 @@ public partial class TeamRepository
                 a.LimitTo24Hours,
                 a.AccessEndsAt,
                 a.SysCreatedAt,
+                a.TeamManagesStaff,
+                Pending = db.TeamSiteStaff.Count(s => s.TeamTenantAccessId == a.Id && s.Status == TeamSiteStaffStatus.Pending),
+                Declined = db.TeamSiteStaff.Count(s => s.TeamTenantAccessId == a.Id && s.Status == TeamSiteStaffStatus.Declined),
             })
             .ToListAsync(ct);
         return sites.Select(s => new TeamSiteAccess(
             s.TenantId, s.DisplayName, s.RoleNames, s.LimitTo24Hours, Utc(s.AccessEndsAt),
             MembershipLiveness.HasEnded(s.AccessEndsAt, now),
-            DateTime.SpecifyKind(s.SysCreatedAt, DateTimeKind.Utc))).ToList();
+            DateTime.SpecifyKind(s.SysCreatedAt, DateTimeKind.Utc),
+            s.TeamManagesStaff, s.Pending, s.Declined)).ToList();
     }
 
     /// <summary>

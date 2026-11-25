@@ -271,13 +271,13 @@ public class AddTeamStaffTests(AddTeamStaffFixture fixture) : IClassFixture<AddT
     }
 
     [Fact]
-    public async Task A_site_staff_row_has_the_status_pending_or_approved_and_no_other()
+    public async Task A_site_staff_row_of_an_unknown_status_is_refused()
     {
         var team = await fixture.NewTeamAsync();
         var access = await fixture.NewAccessAsync(team, await fixture.NewTenantAsync());
         var member = await fixture.NewMemberAsync(team, await fixture.NewSubjectAsync());
 
-        await ShouldViolateAsync(() => fixture.NewSiteStaffAsync(access, member, "declined"), PostgresErrorCodes.CheckViolation);
+        await ShouldViolateAsync(() => fixture.NewSiteStaffAsync(access, member, "waiting"), PostgresErrorCodes.CheckViolation);
         await fixture.NewSiteStaffAsync(access, member, "pending");
         (await fixture.ScalarAsync($"SELECT count(*) FROM team_site_staff WHERE team_member_id = '{member}'")).Should().Be(1);
     }

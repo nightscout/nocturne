@@ -13,7 +13,8 @@ namespace Nocturne.API.Services.Identity;
 /// by site, and the approval. Only an owner of the site may approve, and never wider than the link,
 /// than the roles they could grant, or than their own access. Also the other team writes that change
 /// the team reasons of its staff (<see cref="TeamReasonWrites"/>): a staff member joining, being edited,
-/// being removed or leaving, a site stopping the team's access, and the team being deleted.
+/// being removed or leaving, a site stopping the team's access, the team being deleted, and an owner of
+/// a site deciding which of the team's staff reach it.
 /// </summary>
 /// <remarks>
 /// The approver is read from their membership of the chosen site, never from the request's tenant:
@@ -126,6 +127,29 @@ public sealed class TeamAccessService(
     public Task<TeamStaffChange> UpdateStaffAsync(
         Guid teamId, Guid callerSubjectId, Guid staffSubjectId, TeamStaffNarrowing narrowing, CancellationToken ct) =>
         TeamReasonWrites.UpdateStaffAsync(contexts, grantRevocation, teamId, callerSubjectId, staffSubjectId, narrowing, Now, ct);
+
+    /// <summary>
+    /// An owner of <paramref name="tenantId"/> approves a staff member of the team there
+    /// (<see cref="TeamRepository.LockStaffDecisionAsync"/>).
+    /// </summary>
+    public Task<OwnerDecision> ApproveStaffAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
+        TeamReasonWrites.DecideStaffAsync(
+            contexts, grantRevocation, tenantId, teamId, callerSubjectId, staffSubjectId, TeamSiteStaffStatus.Approved, Now, ct);
+
+    /// <summary>
+    /// An owner of <paramref name="tenantId"/> declines a staff member of the team there
+    /// (<see cref="TeamRepository.LockStaffDecisionAsync"/>).
+    /// </summary>
+    public Task<OwnerDecision> DeclineStaffAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, Guid staffSubjectId, CancellationToken ct) =>
+        TeamReasonWrites.DecideStaffAsync(
+            contexts, grantRevocation, tenantId, teamId, callerSubjectId, staffSubjectId, TeamSiteStaffStatus.Declined, Now, ct);
+
+    /// <inheritdoc cref="TeamRepository.LockStaffRuleAsync"/>
+    public Task<OwnerDecision> SetStaffRuleAsync(
+        Guid tenantId, Guid teamId, Guid callerSubjectId, bool teamManagesStaff, CancellationToken ct) =>
+        TeamReasonWrites.SetStaffRuleAsync(contexts, grantRevocation, tenantId, teamId, callerSubjectId, teamManagesStaff, Now, ct);
 
     private DateTime Now => time.GetUtcNow().UtcDateTime;
 

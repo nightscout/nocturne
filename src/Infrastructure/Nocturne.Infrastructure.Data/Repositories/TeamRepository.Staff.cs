@@ -134,7 +134,7 @@ public partial class TeamRepository
             .Select(a => new { a.Id, a.TenantId, a.TeamManagesStaff })
             .ToListAsync(ct);
         foreach (var access in accesses)
-            db.TeamSiteStaff.Add(NewSiteStaff(access.Id, member.Id, access.TeamManagesStaff));
+            db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, subjectId, access.TeamManagesStaff, ct));
 
         TeamAudit.StageStaffAdded(db, id, subjectId, invite.Id);
         await db.SaveChangesAsync(ct);
@@ -206,12 +206,20 @@ public partial class TeamRepository
         db.TeamMembers.FirstOrDefaultAsync(
             m => m.TeamId == teamId && m.SubjectId == subjectId && m.Kind == TeamMemberKind.Staff, ct);
 
-    private static TeamSiteStaffEntity NewSiteStaff(Guid accessId, Guid memberId, bool teamManagesStaff) => new()
+    /// <summary>
+    /// The <c>team_site_staff</c> row of a staff member at a site: declined when an owner of the site
+    /// declined the subject on this access before (<see cref="TeamSiteDeclineEntity"/>), else approved when
+    /// the team manages its staff there and pending when it does not.
+    /// </summary>
+    private static async Task<TeamSiteStaffEntity> NewSiteStaffAsync(
+        NocturneDbContext db, Guid accessId, Guid memberId, Guid subjectId, bool teamManagesStaff, CancellationToken ct) => new()
     {
         Id = Guid.CreateVersion7(),
         TeamTenantAccessId = accessId,
         TeamMemberId = memberId,
-        Status = teamManagesStaff ? TeamSiteStaffStatus.Approved : TeamSiteStaffStatus.Pending,
+        Status = await db.TeamSiteDeclines.AnyAsync(d => d.TeamTenantAccessId == accessId && d.SubjectId == subjectId, ct)
+            ? TeamSiteStaffStatus.Declined
+            : teamManagesStaff ? TeamSiteStaffStatus.Approved : TeamSiteStaffStatus.Pending,
     };
 
     private static TeamStaffNarrowing NarrowingOf(TeamMemberEntity member) =>
