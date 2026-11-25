@@ -114,15 +114,14 @@ public class TreatmentServiceBulkDeleteTests
     public async Task DeleteTreatmentsAsync_BareRegexLiteralOnEventType_DeletesExactlyTheRegexMatches()
     {
         var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>
+        projection.SetupWindowRead(
+            new List<Treatment>
             {
                 new() { Id = "note-1", Mills = 3000, EventType = "Note" },
                 new() { Id = "bolus-1", Mills = 2000, EventType = "Meal Bolus" },
                 new() { Id = "note-2", Mills = 1000, EventType = "NOTE" },
-            });
+            },
+            range => !range.IncludeDeleted);
         var readService = new TreatmentReadService(
             projection.Object,
             new Mock<ITreatmentDecomposer>().Object,
@@ -155,14 +154,13 @@ public class TreatmentServiceBulkDeleteTests
     public async Task DeleteTreatmentsAsync_IsValidFalse_DeletesNothingBecauseTheMatchesAreAlreadyDeleted()
     {
         var projection = new Mock<IV4ToLegacyProjectionService>();
-        projection
-            .Setup(p => p.GetProjectedTreatmentsIncludingDeletedAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>
+        projection.SetupWindowRead(
+            new List<Treatment>
             {
                 new() { Id = "live", Mills = 3000, EventType = "Meal Bolus" },
                 new() { Id = "deleted", Mills = 2000, EventType = "Meal Bolus", IsValid = false },
-            });
+            },
+            range => range.IncludeDeleted);
         var readService = new TreatmentReadService(
             projection.Object,
             new Mock<ITreatmentDecomposer>().Object,

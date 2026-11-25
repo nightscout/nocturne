@@ -400,8 +400,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     internal static IQueryable<TEntity> InWindow(
         IQueryable<TEntity> query, DateTime? from, DateTime? to, string? device)
     {
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        query = query.InWindow(from, to);
         if (device != null) query = query.Where(e => e.Device == device);
         return query;
     }

@@ -117,11 +117,10 @@ internal class TreatmentReadService : ITreatmentStore
 
     private Task<IEnumerable<Treatment>> FetchWindowAsync(
         FindQuery find, int limit, bool descending, CancellationToken ct) =>
-        NamesIsValid(find)
-            ? _projection.GetProjectedTreatmentsIncludingDeletedAsync(
-                find.FromMills, find.ToMills, limit, descending, ct)
-            : _projection.GetProjectedTreatmentsAsync(
-                find.FromMills, find.ToMills, limit, descending, ct);
+        _projection.GetProjectedTreatmentsAsync(
+            LegacyTreatmentRange.FromMills(
+                find.FromMills, find.ToMills, limit, descending, includeDeleted: NamesIsValid(find)),
+            ct);
 
     private static bool NamesIsValid(FindQuery find) => find.Fields.Contains("isValid");
 
@@ -175,7 +174,8 @@ internal class TreatmentReadService : ITreatmentStore
         // The projection service already orders newest-first internally, but we re-sort here
         // to make the contract explicit at the read boundary.
         var projected = await _projection.GetProjectedTreatmentsAsync(
-            fromMills, toMills, limit: int.MaxValue, ct: ct);
+            LegacyTreatmentRange.FromMills(fromMills, toMills, int.MaxValue, descending: true),
+            ct);
 
         return projected.OrderByDescending(t => t.Mills).ToList();
     }

@@ -1206,14 +1206,10 @@ public class StateSpanRepository : IStateSpanRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
-
-        if (from is { } fromValue)
-            query = query.Where(s => s.StartTimestamp >= fromValue);
-        if (to is { } toValue)
-            query = query.Where(s => s.StartTimestamp <= toValue);
-
-        query = query.ExcludeDuplicates();
+        var query = db.StateSpans.AsNoTracking()
+            .Where(s => ActivityCategories.Contains(s.Category))
+            .InWindow(s => s.StartTimestamp, from, to)
+            .ExcludeDuplicates();
 
         var entities = await query
             .OrderByDescending(s => s.StartTimestamp)
