@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
@@ -21,6 +22,9 @@ namespace Nocturne.API.Services.Identity;
 /// </summary>
 public class MembershipRequestService : IMembershipRequestService
 {
+    public const string ApprovedNotificationType = "membership.approved";
+    public const string DeniedNotificationType = "membership.denied";
+
     private static readonly DecideMembershipRequestResult AlreadyAMember =
         new(false, "The subject is already a member.");
 
@@ -244,7 +248,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            "membership.approved",
+            ApprovedNotificationType,
             "Your membership request has been approved",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -303,7 +307,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            "membership.denied",
+            DeniedNotificationType,
             "Your membership request has been denied",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -348,7 +352,7 @@ public class MembershipRequestService : IMembershipRequestService
             {
                 await _notificationService.CreateNotificationAsync(
                     recipientSubjectId.ToString(),
-                    "membership.requested",
+                    NotificationSubjectNaming.MembershipRequested,
                     $"Membership request from {subjectName}",
                     subtitle: message,
                     sourceId: requestId.ToString(),
