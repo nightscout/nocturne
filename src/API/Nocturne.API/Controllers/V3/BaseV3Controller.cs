@@ -552,6 +552,21 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Nightscout's answer to an update that sets <c>isValid: false</c>: a client deletes a document
+    /// with DELETE, never by an edit.
+    /// </summary>
+    protected ActionResult IsValidImmutable() =>
+        CreateV3ErrorResponse(400, "Field isValid cannot be modified by the client");
+
+    /// <summary>
+    /// Whether a v3 patch body sets <c>isValid: false</c>, which <see cref="IsValidImmutable"/> refuses.
+    /// </summary>
+    protected static bool PatchSetsInvalid(JsonElement patch) =>
+        patch.ValueKind == JsonValueKind.Object
+        && patch.TryGetProperty("isValid", out var isValid)
+        && isValid.ValueKind == JsonValueKind.False;
+
+    /// <summary>
     /// The V3 answer to a create that matched a document already stored: 200 with
     /// <c>isDeduplication</c>, the stored document's identifier, which a v3 read by id resolves, and
     /// its <c>lastModified</c>. The stored document is left as it was.

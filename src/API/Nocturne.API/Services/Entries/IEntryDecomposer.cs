@@ -63,10 +63,11 @@ internal interface IEntryDecomposer
     /// <param name="origin">Write classification, as for <see cref="DecomposeAsync"/>.</param>
     /// <param name="ct">Cancels the operation.</param>
     /// <returns>
-    /// A <see cref="DecompositionResult"/> with the records created, updated and left unchanged, whose
+    /// An <see cref="EntryDecomposition"/> with the records created, updated and left unchanged, and
+    /// the entries that deleted the reading they name, whose
     /// <see cref="DecompositionResult.CorrelationId"/> is the first entry's. Entries with unrecognised
     /// types are skipped.
     /// </returns>
-    Task<DecompositionResult> DecomposeBatchAsync(
+    Task<EntryDecomposition> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default);
 }

@@ -1477,58 +1477,27 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     }
 
     /// <summary>
-    /// Sorts the treatments uploaded with <c>isValid: false</c> out of <paramref name="writing"/>, as
-    /// Nightscout stores such a document already deleted; none writes anything live. One whose id holds
-    /// a live treatment deletes it when the client named that treatment
-    /// (<see cref="NamesStoredTreatment"/>), and otherwise is a different record that writes nothing.
-    /// One whose id holds no row is stored deleted, so v3 history serves it, and one whose id a deleted
-    /// row already holds writes nothing, as a re-send of it. The earlier versions of a client's id in
-    /// <paramref name="batch"/> take the validity of the last, so each is answered as what is stored;
-    /// versions of a synthetic id that differ in validity are different records (<see cref="Writing"/>).
+    /// Sorts the treatments uploaded with <c>isValid: false</c> out of <paramref name="writing"/> by
+    /// <see cref="InvalidUploads{TUpload}"/>, each marked as writing nothing. A live treatment, or a
+    /// span stored as one, holds an id; versions of a synthetic id that differ in validity are
+    /// different records (<see cref="Writing"/>).
     /// </summary>
-    private async Task<InvalidUploads> SortInvalidAsync(
+    private async Task<InvalidUploads<BatchTreatment>> SortInvalidAsync(
         List<BatchTreatment> writing, IReadOnlyList<BatchTreatment> batch, StoredRows stored,
         TreatmentDecomposition result, CancellationToken ct)
     {
-        var versions = batch.Where(b => b.Treatment.Id is not null).ToLookup(b => b.Treatment.Id!, StringComparer.Ordinal);
         var live = stored.Kinds();
-        var sorted = new InvalidUploads();
-        List<BatchTreatment> unstored = [];
-        foreach (var treatment in writing)
-        {
-            var id = treatment.Treatment.Id;
-            if (id is not null && !TreatmentClientId.IsSynthetic(id))
-            {
-                foreach (var earlier in versions[id].Where(v => v.Index < treatment.Index))
-                    earlier.Treatment.IsValid = treatment.Treatment.IsValid;
-            }
-
-            if (treatment.Treatment.IsValid != false)
-            {
-                sorted.Writing.Add(treatment);
-                continue;
-            }
-
+        var sorted = await InvalidUploads<BatchTreatment>.SortAsync(writing, batch, new InvalidUploadRule<BatchTreatment>(
+            t => t.Treatment.Id,
+            t => t.Index,
+            t => t.Treatment.IsValid,
+            (t, valid) => t.Treatment.IsValid = valid,
+            t => live.ContainsKey(t.Treatment.Id!) || stored.SpanKeys.ContainsKey(t.Treatment.Id!),
+            t => NamesStoredTreatment(t.Treatment, result),
+            _keys.GetDeletedLegacyIdsAsync,
+            TreatmentClientId.IsSynthetic), ct);
+        foreach (var treatment in writing.Where(t => t.Treatment.IsValid == false))
             result.WritesNothing(treatment.Index);
-            if (id is null)
-                continue;
-
-            if (!live.ContainsKey(id) && !stored.SpanKeys.ContainsKey(id))
-            {
-                unstored.Add(treatment);
-            }
-            else if (NamesStoredTreatment(treatment.Treatment, result))
-            {
-                sorted.Invalidating.Add(treatment);
-            }
-        }
-
-        if (unstored.Count > 0)
-        {
-            var deleted = await _keys.GetDeletedLegacyIdsAsync([.. unstored.Select(t => t.Treatment.Id!)], ct);
-            sorted.StoredDeleted.AddRange(unstored.Where(t => !deleted.Contains(t.Treatment.Id!)));
-        }
-
         return sorted;
     }
 
@@ -1541,31 +1510,16 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static bool NamesStoredTreatment(Treatment treatment, TreatmentDecomposition result) =>
         treatment.Id is { } id && (!TreatmentClientId.IsSynthetic(id) || result.IsKeyedToServed(treatment));
 
-    /// <summary>What <see cref="SortInvalidAsync"/> sorted the treatments a batch writes into.</summary>
-    private sealed class InvalidUploads
-    {
-        /// <summary>The treatments that write as usual.</summary>
-        public List<BatchTreatment> Writing { get; } = [];
-
-        /// <summary>The uploads with <c>isValid: false</c> whose id names a live treatment they delete.</summary>
-        public List<BatchTreatment> Invalidating { get; } = [];
-
-        /// <summary>The uploads with <c>isValid: false</c> stored as rows already deleted.</summary>
-        public List<BatchTreatment> StoredDeleted { get; } = [];
-    }
-
     /// <summary>
     /// Deletes what <see cref="SortInvalidAsync"/> found the client invalidated, and stores the other
     /// invalid uploads as rows already deleted, built as a live write builds them but with no pump
-    /// resolved, so a deleted document registers no device. Both are the system's, so a later upload of
-    /// the id without <c>isValid</c> writes it again
-    /// (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>). One that cannot be
-    /// mapped is stored as nothing. An invalidating upload is marked
+    /// resolved, so a deleted document registers no device. Both are the system's
+    /// (<see cref="InvalidUploads{TUpload}"/>). One that cannot be mapped is stored as nothing. An invalidating upload is marked
     /// <see cref="TreatmentDecomposition.Invalidated"/> once its delete commits, so a batch that fails
     /// after it still announces the delete, and one that fails in it announces none.
     /// </summary>
     private async Task SettleInvalidAsync(
-        InvalidUploads invalid, IPatientDeviceLinks links, StoredRows stored,
+        InvalidUploads<BatchTreatment> invalid, IPatientDeviceLinks links, StoredRows stored,
         IReadOnlyDictionary<string, Guid> storedCorrelations, TreatmentDecomposition result, WriteOrigin origin,
         CancellationToken ct)
     {
