@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "tracker-hysteresis-zero-minutes",
-  "description": "HysteresisMinutes=0 closes on the very next false evaluation after entering hysteresis",
+  "description": "an excursion in hysteresis closes on the very next false evaluation after entering it",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,7 +11,6 @@
         "direction": "below",
         "value": 70
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

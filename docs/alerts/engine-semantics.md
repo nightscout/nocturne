@@ -956,9 +956,9 @@ The excursion tracker dedupes: a continuing outage is `continues`, and the first
 after readings resume feeds false, so the excursion goes through hysteresis and closes like
 any other.
 
-A periodic evaluation is an evaluation to the tracker (§6). The backend stores no
-`HysteresisMinutes`: every rule reads 0, and the alerts redesign migrated it into
-`sustained` wrappers, which are cadence-independent. So no stored rule is affected.
+A periodic evaluation is an evaluation to the tracker (§6): an excursion in hysteresis closes
+on the next false one, or at the sweep's close (§6.1). A rule that waits before it clears says
+so with a `sustained` wrapper, which does not depend on the cadence.
 
 ### 5.2 Context facts
 
@@ -1306,7 +1306,7 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
   run at `now`.
 - A hysteresis window whose start is beyond the tolerance ahead does not close on that evaluation,
   by the tracker or by the sweep's `CloseElapsedHysteresisAsync`. Within the tolerance the start
-  reads as `now`, so a window of zero or fewer minutes closes.
+  reads as `now`, so the window closes.
 
 The engine cannot tell a forward step of the host's clock from time passing: a timer, a window or
 a bound that a step jumps past completes at once, as it would had the time passed. No rule here
@@ -1361,8 +1361,8 @@ hysteresis`.
 A rule numbers its own excursions 1, 2, ... in the order it opens them: opening one takes
 `LastExcursion + 1` and records it as `LastExcursion`, so an excursion is identified by its rule
 and that ordinal, and no counter is shared between rules. A state restored without
-`LastExcursion` reads it as the active excursion's ordinal, or 0. Rule inputs:
-`HysteresisMinutes`, `OnUnknown` (§6.4). One evaluation whose root is known, or
+`LastExcursion` reads it as the active excursion's ordinal, or 0. Rule input: `OnUnknown`
+(§6.4). One evaluation whose root is known, or
 read as known by `OnUnknown`, = one `ProcessEvaluationAsync(ruleId, conditionMet,
 autoResolveMet)` call, where `autoResolveMet` is read only while the rule awaits re-arm
 (§6.3). Such a call ends any hold: it clears `HeldSince`. An evaluation the rule holds makes no
@@ -1389,15 +1389,13 @@ flag (§6.3) are dropped. Every operation reads it so.
 
 ### 6.1 Hysteresis expiry
 
-`expired = now >= HysteresisStartedAt + HysteresisMinutes`, with the window an exact
-whole-minute duration, and a start ahead of `now` read by §5.4: within 5 minutes it is `now`,
-beyond that the window does not expire on that evaluation. The start is the instant of the evaluation that entered hysteresis
-and does not move until the excursion resumes or closes, so a window closes on the first
-false evaluation at or past its end, whatever the evaluation cadence. A non-positive
-`HysteresisMinutes` has always expired: the excursion closes on the first false evaluation
-after the one that entered hysteresis. A window whose end is past the representable
-calendar never expires. A re-entry (a true evaluation) resumes the same excursion; the
-next false evaluation starts a fresh window.
+`expired = now >= HysteresisStartedAt`, with a start ahead of `now` read by §5.4: within 5
+minutes it is `now`, beyond that the window does not expire on that evaluation. The start is the
+instant of the evaluation that entered hysteresis and does not move until the excursion resumes
+or closes, so the excursion closes on the first false evaluation after the one that entered
+hysteresis. A rule sets no wait of its own: there is no stored column for one, and a rule that
+waits before it clears wraps its condition in `sustained`. A re-entry (a true evaluation)
+resumes the same excursion; the next false evaluation starts a fresh window.
 
 State persisted before `HysteresisStartedAt` existed has none while in hysteresis. Both
 engines adopt that state's `UpdatedAt` as the start, once, and persist it.
@@ -1763,7 +1761,7 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
   only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
 - **State.** One fresh timer store and one fresh tracker for the whole call; nothing is read from
-  or written to persistent state. The tracker reads each rule's `hysteresis_minutes`,
+  or written to persistent state. The tracker reads each rule's
   `on_unknown` (§6.4) and re-arm (§6.3), and the leaves its `glucose_freshness_minutes` (§3), as
   live does. With no `enabled_at` (below), a path's first run starts no earlier than the
   evaluation that starts it, unless its child read false on an earlier one (§3).
@@ -1814,8 +1812,8 @@ after the last tick, is an error (`StepLimit`), not a result cut short.
 - A dry-run rule (the editor's unsaved rule) carries its own `OnUnknown` and
   `glucose_freshness_minutes`; without one it takes the stored rule's when it names one, else
   `hold` and the 11-minute default, so it replays as the live engine evaluates.
-- The backend stores no `hysteresis_minutes` (§5.1) and sends none, so its excursions close at
-  the first step after the evaluation that found the condition false.
+- An excursion closes at the first step after the evaluation that found the condition false
+  (§6.1).
 
 **What replay cannot know.** Replay does not simulate these, and its result does not show them:
 
@@ -1856,20 +1854,16 @@ these, each by at most its 30 s sweep:
   with the clock exactly where it falls; the backend's sweep lands up to 30 s later. So a
   condition true again within 30 s after a window's end is a new excursion in replay and a resume
   live, where the sweep has not closed the window yet. Replay hides an opening the backend makes
-  in three ways, all from the sweep's phase:
-  1. A wall-clock change less than 30 s before a hysteresis window ends. Replay sees it before
-     the end and resumes; the sweep sees it only after the end, closes the window and opens a new
-     excursion. This needs a window longer than zero, so it cannot happen in the backend, whose
-     hysteresis is 0 (§5.1).
-  2. The not-true lease of a wall-clock rule (§3). Live evaluates the rule at every sweep and
+  in two ways, both from the sweep's phase:
+  1. The not-true lease of a wall-clock rule (§3). Live evaluates the rule at every sweep and
      replay only at its changes, so `sustained` records its not-true instants at other moments
      and a run starts up to the cadence apart. A `sustained` body or auto-resolve can then
      complete before the reading goes stale in one and after it in the other.
-  3. An `alert_state` child's `for_minutes`. Where replay opens the parent again (one of its
+  2. An `alert_state` child's `for_minutes`. Where replay opens the parent again (one of its
      extra openings), the parent's `triggered_at` moves and the child's escalation clock starts
      over, so the escalation opens later in replay, or not at all.
 
-  Over generated cases at the backend's hysteresis of 0, replay hides of the order of one opening
+  Over generated cases, replay hides of the order of one opening
   in a hundred cases, and shows an order of magnitude more extra ones (`live_replay_pairs`).
 - **A parent's change seen by its `alert_state` children.** Replay evaluates parents first and
   steps a child at the instant its parent opens or closes (Active alerts). The backend evaluates a

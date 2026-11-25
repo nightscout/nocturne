@@ -128,7 +128,6 @@ preserves sub-second precision when present.
     "id": "00000000-0000-0000-0000-000000000001",
     "condition_type": "sustained",          // canonical wire string
     "condition_params": { /* payload */ },  // payload object as stored
-    "hysteresis_minutes": 0,                // default 0
     "auto_resolve_enabled": false,          // default false
     "auto_resolve_params": { "type": "…" }, // full ConditionNode or null
     "on_unknown": "hold",                   // hold|met|not_met; default hold; any other word is an envelope error
@@ -770,7 +769,6 @@ the rule has never been evaluated):
 ```jsonc
 // nocturne_alerts_tracker_process: one evaluation's truth
 { "schema_version": 1, "tracker": { /* … */ }, "now": "…",
-  "config": { "hysteresis_minutes": 0 },  // optional
   "condition_met": true,
   "auto_resolve_met": true }                 // optional, default false; see below
 
@@ -779,8 +777,7 @@ the rule has never been evaluated):
   "reason": "manual" }                       // hysteresis | auto | manual | rule-disabled | hold-bound
 
 // nocturne_alerts_tracker_close_elapsed_hysteresis: only in hysteresis, only once the window has elapsed (§6.1)
-{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
-  "config": { "hysteresis_minutes": 30 } }
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…" }
 ```
 
 `condition_met` is a known truth, so `process` clears `held_since`: an

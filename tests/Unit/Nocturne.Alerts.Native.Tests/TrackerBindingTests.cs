@@ -83,7 +83,6 @@ public class TrackerBindingTests
         var response = RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
         {
             Now = Now,
-            Config = new RustTrackerConfig(),
             ConditionMet = true,
         });
 
@@ -100,7 +99,6 @@ public class TrackerBindingTests
         {
             Tracker = Active,
             Now = Now,
-            Config = new RustTrackerConfig { HysteresisMinutes = 10 },
             ConditionMet = false,
         });
 
@@ -126,21 +124,19 @@ public class TrackerBindingTests
     }
 
     [NativeFact]
-    public void Close_elapsed_hysteresis_waits_for_the_window()
+    public void Close_elapsed_hysteresis_waits_while_its_start_is_beyond_the_clock_tolerance_ahead()
     {
-        var inHysteresis = Active with { State = "hysteresis", HysteresisStartedAt = Now.AddMinutes(-5) };
+        var inHysteresis = Active with { State = "hysteresis", HysteresisStartedAt = Now.AddMinutes(10) };
 
         var early = RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
         {
             Tracker = inHysteresis,
             Now = Now,
-            Config = new RustTrackerConfig { HysteresisMinutes = 10 },
         });
         var elapsed = RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
         {
             Tracker = inHysteresis,
             Now = Now.AddMinutes(5),
-            Config = new RustTrackerConfig { HysteresisMinutes = 10 },
         });
 
         early.Transition!.Type.Should().Be(RustTransition.None);
@@ -152,15 +148,16 @@ public class TrackerBindingTests
     [NativeFact]
     public void Close_elapsed_hysteresis_adopts_updated_at_as_a_missing_start()
     {
+        var ahead = Active with { State = "hysteresis", UpdatedAt = Now.AddMinutes(10) };
+
         var response = RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
         {
-            Tracker = Active with { State = "hysteresis" },
+            Tracker = ahead,
             Now = Now,
-            Config = new RustTrackerConfig { HysteresisMinutes = 10 },
         });
 
         response.Transition!.Type.Should().Be(RustTransition.None);
-        response.Tracker!.HysteresisStartedAt.Should().Be(Active.UpdatedAt);
+        response.Tracker!.HysteresisStartedAt.Should().Be(ahead.UpdatedAt);
     }
 
     [NativeFact]
@@ -195,7 +192,6 @@ public class TrackerBindingTests
         {
             Tracker = awaiting,
             Now = Now,
-            Config = new RustTrackerConfig(),
             ConditionMet = true,
             AutoResolveMet = autoResolveMet,
         });

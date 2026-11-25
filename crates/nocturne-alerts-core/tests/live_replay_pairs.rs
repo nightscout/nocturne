@@ -28,9 +28,7 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::{ActiveAlertSnapshot, SensorContext, SensorStateSnapshot};
 use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, evaluate_rule};
 use nocturne_alerts_core::enums::{SensorState, WireEnum};
-use nocturne_alerts_core::excursion::{
-    CloseReason, HOLD_BOUND, TrackerRuleConfig, Transition, TransitionType,
-};
+use nocturne_alerts_core::excursion::{CloseReason, HOLD_BOUND, Transition, TransitionType};
 use nocturne_alerts_core::facts::{ContextFact, RuleConditions, rule_reads};
 use nocturne_alerts_core::model::ConditionKind;
 use nocturne_alerts_core::next_change::RESOLUTION;
@@ -363,13 +361,7 @@ impl<'a> Live<'a> {
 
     fn close(&mut self, i: usize, at: DateTime<Utc>) {
         let r = &mut self.rules[i];
-        let config = TrackerRuleConfig {
-            hysteresis_minutes: r.rule.hysteresis_minutes,
-        };
-        let closed = r
-            .state
-            .tracker
-            .close_elapsed_hysteresis(r.rule.id, config, at);
+        let closed = r.state.tracker.close_elapsed_hysteresis(r.rule.id, at);
         if !r.wall_clock {
             r.due = sweep_due(r, at);
         }
@@ -486,9 +478,7 @@ impl<'a> Live<'a> {
 /// on a sweep after `now`.
 fn sweep_due(r: &LiveRule<'_>, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
     let state = r.state.tracker.state(r.rule.id)?;
-    let window_end = state
-        .hysteresis_started_at
-        .map(|started| started + TimeDelta::minutes(i64::from(r.rule.hysteresis_minutes)));
+    let window_end = state.hysteresis_started_at;
     let bound = state
         .hold_pending()
         .then_some(state.held_since)
@@ -616,7 +606,6 @@ fn rule_from(n: u128, node: &Value) -> Rule {
         id: Uuid::from_u128(n),
         condition_type: kind,
         condition_params: node[kind.name()].clone(),
-        hysteresis_minutes: 0,
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
@@ -628,7 +617,6 @@ fn rule_from(n: u128, node: &Value) -> Rule {
 fn rule_of(n: u128) -> impl Strategy<Value = Rule> {
     (
         body(),
-        select(vec![0, 0, 5, 10, 15, 30]),
         prop_oneof![
             2 => Just(None),
             1 => (select(vec!["below", "above"]), select(vec![70i64, 100, 180]))
@@ -640,23 +628,19 @@ fn rule_of(n: u128) -> impl Strategy<Value = Rule> {
         select(vec![OnUnknown::Hold, OnUnknown::Met, OnUnknown::NotMet]),
         select(vec![5i64, 11, 20]),
     )
-        .prop_map(
-            move |(node, hysteresis, auto_resolve, on_unknown, fresh)| Rule {
-                hysteresis_minutes: hysteresis,
-                auto_resolve_enabled: auto_resolve.is_some(),
-                auto_resolve_params: auto_resolve,
-                on_unknown,
-                glucose_freshness: TimeDelta::minutes(fresh),
-                ..rule_from(n, &node)
-            },
-        )
+        .prop_map(move |(node, auto_resolve, on_unknown, fresh)| Rule {
+            auto_resolve_enabled: auto_resolve.is_some(),
+            auto_resolve_params: auto_resolve,
+            on_unknown,
+            glucose_freshness: TimeDelta::minutes(fresh),
+            ..rule_from(n, &node)
+        })
 }
 
 /// An IOB rule, read by the samples and the IOB writes.
 fn iob_rule() -> impl Strategy<Value = Rule> {
-    (1i64..=4, select(vec![0, 5, 10])).prop_map(|(units, hysteresis)| Rule {
-        hysteresis_minutes: hysteresis,
-        ..rule_from(
+    (1i64..=4).prop_map(|units| {
+        rule_from(
             4,
             &json!({ "type": "iob", "iob": { "operator": ">", "value": units } }),
         )
@@ -928,8 +912,7 @@ fn fixed_cases_pair() {
     };
     let low = threshold("below", 70);
 
-    let mut hysteresis = fixed_rule(low.clone());
-    hysteresis.hysteresis_minutes = 15;
+    let flapping_low = fixed_rule(low.clone());
 
     let sustained = fixed_rule(json!({
         "type": "sustained", "sustained": { "minutes": 15, "child": low } }));
@@ -942,7 +925,6 @@ fn fixed_cases_pair() {
     let on_unknown = [OnUnknown::Hold, OnUnknown::Met, OnUnknown::NotMet].map(|word| {
         let mut r = fixed_rule(low.clone());
         r.on_unknown = word;
-        r.hysteresis_minutes = 10;
         fixed(r, &gap, 90)
     });
 
@@ -954,7 +936,7 @@ fn fixed_cases_pair() {
         ] } }));
 
     let cases = [
-        fixed(hysteresis, &every5(&[60, 80, 60, 80, 80, 80, 80]), 60),
+        fixed(flapping_low, &every5(&[60, 80, 60, 80, 80, 80, 80]), 60),
         fixed(
             sustained,
             &every5(&[60, 60, 60, 60, 80, 60, 60, 60, 60]),
@@ -1218,11 +1200,9 @@ fn sample(n: usize) -> Vec<Case> {
 /// The pairing is not vacuous, and it sees a host that does not sweep. Against
 /// a host that sweeps every 30 s, replay shows far more openings than it hides.
 /// It hides one through the sweep's phase alone (engine-semantics.md §8): a
-/// change less than 30 s before a hysteresis window ends, which replay resumes
-/// and the sweep closes and opens again; a wall-clock rule's not-true instants,
-/// recorded at each sweep live and at each change in replay, which move a
-/// sustained run's start; and an `alert_state` child's `for_minutes`, restarted
-/// where replay opens its parent again.
+/// wall-clock rule's not-true instants, recorded at each sweep live and at each
+/// change in replay, which move a sustained run's start; and an `alert_state`
+/// child's `for_minutes`, restarted where replay opens its parent again.
 #[test]
 fn the_pairing_opens_and_closes_excursions_and_needs_the_sweep() {
     #[derive(Debug, Default)]
@@ -1231,7 +1211,6 @@ fn the_pairing_opens_and_closes_excursions_and_needs_the_sweep() {
         opened: usize,
         closed: usize,
         resolved: usize,
-        resumed: usize,
         between: usize,
         late: usize,
         imported: usize,
@@ -1261,7 +1240,6 @@ fn the_pairing_opens_and_closes_excursions_and_needs_the_sweep() {
         t.opened += usize::from(has(ReplayEventKind::Fired));
         t.closed += usize::from(has(ReplayEventKind::Closed));
         t.resolved += usize::from(has(ReplayEventKind::AutoResolved));
-        t.resumed += usize::from(has(ReplayEventKind::HysteresisResumed));
         t.suppressed += usize::from(has(ReplayEventKind::SuppressedByDnd));
         t.between += usize::from(events.iter().any(|e| !ticks.contains(&e.0)));
         t.late += usize::from(
@@ -1300,7 +1278,6 @@ fn the_pairing_opens_and_closes_excursions_and_needs_the_sweep() {
     assert!(t.opened * 2 >= t.cases, "{t:?}");
     assert!(t.closed * 3 >= t.cases, "{t:?}");
     assert!(t.resolved * 10 >= t.cases, "{t:?}");
-    assert!(t.resumed * 20 >= t.cases, "{t:?}");
     assert!(t.between * 4 >= t.cases, "{t:?}");
     assert!(t.late * 4 >= t.cases, "{t:?}");
     assert!(t.imported * 4 >= t.cases, "{t:?}");

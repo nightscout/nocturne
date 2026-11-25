@@ -444,12 +444,11 @@ fn the_hold_property_reaches_reports_and_closes() {
 // A stored hold this engine cannot have written (engine-semantics.md §6.4)
 // ---------------------------------------------------------------------------
 
-fn low_rule(hysteresis_minutes: i32) -> Rule {
+fn low_rule() -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE_ID,
         "condition_type": "threshold",
         "condition_params": {"direction": "below", "value": 70},
-        "hysteresis_minutes": hysteresis_minutes,
     }))
     .unwrap();
     Rule::try_from(wire).unwrap()
@@ -467,7 +466,7 @@ fn restored(state: TrackerState) -> EngineState {
 #[test]
 fn an_alert_opened_after_a_stale_hold_waits_its_own_24_hours() {
     let t0 = base();
-    let rule = low_rule(15);
+    let rule = low_rule();
     let mut state = restored(TrackerState {
         state: TrackerStateKind::Active,
         active_excursion: Some(1),
@@ -513,7 +512,7 @@ fn a_hold_written_over_before_its_bound_restarts() {
     });
     let at = t0 + TimeDelta::hours(30);
     let e = evaluate_rule(
-        &low_rule(0),
+        &low_rule(),
         &SensorContext::default(),
         at,
         &mut state,
@@ -559,10 +558,9 @@ proptest! {
     #[test]
     fn a_stale_stored_hold_never_closes_an_alert_early(
         stored in older_engine_state(),
-        hysteresis_minutes in 0i32..=30,
         steps in steps(),
     ) {
-        let rule = low_rule(hysteresis_minutes);
+        let rule = low_rule();
         let mut state = restored(stored);
         let mut now = base();
         let mut held_from: Option<DateTime<Utc>> = None;

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "clear-margin-leaves-through-widened-limit",
-  "description": "an open excursion leaves when the value reaches the widened limit (75, strict below); the wait time (hysteresis 10) still applies after it, a value back inside the margin resumes, and after the close the plain limit applies again",
+  "name": "clear-margin-leaves-and-resumes-through-widened-limit",
+  "description": "an open excursion leaves when the value reaches the widened limit (75, strict below), a value back inside the margin resumes it, the next value past the widened limit leaves again and the one after closes, and after the close the plain limit applies again",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,8 +11,7 @@
         "direction": "below",
         "value": 70,
         "clear_margin": 5
-      },
-      "hysteresis_minutes": 10
+      }
     }
   ],
   "ticks": [
@@ -109,7 +108,7 @@
     {
       "at": "2026-01-05T12:30:00Z",
       "context": {
-        "latest_value": 78,
+        "latest_value": 72,
         "latest_timestamp": "2026-01-05T12:30:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:30:00Z",
@@ -124,25 +123,10 @@
     {
       "at": "2026-01-05T12:35:00Z",
       "context": {
-        "latest_value": 72,
+        "latest_value": 69,
         "latest_timestamp": "2026-01-05T12:35:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:35:00Z",
-        "trend_bucket": "flat",
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:40:00Z",
-      "context": {
-        "latest_value": 69,
-        "latest_timestamp": "2026-01-05T12:40:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:40:00Z",
         "trend_bucket": "flat",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,

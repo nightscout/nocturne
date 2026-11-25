@@ -12,7 +12,6 @@
           "normal"
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -32,7 +31,6 @@
           }
         ]
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

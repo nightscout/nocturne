@@ -14,7 +14,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
       "condition_params": {
         "direction": "below"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -38,7 +36,6 @@
           "offset": -5
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -53,7 +50,6 @@
           "offset": -1001
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -66,7 +62,6 @@
           "fact": "max_iob"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -79,7 +74,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -92,7 +86,6 @@
           "fact": "target_low"
         }
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

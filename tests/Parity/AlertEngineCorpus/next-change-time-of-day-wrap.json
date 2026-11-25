@@ -12,7 +12,6 @@
         "to": "06:00",
         "timezone": "Etc/UTC"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

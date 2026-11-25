@@ -12,7 +12,6 @@
         "to": "02:00",
         "timezone": "Europe/London"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     },
     {
@@ -24,7 +23,6 @@
         "to": "03:00",
         "timezone": "Europe/London"
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

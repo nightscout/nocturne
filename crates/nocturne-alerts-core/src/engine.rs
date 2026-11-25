@@ -14,8 +14,8 @@ use crate::eval::{
     eval_payload_unknown, met_point,
 };
 use crate::excursion::{
-    CloseReason, ExcursionTracker, TrackerRuleConfig, TrackerState, TrackerStateKind, Transition,
-    TransitionType, hysteresis_window,
+    CloseReason, ExcursionTracker, TrackerState, TrackerStateKind, Transition, TransitionType,
+    hysteresis_window,
 };
 use crate::leaf_identity::collect_leaves_with_polarity;
 use crate::model::{ConditionKind, Node, ParseResult, parse_payload};
@@ -54,7 +54,6 @@ pub struct Rule {
     pub condition_type: ConditionKind,
     /// The payload object as stored in `condition_params`.
     pub condition_params: Value,
-    pub hysteresis_minutes: i32,
     pub auto_resolve_enabled: bool,
     /// A full condition node, or `None`.
     pub auto_resolve_params: Option<Value>,
@@ -99,8 +98,6 @@ pub struct WireRule {
     pub condition_type: String,
     #[serde(default)]
     pub condition_params: Value,
-    #[serde(default)]
-    pub hysteresis_minutes: i32,
     #[serde(default)]
     pub auto_resolve_enabled: bool,
     #[serde(default)]
@@ -150,7 +147,6 @@ impl TryFrom<WireRule> for Rule {
             id: w.id,
             condition_type,
             condition_params: w.condition_params,
-            hysteresis_minutes: w.hysteresis_minutes,
             auto_resolve_enabled: w.auto_resolve_enabled,
             auto_resolve_params: w.auto_resolve_params,
             on_unknown,
@@ -365,9 +361,6 @@ pub fn evaluate_parsed_rule(
         log_leaves,
     );
     let mut clock_anomaly = outcome.clock_anomaly;
-    let config = TrackerRuleConfig {
-        hysteresis_minutes: rule.hysteresis_minutes,
-    };
 
     // Awaiting re-arm, the resolve tree is read before the tracker, and is
     // then the evaluation's only read of it (engine-semantics.md §6.3). Only
@@ -391,7 +384,7 @@ pub fn evaluate_parsed_rule(
                 .tracker
                 .state(rule.id)
                 .filter(|s| s.state == TrackerStateKind::Hysteresis)
-                .and_then(|s| hysteresis_window(s, rule.hysteresis_minutes))
+                .and_then(hysteresis_window)
                 .and_then(|w| w.ahead(now)),
         );
     }
@@ -399,7 +392,7 @@ pub fn evaluate_parsed_rule(
         Some(met) => (
             state
                 .tracker
-                .process_evaluation(rule.id, config, met, auto_resolve_met, now),
+                .process_evaluation(rule.id, met, auto_resolve_met, now),
             false,
         ),
         None => {
@@ -410,7 +403,7 @@ pub fn evaluate_parsed_rule(
                     .and_then(TrackerState::hold_bound)
                     .and_then(|bound| bound.ahead(now)),
             );
-            let held = state.tracker.process_held(rule.id, config, now);
+            let held = state.tracker.process_held(rule.id, now);
             (held.transition, held.held_too_long)
         }
     };

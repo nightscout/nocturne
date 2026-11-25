@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "signal-loss-timeout-lifecycle",
-  "description": "true once now - LastReadingAt reaches timeout_minutes (inclusive); resumed readings feed false, starting hysteresis and then closing (hysteresis_minutes 0)",
+  "description": "true once now - LastReadingAt reaches timeout_minutes (inclusive); resumed readings feed false, starting hysteresis and then closing",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -10,7 +10,6 @@
       "condition_params": {
         "timeout_minutes": 15
       },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],

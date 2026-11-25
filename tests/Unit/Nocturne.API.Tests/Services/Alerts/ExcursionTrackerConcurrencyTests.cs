@@ -77,7 +77,6 @@ public class ExcursionTrackerConcurrencyTests
     {
         Id = id,
         Name = "Test Rule",
-        HysteresisMinutes = 5,
     };
 
     /// <summary>

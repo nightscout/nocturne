@@ -12,9 +12,7 @@ use uuid::Uuid;
 
 use crate::context::{ActiveAlertSnapshot, SensorContext};
 use crate::engine::{EngineState, Evaluation, Rule, evaluate_parsed_rule, format_instant};
-use crate::excursion::{
-    CloseReason, TrackerRuleConfig, TrackerState, TrackerStateKind, TransitionType,
-};
+use crate::excursion::{CloseReason, TrackerState, TrackerStateKind, TransitionType};
 use crate::facts::{ContextFact, RuleConditions, rule_reads};
 use crate::leaf_identity::collect_leaves;
 use crate::model::{Node, Payload};
@@ -398,13 +396,7 @@ impl Run<'_> {
             return;
         };
         let rule = p.rule;
-        let config = TrackerRuleConfig {
-            hysteresis_minutes: rule.hysteresis_minutes,
-        };
-        let transition = self
-            .state
-            .tracker
-            .close_elapsed_hysteresis(rule.id, config, at);
+        let transition = self.state.tracker.close_elapsed_hysteresis(rule.id, at);
         let tracker = self.state.tracker.state(rule.id);
         p.due = match (&p.body, tracker) {
             (Some(body), Some(s)) => sweep_due(

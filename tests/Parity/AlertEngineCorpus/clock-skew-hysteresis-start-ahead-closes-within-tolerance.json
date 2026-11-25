@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "clock-skew-hysteresis-start-ahead",
-  "description": "both rules enter hysteresis at 12:30, then the clock reads 12:10: the start is 20 minutes ahead, so neither window closes and clock_anomaly reports hysteresis_started_at; at 12:27 the start is within the tolerance and reads as now, so the 0-minute window closes and the 30-minute one does not; the 30-minute window closes at 13:00",
+  "name": "clock-skew-hysteresis-start-ahead-closes-within-tolerance",
+  "description": "the rule enters hysteresis at 12:30, then the clock reads 12:10: the start is 20 minutes ahead, so the window does not close and clock_anomaly reports hysteresis_started_at; at 12:27 the start is within the tolerance and reads as now, so the window closes",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -11,18 +11,6 @@
         "direction": "above",
         "value": 180
       },
-      "hysteresis_minutes": 30,
-      "auto_resolve_enabled": false
-    },
-    {
-      "id": "00000000-0000-0000-0000-000000000002",
-      "name": "rule-2",
-      "condition_type": "threshold",
-      "condition_params": {
-        "direction": "above",
-        "value": 180
-      },
-      "hysteresis_minutes": 0,
       "auto_resolve_enabled": false
     }
   ],
