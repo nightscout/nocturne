@@ -244,9 +244,9 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = AlertChannelNotice.NotificationType,
+            Type = NotificationSubjectNaming.AlertChannelNotSending,
             Category = NotificationCategory.Alert,
-            NamesSubject = false
+            NamesSubject = true
         });
 
         registry.Register(new NotificationTemplate

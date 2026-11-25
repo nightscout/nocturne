@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -30,6 +31,14 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="AlertChannelNoticeLog.Freshness"/>, so a run that finds the same channels reads no
 /// owner and no notification.
 /// </para>
+/// <para>
+/// Deleting an account removes the notices that name the person
+/// (<see cref="NotificationSubjectNaming.AlertChannelNotSending"/>) but keeps their channels, which then
+/// do not send. A notice raised for such a channel still tells the owner, but names no member or
+/// adder whose subject is gone, and leaves out the channel's label, which can name them too. A channel
+/// that goes to a member it cannot name keeps no label either: a direct message saved before its
+/// recipient was recorded loses its link with the account, and that member may be the one gone.
+/// </para>
 /// </remarks>
 public interface IAlertChannelNotice
 {
@@ -57,6 +66,7 @@ public sealed class AlertChannelNoticeLog(TimeProvider timeProvider)
 internal sealed class AlertChannelNotice(
     IAlertRuleRepository rules,
     ITenantMembershipRepository members,
+    ISubjectRepository subjects,
     INocturneDbContextFactory contexts,
     ITenantOwnerResolver ownerResolver,
     IInAppNotificationService notifications,
@@ -65,7 +75,6 @@ internal sealed class AlertChannelNotice(
     ILogger<AlertChannelNotice> logger)
     : IAlertChannelNotice
 {
-    internal const string NotificationType = "alerts.channelNotSending";
     internal const string NotificationSource = "alert-channel";
 
     public async Task CheckAsync(IReadOnlyList<AlertRuleSnapshot> enabled, DateTime now, CancellationToken ct)
@@ -89,21 +98,23 @@ internal sealed class AlertChannelNotice(
         if (log.Unchanged(tenantId, keys))
             return;
 
+        IReadOnlySet<Guid>? existing = null;
         foreach (var owner in await ownerResolver.GetOwnerSubjectIdsAsync(tenantId, ct))
         {
             var standing = (await notifications.GetActiveNotificationsAsync(owner, ct))
-                .Where(n => n.Type == NotificationType && n.SourceId is not null)
+                .Where(n => n.Type == NotificationSubjectNaming.AlertChannelNotSending && n.SourceId is not null)
                 .Select(n => n.SourceId!)
                 .ToHashSet(StringComparer.Ordinal);
 
             foreach (var (sourceId, (channel, verdict)) in notSending.Where(c => !standing.Contains(c.Key)))
             {
+                existing ??= await ExistingSubjectsAsync(notSending.Values, ct);
                 if (await notifications.CreateNotificationUnlessActiveAsync(
-                        owner, NotificationType, TitleKey(verdict.State), sourceId,
+                        owner, NotificationSubjectNaming.AlertChannelNotSending, TitleKey(verdict.State), sourceId,
                         category: NotificationCategory.Alert,
                         source: NotificationSource,
                         subtitle: TitleKey(verdict.State) + "_subtitle",
-                        metadata: Metadata(channel, verdict, names.GetValueOrDefault(channel.AlertRuleId)),
+                        metadata: Metadata(channel, verdict, names.GetValueOrDefault(channel.AlertRuleId), existing),
                         cancellationToken: ct))
                     logger.LogWarning(
                         "Channel {ChannelId} of alert rule {AlertRuleId} for tenant {TenantId} does not send: {Reason}",
@@ -112,7 +123,7 @@ internal sealed class AlertChannelNotice(
 
             foreach (var sourceId in standing.Where(s => !notSending.ContainsKey(s)))
                 await notifications.ArchiveBySourceAsync(
-                    owner, NotificationType, sourceId, NotificationArchiveReason.ConditionMet, ct);
+                    owner, NotificationSubjectNaming.AlertChannelNotSending, sourceId, NotificationArchiveReason.ConditionMet, ct);
         }
 
         log.Record(tenantId, keys);
@@ -121,9 +132,28 @@ internal sealed class AlertChannelNotice(
     private static string TitleKey(AlertChannelState state) =>
         state == AlertChannelState.Stopped ? "alert_channel_stopped" : "alert_channel_no_recipient";
 
-    private static Dictionary<string, object> Metadata(
-        AlertRuleChannelSnapshot channel, AlertChannelVerdict verdict, string? ruleName)
+    /// <summary>Which of the members and adders the <paramref name="notSending"/> channels name still have a subject.</summary>
+    private async Task<IReadOnlySet<Guid>> ExistingSubjectsAsync(
+        IEnumerable<(AlertRuleChannelSnapshot Channel, AlertChannelVerdict Verdict)> notSending, CancellationToken ct)
     {
+        var named = notSending
+            .SelectMany(c => new[] { c.Verdict.MemberSubjectId, c.Channel.AddedBySubjectId })
+            .OfType<Guid>()
+            .ToHashSet();
+        return named.Count == 0
+            ? new HashSet<Guid>()
+            : (await subjects.GetManyAsync(named, ct)).Select(s => s.Id).ToHashSet();
+    }
+
+    private static Dictionary<string, object> Metadata(
+        AlertRuleChannelSnapshot channel, AlertChannelVerdict verdict, string? ruleName, IReadOnlySet<Guid> existing)
+    {
+        var member = verdict.MemberSubjectId is { } m && existing.Contains(m) ? m : (Guid?)null;
+        var adder = channel.AddedBySubjectId is { } a && existing.Contains(a) ? a : (Guid?)null;
+        var goesToAMember = ChannelDestinations.ModeOf(channel.ChannelType)
+            is ChannelDestinationMode.Member or ChannelDestinationMode.LinkedIdentity;
+        var namesTheGone = (member is null && (verdict.MemberSubjectId is not null || goesToAMember))
+            || (adder is null && channel.AddedBySubjectId is not null);
         var metadata = new Dictionary<string, object>
         {
             ["alertRuleId"] = channel.AlertRuleId.ToString(),
@@ -133,12 +163,12 @@ internal sealed class AlertChannelNotice(
         };
         if (ruleName is not null)
             metadata["alertRuleName"] = ruleName;
-        if (channel.DestinationLabel is not null)
+        if (channel.DestinationLabel is not null && !namesTheGone)
             metadata["destinationLabel"] = channel.DestinationLabel;
-        if (verdict.MemberSubjectId is { } member)
-            metadata["memberSubjectId"] = member.ToString();
-        if (channel.AddedBySubjectId is { } adder)
-            metadata["addedBySubjectId"] = adder.ToString();
+        if (member is not null)
+            metadata[NotificationSubjectNaming.MemberSubjectIdKey] = member.Value.ToString();
+        if (adder is not null)
+            metadata[NotificationSubjectNaming.AddedBySubjectIdKey] = adder.Value.ToString();
         if (channel.StopsAt is { } stopsAt)
             metadata["stopsAt"] = stopsAt.ToString("O", CultureInfo.InvariantCulture);
         return metadata;

@@ -129,7 +129,14 @@ public abstract record SubjectChange
 {
     private SubjectChange() { }
 
-    public sealed record Changed : SubjectChange;
+    public sealed record Changed : SubjectChange
+    {
+        /// <summary>
+        /// The notices a deletion removed from people other than the deleted subject, whose open apps
+        /// still list them. Empty for any other change.
+        /// </summary>
+        public IReadOnlyList<RemovedNotice> RemovedNotices { get; init; } = [];
+    }
 
     public sealed record NotFound : SubjectChange;
 
@@ -137,6 +144,9 @@ public abstract record SubjectChange
 
     public sealed record LastManagerOf(IReadOnlyList<LastManagerTeam> ManagedTeams) : SubjectChange;
 }
+
+/// <summary>A notice <paramref name="UserId"/> held on <paramref name="TenantId"/>, which a deletion removed.</summary>
+public sealed record RemovedNotice(Guid TenantId, string UserId, InAppNotificationDto Notice);
 
 /// <summary>
 /// What deleting a subject found, with the tenants a delete that removes even a last owner's

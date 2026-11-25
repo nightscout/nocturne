@@ -185,6 +185,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
                 NullLogger<AuthAuditService>.Instance),
             TimeProvider.System,
             InertTeamStaff.Announcer(),
+            InertTeamStaff.Sites(),
             NullLogger<SubjectDeletion>.Instance);
     }
 

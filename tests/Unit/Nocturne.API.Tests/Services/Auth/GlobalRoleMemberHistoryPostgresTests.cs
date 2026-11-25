@@ -103,7 +103,7 @@ public class GlobalRoleMemberHistoryPostgresTests(GlobalRoleMemberHistoryPostgre
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            audit, TimeProvider.System, InertTeamStaff.Announcer(), NullLogger<SubjectDeletion>.Instance);
+            audit, TimeProvider.System, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         return new Scenario(tenant, person, role, service, deletion, new MemberHistoryReader(contexts));
     }
 

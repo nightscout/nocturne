@@ -59,7 +59,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            Mock.Of<IAuthAuditService>(), _time, InertTeamStaff.Announcer(), NullLogger<SubjectDeletion>.Instance);
+            Mock.Of<IAuthAuditService>(), _time, InertTeamStaff.Announcer(), InertTeamStaff.Sites(), NullLogger<SubjectDeletion>.Instance);
         _service = new DemoTenantService(
             contexts, new TenantRepository(contexts), members, subjects, deletion,
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),

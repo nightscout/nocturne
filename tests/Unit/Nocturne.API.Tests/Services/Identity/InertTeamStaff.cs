@@ -19,7 +19,11 @@ internal static class InertTeamStaff
         teams.Setup(t => t.ListStaffSitesOfSubjectAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         return new TeamStaffAnnouncer(
             teams.Object, Mock.Of<ITenantMembershipRepository>(),
-            new SiteNotices(Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider()),
+            Sites(),
             TimeProvider.System, NullLogger<TeamStaffAnnouncer>.Instance);
     }
+
+    /// <summary>Site notices that find no site, so nothing is filed or broadcast.</summary>
+    public static SiteNotices Sites() =>
+        new(Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider());
 }

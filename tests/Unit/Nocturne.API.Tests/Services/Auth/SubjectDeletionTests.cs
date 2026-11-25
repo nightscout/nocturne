@@ -2,10 +2,18 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -16,7 +24,8 @@ namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
 /// Covers what <see cref="SubjectDeletion.DeleteAsync"/> leaves of the deleted subject's auth
-/// audit trail, over SQLite so the scrub's bulk updates and the foreign keys both run for real.
+/// audit trail, and whom it tells of the notices it removed, over SQLite so the scrub's bulk updates
+/// and the foreign keys both run for real.
 /// </summary>
 public class SubjectDeletionTests : IDisposable
 {
@@ -48,7 +57,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_KeepsTheSubjectAndActorIdsOnEveryRow()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         var rows = await ReadRowsAsync();
         rows[_selfLoginRow].TargetSubjectId.Should().Be(_deletedId);
@@ -60,7 +69,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_ClearsTheClientOfEveryRowTheSubjectActedOn()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         var rows = await ReadRowsAsync();
         foreach (var id in new[] { _selfLoginRow, _actedOnOtherRow })
@@ -73,7 +82,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_ClearsTheDetailsOfEveryRowTheSubjectIsPartyTo()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         var rows = await ReadRowsAsync();
         rows[_selfLoginRow].DetailsJson.Should().BeNull();
@@ -84,7 +93,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_KeepsAnotherActorsClientOnARowAboutTheSubject()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         var row = (await ReadRowsAsync())[_actedOnByAdminRow];
         row.IpAddress.Should().Be("10.0.0.3");
@@ -94,7 +103,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_LeavesRowsTheSubjectIsNoPartyToUntouched()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         var row = (await ReadRowsAsync())[_unrelatedRow];
         row.IpAddress.Should().Be("10.0.0.4");
@@ -105,7 +114,7 @@ public class SubjectDeletionTests : IDisposable
     [Fact]
     public async Task Delete_RecordsTheDeletionAgainstTheDeletedSubjectAndTheCaller()
     {
-        await DeleteAsLeaverAsync();
+        (await DeleteAsLeaverAsync()).Should().BeOfType<SubjectChange.Changed>();
 
         await using var reader = _db.CreateContext();
         var deleted = await reader.AuthAuditLog.SingleAsync(a => a.EventType == AuthAuditEventType.SubjectDeleted);
@@ -114,7 +123,127 @@ public class SubjectDeletionTests : IDisposable
         (await reader.Subjects.AnyAsync(s => s.Id == _deletedId)).Should().BeFalse();
     }
 
-    private async Task DeleteAsLeaverAsync()
+    [Fact]
+    public async Task Delete_TellsEachOtherHolderOfARemovedNoticeOnItsOwnSite()
+    {
+        var (home, away) = await SeedNoticesAsync();
+        var told = new List<(Guid Tenant, string UserId, Guid NoticeId)>();
+
+        (await DeleteAsLeaverAsync(Hubs((tenant, userId, notice) => told.Add((tenant, userId, notice.Id)))))
+            .Should().BeOfType<SubjectChange.Changed>();
+
+        told.Should().BeEquivalentTo(
+            [
+                (home.Tenant, _adminId.ToString(), home.Notice),
+                (away.Tenant, _bystanderId.ToString(), away.Notice),
+            ],
+            "each removed notice someone else held is broadcast to them under its site, and none the deleted subject held");
+    }
+
+    [Fact]
+    public async Task Delete_StillDeletesAndTellsTheOthers_WhenABroadcastFails()
+    {
+        var (_, away) = await SeedNoticesAsync();
+        var told = new List<(Guid Tenant, string UserId, Guid NoticeId)>();
+
+        (await DeleteAsLeaverAsync(Hubs((tenant, userId, notice) =>
+        {
+            if (userId == _adminId.ToString())
+                throw new InvalidOperationException("The hub is gone.");
+            told.Add((tenant, userId, notice.Id));
+        }))).Should().BeOfType<SubjectChange.Changed>();
+
+        told.Should().Equal((away.Tenant, _bystanderId.ToString(), away.Notice));
+        await using var reader = _db.CreateContext();
+        (await reader.Subjects.AnyAsync(s => s.Id == _deletedId)).Should().BeFalse();
+        (await reader.InAppNotifications.IgnoreQueryFilters().AnyAsync(n => n.SourceId == _deletedId.ToString()))
+            .Should().BeFalse();
+    }
+
+    /// <summary>
+    /// A notice naming the deleted subject on each of two sites, held by the admin on one and the
+    /// bystander on the other, beside one the deleted subject held and one that names no one.
+    /// </summary>
+    private async Task<((Guid Tenant, Guid Notice) Home, (Guid Tenant, Guid Notice) Away)> SeedNoticesAsync()
+    {
+        var home = (Tenant: Guid.CreateVersion7(), Notice: Guid.CreateVersion7());
+        var away = (Tenant: Guid.CreateVersion7(), Notice: Guid.CreateVersion7());
+        await using var seed = _db.CreateContext();
+        seed.Tenants.AddRange(
+            new TenantEntity { Id = home.Tenant, Slug = "home", DisplayName = "Home", IsActive = true },
+            new TenantEntity { Id = away.Tenant, Slug = "away", DisplayName = "Away", IsActive = true });
+        seed.InAppNotifications.AddRange(
+            Notice(home.Notice, home.Tenant, _adminId, NotificationSubjectNaming.AnonymousLoginRequest, _deletedId.ToString()),
+            Notice(away.Notice, away.Tenant, _bystanderId, NotificationSubjectNaming.AnonymousLoginRequest, _deletedId.ToString()),
+            Notice(Guid.CreateVersion7(), home.Tenant, _deletedId, "system.update_available", "1.2.3"),
+            Notice(Guid.CreateVersion7(), away.Tenant, _bystanderId, "sharing.link_rotated", away.Tenant.ToString()));
+        await seed.SaveChangesAsync();
+        return (home, away);
+    }
+
+    private static InAppNotificationEntity Notice(Guid id, Guid tenant, Guid holder, string type, string sourceId) => new()
+    {
+        Id = id,
+        TenantId = tenant,
+        UserId = holder.ToString(),
+        Type = type,
+        Title = type,
+        SourceId = sourceId,
+    };
+
+    /// <summary>
+    /// What a site's scope resolves to broadcast with: a hub that hands <paramref name="told"/> the tenant
+    /// the scope was opened for, which is the tenant the real hub groups the broadcast under.
+    /// </summary>
+    private static ServiceProvider Hubs(Action<Guid, string, InAppNotificationDto> told)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped(sp =>
+        {
+            var tenant = sp.GetRequiredService<ITenantAccessor>();
+            var hub = new Mock<ISignalRBroadcastService>();
+            hub.Setup(h => h.BroadcastNotificationArchivedAsync(
+                    It.IsAny<string>(), It.IsAny<InAppNotificationDto>(), It.IsAny<NotificationArchiveReason>()))
+                .Returns<string, InAppNotificationDto, NotificationArchiveReason>((userId, notice, _) =>
+                {
+                    told(tenant.TenantId, userId, notice);
+                    return Task.CompletedTask;
+                });
+            return hub.Object;
+        });
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public async Task A_refused_deletion_tells_no_one_and_removes_no_notice()
+    {
+        var (home, _) = await SeedNoticesAsync();
+        var members = new TenantMembershipRepository(_db.CreateContext(home.Tenant).AsFactory(), AccountLinkRoutes.Off);
+        await members.SeedRolesAsync(home.Tenant, CancellationToken.None);
+        var owner = (await members.FindRoleIdBySlugAsync(home.Tenant, RoleSeeds.Owner, CancellationToken.None))!.Value;
+        (await members.AddMemberAsync(
+                new NewTenantMember(home.Tenant, _deletedId, [owner]) { How = MembershipJoinHow.Direct, By = null },
+                CancellationToken.None))
+            .Should().BeTrue();
+        await using (var seed = _db.CreateContext())
+        {
+            seed.PasskeyCredentials.Add(new PasskeyCredentialEntity
+            {
+                Id = Guid.CreateVersion7(), SubjectId = _deletedId, CredentialId = _deletedId.ToByteArray(), PublicKey = [1],
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var told = new List<Guid>();
+        (await DeleteAsLeaverAsync(Hubs((_, _, notice) => told.Add(notice.Id)))).Should().BeOfType<SubjectChange.LastOwnerOf>();
+
+        told.Should().BeEmpty("a refused deletion removed nothing");
+        await using var reader = _db.CreateContext();
+        (await reader.InAppNotifications.IgnoreQueryFilters().AnyAsync(n => n.Id == home.Notice)).Should().BeTrue();
+    }
+
+    private async Task<SubjectChange> DeleteAsLeaverAsync(IServiceProvider? hubs = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -138,10 +267,10 @@ public class SubjectDeletionTests : IDisposable
             audit,
             TimeProvider.System,
             InertTeamStaff.Announcer(),
+            hubs is null ? InertTeamStaff.Sites() : new SiteNotices(new TenantRepository(dbContext.AsFactory()), hubs),
             NullLogger<SubjectDeletion>.Instance);
 
-        (await deletion.DeleteAsync(_deletedId, evenLastOwner: false, CancellationToken.None)).Change
-            .Should().BeOfType<SubjectChange.Changed>();
+        return (await deletion.DeleteAsync(_deletedId, evenLastOwner: false, CancellationToken.None)).Change;
     }
 
     private async Task<Dictionary<Guid, AuthAuditLogEntity>> ReadRowsAsync()
