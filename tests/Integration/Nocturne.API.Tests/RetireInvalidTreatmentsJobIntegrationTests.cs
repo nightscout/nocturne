@@ -97,6 +97,7 @@ public class RetireInvalidTreatmentsJobIntegrationTests : ApiIntegrationTestBase
 
         await RunJobAsync(Main);
 
+        await SettleHistoryAsync();
         var history = await GetAsync("/api/v3/treatments/history/0");
         history["result"]!.AsArray()
             .Should().Contain(t => (t!["identifier"] ?? t["_id"])!.GetValue<string>() == invalid

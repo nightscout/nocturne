@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -139,29 +138,6 @@ public class V4GoldenFixture : IAsyncLifetime
         await using var scope = _provider!.CreateAsyncScope();
         await using var ctx = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         return await query(ctx);
-    }
-
-    /// <summary>
-    /// Returns once the history horizon is past every write the test has made. A history read
-    /// delivers only stamps below its horizon, which is truncated to the millisecond, so a row
-    /// stamped in the millisecond of the read is left for the next one. A test that reads straight
-    /// after a write waits here first, then reads once and asserts the whole page. Rows are stamped
-    /// on the application clock, so the horizon is compared with that clock: a database clock that
-    /// drifts from it only lengthens or shortens the wait, never admits a stamp the horizon is behind.
-    /// </summary>
-    public async Task SettleHistoryAsync(IServiceScope scope)
-    {
-        var written = DateTime.UtcNow;
-        var contexts = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
-        await Eventually.UntilAsync(
-            "the history horizon to pass the last write",
-            async () =>
-            {
-                await using var ctx = await contexts.CreateAsync();
-                var horizon = await HistoryHorizon.ReadAsync(ctx, TimeSpan.Zero, NullLogger.Instance, CancellationToken.None);
-                return horizon > written;
-            },
-            step: TimeSpan.FromMilliseconds(1));
     }
 
     private void PinTenant(Guid tenantId) =>

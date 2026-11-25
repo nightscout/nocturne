@@ -383,6 +383,7 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
 
     private async Task<List<JsonElement>> HistoryAsync(long cursor)
     {
+        await SettleHistoryAsync();
         var body = await AuthenticatedClient.GetFromJsonAsync<JsonElement>(
             $"/api/v3/devicestatus/history/{cursor}?limit=1000");
         return body.GetProperty("result").EnumerateArray().ToList();

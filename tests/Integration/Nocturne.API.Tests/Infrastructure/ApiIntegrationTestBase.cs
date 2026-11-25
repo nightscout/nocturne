@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -235,6 +236,17 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
             new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
         return await action(scope.ServiceProvider);
     }
+
+    /// <summary>
+    /// Call before a v3 history read or a search by <c>srvModified</c> that follows a write; see
+    /// <see cref="HistorySettle"/>.
+    /// </summary>
+    protected Task SettleHistoryAsync() =>
+        WithTenantScopeAsync(async sp =>
+        {
+            await HistorySettle.UntilHorizonPassesAsync(sp);
+            return true;
+        });
 
     /// <summary>
     /// Logs a message to the test output

@@ -84,11 +84,12 @@ public class UploadedInvalidDeviceStatusIntegrationTests : ApiIntegrationTestBas
         public static Live None { get; } = new([], [], []);
     }
 
-    private static async Task<Live> LiveAsync(HttpClient client)
+    private async Task<Live> LiveAsync(HttpClient client)
     {
         static string[] Ids(JsonArray documents, string key) =>
             [.. documents.Select(d => d![key]!.GetValue<string>()).Order()];
 
+        await SettleHistoryAsync();
         return new Live(
             Ids((await GetAsync(client, "/api/v1/devicestatus?count=100")).AsArray(), "_id"),
             Ids((await GetAsync(client, "/api/v3/devicestatus?limit=100"))["result"]!.AsArray(), "identifier"),
@@ -99,8 +100,11 @@ public class UploadedInvalidDeviceStatusIntegrationTests : ApiIntegrationTestBas
     private static void ShouldServe(Live live, string id) =>
         live.Should().BeEquivalentTo(new Live([id], [id], [id]), o => o.WithStrictOrdering());
 
-    private static async Task<JsonArray> HistoryAsync(HttpClient client) =>
-        (await GetAsync(client, "/api/v3/devicestatus/history/0"))["result"]!.AsArray();
+    private async Task<JsonArray> HistoryAsync(HttpClient client)
+    {
+        await SettleHistoryAsync();
+        return (await GetAsync(client, "/api/v3/devicestatus/history/0"))["result"]!.AsArray();
+    }
 
     private static bool IsDeleted(JsonNode? status) => status?["isValid"]?.GetValue<bool>() == false;
 
