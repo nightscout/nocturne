@@ -300,7 +300,7 @@ as false or true.
 | `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `(now - Since).TotalMinutes >= for_minutes` (double) | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
 | `eventual_glucose` | `operator`, `value` (mg/dL) or `value_from` | `ApsDetermination.EventualMgdl`, `ApsDetermination.At`, now, and what `value_from` names | `Compare` | no determination, or one without the value ⇒ **unknown** (`absent`); older than the rule's glucose freshness bound ⇒ **unknown** (`stale`, below) |
 | `carbs_required` | `operator`, `value` (grams) | `ApsDetermination.CarbsRequiredGrams`, `ApsDetermination.At`, now | `Compare` | as `eventual_glucose` |
-| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back. A **Duration** start beyond the clock tolerance ahead ⇒ **unknown** (§5.4), held back or not: the clock rule comes first, since a threshold measured from a start that has not happened yet is not known to have held |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
@@ -846,6 +846,11 @@ in §3 plus:
 
   A condition operand naming an unknown member is a different case: the tree cannot be
   evaluated (§1.4).
+- **One entry per key.** A host sends one `active_state_spans` entry per `(category, state)` and
+  one `active_trackers` entry per `tracker_definition_id`. If two entries share a key anyway, the
+  last one in the list wins, as a tolerance, and the earlier ones are not read. A span the engine
+  ignores (an unknown category, above) takes no part. The backend holds both facts keyed, so it
+  cannot send a duplicate.
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.
@@ -1185,7 +1190,7 @@ measures from the rule's `enabled_at` (§3), so it contributes `enabled_at` plus
 anchor, and a host can
 pre-arm that instant for a sensor that has never sent a reading. A leaf without an anchor, or
 whose guard holds it constant (a `has_ever_*` flag false, a `tracker_age` threshold held back at
-recording), contributes nothing, so an unknown leaf
+recording whose start is not beyond the tolerance ahead), contributes nothing, so an unknown leaf
 contributes nothing (a fact arriving is not a clock event; an unknown leaf whose anchor is
 known contributes as a known one: `pump_state` with `is_active` and `for_minutes` over an
 unrecognised mode, §3, moves from false to unknown there), as does a
@@ -1299,6 +1304,9 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
   `signal_loss` and `staleness` measure from the readings that did arrive.
 - A glucose reading whose freshness runs from its timestamp is not known to be fresh, so the four
   judged leaves read unknown, as for a stale reading.
+- A duration `tracker_age` instance whose threshold is held back (§3) reads unknown, not false,
+  while its start is beyond the tolerance ahead, and the start is reported. From `start - 5
+  minutes` the start is within the tolerance and the threshold is held back, so the leaf is false.
 - A `sustained` run whose start is beyond the tolerance ahead returns unknown and is kept: the run
   neither completes nor breaks on that evaluation. Within the tolerance it reads zero elapsed,
   which is false, since `minutes > 0`. A run starts at or before `now` (§3), so only one started
