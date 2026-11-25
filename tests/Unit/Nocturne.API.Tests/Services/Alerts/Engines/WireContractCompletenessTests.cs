@@ -48,13 +48,7 @@ public class WireContractCompletenessTests
         // the domain side); the snapshot's own properties must all cross.
         new(typeof(ActiveAlertSnapshot), "WireActiveAlert", typeof(ScenarioActiveAlert), []),
         new(typeof(TempBasalSnapshot), "WireTempBasal", typeof(ScenarioTempBasal), []),
-        new(typeof(OverrideSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan),
-        [
-            // The override evaluators read only StartedAt; the rest never crosses.
-            nameof(OverrideSnapshot.EndsAt),
-            nameof(OverrideSnapshot.Multiplier),
-            nameof(OverrideSnapshot.Name),
-        ]),
+        new(typeof(OverrideSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan), []),
         new(typeof(PumpSuspensionSnapshot), "WireStartedSpan", typeof(ScenarioStartedSpan), []),
         new(typeof(DoNotDisturbSnapshot), "WireDoNotDisturb", typeof(ScenarioDoNotDisturb), []),
         new(typeof(PumpModeSnapshot), "WirePumpMode", typeof(ScenarioPumpMode), []),

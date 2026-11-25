@@ -507,15 +507,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 StateSpanCategory.Override, state: null, at: now, ct)
                 ?? (isReplay ? null : await SoonestDeviceStatusOverrideAheadAsync(now, ct));
             if (span is not null)
-            {
-                var multiplier = span.Metadata.TryReadDecimal("insulinNeedsScaleFactor");
-                var name = span.Metadata.TryReadString("reasonDisplay");
-                enriched = enriched with
-                {
-                    ActiveOverride = new OverrideSnapshot(
-                        span.StartTimestamp, span.EndTimestamp, multiplier, name)
-                };
-            }
+                enriched = enriched with { ActiveOverride = new OverrideSnapshot(span.StartTimestamp) };
         }
 
         if (needs.NeedsSensorState)

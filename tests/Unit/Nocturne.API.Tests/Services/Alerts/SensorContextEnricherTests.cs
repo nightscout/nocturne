@@ -1062,7 +1062,6 @@ public class SensorContextEnricherTests
         var (context, evaluation) = await OverrideRuleOverAsync(span);
 
         context.ActiveOverride!.StartedAt.Should().Be(now.AddMinutes(2));
-        context.ActiveOverride.EndsAt.Should().Be(now.AddMinutes(62));
         evaluation.ConditionMet.Should().BeTrue();
     }
 
@@ -1379,7 +1378,7 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
-    public async Task OverrideActive_need_projects_metadata_correctly()
+    public async Task OverrideActive_need_projects_the_start_of_the_override_in_force()
     {
         var enricher = BuildEnricher();
         var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -1390,21 +1389,12 @@ public class SensorContextEnricherTests
                 Category = StateSpanCategory.Override,
                 StartTimestamp = now.AddMinutes(-15),
                 EndTimestamp = now.AddMinutes(45),
-                Metadata = new Dictionary<string, object>
-                {
-                    ["insulinNeedsScaleFactor"] = 1.5,
-                    ["reasonDisplay"] = "Eating Soon",
-                },
             });
         var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
-        enriched.ActiveOverride.Should().NotBeNull();
-        enriched.ActiveOverride!.Multiplier.Should().Be(1.5m);
-        enriched.ActiveOverride.Name.Should().Be("Eating Soon");
-        enriched.ActiveOverride.StartedAt.Should().Be(now.AddMinutes(-15));
-        enriched.ActiveOverride.EndsAt.Should().Be(now.AddMinutes(45));
+        enriched.ActiveOverride.Should().Be(new OverrideSnapshot(now.AddMinutes(-15)));
     }
 
     [Fact]
