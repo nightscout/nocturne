@@ -318,6 +318,17 @@ public sealed record TeamAccessGrant(
 /// <summary>What approving an access link did: the access made, or why it was refused.</summary>
 public sealed record TeamAccessApproval(Guid? AccessId, TeamAccessRefusal? Refusal);
 
+/// <summary>Everything a team's access to a site gives, as an owner sets it in place of what it gave.</summary>
+/// <param name="AccessEndsAt">When the access ends, in UTC; null for no end.</param>
+public sealed record TeamAccessTerms(IReadOnlyList<Guid> RoleIds, bool LimitTo24Hours, DateTime? AccessEndsAt);
+
+/// <summary>
+/// What an owner's edit of a team's access to their site found: <paramref name="Refusal"/> says why the new
+/// terms were refused when <paramref name="Decision"/> is <see cref="OwnerDecision.Decided"/>, and is null
+/// when they were saved or changed nothing.
+/// </summary>
+public sealed record TeamAccessEdit(OwnerDecision Decision, TeamAccessRefusal? Refusal);
+
 /// <summary>A team with access to a site, as the site reads it.</summary>
 /// <param name="HasEnded">Whether <paramref name="AccessEndsAt"/> has passed.</param>
 /// <param name="ApprovedBySubjectId">Who approved it; null once that subject is deleted.</param>

@@ -26,7 +26,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <para>
 /// The writes, each in that order: an approval of a team's access takes the subject rows of the approver
 /// and the team's staff, the owners lock, the manager lock and the team access lock, so the approver's
-/// owner role, end and limit hold still from its check to its commit. A role edit takes the rows of the
+/// owner role, end and limit hold still from its check to its commit. An owner's edit of a team's access and
+/// the switch of who decides its staff take the same locks without the owner's row, since they insert no row
+/// naming the owner; an owner's decision on one staff member takes that member's row, the owners lock and the
+/// team access lock. A role edit takes the rows of the
 /// staff it may sync, the owners lock and the team access lock; a role deletion takes the owners lock, the
 /// team access lock, then the locks of the members who hold it. A staff member joining or being edited
 /// takes their row, the team's manager lock and the team access lock of every site the team follows. A

@@ -25,7 +25,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <c>access_ends_at</c> key: a string is the new end, a null is a cleared end, and no key is a row
 /// whose detail is unknown.
 /// <para>
-/// A team's access to the site given or stopped is a <see cref="TeamAudit"/> row with
+/// A team's access to the site given, changed or stopped is a <see cref="TeamAudit"/> row with
 /// <c>kind</c> = <c>team_access</c> and no target, so it never appears in a page narrowed to a member.
 /// It names the team by its name now, or the name the row recorded once the team is gone. An owner's
 /// approval or decline of a staff member is a <c>team_access</c> row that targets the staff member, so it
@@ -50,6 +50,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         AuthAuditEventType.MemberRemoved,
         AuthAuditEventType.TeamAccessGiven,
         AuthAuditEventType.TeamAccessStopped,
+        AuthAuditEventType.TeamAccessChanged,
         AuthAuditEventType.TeamStaffApproved,
         AuthAuditEventType.TeamStaffDeclined,
         AuthAuditEventType.TeamStaffRuleChanged,
@@ -170,6 +171,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
             AuthAuditEventType.MemberRemoved => MemberHistoryKind.Removed,
             AuthAuditEventType.TeamAccessGiven => MemberHistoryKind.TeamAccessGiven,
             AuthAuditEventType.TeamAccessStopped => MemberHistoryKind.TeamAccessStopped,
+            AuthAuditEventType.TeamAccessChanged => MemberHistoryKind.TeamAccessChanged,
             AuthAuditEventType.TeamStaffApproved => MemberHistoryKind.TeamStaffApproved,
             AuthAuditEventType.TeamStaffDeclined => MemberHistoryKind.TeamStaffDeclined,
             AuthAuditEventType.TeamStaffRuleChanged => MemberHistoryKind.TeamStaffRuleChanged,

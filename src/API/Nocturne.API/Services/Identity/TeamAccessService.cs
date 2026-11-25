@@ -14,7 +14,7 @@ namespace Nocturne.API.Services.Identity;
 /// than the roles they could grant, or than their own access. Also the other team writes that change
 /// the team reasons of its staff (<see cref="TeamReasonWrites"/>): a staff member joining, being edited,
 /// being removed or leaving, a site stopping the team's access, the team being deleted, and an owner of
-/// a site deciding which of the team's staff reach it. Each of those, once committed, files or takes back
+/// a site changing what the access gives or deciding which of the team's staff reach it. Each of those, once committed, files or takes back
 /// the notices the owners of the sites are owed (<see cref="TeamStaffAnnouncer"/>).
 /// </summary>
 /// <remarks>
@@ -108,6 +108,11 @@ public sealed class TeamAccessService(
 
         return await AnnouncedAsync(TeamReasonWrites.ApproveAccessAsync(contexts, grantRevocation, tokenHash, caller, grant, now, ct));
     }
+
+    /// <inheritdoc cref="TeamRepository.LockAccessEditAsync"/>
+    public Task<TeamAccessEdit> EditAccessAsync(
+        Guid tenantId, Guid teamId, TeamAccessApproverCredential editor, TeamAccessTerms terms, CancellationToken ct) =>
+        AnnouncedAsync(TeamReasonWrites.EditAccessAsync(contexts, grantRevocation, tenantId, teamId, editor, terms, Now, ct));
 
     /// <inheritdoc cref="TeamReasonWrites.StopAsync"/>
     public Task<bool> StopAsync(Guid tenantId, Guid teamId, CancellationToken ct) =>

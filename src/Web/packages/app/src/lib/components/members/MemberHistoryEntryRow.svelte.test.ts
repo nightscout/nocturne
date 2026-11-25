@@ -407,6 +407,87 @@ describe("MemberHistoryEntryRow team access with no team name", () => {
   });
 });
 
+describe("MemberHistoryEntryRow a team's access changed", () => {
+  const team = { teamId: "t1", name: "Clinic" };
+  const unnamed = { teamId: "t3" };
+  const END = accessEndInstant("2026-12-31");
+  const endText = () => formatMediumDate(new Date(2026, 11, 31));
+  const roleList = [
+    { id: "r1", slug: "viewer", name: "Viewer" } as TenantRoleDto,
+    { id: "r2", slug: "caretaker", name: "Caretaker" } as TenantRoleDto,
+  ];
+  const changed = (overrides: Partial<MemberHistoryEntry>) =>
+    sentence({ kind: MemberHistoryKind.TeamAccessChanged, member: undefined, team, ...overrides }, roleList);
+
+  it.each([
+    ["one role", { roles: ["viewer"] }, () => "After this change, the team had access with the role Viewer."],
+    [
+      "one role and the 24-hour limit",
+      { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours },
+      () => "After this change, the team had access with the role Viewer to the last 24 hours only.",
+    ],
+    [
+      "one role and an end",
+      { roles: ["viewer"], accessEndsAt: END },
+      () => `After this change, the team had access with the role Viewer until ${endText()}.`,
+    ],
+    [
+      "one role, the limit and an end",
+      { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
+      () => `After this change, the team had access with the role Viewer to the last 24 hours only, until ${endText()}.`,
+    ],
+    ["two roles", { roles: ["viewer", "caretaker"] }, () => "After this change, the team had access with the roles Viewer, Caretaker."],
+    [
+      "two roles and the 24-hour limit",
+      { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours },
+      () => "After this change, the team had access with the roles Viewer, Caretaker to the last 24 hours only.",
+    ],
+    [
+      "two roles and an end",
+      { roles: ["viewer", "caretaker"], accessEndsAt: END },
+      () => `After this change, the team had access with the roles Viewer, Caretaker until ${endText()}.`,
+    ],
+    [
+      "two roles, the limit and an end",
+      { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
+      () => `After this change, the team had access with the roles Viewer, Caretaker to the last 24 hours only, until ${endText()}.`,
+    ],
+  ])("states the change and the access it now gives with %s", async (_case, overrides, text) => {
+    const row = await changed(overrides as Partial<MemberHistoryEntry>);
+    await expect
+      .element(row)
+      .toHaveTextContent(`Alex changed what the team Clinic can do on this site. ${text()}`);
+  });
+
+  it("says the detail is not stored when the row names no role", async () => {
+    const row = await changed({ roles: [] });
+    await expect
+      .element(row)
+      .toHaveTextContent("Alex changed what the team Clinic can do on this site. The detail is no longer stored.");
+  });
+
+  it("states the change for a team that was deleted, with what it then gave", async () => {
+    const row = await changed({ team: unnamed, roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours });
+    await expect
+      .element(row)
+      .toHaveTextContent(
+        "Alex changed what a team that was deleted can do on this site. After this change, the team had access with the role Viewer to the last 24 hours only.",
+      );
+  });
+
+  it("says the detail is not stored for a team that was deleted when the row names no role", async () => {
+    const row = await changed({ team: undefined, roles: [] });
+    await expect
+      .element(row)
+      .toHaveTextContent("Alex changed what a team that was deleted can do on this site. The detail is no longer stored.");
+  });
+
+  it("names the system when the actor is not a person", async () => {
+    const row = await changed({ roles: ["viewer"], actor: { kind: MemberHistoryActorKind.System } });
+    await expect.element(row).toHaveTextContent("The system changed what the team Clinic can do on this site.");
+  });
+});
+
 describe("MemberHistoryEntryRow access through a team", () => {
   const self = { kind: MemberHistoryActorKind.Person, subjectId: "b1", name: "Sam" };
   const team = { teamId: "t1", name: "Clinic" };

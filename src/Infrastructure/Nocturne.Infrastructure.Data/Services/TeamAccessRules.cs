@@ -5,8 +5,8 @@ using Nocturne.Infrastructure.Data.Extensions;
 namespace Nocturne.Infrastructure.Data.Services;
 
 /// <summary>
-/// What an owner approving a team's access may give: the one rule the approval's transaction decides
-/// by and the link's offer is shown from.
+/// What an owner giving a team access, or changing what it gives, may give: the one rule the approval's
+/// and the edit's transactions decide by and the link's offer is shown from.
 /// </summary>
 public static class TeamAccessRules
 {
@@ -26,20 +26,30 @@ public static class TeamAccessRules
 
     /// <summary>
     /// Why <paramref name="grant"/>'s limit or end is wider than the link suggests or than the
-    /// approver's own access, or null when it is within both. <paramref name="approverLimited"/> is
-    /// whether the approver reads only the last 24 hours, and <paramref name="approverEnd"/> when their
-    /// own access ends, null when it does not.
+    /// approver's own access (<see cref="Refusal(bool, DateTime?, bool, DateTime?, DateTime)"/>), or null
+    /// when it is within both.
     /// </summary>
     public static TeamAccessRefusal? Refusal(
-        TeamAccessSuggestion suggestion, bool approverLimited, DateTime? approverEnd, TeamAccessGrant grant, DateTime now)
+        TeamAccessSuggestion suggestion, bool approverLimited, DateTime? approverEnd, TeamAccessGrant grant, DateTime now) =>
+        Refusal(suggestion.LimitTo24Hours || approverLimited, approverEnd, grant.LimitTo24Hours, grant.AccessEndsAt, now)
+        ?? (suggestion.AccessEndsAt is { } latest && (grant.AccessEndsAt is not { } chosen || chosen > latest)
+            ? TeamAccessRefusal.EndLaterThanLink
+            : null);
+
+    /// <summary>
+    /// Why an access limited by <paramref name="limitTo24Hours"/> and ending at <paramref name="accessEndsAt"/>
+    /// may not be given: it has ended, it lacks the 24-hour limit <paramref name="limitRequired"/> requires,
+    /// or it outlasts the approver's own access, which ends at <paramref name="approverEnd"/>, null when it
+    /// does not. Null when it may.
+    /// </summary>
+    public static TeamAccessRefusal? Refusal(
+        bool limitRequired, DateTime? approverEnd, bool limitTo24Hours, DateTime? accessEndsAt, DateTime now)
     {
-        if (grant.AccessEndsAt is { } end && MembershipLiveness.HasEnded(end, now))
+        if (accessEndsAt is { } end && MembershipLiveness.HasEnded(end, now))
             return TeamAccessRefusal.EndInPast;
-        if ((suggestion.LimitTo24Hours || approverLimited) && !grant.LimitTo24Hours)
+        if (limitRequired && !limitTo24Hours)
             return TeamAccessRefusal.LimitRequired;
-        if (suggestion.AccessEndsAt is { } latest && (grant.AccessEndsAt is not { } chosen || chosen > latest))
-            return TeamAccessRefusal.EndLaterThanLink;
-        if (MembershipLiveness.Outlasts(approverEnd, grant.AccessEndsAt))
+        if (MembershipLiveness.Outlasts(approverEnd, accessEndsAt))
             return TeamAccessRefusal.EndOutlastsApprover;
         return null;
     }
