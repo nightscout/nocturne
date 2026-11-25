@@ -37,13 +37,14 @@ public partial class TeamRepository
         if (access is null)
             return null;
 
-        return await TeamReasonChanges.ReadAsync(unit, [access.Id], subjectId: null, (context, _) =>
+        var changes = await TeamReasonChanges.ReadAsync(unit, [access.Id], subjectId: null, (context, _) =>
         {
             TeamAudit.StageAccessStopped(
                 context, access, access.Team!.Name, access.AccessRoles.Select(r => r.TenantRole!.Slug), TeamAudit.StoppedHow);
             context.TeamTenantAccess.Remove(access);
             return Task.CompletedTask;
         }, ct);
+        return changes.WithStaffNotices(teamId, [tenantId]);
     }
 
     /// <summary>
@@ -65,9 +66,10 @@ public partial class TeamRepository
             return (TeamDeletion.Refused, null);
 
         var accesses = await AccessOfTeamAcrossSitesAsync(db, teamId, ct);
-        return (TeamDeletion.Deleted, await TeamReasonChanges.ReadAsync(
+        var changes = await TeamReasonChanges.ReadAsync(
             unit, accesses.Select(a => a.Access.Id).ToList(), subjectId: null,
-            (context, token) => RemoveAsync(context, team, token), ct));
+            (context, token) => RemoveAsync(context, team, token), ct);
+        return (TeamDeletion.Deleted, changes.WithStaffNotices(teamId, accesses.Select(a => a.Access.TenantId)));
     }
 
     /// <summary>
@@ -90,11 +92,12 @@ public partial class TeamRepository
             return null;
 
         var accesses = await AccessOfTeamAcrossSitesAsync(db, teamId, ct);
-        return await TeamReasonChanges.ReadAsync(unit, accesses.Select(a => a.Access.Id).ToList(), staffSubjectId, (context, _) =>
+        var changes = await TeamReasonChanges.ReadAsync(unit, accesses.Select(a => a.Access.Id).ToList(), staffSubjectId, (context, _) =>
         {
             context.TeamMembers.Remove(member);
             TeamAudit.StageStaffRemoved(context, teamId, staffSubjectId);
             return Task.CompletedTask;
         }, ct);
+        return changes.WithStaffNotices(teamId, accesses.Select(a => a.Access.TenantId));
     }
 }

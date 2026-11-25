@@ -185,7 +185,7 @@ public class OAuthGrantService : IOAuthGrantService
         if (validatedScopes is not null && grant.GrantType == OAuthGrantTypes.Guest)
         {
             var violation = bounds.GivenToOthers is null
-                ? new GrantCeilingViolation(MemberAccessFromTeam.Code, MemberAccessFromTeam.CallerDetail)
+                ? new GrantCeilingViolation(CallerAccessFromTeam.Code, CallerAccessFromTeam.Detail)
                 : Scope.ValidateDelegation(validatedScopes, bounds.GivenToOthers);
             if (violation is not null)
                 throw new GrantCeilingViolationException(violation);

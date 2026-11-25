@@ -30,14 +30,20 @@ namespace Nocturne.API.Services.Identity;
 /// </remarks>
 internal static class TeamReasonWrites
 {
+    /// <summary>
+    /// The outcome of a write that has committed, and <paramref name="Notices"/>, what it owes the owners of
+    /// the sites once it has (<see cref="TeamStaffAnnouncer"/>).
+    /// </summary>
+    internal sealed record Written<T>(T Outcome, StaffNotices Notices);
+
     /// <summary>How many times <see cref="RunAsync{T}"/> runs a write that wrote nothing before it gives up.</summary>
     internal const int Attempts = 5;
 
     /// <summary>Stops the team's access to <paramref name="tenantId"/>. False when it has none.</summary>
-    public static async Task<bool> StopAsync(
+    public static async Task<Written<bool>> StopAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid tenantId, Guid teamId, DateTime now,
         CancellationToken ct) =>
-        await RunAsync<bool>(
+        await RunWithNoticesAsync<bool>(
             "stop",
             token => DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, token),
             async (unit, token) => await TeamRepository.LockAccessStopAsync(unit, tenantId, teamId, token) is { } changes
@@ -50,10 +56,10 @@ internal static class TeamReasonWrites
     /// stopped. <see cref="TeamDeletion.NotFound"/> when the caller is not a member,
     /// <see cref="TeamDeletion.Refused"/> when the team may not be deleted now.
     /// </summary>
-    public static Task<TeamDeletion> DeleteTeamAsync(
+    public static Task<Written<TeamDeletion>> DeleteTeamAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid teamId, Guid callerSubjectId,
         DateTime now, CancellationToken ct) =>
-        RunAsync<TeamDeletion>(
+        RunWithNoticesAsync<TeamDeletion>(
             "team deletion",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             async (unit, token) => await TeamRepository.LockTeamDeletionAsync(unit, teamId, callerSubjectId, token),
@@ -64,10 +70,10 @@ internal static class TeamReasonWrites
     /// leave. False when the subject is not staff of the team, or the caller is neither a manager of it
     /// nor that staff member. Never refused for the last-manager rule.
     /// </summary>
-    public static async Task<bool> RemoveStaffAsync(
+    public static async Task<Written<bool>> RemoveStaffAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid teamId, Guid callerSubjectId,
         Guid staffSubjectId, DateTime now, CancellationToken ct) =>
-        await RunAsync<bool>(
+        await RunWithNoticesAsync<bool>(
             "staff removal",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             async (unit, token) =>
@@ -77,20 +83,20 @@ internal static class TeamReasonWrites
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TeamRepository.LockStaffJoinAsync"/>
-    public static Task<TeamInviteAcceptance> JoinStaffAsync(
+    public static Task<Written<TeamInviteAcceptance>> JoinStaffAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, string tokenHash, Guid subjectId,
         DateTime now, CancellationToken ct) =>
-        RunAsync<TeamInviteAcceptance>(
+        RunWithNoticesAsync<TeamInviteAcceptance>(
             "staff join",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             async (unit, token) => await TeamRepository.LockStaffJoinAsync(unit, tokenHash, subjectId, now, token),
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TeamRepository.LockStaffUpdateAsync"/>
-    public static Task<TeamStaffChange> UpdateStaffAsync(
+    public static Task<Written<TeamStaffChange>> UpdateStaffAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid teamId, Guid callerSubjectId,
         Guid staffSubjectId, TeamStaffNarrowing narrowing, DateTime now, CancellationToken ct) =>
-        RunAsync<TeamStaffChange>(
+        RunWithNoticesAsync<TeamStaffChange>(
             "staff edit",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             async (unit, token) =>
@@ -98,30 +104,30 @@ internal static class TeamReasonWrites
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TeamRepository.LockAccessApprovalAsync"/>
-    public static Task<TeamAccessApproval> ApproveAccessAsync(
+    public static Task<Written<TeamAccessApproval>> ApproveAccessAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, string tokenHash,
         TeamAccessApproverCredential approver, TeamAccessGrant grant, DateTime now, CancellationToken ct) =>
-        RunAsync(
+        RunWithNoticesAsync(
             "access approval",
             token => DbUnitOfWork.OpenPlatformAsync(contexts, token),
             (unit, token) => TeamRepository.LockAccessApprovalAsync(unit, tokenHash, approver, grant, now, token),
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TeamRepository.LockStaffDecisionAsync"/>
-    public static Task<OwnerDecision> DecideStaffAsync(
+    public static Task<Written<OwnerDecision>> DecideStaffAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid tenantId, Guid teamId,
         Guid callerSubjectId, Guid staffSubjectId, string status, DateTime now, CancellationToken ct) =>
-        RunAsync(
+        RunWithNoticesAsync(
             "staff decision",
             token => DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, token),
             (unit, token) => TeamRepository.LockStaffDecisionAsync(unit, tenantId, teamId, callerSubjectId, staffSubjectId, status, now, token),
             grantRevocation, now, ct);
 
     /// <inheritdoc cref="TeamRepository.LockStaffRuleAsync"/>
-    public static Task<OwnerDecision> SetStaffRuleAsync(
+    public static Task<Written<OwnerDecision>> SetStaffRuleAsync(
         INocturneDbContextFactory contexts, GrantRevocationService grantRevocation, Guid tenantId, Guid teamId,
         Guid callerSubjectId, bool teamManagesStaff, DateTime now, CancellationToken ct) =>
-        RunAsync(
+        RunWithNoticesAsync(
             "staff rule change",
             token => DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, token),
             (unit, token) => TeamRepository.LockStaffRuleAsync(unit, tenantId, teamId, callerSubjectId, teamManagesStaff, now, token),
@@ -187,13 +193,14 @@ internal static class TeamReasonWrites
     /// Runs <paramref name="write"/> on a unit <paramref name="open"/> opens and applies the changes it
     /// returns (<see cref="ApplyAsync"/>) in the same commit, then evicts the sessions of what they revoked
     /// or capped. A write that returns null wrote nothing and runs again on a new unit, up to
-    /// <see cref="Attempts"/> times.
+    /// <see cref="Attempts"/> times. Returns with the outcome the notices the committed write owes the owners
+    /// of the sites (<see cref="TeamReasonChanges.WithStaffNotices"/>), which the caller files.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <paramref name="write"/> wrote nothing on every attempt: a staff member joined between each read and
     /// its locks, which only a flood of joins sustains.
     /// </exception>
-    internal static async Task<T> RunAsync<T>(
+    internal static async Task<Written<T>> RunWithNoticesAsync<T>(
         string name,
         Func<CancellationToken, ValueTask<DbUnitOfWork>> open,
         Func<DbUnitOfWork, CancellationToken, Task<(T Outcome, TeamReasonChanges? Changes)?>> write,
@@ -202,18 +209,29 @@ internal static class TeamReasonWrites
         for (var attempt = 0; attempt < Attempts; attempt++)
         {
             await using var unit = await open(ct);
-            var done = await unit.CommitAsync<(T Outcome, IReadOnlyList<OAuthGrantRecord> Lost)?>(
+            var done = await unit.CommitAsync<(T Outcome, IReadOnlyList<OAuthGrantRecord> Lost, StaffNotices Notices)?>(
                 async token => await write(unit, token) is { } written
-                    ? (written.Outcome, written.Changes is { } changes ? await ApplyAsync(unit, changes, grantRevocation, now, token) : [])
+                    ? (
+                        written.Outcome,
+                        written.Changes is { } changes ? await ApplyAsync(unit, changes, grantRevocation, now, token) : [],
+                        written.Changes?.Notices ?? StaffNotices.None)
                     : null,
                 ct: ct);
             if (done is { } result)
             {
                 grantRevocation.EvictSessions(result.Lost);
-                return result.Outcome;
+                return new Written<T>(result.Outcome, result.Notices);
             }
         }
 
         throw new InvalidOperationException($"The {name} found a new staff member under its locks on each of {Attempts} attempts.");
     }
+
+    /// <summary><see cref="RunWithNoticesAsync{T}"/> for a write that owes no notice.</summary>
+    internal static async Task<T> RunAsync<T>(
+        string name,
+        Func<CancellationToken, ValueTask<DbUnitOfWork>> open,
+        Func<DbUnitOfWork, CancellationToken, Task<(T Outcome, TeamReasonChanges? Changes)?>> write,
+        GrantRevocationService grantRevocation, DateTime now, CancellationToken ct) =>
+        (await RunWithNoticesAsync(name, open, write, grantRevocation, now, ct)).Outcome;
 }

@@ -138,8 +138,8 @@ public partial class TeamRepository
 
         TeamAudit.StageStaffAdded(db, id, subjectId, invite.Id);
         await db.SaveChangesAsync(ct);
-        return (new TeamInviteAcceptance(id, null), await TeamReasonChanges.SyncAsync(
-            unit, accesses.Select(a => (a.TenantId, subjectId)), now, ct));
+        return (new TeamInviteAcceptance(id, null), (await TeamReasonChanges.SyncAsync(
+            unit, accesses.Select(a => (a.TenantId, subjectId)), now, ct)).WithStaffNotices(id, accesses.Select(a => a.TenantId)));
     }
 
     /// <summary>
@@ -179,15 +179,20 @@ public partial class TeamRepository
         member.LimitTo24Hours = narrowing.LimitTo24Hours;
         member.EndsAt = narrowing.EndsAt;
 
+        var sentBack = new List<Guid>();
         if (TeamStaffRules.Widens(before, narrowing))
         {
             var approvedWhereSiteDecides = await db.TeamSiteStaff
                 .Where(s => s.TeamMemberId == member.Id
                     && s.Status == TeamSiteStaffStatus.Approved
                     && !s.TeamTenantAccess!.TeamManagesStaff)
+                .Select(s => new { Row = s, s.TeamTenantAccess!.TenantId })
                 .ToListAsync(ct);
-            foreach (var row in approvedWhereSiteDecides)
-                row.Status = TeamSiteStaffStatus.Pending;
+            foreach (var approved in approvedWhereSiteDecides)
+            {
+                approved.Row.Status = TeamSiteStaffStatus.Pending;
+                sentBack.Add(approved.TenantId);
+            }
         }
 
         TeamAudit.StageStaffChanged(db, teamId, staffSubjectId, before, narrowing);
@@ -197,8 +202,8 @@ public partial class TeamRepository
             .Where(a => a.TeamId == teamId)
             .Select(a => a.TenantId)
             .ToListAsync(ct);
-        return (TeamStaffChange.Changed, await TeamReasonChanges.SyncAsync(
-            unit, sites.Select(site => (site, staffSubjectId)), now, ct));
+        return (TeamStaffChange.Changed, (await TeamReasonChanges.SyncAsync(
+            unit, sites.Select(site => (site, staffSubjectId)), now, ct)).WithStaffNotices(teamId, sentBack));
     }
 
     private static Task<TeamMemberEntity?> StaffMemberAsync(

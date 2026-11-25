@@ -47,6 +47,7 @@ public class MembershipRequestService : IMembershipRequestService
     private readonly ILogger<MembershipRequestService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
 
     public MembershipRequestService(
         ITenantRepository tenants,
@@ -59,7 +60,8 @@ public class MembershipRequestService : IMembershipRequestService
         TimeProvider timeProvider,
         ILogger<MembershipRequestService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        TeamStaffAnnouncer teamStaff)
     {
         _tenants = tenants ?? throw new ArgumentNullException(nameof(tenants));
         _members = members ?? throw new ArgumentNullException(nameof(members));
@@ -72,6 +74,7 @@ public class MembershipRequestService : IMembershipRequestService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation ?? throw new ArgumentNullException(nameof(grantRevocation));
+        _teamStaff = teamStaff;
     }
 
     /// <inheritdoc />
@@ -234,6 +237,7 @@ public class MembershipRequestService : IMembershipRequestService
             return refusal;
 
         _grantRevocation.EvictSessions(revoked);
+        await _teamStaff.RecountOwnerChangeAsync(tenantId, request.SubjectId);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId} decided_by={DecidedBy}",

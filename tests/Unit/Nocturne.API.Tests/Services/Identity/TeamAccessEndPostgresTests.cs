@@ -117,11 +117,30 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
         return new TeamAccessService(
             new TeamRepository(contexts),
             new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
-            Mock.Of<ITenantRoleService>(),
+            RolesThatMayBeGiven(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
             contexts,
-            new GrantRevocationService(sessions ?? NewSessions()));
+            new GrantRevocationService(sessions ?? NewSessions()),
+            Announcer(contexts));
     }
+
+    private readonly RecordingNotices _notices = new();
+
+    private static ITenantRoleService RolesThatMayBeGiven()
+    {
+        var roles = new Mock<ITenantRoleService>();
+        roles.Setup(r => r.ValidateRoleGrantAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(RoleGrantValidation.Valid);
+        return roles.Object;
+    }
+
+    private TeamStaffAnnouncer Announcer(INocturneDbContextFactory contexts) => new(
+        new TeamRepository(contexts),
+        new TenantMembershipRepository(contexts, AccountLinkRoutes.Off),
+        new SiteNotices(new TenantRepository(contexts), _notices.Services()),
+        new FakeTimeProvider(new DateTimeOffset(Now)),
+        NullLogger<TeamStaffAnnouncer>.Instance);
 
     private SubjectDeletion Deletion(Guid actor)
     {
@@ -133,6 +152,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
             new GrantRevocationService(NewSessions()),
             Mock.Of<IAuthAuditService>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
+            Announcer(contexts),
             NullLogger<SubjectDeletion>.Instance);
     }
 
@@ -184,13 +204,10 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
     }
 
     private Task<TeamAccessApproval> ApproveAsync(Site site, string token, TeamAccessGrant grant) =>
-        TeamReasonWrites.ApproveAccessAsync(
-            Contexts(Guid.Empty, site.Owner),
-            new GrantRevocationService(NewSessions()),
+        Service(Guid.Empty, site.Owner).ApproveAsync(
             token,
             new TeamAccessApproverCredential(site.Owner, AuthType.SessionCookie, new HashSet<string>(), false),
             grant,
-            Now,
             Ct);
 
     private async Task<Guid> JoinStaffAsync(Team team, Guid? subject = null)

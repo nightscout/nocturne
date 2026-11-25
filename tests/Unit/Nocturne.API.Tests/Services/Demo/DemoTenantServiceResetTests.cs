@@ -11,6 +11,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -19,6 +20,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -57,7 +59,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var deletion = new SubjectDeletion(
             contexts, subjects, members,
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            Mock.Of<IAuthAuditService>(), _time, NullLogger<SubjectDeletion>.Instance);
+            Mock.Of<IAuthAuditService>(), _time, InertTeamStaff.Announcer(), NullLogger<SubjectDeletion>.Instance);
         _service = new DemoTenantService(
             contexts, new TenantRepository(contexts), members, subjects, deletion,
             new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
@@ -258,6 +260,40 @@ public class DemoTenantServiceResetTests : IDisposable
         row.ActorSubjectId.Should().BeNull();
         row.ActorCredential.Should().Be("system");
         row.TargetSubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConfigureAccessAsync_WhenATeamHoldsTheDemoRole_LogsTheOutcomeOfTheEditThatDidNotChangeIt()
+    {
+        var tenantId = SeedDemoTenant();
+        await using (var db = _db.CreateContext())
+        {
+            var role = await db.TenantRoles.SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor");
+            role.Permissions = [Scope.DemoVisitorPermissions.First()];
+            var team = new TeamEntity { Id = Guid.CreateVersion7(), Name = "Clinic" };
+            var access = new TeamTenantAccessEntity { Id = Guid.CreateVersion7(), TeamId = team.Id, TenantId = tenantId };
+            db.Teams.Add(team);
+            db.TeamTenantAccess.Add(access);
+            db.TeamTenantAccessRoles.Add(new TeamTenantAccessRoleEntity
+            {
+                Id = Guid.CreateVersion7(), TeamTenantAccessId = access.Id, TenantRoleId = role.Id,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state!.ToString()!.Contains(tenantId.ToString())),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        await using var read = _db.CreateContext();
+        (await read.TenantRoles.AsNoTracking().SingleAsync(r => r.TenantId == tenantId && r.Slug == "demo-visitor"))
+            .Permissions.Should().Equal([Scope.DemoVisitorPermissions.First()], "the refused edit left the role as it was");
     }
 
     [Fact]

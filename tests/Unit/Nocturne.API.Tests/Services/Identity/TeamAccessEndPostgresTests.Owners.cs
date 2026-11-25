@@ -50,7 +50,7 @@ public partial class TeamAccessEndPostgresTests
         new GrantRevocationService(NewSessions()),
         new FakeTimeProvider(new DateTimeOffset(Now)),
         Mock.Of<ILogger<TenantService>>(),
-        AccountLinkRoutes.Off);
+        AccountLinkRoutes.Off, InertTeamStaff.Announcer());
 
     private MemberInviteService Invites(Site site, Guid actor) => new(
         new TenantMembershipRepository(Contexts(site.Tenant, actor), AccountLinkRoutes.Off),
@@ -63,7 +63,7 @@ public partial class TeamAccessEndPostgresTests
         new FakeTimeProvider(new DateTimeOffset(Now)),
         NullLogger<MemberInviteService>.Instance,
         AccountLinkRoutes.Off,
-        new GrantRevocationService(NewSessions()));
+        new GrantRevocationService(NewSessions()), InertTeamStaff.Announcer());
 
     private MembershipRequestService Requests(Site site, Guid actor) => new(
         new TenantRepository(Contexts(site.Tenant, actor)),
@@ -78,7 +78,7 @@ public partial class TeamAccessEndPostgresTests
         new FakeTimeProvider(new DateTimeOffset(Now)),
         NullLogger<MembershipRequestService>.Instance,
         AccountLinkRoutes.Off,
-        new GrantRevocationService(NewSessions()));
+        new GrantRevocationService(NewSessions()), InertTeamStaff.Announcer());
 
     private async Task<Guid> OwnerRoleAsync(Site site) =>
         (await Members(site.Tenant).FindRoleIdBySlugAsync(site.Tenant, RoleSeeds.Owner, Ct))!.Value;

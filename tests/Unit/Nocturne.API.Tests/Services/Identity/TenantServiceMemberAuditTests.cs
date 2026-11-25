@@ -72,7 +72,7 @@ public sealed class TenantServiceMemberAuditTests : IDisposable
             Mock.Of<ITenantRoleService>(),
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             TimeProvider.System,
-            Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off);
+            Mock.Of<ILogger<TenantService>>(), AccountLinkRoutes.Off, InertTeamStaff.Announcer());
     }
 
     [Fact]

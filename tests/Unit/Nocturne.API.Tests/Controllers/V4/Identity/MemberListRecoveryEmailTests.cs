@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Services.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -58,7 +59,7 @@ public class MemberListRecoveryEmailTests
             grantRevocation: null!,
             TimeProvider.System,
             NullLogger<TenantService>.Instance,
-            AccountLinkRoutes.Of(deliveryConfigured));
+            AccountLinkRoutes.Of(deliveryConfigured), InertTeamStaff.Announcer());
     }
 
     private static async Task<Dictionary<string, bool?>> FlagsAsync(TenantService service) =>

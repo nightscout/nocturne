@@ -602,13 +602,15 @@ public class TeamsControllerTests
             [new TenantMemberRoleRecord(Guid.CreateVersion7(), "Owner", RoleSeeds.Owner, [Scope.FullAccess])],
             null, null, null, false, null, null, null, DateTime.UtcNow, []));
 
+    private static SiteNotices Sites() => new(Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider());
+
     private TeamRenameAnnouncer Announcer() => new(
-        _teams.Object, _members.Object, Mock.Of<ITenantRepository>(), new ServiceCollection().BuildServiceProvider(),
-        TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
+        _teams.Object, _members.Object, Sites(), TimeProvider.System, NullLogger<TeamRenameAnnouncer>.Instance);
 
     private TeamAccessService Access() => new(
         _teams.Object, _members.Object, _roles.Object, TimeProvider.System, Mock.Of<INocturneDbContextFactory>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new TeamStaffAnnouncer(_teams.Object, _members.Object, Sites(), TimeProvider.System, NullLogger<TeamStaffAnnouncer>.Instance));
 
     private static object? CodeOf(ObjectResult problem) =>
         problem.Value.Should().BeOfType<ProblemDetails>().Which.Extensions["code"];

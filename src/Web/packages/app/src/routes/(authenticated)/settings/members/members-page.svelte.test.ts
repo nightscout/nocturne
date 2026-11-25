@@ -225,6 +225,36 @@ describe("members page saving a member", () => {
     await expect.element(browserPage.getByRole("button", { name: "Save" })).toBeVisible();
   });
 
+  it("tells a caller who has access only through a team that they cannot give access", async () => {
+    mocks.setMemberLimitTo24Hours.mockImplementation(async () =>
+      error(409, "Refused.", { code: "caller_access_from_team" }),
+    );
+
+    await expandMember();
+    await browserPage.getByText("Only last 24 hours").click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(browserPage.getByRole("alert"))
+      .toHaveTextContent("You have access to this site only through a team, so you cannot give access to anyone.");
+    expect(browserPage.getByText(/This member has access only through a team/).elements()).toHaveLength(0);
+  });
+
+  it("tells a caller that the member they change has access only through a team", async () => {
+    mocks.setMemberLimitTo24Hours.mockImplementation(async () =>
+      error(409, "Refused.", { code: "member_access_from_team" }),
+    );
+
+    await expandMember();
+    await browserPage.getByText("Only last 24 hours").click();
+    await browserPage.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(browserPage.getByRole("alert"))
+      .toHaveTextContent("This member has access only through a team. To change it, stop the team's access to this site.");
+    expect(browserPage.getByText(/You have access to this site only through a team/).elements()).toHaveLength(0);
+  });
+
   it("drops a failed save's message when the card is closed and reopened", async () => {
     mocks.setMemberRoles.mockImplementation(async () => error(400, "Refused."));
 

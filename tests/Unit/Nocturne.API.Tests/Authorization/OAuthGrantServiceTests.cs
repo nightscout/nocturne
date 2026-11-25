@@ -478,7 +478,7 @@ public class OAuthGrantServiceTests : IDisposable
 
         var attempt = () => service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), scopes: [Scope.GlucoseRead]);
         (await attempt.Should().ThrowAsync<GrantCeilingViolationException>())
-            .Which.Violation.Code.Should().Be(MemberAccessFromTeam.Code);
+            .Which.Violation.Code.Should().Be(CallerAccessFromTeam.Code);
 
         var relabelled = await service.UpdateGrantAsync(grantId, _ownerSubjectId, new GrantScopeBounds(FullAccessCeiling, null), label: "Renamed");
         relabelled!.Label.Should().Be("Renamed");

@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.API.Tests.Services.Identity;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -136,6 +137,7 @@ public class SubjectDeletionTests : IDisposable
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             audit,
             TimeProvider.System,
+            InertTeamStaff.Announcer(),
             NullLogger<SubjectDeletion>.Instance);
 
         (await deletion.DeleteAsync(_deletedId, evenLastOwner: false, CancellationToken.None)).Change

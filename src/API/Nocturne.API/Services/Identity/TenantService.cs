@@ -41,6 +41,7 @@ public partial class TenantService : ITenantService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly TeamStaffAnnouncer _teamStaff;
     private readonly TimeProvider _time;
     private readonly ILogger<TenantService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
@@ -84,6 +85,7 @@ public partial class TenantService : ITenantService
     /// <param name="grantRevocation">Revokes a removed member's grants and evicts their sessions.</param>
     /// <param name="timeProvider">Clock for the handover, passkey and OIDC identity timestamps.</param>
     /// <param name="logger">Logs a tenant left without its public membership.</param>
+    /// <param name="teamStaff">Recounts the team staff who wait at a site once a member becomes or stops being its owner.</param>
     public TenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,
@@ -96,7 +98,8 @@ public partial class TenantService : ITenantService
         GrantRevocationService grantRevocation,
         TimeProvider timeProvider,
         ILogger<TenantService> logger,
-        IAccountLinkRoute linkRoute)
+        IAccountLinkRoute linkRoute,
+        TeamStaffAnnouncer teamStaff)
     {
         _factory = factory;
         _tenants = tenants;
@@ -110,6 +113,7 @@ public partial class TenantService : ITenantService
         _time = timeProvider;
         _logger = logger;
         _linkRoute = linkRoute;
+        _teamStaff = teamStaff;
     }
 
     public async Task<TenantCreatedDto> CreateAsync(
@@ -375,6 +379,8 @@ public partial class TenantService : ITenantService
             ct: ct);
 
         _grantRevocation.EvictSessions(lost);
+        if (added)
+            await _teamStaff.RecountOwnerChangeAsync(tenantId, subjectId);
         return added;
     }
 
@@ -413,6 +419,7 @@ public partial class TenantService : ITenantService
             return new MemberRemovalResult(false, MemberAccessFromTeam.Detail) { AccessFromTeam = true };
 
         _grantRevocation.EvictSessions(grants);
+        await _teamStaff.RecountOwnerChangeAsync(tenantId, subjectId);
         return new MemberRemovalResult(true);
     }
 
@@ -421,12 +428,15 @@ public partial class TenantService : ITenantService
     {
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var members = new TenantMembershipRepository(unit, _linkRoute);
+        Guid? changedSubject = null;
         var (outcome, capped) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
             async token =>
             {
                 IReadOnlyList<OAuthGrantRecord> lowered = [];
                 if (await members.GetMemberAsync(tenantId, memberId, token) is not { } target)
                     return (OwnerGuardedChange.NotFound, lowered);
+
+                changedSubject = target.SubjectId;
 
                 await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, target.SubjectId, token);
                 var change = await members.SetAccessEndUnlessOwnerAsync(tenantId, memberId, accessEndsAt, now, token);
@@ -445,6 +455,8 @@ public partial class TenantService : ITenantService
             ct: ct);
 
         _grantRevocation.EvictSessions(capped);
+        if (outcome == OwnerGuardedChange.Changed && changedSubject is { } ended)
+            await _teamStaff.RecountOwnerChangeAsync(tenantId, ended);
         return outcome;
     }
 
@@ -455,11 +467,14 @@ public partial class TenantService : ITenantService
         var now = _time.GetUtcNow().UtcDateTime;
         await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
         var members = new TenantMembershipRepository(unit, _linkRoute);
+        Guid? changedSubject = null;
         var (outcome, lost) = await unit.CommitAsync<(OwnerGuardedChange, IReadOnlyList<OAuthGrantRecord>)>(
             async token =>
             {
                 if (await members.GetMemberAsync(tenantId, memberId, token) is not { } target)
                     return (OwnerGuardedChange.NotFound, []);
+
+                changedSubject = target.SubjectId;
 
                 await TenantMembershipRepository.LockOwnerChangeAsync(unit, tenantId, target.SubjectId, token);
                 var change = await members.ReplaceRolesUnlessLastOwnerAsync(tenantId, memberId, removedRoleIds, addedRoleIds, now, token);
@@ -472,6 +487,8 @@ public partial class TenantService : ITenantService
             ct: ct);
 
         _grantRevocation.EvictSessions(lost);
+        if (outcome == OwnerGuardedChange.Changed && changedSubject is { } replaced)
+            await _teamStaff.RecountOwnerChangeAsync(tenantId, replaced);
         return outcome;
     }
 

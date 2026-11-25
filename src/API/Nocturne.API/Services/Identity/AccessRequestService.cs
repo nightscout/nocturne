@@ -24,7 +24,8 @@ public class AccessRequestService(
     TimeProvider time,
     ILogger<AccessRequestService> logger,
     IAccountLinkRoute linkRoute,
-    GrantRevocationService grantRevocation) : IAccessRequestService
+    GrantRevocationService grantRevocation,
+    TeamStaffAnnouncer teamStaff) : IAccessRequestService
 {
     /// <inheritdoc />
     public async Task<ApproveAccessRequestResult> ApproveAsync(
@@ -91,6 +92,7 @@ public class AccessRequestService(
                 if (!added)
                     return new ApproveAccessRequestResult(ApproveAccessRequestOutcome.AlreadyMember);
                 grantRevocation.EvictSessions(lost);
+                await teamStaff.RecountOwnerChangeAsync(tenant, subjectId);
             }
             catch (DbUpdateConcurrencyException)
             {

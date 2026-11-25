@@ -27,6 +27,7 @@ public class MemberInviteServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IJwtService> _jwtService;
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero));
+    private readonly Mock<Nocturne.Core.Contracts.Identity.ITeamRepository> _teams = new();
     private readonly MemberInviteService _service;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -64,7 +65,7 @@ public class MemberInviteServiceTests : IDisposable
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             _time,
             logger.Object, AccountLinkRoutes.Off,
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))));
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))), InertTeamStaff.Announcer(_teams));
 
         // Seed tenant and subjects
         SeedData();
@@ -134,6 +135,21 @@ public class MemberInviteServiceTests : IDisposable
         (await _dbContext.TenantMembers.AsNoTracking().SingleAsync(m => m.SubjectId == _acceptorSubjectId))
             .AccessEndsAt.Should().Be(end);
     }
+
+    [Fact]
+    public async Task AcceptInviteAsync_recountsTheTeamStaffOfTheSiteAndARefusalDoesNot()
+    {
+        await _service.CreateInviteAsync(_tenantId, _creatorSubjectId, OwnerPermissions, [_followerRoleId], null);
+        (await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, Guid.CreateVersion7())).Success.Should().BeFalse();
+        RecountedSite(Times.Never());
+
+        (await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId)).Success.Should().BeTrue();
+
+        RecountedSite(Times.Once());
+    }
+
+    private void RecountedSite(Times times) =>
+        _teams.Verify(t => t.ListAccessOfTenantAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), times);
 
     [Fact]
     public async Task AcceptInviteAsync_byASubjectWhoseMembershipHasEnded_replacesItWithOneNewMembership()

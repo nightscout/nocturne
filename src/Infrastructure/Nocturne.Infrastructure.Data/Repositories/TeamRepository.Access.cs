@@ -180,8 +180,8 @@ public partial class TeamRepository
         var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
         TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
         await db.SaveChangesAsync(ct);
-        return (new TeamAccessApproval(access.Id, null), await TeamReasonChanges.SyncAsync(
-            unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct));
+        return (new TeamAccessApproval(access.Id, null), (await TeamReasonChanges.SyncAsync(
+            unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct)).WithStaffNotices(id, [grant.TenantId]));
     }
 
     /// <summary>
@@ -307,6 +307,50 @@ public partial class TeamRepository
             .OrderBy(a => a.TenantId)
             .Select(a => new TeamAccessApprover(a.TenantId, a.ApprovedBySubjectId!.Value, a.Team!.Name))
             .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>The lock is <see cref="TeamStaffNoticeLock"/>, whose remarks say why it joins no lock order.</remarks>
+    public virtual async Task WithStaffWaitingLockedAsync(
+        Guid tenantId, Guid teamId, DateTime now, Func<TeamStaffWaiting?, Task> work, CancellationToken ct)
+    {
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(contexts, tenantId, ct);
+        await unit.CommitAsync(async token =>
+        {
+            await unit.Context.LockTeamStaffNoticesAsync(tenantId, teamId, token);
+            var access = await unit.Context.TeamTenantAccess.AsNoTracking()
+                .Where(a => a.TenantId == tenantId && a.TeamId == teamId)
+                .Select(a => new { a.Id, TeamName = a.Team!.Name, a.AccessEndsAt })
+                .FirstOrDefaultAsync(token);
+            if (access is null)
+            {
+                await work(null);
+                return;
+            }
+
+            var waiting = MembershipLiveness.HasEnded(access.AccessEndsAt, now)
+                ? []
+                : await unit.Context.TeamSiteStaff.AsNoTracking()
+                    .Where(s => s.TeamTenantAccessId == access.Id
+                        && s.Status == TeamSiteStaffStatus.Pending
+                        && s.TeamMember!.Kind == TeamMemberKind.Staff
+                        && (s.TeamMember.EndsAt == null || s.TeamMember.EndsAt > now))
+                    .Select(s => s.TeamMember!.SubjectId)
+                    .ToListAsync(token);
+            await work(new TeamStaffWaiting(access.TeamName, waiting));
+        }, ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<TeamSiteKey>> ListStaffSitesOfSubjectAsync(Guid subjectId, CancellationToken ct)
+    {
+        await using var db = await contexts.CreatePlatformAsync(ct);
+        var pairs = await db.TeamSiteStaff.AsNoTracking()
+            .Where(s => s.TeamMember!.SubjectId == subjectId && s.TeamMember.Kind == TeamMemberKind.Staff)
+            .Select(s => new { s.TeamTenantAccess!.TenantId, s.TeamTenantAccess.TeamId })
+            .Distinct()
+            .ToListAsync(ct);
+        return pairs.Select(p => new TeamSiteKey(p.TenantId, p.TeamId)).ToList();
     }
 
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>

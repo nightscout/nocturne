@@ -122,6 +122,14 @@
       return;
     }
 
+    if (
+      (notification.type === "team.staff_waiting" || notification.type === "team.staff_joined") &&
+      actionId === "open_team"
+    ) {
+      markRead(notification.id);
+      return;
+    }
+
     if (notification.type === "data.rejected_uploads" && actionId === "review") {
       markRead(notification.id);
       goto(resolve('reports/data-quality/rejected-uploads'));

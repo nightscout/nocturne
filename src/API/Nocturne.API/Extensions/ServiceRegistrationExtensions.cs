@@ -698,7 +698,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<TeamAccessService>();
+        services.AddScoped<SiteNotices>();
         services.AddScoped<TeamRenameAnnouncer>();
+        services.AddScoped<TeamStaffAnnouncer>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();

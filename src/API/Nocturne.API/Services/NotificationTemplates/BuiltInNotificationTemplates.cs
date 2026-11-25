@@ -124,6 +124,22 @@ public static class BuiltInNotificationTemplates
             Source = TeamRenameAnnouncer.Source
         });
 
+        foreach (var (type, source) in new[]
+                 {
+                     (TeamStaffAnnouncer.WaitingType, TeamStaffAnnouncer.WaitingSource),
+                     (TeamStaffAnnouncer.JoinedType, TeamStaffAnnouncer.JoinedSource),
+                 })
+        {
+            registry.Register(new NotificationTemplate
+            {
+                Type = type,
+                Category = NotificationCategory.Informational,
+                DefaultUrgency = NotificationUrgency.Info,
+                Icon = "users",
+                Source = source
+            });
+        }
+
         registry.Register(new NotificationTemplate
         {
             Type = "profile.raw_mmol_values",
