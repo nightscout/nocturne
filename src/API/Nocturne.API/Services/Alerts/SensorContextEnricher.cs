@@ -525,7 +525,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     }
 
     /// <summary>
-    /// The sensor state a recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
+    /// The sensor state the newest recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
     /// (<see cref="SensorStateReports"/>), with the instant the engine stops counting it. A state other
     /// than ok replaces the <see cref="SensorState.NoValue"/> the base context may carry for a newest
     /// reading with no value, since it says why; an ok one does not. A context whose reading source
@@ -536,9 +536,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         if (context.LatestSource is not { Device: { Length: > 0 } device, DataSource: { Length: > 0 } dataSource })
             return context;
-        var reports = await _deps.SensorStates.GetReportedAsync(
+        var newest = await _deps.SensorStates.GetNewestAsync(
             device, dataSource, now - SensorStateReports.MaxAge, now, AlertReadings.Bound(now), ct);
-        return SensorStateReports.Newest(reports, now, context.LatestSource) is var (reported, until)
+        return SensorStateReports.StateOf(newest) is var (reported, until)
                && (reported != SensorState.Ok || context.SensorState is null)
             ? context with { SensorState = new SensorStateSnapshot(reported, Since: null, until) }
             : context;

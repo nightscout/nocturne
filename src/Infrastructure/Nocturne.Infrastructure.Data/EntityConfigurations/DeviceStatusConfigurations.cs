@@ -75,8 +75,8 @@ internal sealed class SensorStateReportEntityConfiguration : IEntityTypeConfigur
 {
     public void Configure(EntityTypeBuilder<SensorStateReportEntity> entity)
     {
-        // An alert pass that reads the sensor's state reads the recent reports of the newest
-        // reading's device and source; see SensorStateReportRepository.GetReportedAsync.
+        // An alert pass that reads the sensor's state reads the newest recent report of the newest
+        // reading's device and source; see SensorStateReportRepository.GetNewestAsync.
         entity
             .HasIndex(e => new { e.TenantId, e.DataSource, e.Device, e.Timestamp })
             .HasDatabaseName("ix_sensor_state_reports_tenant_source_device_timestamp")

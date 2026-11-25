@@ -9,12 +9,13 @@ namespace Nocturne.API.Services.V4;
 /// The sensor state a device status states outright (docs/alerts/engine-semantics.md §4, sensor
 /// state). Two sources say it: CareLink's <c>cgm.sensorState</c> for Medtronic Guardian sensors, and
 /// the <c>xdripjs.state</c> session code that Lookout, Logger and xdrip-js send for Dexcom G5 and G6.
-/// Both are read through an allowlist, and every other value is no state. An entry is added only
-/// from a real upload.
+/// Both are read through an allowlist. An entry is added only from a real upload.
 /// </summary>
 /// <remarks>
 /// A glucose rule whose sensor is not ok holds rather than fires, so a state read wrongly silences a
-/// low alarm. That is why nothing is inferred.
+/// low alarm. That is why nothing is inferred. A value outside the allowlist is still news: the sensor
+/// has moved on from what it said before, so it writes a report with no state, which replaces the
+/// older one.
 /// </remarks>
 internal static class ReportedSensorStates
 {
@@ -31,7 +32,8 @@ internal static class ReportedSensorStates
 
     /// <summary>
     /// Dexcom G5/G6 transmitter session codes, as xdrip-js names them. The routine calibration prompts
-    /// (<c>0x07</c>, <c>0x0e</c>) are absent: the sensor still reports glucose through them.
+    /// (<c>0x07</c>, <c>0x0e</c>) are not mapped, since the sensor still reports glucose through them, so
+    /// like every other code missing here they write a report with no state.
     /// </summary>
     private static readonly IReadOnlyDictionary<int, SensorState> XDripJs = new Dictionary<int, SensorState>
     {
@@ -53,18 +55,27 @@ internal static class ReportedSensorStates
 
     /// <summary>
     /// The report of the state <paramref name="ds"/> states, written under its
-    /// <paramref name="extras"/>' correlation id, time and source; null when it states none. CareLink's
-    /// value is read first.
+    /// <paramref name="extras"/>' correlation id, time and source; null when it states no value in
+    /// either field. The first value an allowlist maps decides, CareLink's read first; with none, the
+    /// first value stated writes a report with no state.
     /// </summary>
     public static V4Models.SensorStateReport? Of(DeviceStatus ds, V4Models.DeviceStatusExtras extras, string? source)
     {
-        if (ds.Cgm?.SensorState is { } careLink && CareLink.TryGetValue(careLink, out var reported))
+        var careLink = ds.Cgm?.SensorState is { } stated && !string.IsNullOrWhiteSpace(stated) ? stated : null;
+        var code = ds.XDripJs?.State;
+        if (careLink is not null && CareLink.TryGetValue(careLink, out var reported))
             return Report(reported, V4Models.SensorStateReport.CareLinkField, careLink);
-        if (ds.XDripJs?.State is { } code && XDripJs.TryGetValue(code, out var session))
-            return Report(session, V4Models.SensorStateReport.XDripJsField, code.ToString(CultureInfo.InvariantCulture));
+        if (code is { } mapped && XDripJs.TryGetValue(mapped, out var session))
+            return Report(session, V4Models.SensorStateReport.XDripJsField, Decimal(mapped));
+        if (careLink is not null)
+            return Report(null, V4Models.SensorStateReport.CareLinkField, careLink);
+        if (code is { } unmapped)
+            return Report(null, V4Models.SensorStateReport.XDripJsField, Decimal(unmapped));
         return null;
 
-        V4Models.SensorStateReport Report(SensorState state, string field, string value) => new()
+        static string Decimal(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+        V4Models.SensorStateReport Report(SensorState? state, string field, string value) => new()
         {
             Timestamp = extras.Timestamp,
             UtcOffset = ds.UtcOffset,

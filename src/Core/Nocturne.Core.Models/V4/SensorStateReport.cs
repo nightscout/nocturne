@@ -8,8 +8,9 @@ namespace Nocturne.Core.Models.V4;
 /// status was decomposed. Alert rules read it (docs/alerts/engine-semantics.md §4, sensor state).
 /// </summary>
 /// <remarks>
-/// A status writes one only when it states a value its source's allowlist maps, so a row always says
-/// something the source meant. It shares the status's <see cref="IV4Record.CorrelationId"/> with the
+/// A status writes one whenever it states a value in either field, and a value its source's allowlist
+/// does not map writes one with no <see cref="State"/> (why is on the API's <c>ReportedSensorStates</c>).
+/// It shares the status's <see cref="IV4Record.CorrelationId"/> with the
 /// status's other snapshots and its <see cref="DeviceStatusExtras"/>, which still hold the section the
 /// value came from. Neither source says when the state began, so there is no start.
 /// </remarks>
@@ -19,8 +20,8 @@ namespace Nocturne.Core.Models.V4;
 public class SensorStateReport : V4RecordBase
 {
     /// <summary>
-    /// The mapped state, or null for a stored state this build cannot read, which reads as no state,
-    /// never as ok.
+    /// The mapped state, or null for a value outside the allowlist or a stored state this build cannot
+    /// read, which reads as no state, never as ok.
     /// </summary>
     public SensorState? State { get; set; }
 
