@@ -164,6 +164,13 @@ public interface IStateSpanService
         DateTime at,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetAllCopiesAsync"/>
+    Task<IReadOnlyList<StateSpan>> GetAllCopiesAsync(
+        StateSpanCategory category,
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Get activities stored as StateSpans for v1 API compatibility
     /// </summary>

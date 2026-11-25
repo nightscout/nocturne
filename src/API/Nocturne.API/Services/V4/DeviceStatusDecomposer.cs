@@ -225,9 +225,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// whose source happens to equal the device.
     /// </summary>
     private static bool IsUploaderSpan(StateSpan span, string? device) =>
-        span.Source == device
-        && span.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
-            != StateSpanMetadataExtensions.TreatmentsCollection;
+        span.Source == device && !span.Metadata.IsFromTreatment();
 
     /// <summary>
     /// Moves a span's start to a status and keys the span to that status. Upserts match on
