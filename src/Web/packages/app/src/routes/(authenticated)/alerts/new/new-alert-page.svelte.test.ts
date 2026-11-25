@@ -258,7 +258,7 @@ describe("new alert wizard", () => {
     });
   });
 
-  it("states each channel the test would not send, and does not say the test arrived", async () => {
+  it("states each channel that did not get the test, and does not say the test arrived", async () => {
     calls.dryRun = {
       notSent: [
         { index: 0, channelType: "in_app", state: "no_recipient" },
@@ -271,10 +271,10 @@ describe("new alert wizard", () => {
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
     await expect
-      .element(page.getByText("In-app (channel 1) would not send: it has no recipient."))
+      .element(page.getByText("In-app (channel 1) did not get the test alert. This channel has no recipient."))
       .toBeVisible();
     await expect
-      .element(page.getByText("Webhook (channel 2) would not send: it has stopped."))
+      .element(page.getByText("Webhook (channel 2) did not get the test alert. This channel has stopped."))
       .toBeVisible();
     await expect
       .element(page.getByText("The test alert did not go to every channel."))
@@ -289,7 +289,7 @@ describe("new alert wizard", () => {
     await toCheckStep();
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
-    await expect.element(page.getByText("A channel would not send.")).toBeVisible();
+    await expect.element(page.getByText("A channel did not get the test alert.")).toBeVisible();
     await expect
       .element(page.getByText("The test alert did not go to every channel."))
       .toBeVisible();
@@ -303,7 +303,7 @@ describe("new alert wizard", () => {
     await toCheckStep();
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
-    await expect.element(page.getByText("In-app (channel 1) would not send.")).toBeVisible();
+    await expect.element(page.getByText("In-app (channel 1) did not get the test alert.", { exact: true })).toBeVisible();
   });
 
   it("lists nothing when every channel would send the test", async () => {

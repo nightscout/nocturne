@@ -1,5 +1,5 @@
 import { render } from "vitest-browser-svelte";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
@@ -32,12 +32,13 @@ const alertHistory = { items: [], totalCount: 0 };
 // it stands in for the server's refusal.
 let toggleImpl: () => Promise<unknown>;
 let deleteImpl: () => Promise<unknown>;
+let testFireImpl: (id: unknown) => Promise<unknown>;
 
 vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   deleteRule: remoteCommand(() => deleteImpl()),
   toggleRule: remoteCommand(() => toggleImpl()),
-  testFire: remoteCommand(() => undefined),
+  testFire: remoteCommand((id) => testFireImpl(id)),
 }));
 
 vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
@@ -66,6 +67,7 @@ describe("alerts page", () => {
   beforeEach(() => {
     toggleImpl = () => Promise.resolve();
     deleteImpl = () => Promise.resolve();
+    testFireImpl = () => Promise.resolve({ notSent: [] });
     rules = [lowRule];
     dndSettings = null;
     toastError.mockClear();
@@ -278,6 +280,138 @@ describe("alerts page", () => {
 
       await expect.element(page.getByText(/This action cannot be undone/)).toBeVisible();
       await expect.element(lastCoverDialog()).not.toBeInTheDocument();
+    });
+  });
+
+  describe("test fire", () => {
+    const sendTest = async () => {
+      await expect.element(ruleName()).toBeVisible();
+      await rowActions().click();
+      await page.getByRole("menuitem", { name: /Test fire/i }).click();
+      await userEvent.keyboard("{Escape}");
+    };
+
+    it("lists each channel that did not get the test alert, with the reason", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = [
+        {
+          ...lowRule,
+          channels: [
+            { id: "c0", channelType: "webhook", destinationLabel: "Site A", sortOrder: 0 },
+            { id: "c1", channelType: "webhook", destinationLabel: "Site B", sortOrder: 1 },
+          ],
+        } as unknown as AlertRuleResponse,
+      ];
+      testFireImpl = () => Promise.resolve({ notSent: [{ index: 1, channelType: "webhook", state: "stopped" }] });
+
+      render(AlertsPage, {});
+      await sendTest();
+
+      await expect
+        .element(page.getByText("The test alert for Nighttime low did not go to every channel."))
+        .toBeVisible();
+      await expect.element(page.getByText("Site B did not get the test alert. This channel has stopped.")).toBeVisible();
+      expect(page.getByText(/Site A did not get the test alert/).elements()).toHaveLength(0);
+    });
+
+    it("says nothing of channels when the test alert went to every one", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      const fired = vi.fn(() => Promise.resolve({ notSent: [] }));
+      testFireImpl = fired;
+
+      render(AlertsPage, {});
+      await sendTest();
+
+      await vi.waitFor(() => expect(fired).toHaveBeenCalledOnce());
+      expect(page.getByText(/did not go to every channel/).elements()).toHaveLength(0);
+      expect(toastError).not.toHaveBeenCalled();
+    });
+
+    const twoRules = () => [
+      {
+        ...lowRule,
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name: "Rule A",
+        channels: [{ id: "a0", channelType: "webhook", destinationLabel: "Site A", sortOrder: 0 }],
+      },
+      {
+        ...lowRule,
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        name: "Rule B",
+        channels: [{ id: "b0", channelType: "webhook", destinationLabel: "Site B", sortOrder: 0 }],
+      },
+    ] as unknown as AlertRuleResponse[];
+
+    it("shows the answer of the latest test alert when an earlier one answers last", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = twoRules();
+      const answers = new Map<string, (value: unknown) => void>();
+      testFireImpl = (id) => new Promise((resolve) => answers.set(id as string, resolve));
+      const stopped = { notSent: [{ index: 0, channelType: "webhook", state: "stopped" }] };
+
+      render(AlertsPage, {});
+      await expect.element(page.getByText("Rule A")).toBeVisible();
+      for (const row of [0, 1]) {
+        await rowActions().nth(row).click();
+        await page.getByRole("menuitem", { name: /Test fire/i }).click();
+        await userEvent.keyboard("{Escape}");
+      }
+      await vi.waitFor(() => expect(answers.size).toBe(2));
+
+      answers.get("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!(stopped);
+      await expect
+        .element(page.getByText("The test alert for Rule B did not go to every channel."))
+        .toBeVisible();
+
+      answers.get("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!(stopped);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await expect
+        .element(page.getByText("The test alert for Rule B did not go to every channel."))
+        .toBeVisible();
+      expect(page.getByText(/Rule A did not go to every channel/).elements()).toHaveLength(0);
+      expect(page.getByText(/Site A did not get the test alert/).elements()).toHaveLength(0);
+    });
+
+    it("keeps a row marked as testing until its own test alert answers", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      rules = twoRules();
+      const answers = new Map<string, (value: unknown) => void>();
+      testFireImpl = (id) => new Promise((resolve) => answers.set(id as string, resolve));
+
+      render(AlertsPage, {});
+      await expect.element(page.getByText("Rule A")).toBeVisible();
+      for (const row of [0, 1]) {
+        await rowActions().nth(row).click();
+        await page.getByRole("menuitem", { name: /Test fire/i }).click();
+        await userEvent.keyboard("{Escape}");
+      }
+      await vi.waitFor(() => expect(answers.size).toBe(2));
+
+      answers.get("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!({ notSent: [] });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await rowActions().first().click();
+      await expect.element(page.getByRole("menuitem", { name: /Test fire/i })).toBeDisabled();
+    });
+
+    it("drops the list of a rule that is deleted", async () => {
+      pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+      testFireImpl = () => Promise.resolve({ notSent: [{ index: 0, channelType: "webhook", state: "stopped" }] });
+
+      render(AlertsPage, {});
+      await sendTest();
+      await expect
+        .element(page.getByText("The test alert for Nighttime low did not go to every channel."))
+        .toBeVisible();
+
+      await rowActions().click();
+      await page.getByRole("menuitem", { name: /Delete/i }).click();
+      await page.getByRole("button", { name: "Delete", exact: true }).click();
+
+      await expect
+        .element(page.getByText("The test alert for Nighttime low did not go to every channel."))
+        .not.toBeInTheDocument();
     });
   });
 });
