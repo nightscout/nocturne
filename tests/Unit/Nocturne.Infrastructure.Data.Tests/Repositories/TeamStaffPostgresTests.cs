@@ -111,17 +111,17 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     private static TeamAccessApproverCredential Credential(Guid subject) =>
         new(subject, AuthType.SessionCookie, new HashSet<string>(), false);
 
-    private static TeamAccessGrant Grant(Site site, bool teamManagesStaff) =>
-        new(site.Id, [site.Roles[RoleSeeds.Viewer]], false, null, teamManagesStaff);
+    private static TeamAccessGrant Grant(Site site, string staffRule) =>
+        new(site.Id, [site.Roles[RoleSeeds.Viewer]], false, null, staffRule);
 
     /// <summary>Gives the team access to a new site, as a new owner of it.</summary>
-    private async Task<(Site Site, Guid Owner)> FollowAsync(Guid team, Guid manager, bool teamManagesStaff = true)
+    private async Task<(Site Site, Guid Owner)> FollowAsync(Guid team, Guid manager, string staffRule = TeamStaffRule.TeamDecides)
     {
         var site = await NewSiteAsync();
         var owner = await NewSubjectAsync("owner");
         await OwnerOfAsync(site, owner);
         (await TeamWrites.ApproveAccessAsync(
-            Contexts(owner), await AccessLinkAsync(team, manager), Credential(owner), Grant(site, teamManagesStaff), Now)).Refusal.Should().BeNull();
+            Contexts(owner), await AccessLinkAsync(team, manager), Credential(owner), Grant(site, staffRule), Now)).Refusal.Should().BeNull();
         return (site, owner);
     }
 
@@ -441,8 +441,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task Joining_a_team_with_two_sites_gives_one_approved_row_where_the_team_manages_staff_and_one_pending_where_it_does_not()
     {
         var (team, manager) = await TeamAsync();
-        var (managed, _) = await FollowAsync(team, manager, teamManagesStaff: true);
-        var (decided, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (managed, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
+        var (decided, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
 
         var staff = await JoinStaffAsync(team, manager);
 
@@ -458,8 +458,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var second = await JoinStaffAsync(team, manager);
         (await SiteStaffAsync(team)).Should().BeEmpty("the team follows no site yet");
 
-        var (managed, _) = await FollowAsync(team, manager, teamManagesStaff: true);
-        var (decided, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (managed, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
+        var (decided, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
 
         (await SiteStaffAsync(team)).Should().BeEquivalentTo(
         [
@@ -468,15 +468,39 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         ]);
     }
 
-    [Fact]
-    public async Task A_switch_stated_off_in_the_grant_is_stored_off_despite_the_column_default_of_on()
+    [Theory]
+    [InlineData(TeamStaffRule.OwnerApproves)]
+    [InlineData(TeamStaffRule.TeamDecides)]
+    [InlineData(TeamStaffRule.TeamTrusted)]
+    public async Task The_rule_stated_in_the_grant_is_stored(string rule)
     {
         var (team, manager) = await TeamAsync();
-        var (site, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (site, _) = await FollowAsync(team, manager, staffRule: rule);
 
         await using var db = Context();
 
-        (await db.TeamTenantAccess.SingleAsync(a => a.TeamId == team && a.TenantId == site.Id)).TeamManagesStaff.Should().BeFalse();
+        (await db.TeamTenantAccess.SingleAsync(a => a.TeamId == team && a.TenantId == site.Id)).StaffRule.Should().Be(rule);
+    }
+
+    [Fact]
+    public async Task Joining_a_trusted_site_gives_an_approved_row_and_a_declined_one_when_the_site_declined_the_subject_before()
+    {
+        var (team, manager) = await TeamAsync();
+        var (site, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamTrusted);
+        var declined = await NewSubjectAsync("declined");
+        await using (var db = Context())
+        {
+            var access = await db.TeamTenantAccess.SingleAsync(a => a.TeamId == team && a.TenantId == site.Id);
+            db.TeamSiteDeclines.Add(new TeamSiteDeclineEntity { Id = Guid.CreateVersion7(), TeamTenantAccessId = access.Id, SubjectId = declined });
+            await db.SaveChangesAsync();
+        }
+
+        var staff = await JoinStaffAsync(team, manager);
+        var (token, _) = await StaffInviteAsync(team, manager);
+        (await TeamWrites.JoinStaffAsync(Contexts(declined), token, declined, Now)).Refusal.Should().BeNull();
+
+        (await SiteStaffAsync(team)).Should().BeEquivalentTo(
+            [(site.Id, staff, TeamSiteStaffStatus.Approved), (site.Id, declined, TeamSiteStaffStatus.Declined)]);
     }
 
     [Fact]
@@ -488,7 +512,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var owner = await NewSubjectAsync("owner");
         await OwnerOfAsync(followed, owner);
         (await TeamWrites.ApproveAccessAsync(
-            Contexts(owner), await AccessLinkAsync(team, manager), Credential(owner), Grant(followed, true), Now)).Refusal.Should().BeNull();
+            Contexts(owner), await AccessLinkAsync(team, manager), Credential(owner), Grant(followed, TeamStaffRule.TeamDecides), Now)).Refusal.Should().BeNull();
         await OwnerOfAsync(followed, staff);
         var (token, _) = await StaffInviteAsync(team, manager);
         (await TeamWrites.JoinStaffAsync(Contexts(staff), token, staff, Now)).Refusal.Should().BeNull();
@@ -496,7 +520,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         var later = await NewSiteAsync();
         await OwnerOfAsync(later, staff);
         (await TeamWrites.ApproveAccessAsync(
-            Contexts(staff), await AccessLinkAsync(team, manager), Credential(staff), Grant(later, false), Now)).Refusal.Should().BeNull();
+            Contexts(staff), await AccessLinkAsync(team, manager), Credential(staff), Grant(later, TeamStaffRule.OwnerApproves), Now)).Refusal.Should().BeNull();
 
         (await SiteStaffAsync(team)).Should().BeEquivalentTo(
             [(followed.Id, staff, TeamSiteStaffStatus.Approved), (later.Id, staff, TeamSiteStaffStatus.Pending)]);
@@ -587,7 +611,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
         await holder.LockTeamManagersAsync(team, default);
 
         var join = TeamWrites.JoinStaffAsync(Contexts(staff), token, staff, Now);
-        var approval = TeamWrites.ApproveAccessAsync(Contexts(owner), link, Credential(owner), Grant(site, true), Now);
+        var approval = TeamWrites.ApproveAccessAsync(Contexts(owner), link, Credential(owner), Grant(site, TeamStaffRule.TeamDecides), Now);
         await UntilWaitingAsync(2, join, approval);
         await held.RollbackAsync();
 
@@ -622,9 +646,9 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task A_staff_member_holds_a_team_reason_at_a_site_that_approved_them_and_nothing_where_they_wait()
     {
         var (team, manager) = await TeamAsync();
-        var (before, _) = await FollowAsync(team, manager, teamManagesStaff: true);
+        var (before, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
         var staff = await JoinStaffAsync(team, manager);
-        var (after, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (after, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
 
         (await SiteStaffAsync(team)).Select(r => (r.Tenant, r.Status)).Should().BeEquivalentTo(
             [(before.Id, TeamSiteStaffStatus.Approved), (after.Id, TeamSiteStaffStatus.Pending)]);
@@ -691,8 +715,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task A_widening_edit_sends_the_approvals_a_site_decides_back_to_pending_and_leaves_the_teams_own_alone()
     {
         var (team, manager) = await TeamAsync();
-        var (managed, _) = await FollowAsync(team, manager, teamManagesStaff: true);
-        var (decided, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (managed, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
+        var (decided, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(RoleSeeds.Viewer, true, Now.AddDays(2)));
         await ApproveEverySiteRowAsync(team);
 
@@ -703,11 +727,42 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     }
 
     [Fact]
+    public async Task A_widening_edit_leaves_an_approval_at_a_trusted_site_approved()
+    {
+        var (team, manager) = await TeamAsync();
+        var (trusted, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamTrusted);
+        var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(RoleSeeds.Viewer, true, Now.AddDays(2)));
+
+        await TeamWrites.UpdateStaffAsync(Contexts(manager), team, manager, staff, new TeamStaffNarrowing(null, false, null), Now);
+
+        (await SiteStaffAsync(team)).Should().Equal((trusted.Id, staff, TeamSiteStaffStatus.Approved));
+    }
+
+    [Fact]
+    public async Task A_manager_reads_a_pending_row_at_a_trusted_site_as_a_site_the_staff_member_reaches()
+    {
+        var (team, manager) = await TeamAsync();
+        var (site, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
+        var staff = await JoinStaffAsync(team, manager);
+        await using (var db = Context())
+        {
+            await db.Database.ExecuteSqlAsync($"""
+                UPDATE team_tenant_access SET staff_rule = {TeamStaffRule.TeamTrusted} WHERE team_id = {team} AND tenant_id = {site.Id}
+                """);
+        }
+
+        var read = (await Teams().GetAsync(team, manager, Now, default))!.Staff.Should().ContainSingle().Subject;
+
+        (await SiteStaffAsync(team)).Should().Equal((site.Id, staff, TeamSiteStaffStatus.Pending));
+        (read.SitesApproved, read.SitesPending).Should().Be((1, 0));
+    }
+
+    [Fact]
     public async Task A_widening_edit_waiting_on_a_stop_of_one_of_two_sites_is_saved_and_leaves_the_other_site_pending()
     {
         var (team, manager) = await TeamAsync();
-        var (stopped, _) = await FollowAsync(team, manager, teamManagesStaff: false);
-        var (kept, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (stopped, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
+        var (kept, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(RoleSeeds.Viewer, true, null));
         await ApproveEverySiteRowAsync(team);
 
@@ -730,7 +785,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task A_staff_member_whose_end_has_passed_is_narrowed_with_the_end_unchanged_and_no_approval_changes()
     {
         var (team, manager) = await TeamAsync();
-        await FollowAsync(team, manager, teamManagesStaff: false);
+        await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var end = Now.AddHours(1);
         var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(null, false, end));
         await ApproveEverySiteRowAsync(team);
@@ -764,7 +819,7 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task An_end_of_a_staff_member_moved_to_the_future_is_accepted_and_is_a_widening()
     {
         var (team, manager) = await TeamAsync();
-        var (decided, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        var (decided, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(null, false, Now.AddHours(1)));
         await ApproveEverySiteRowAsync(team);
         var later = Now.AddHours(2);
@@ -782,8 +837,8 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task A_narrowing_edit_changes_no_approval()
     {
         var (team, manager) = await TeamAsync();
-        await FollowAsync(team, manager, teamManagesStaff: true);
-        var (decided, _) = await FollowAsync(team, manager, teamManagesStaff: false);
+        await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
+        var (decided, _) = await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var staff = await JoinStaffAsync(team, manager);
         await ApproveEverySiteRowAsync(team);
 
@@ -797,9 +852,9 @@ public class TeamStaffPostgresTests(TeamStaffPostgresTests.Database database)
     public async Task A_manager_reads_each_staff_member_with_the_sites_approved_and_pending_and_whether_their_end_has_passed()
     {
         var (team, manager) = await TeamAsync();
-        await FollowAsync(team, manager, teamManagesStaff: true);
-        await FollowAsync(team, manager, teamManagesStaff: false);
-        await FollowAsync(team, manager, teamManagesStaff: false);
+        await FollowAsync(team, manager, staffRule: TeamStaffRule.TeamDecides);
+        await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
+        await FollowAsync(team, manager, staffRule: TeamStaffRule.OwnerApproves);
         var end = Now.AddHours(1);
         var staff = await JoinStaffAsync(team, manager, new TeamStaffNarrowing(RoleSeeds.Viewer, true, end));
 

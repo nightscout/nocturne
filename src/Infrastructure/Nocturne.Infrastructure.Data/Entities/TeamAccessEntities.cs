@@ -102,12 +102,11 @@ public class TeamTenantAccessEntity : ISystemTimestamped
 
     public TeamAccessLinkEntity? CreatedFromLink { get; set; }
 
-    /// <summary>
-    /// Whether the team's managers decide which of their staff reach the site: its staff are approved
-    /// here as they join. When false each waits for the site to approve them.
-    /// </summary>
-    [Column("team_manages_staff")]
-    public bool TeamManagesStaff { get; set; } = true;
+    /// <summary>A <see cref="Nocturne.Core.Models.Identity.TeamStaffRule"/>.</summary>
+    [Required]
+    [MaxLength(32)]
+    [Column("staff_rule")]
+    public string StaffRule { get; set; } = Nocturne.Core.Models.Identity.TeamStaffRule.TeamDecides;
 
     public List<TeamTenantAccessRoleEntity> AccessRoles { get; set; } = [];
 
@@ -191,7 +190,7 @@ public class TeamSiteStaffEntity : ISystemTimestamped
 /// A staff member's <see cref="TeamSiteStaffEntity"/> row goes with their team membership, and the
 /// decline must outlast it: a staff member removed and invited again is still declined. So the row's
 /// <see cref="Nocturne.Core.Models.Identity.TeamSiteStaffStatus.Declined"/> is what every read, the sync
-/// and the switch go by, and this memory is read only when a staff row is made. The owner's decision is
+/// and the rule go by, and this memory is read only when a staff row is made. The owner's decision is
 /// the one writer of both. It goes with the access: a site that stops the team and approves it again
 /// decides afresh.
 /// </remarks>

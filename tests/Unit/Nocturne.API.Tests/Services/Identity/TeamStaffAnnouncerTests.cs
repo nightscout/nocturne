@@ -51,7 +51,7 @@ public class TeamStaffAnnouncerTests
             _tenants.Setup(t => t.GetAsync(site, It.IsAny<CancellationToken>())).ReturnsAsync(new TenantRecord(
                 site, $"s-{site:N}", "Site", true, false, false, false, null, null, null, null, null,
                 null, null, null, null, null, null, DateTime.UtcNow, DateTime.UtcNow, null));
-            Reads(site, TeamId, () => new TeamStaffWaiting("Ward 4", _waiting.ToList()));
+            Reads(site, TeamId, () => new TeamStaffWaiting("Ward 4", _waiting.ToList(), false));
         }
     }
 
@@ -176,7 +176,7 @@ public class TeamStaffAnnouncerTests
     {
         var announcer = Announcer();
         Waiting(2);
-        Reads(Site, OtherTeam, () => new TeamStaffWaiting("Ward 5", [Guid.CreateVersion7()]));
+        Reads(Site, OtherTeam, () => new TeamStaffWaiting("Ward 5", [Guid.CreateVersion7()], false));
         await announcer.AnnounceAsync(new StaffNotices(
             [new TeamSiteKey(Site, TeamId), new TeamSiteKey(Site, OtherTeam), new TeamSiteKey(OtherSite, TeamId)], []));
 
@@ -233,7 +233,7 @@ public class TeamStaffAnnouncerTests
     public async Task An_owner_change_recounts_every_team_with_access_to_the_site()
     {
         Waiting(2);
-        Reads(Site, OtherTeam, () => new TeamStaffWaiting("Ward 5", [Guid.CreateVersion7()]));
+        Reads(Site, OtherTeam, () => new TeamStaffWaiting("Ward 5", [Guid.CreateVersion7()], false));
         _teams.Setup(t => t.ListAccessOfTenantAsync(Site, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Access(TeamId), Access(OtherTeam)]);
 
@@ -246,7 +246,7 @@ public class TeamStaffAnnouncerTests
     }
 
     private static TenantTeamAccess Access(Guid team) =>
-        new(team, "Ward", [], false, null, false, null, null, DateTime.UtcNow, false, []);
+        new(team, "Ward", [], false, null, false, null, null, DateTime.UtcNow, TeamStaffRule.OwnerApproves, []);
 
     [Fact]
     public void The_waiting_the_joined_and_the_rename_notice_each_have_a_source_of_their_own()

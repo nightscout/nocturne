@@ -5924,6 +5924,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("limit_to_24_hours");
 
+                    b.Property<string>("StaffRule")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("team_decides")
+                        .HasColumnName("staff_rule");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -5940,11 +5947,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("team_id");
 
-                    b.Property<bool>("TeamManagesStaff")
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("team_manages_staff");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -5960,7 +5962,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TeamId", "TenantId")
                         .IsUnique();
 
-                    b.ToTable("team_tenant_access");
+                    b.ToTable("team_tenant_access", t =>
+                        {
+                            t.HasCheckConstraint("ck_team_tenant_access_staff_rule", "staff_rule IN ('owner_approves', 'team_decides', 'team_trusted')");
+                        });
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TeamTenantAccessRoleEntity", b =>

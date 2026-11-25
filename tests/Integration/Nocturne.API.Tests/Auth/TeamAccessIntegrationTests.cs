@@ -74,7 +74,7 @@ public class TeamAccessIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         var given = team.GetProperty("sites").EnumerateArray().Should().ContainSingle().Subject;
         given.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
             "tenantId", "displayName", "roleNames", "limitTo24Hours", "accessEndsAt", "hasEnded", "givenAt",
-            "teamManagesStaff", "pendingStaffCount", "declinedStaffCount");
+            "staffRule", "pendingStaffCount", "declinedStaffCount");
         given.GetProperty("tenantId").GetGuid().Should().Be(tenantId);
 
         using var ownerOnSite = AuthTestHelpers.CreateBearerClient(Fixture, ownerToken);

@@ -185,7 +185,7 @@ public partial class TeamAccessEndPostgresTests
     {
         var site = await SiteAsync($"backfill-ended-{ended}");
         var team = await TeamAsync("Clinic");
-        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], teamManagesStaff: false, end: Now.AddDays(1)));
+        var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves, end: Now.AddDays(1)));
         var staff = await JoinStaffAsync(team);
         await ApproveSiteRowsAsync(site);
         await EndAsync(ended, site, staff, access);

@@ -183,7 +183,7 @@ public partial class TeamAccessEndPostgresTests(TeamAccessEndPostgresTests.Datab
 
     /// <summary>Gives the team access to the site, approved by its owner, the team deciding its staff; returns the access.</summary>
     private Task<Guid> FollowAsync(Team team, Site site) =>
-        FollowAsync(team, site, new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, TeamManagesStaff: true));
+        FollowAsync(team, site, new TeamAccessGrant(site.Tenant, [site.ViewerRole], false, null, StaffRule: TeamStaffRule.TeamDecides));
 
     /// <summary>Gives the team the access <paramref name="grant"/> describes, approved by the site's owner; returns the access.</summary>
     private async Task<Guid> FollowAsync(Team team, Site site, TeamAccessGrant grant)
