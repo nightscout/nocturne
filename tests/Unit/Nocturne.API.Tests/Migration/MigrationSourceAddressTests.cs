@@ -127,8 +127,8 @@ public class MigrationSourceAddressTests
             $"{Prefix}/api/v1/devicestatus.json",
             $"{Prefix}/api/v1/food.json",
         ]);
-        MigrationJob.ApiSourceIdentifier("https://example-nightscout.invalid/nightscout/?token=synthetic-token&key=proxy")
-            .Should().Be(HashUtils.Sha256Hex("https://example-nightscout.invalid/nightscout"),
+        MigrationJob.ApiSourceIdentifier("https://example-nightscout.invalid/nightscout/?token=synthetic-token&key=proxy", "test-instance-key")
+            .Should().Be(HashUtils.HmacSha256OverSha256Hex("test-instance-key", "https://example-nightscout.invalid/nightscout"),
                 "the source is a digest of the site, whatever query reached it");
     }
 
