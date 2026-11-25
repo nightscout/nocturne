@@ -257,8 +257,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         {
             delegateToStateSpan = true;
         }
-        else if (string.Equals(eventType, TreatmentTypes.ProfileSwitch, StringComparison.OrdinalIgnoreCase)
-              || EffectiveProfileSwitch.Is(treatment))
+        else if (IsProfileSwitch(treatment))
         {
             isProfileSwitch = true;
             delegateToStateSpan = true;
@@ -998,6 +997,10 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             return null;
         }
     }
+
+    private static bool IsProfileSwitch(Treatment treatment) =>
+        string.Equals(treatment.EventType?.Trim(), TreatmentTypes.ProfileSwitch, StringComparison.OrdinalIgnoreCase)
+        || EffectiveProfileSwitch.Is(treatment);
 
     private static bool IsTempBasal(string? eventType)
     {
@@ -2645,17 +2648,23 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
 
     /// <summary>
     /// A stable hash of the fields that define what an upstream treatment says. The field list is
-    /// fixed: adding a field re-applies every stored record once, overwriting edits made in Nocturne.
+    /// fixed: adding a field re-applies every stored record it covers once, overwriting edits made in
+    /// Nocturne. A treatment that classifies as a profile switch also hashes its percentage, timeshift
+    /// and embedded profile.
     /// </summary>
     internal static string UpstreamFingerprint(Treatment t)
     {
-        var canonical = JsonSerializer.Serialize(new object?[]
-        {
+        object?[] fields =
+        [
             t.EventType, t.CreatedAt, t.Mills, t.EnteredBy, t.Insulin, t.Carbs, t.Protein, t.Fat,
             t.AbsorptionTime, t.Glucose, t.GlucoseType, t.Units, t.Duration, HashedAbsolute(t), t.Rate,
             t.Percent, t.Notes, t.Reason, t.TargetTop, t.TargetBottom, t.Profile, t.PreBolus,
             t.SplitNow, t.SplitExt, t.BolusType, t.Automatic, t.InsulinDelivered, t.InsulinProgrammed,
-        });
+        ];
+        if (IsProfileSwitch(t))
+            fields = [.. fields, t.Percentage, t.Timeshift, t.ProfileJson];
+
+        var canonical = JsonSerializer.Serialize(fields);
 
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(canonical)));
