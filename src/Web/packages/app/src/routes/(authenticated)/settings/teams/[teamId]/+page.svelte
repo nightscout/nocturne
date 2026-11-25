@@ -23,20 +23,25 @@
     deleteTeam,
     getTeam,
     removeManager,
+    removeStaff,
     renameTeam,
     revokeManagerInvite,
   } from "#lib/api/generated/teams.generated.remote.js";
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatMediumDate, formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { accessEndDate } from "#lib/components/members/access-end.js";
   import { inviteLabelMaxLength, teamNameMaxLength } from "#lib/teams/limits.js";
-  import { MANAGER_KIND } from "#lib/teams/member-kind.svelte.js";
+  import { MANAGER_KIND, STAFF_KIND } from "#lib/teams/member-kind.svelte.js";
   import { linkExpiryOptions } from "#lib/teams/link-expiry.svelte.js";
   import { teamProblemMessages } from "#lib/teams/problem-messages.svelte.js";
   import TeamsUnavailable from "#lib/components/teams/TeamsUnavailable.svelte";
   import AccessLinksSection from "#lib/components/teams/AccessLinksSection.svelte";
   import TeamSitesSection from "#lib/components/teams/TeamSitesSection.svelte";
+  import TeamStaffSection from "#lib/components/teams/TeamStaffSection.svelte";
+  import StaffInvitesSection from "#lib/components/teams/StaffInvitesSection.svelte";
+  import StaffNarrowing from "#lib/components/teams/StaffNarrowing.svelte";
 
   const refused = $derived(page.data.refusedAsDemoSubject === true);
   const teamId = $derived(page.params.teamId ?? "");
@@ -44,7 +49,9 @@
   retainQuery(() => teamQuery);
   const team = $derived(teamQuery?.current);
   const isManager = $derived(team?.callerKind === MANAGER_KIND);
+  const isStaff = $derived(team?.callerKind === STAFF_KIND);
   const callerId = $derived(page.data.user?.subjectId);
+  const ownEnd = $derived(team?.ownStaff?.hasEnded ? team.ownStaff.narrowing?.endsAt : undefined);
 
   let renameDraft = $state<string | null>(null);
   const name = $derived(renameDraft ?? team?.name ?? "");
@@ -90,6 +97,25 @@
       );
     } finally {
       removingId = null;
+    }
+  }
+
+  let staffLeaveError = $state<string | null>(null);
+
+  async function leaveAsStaff() {
+    if (!callerId) return;
+    leaving = true;
+    staffLeaveError = null;
+    try {
+      await removeStaff({ teamId, subjectId: callerId });
+      await goto(resolve("/(authenticated)/settings/teams"));
+    } catch (err) {
+      leaving = false;
+      staffLeaveError = describeSubmitError(
+        err,
+        "Could not leave the team. Try again.",
+        teamProblemMessages(),
+      );
     }
   }
 
@@ -208,7 +234,15 @@
       </div>
       <div class="min-w-0">
         <h1 class="truncate text-2xl font-bold tracking-tight">{team.name}</h1>
-        <p class="text-muted-foreground">The managers of this team, and the links that add a manager.</p>
+        <p class="text-muted-foreground">
+          {#if isManager}
+            The managers and staff of this team, the links that add them, and the sites that the team has access to.
+          {:else if isStaff}
+            You are staff of this team. These are its managers and your access.
+          {:else}
+            The managers of this team.
+          {/if}
+        </p>
       </div>
     </div>
 
@@ -255,12 +289,23 @@
     <Card.Root>
       <Card.Header>
         <Card.Title>Managers</Card.Title>
-        <Card.Description>A manager can rename the team, add and remove managers, and delete the team.</Card.Description>
+        <Card.Description>
+          A manager can rename the team, add and remove managers and staff, and delete the team.
+        </Card.Description>
       </Card.Header>
       <Card.Content>
         {#if managerError}
           <p class="mb-3 text-sm text-destructive" role="alert">{managerError}</p>
         {/if}
+        {#if !isManager}
+          <ul class="divide-y">
+            {#each team.managerNames ?? [] as managerName, i (i)}
+              <li class="py-3">
+                <span class="truncate font-medium">{managerName}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
         <ul class="divide-y">
           {#each team.managers ?? [] as manager (manager.subjectId)}
             {@const isSelf = manager.subjectId === callerId}
@@ -338,8 +383,56 @@
             </li>
           {/each}
         </ul>
+        {/if}
       </Card.Content>
     </Card.Root>
+
+    {#if isStaff}
+      <Card.Root>
+        <Card.Header>
+          <Card.Title>Your access</Card.Title>
+          <Card.Description>
+            {#if ownEnd}
+              Your access through this team ended on {formatMediumDate(accessEndDate(ownEnd))}. You cannot manage the team.
+            {:else}
+              You see the sites that the team has access to and that let you in. You cannot manage the team.
+            {/if}
+          </Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-3">
+          <p class="text-sm">
+            <StaffNarrowing
+              narrowing={team.ownStaff?.narrowing}
+              roles={team.suggestableRoles ?? []}
+              hasEnded={team.ownStaff?.hasEnded}
+            />
+          </p>
+          {#if staffLeaveError}
+            <p class="text-sm text-destructive" role="alert">{staffLeaveError}</p>
+          {/if}
+          <ConfirmDialog
+            title="Leave team"
+            confirmLabel="Leave team"
+            destructive
+            onConfirm={leaveAsStaff}
+          >
+            {#snippet trigger(props)}
+              <Button {...props} variant="outline-destructive" size="sm" disabled={leaving || !callerId}>
+                <LogOut class="mr-2 h-4 w-4" />
+                Leave
+              </Button>
+            {/snippet}
+            {#snippet description()}
+              {#if ownEnd}
+                Leave {team.name}? A manager of the team must invite you again.
+              {:else}
+                Leave {team.name}? You stop seeing the sites that the team has access to and that let you in. A manager of the team must invite you again.
+              {/if}
+            {/snippet}
+          </ConfirmDialog>
+        </Card.Content>
+      </Card.Root>
+    {/if}
 
     {#if isManager}
     <Card.Root>
@@ -368,8 +461,12 @@
           </div>
 
           <div class="space-y-2">
-            <Label>The link stops working after</Label>
-            <RadioGroup.Root bind:value={expiresInDays} class="flex flex-wrap gap-4">
+            <Label id="team-invite-expiry-label">The link stops working after</Label>
+            <RadioGroup.Root
+              bind:value={expiresInDays}
+              aria-labelledby="team-invite-expiry-label"
+              class="flex flex-wrap gap-4"
+            >
               {#each linkExpiryOptions() as [value, text] (value)}
                 <div class="flex items-center gap-2">
                   <RadioGroup.Item {value} id={`team-invite-expiry-${value}`} />
@@ -443,6 +540,17 @@
     {/if}
 
     {#if isManager}
+      <TeamStaffSection
+        {teamId}
+        teamName={team.name ?? ""}
+        staff={team.staff ?? []}
+        roles={team.suggestableRoles ?? []}
+      />
+      <StaffInvitesSection
+        {teamId}
+        invites={team.staffInvites ?? []}
+        roles={team.suggestableRoles ?? []}
+      />
       <AccessLinksSection
         {teamId}
         links={team.accessLinks ?? []}
@@ -455,7 +563,9 @@
       <Card.Root>
         <Card.Header>
           <Card.Title>Delete team</Card.Title>
-          <Card.Description>Every manager of the team loses it. You cannot undo this.</Card.Description>
+          <Card.Description>
+            Every manager and staff member loses the team. You cannot undo this.
+          </Card.Description>
         </Card.Header>
         <Card.Content class="space-y-3">
           {#if deleteError}
@@ -475,7 +585,7 @@
               </Button>
             {/snippet}
             {#snippet description()}
-              Delete {team.name}? Every manager loses the team. You cannot undo this.
+              Delete {team.name}? Every manager and staff member loses the team. You cannot undo this.
             {/snippet}
           </ConfirmDialog>
         </Card.Content>

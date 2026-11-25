@@ -95,7 +95,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             isManager ? await LiveStaffInvitesAsync(db, teamId, now, ct) : [],
             isManager ? await LiveAccessLinksAsync(db, teamId, now, ct) : [],
             isManager ? await SitesOfAsync(db, teamId, now, ct) : [],
-            isManager ? TeamSuggestableRoles.All : [],
+            TeamSuggestableRoles.All,
             await db.IsLastManagerAsync(teamId, callerSubjectId, ct),
             await CanDeleteAsync(db, teamId, callerSubjectId, ct),
             team.Caller.Kind,

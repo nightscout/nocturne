@@ -346,7 +346,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Looking_up_a_staff_invite_says_what_narrows_the_staff_member_and_whether_the_caller_is_a_member(bool member)
+    public async Task Looking_up_a_staff_invite_says_what_narrows_the_staff_member_whether_the_caller_is_a_member_and_the_role_names(bool member)
     {
         var narrowing = new TeamStaffNarrowing(RoleSeeds.Viewer, true, DateTime.UtcNow.AddDays(3));
         _teams.Setup(t => t.GetStaffInviteInfoAsync(It.IsAny<string>(), Caller, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -355,7 +355,7 @@ public class TeamsControllerTests
         var result = await Controller(Session()).GetStaffInviteInfo("token", default);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should()
-            .Be(new TeamStaffInviteDetails(TeamId, "Camp", "Sam", narrowing, member));
+            .Be(new TeamStaffInviteDetails(TeamId, "Camp", "Sam", narrowing, member, TeamSuggestableRoles.All));
     }
 
     [Fact]

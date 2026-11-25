@@ -18,7 +18,7 @@ export function teamProblemMessages(): ProblemCodeMessages {
     team_invite_already_member: "You are already a member of this team.",
     team_access_role_invalid: "A link cannot suggest this role. Choose another role.",
     team_access_end_invalid: "The end date must be in the future. Choose a later date.",
-    team_staff_ceiling_invalid: "Staff cannot have this role ceiling. Choose another role.",
+    team_staff_ceiling_invalid: "Staff cannot be limited to this role. Choose another role.",
     team_staff_end_invalid: "The end date must be in the future. Choose a later date.",
     team_staff_invite_end_passed:
       "The end date that this invite gives has passed. Ask a manager of the team for a new link.",
