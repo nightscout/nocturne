@@ -1,5 +1,5 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.RateLimiting;
@@ -12,7 +12,9 @@ namespace Nocturne.API.RateLimiting;
 /// <remarks>
 /// The body is a problem document, so a generated client that reads a declared <c>ProblemDetails</c> 429
 /// throws a body that carries <c>status</c>. <c>code</c> is the house problem code, and <c>error</c> and
-/// <c>error_description</c> stay as extensions because OAuth-style clients read them.
+/// <c>error_description</c> stay as extensions because OAuth-style clients read them. It comes from
+/// <see cref="ProblemDetailsFactory"/>, as every other problem document does, so it carries <c>traceId</c>
+/// and any customisation the factory applies.
 /// </remarks>
 internal static class RateLimitRejection
 {
@@ -26,24 +28,18 @@ internal static class RateLimitRejection
     {
         httpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         if (retryAfter is { } wait)
-        {
-            httpContext.Response.Headers.RetryAfter =
-                ((int)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-        }
+            httpContext.Response.SetRetryAfter(wait);
 
-        var problem = new ProblemDetails
-        {
-            Type = "https://tools.ietf.org/html/rfc6585#section-4",
-            Title = "Too Many Requests",
-            Status = StatusCodes.Status429TooManyRequests,
-            Detail = Description,
-            Extensions =
-            {
-                [ProblemCodeExtensions.CodeExtension] = Error,
-                ["error"] = Error,
-                ["error_description"] = Description,
-            },
-        };
+        var problem = httpContext.RequestServices.GetRequiredService<ProblemDetailsFactory>()
+            .CreateProblemDetails(
+                httpContext,
+                statusCode: StatusCodes.Status429TooManyRequests,
+                title: "Too Many Requests",
+                type: "https://tools.ietf.org/html/rfc6585#section-4",
+                detail: Description);
+        problem.Extensions[ProblemCodeExtensions.CodeExtension] = Error;
+        problem.Extensions["error"] = Error;
+        problem.Extensions["error_description"] = Description;
         await httpContext.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", ct);
     }
 }

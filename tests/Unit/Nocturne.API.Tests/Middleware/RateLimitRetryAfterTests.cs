@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
 using Nocturne.API.Tests.RateLimiting;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
@@ -29,7 +30,7 @@ public class RateLimitRetryAfterTests
         using var refused = limiter.AttemptAcquire();
         refused.IsAcquired.Should().BeFalse();
 
-        var http = new DefaultHttpContext();
+        var http = new DefaultHttpContext { RequestServices = TestRequestServices.Build(clamped: false) };
         http.Response.Body = new MemoryStream();
         await options.OnRejected!(new OnRejectedContext { HttpContext = http, Lease = refused }, CancellationToken.None);
 

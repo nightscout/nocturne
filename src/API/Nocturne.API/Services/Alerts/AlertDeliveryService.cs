@@ -131,14 +131,7 @@ internal sealed class AlertDeliveryService(
         // the hub's subscribers are not its recipients.
         if (!notice)
         {
-            try
-            {
-                await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
-            }
+            await broadcastService.BroadcastAlertEventAsync("alert_dispatch", payload);
         }
 
         await alarmRelay.RaiseAsync(payload, ct);
@@ -297,14 +290,7 @@ internal sealed class AlertDeliveryService(
 
         // Broadcast so the firing toast renders for SignalR-connected web clients —
         // mirrors the real-fire UX so users learn what a real fire feels like.
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire for rule {RuleId}", alertRuleId);
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         if (channels.Count == 0)
         {
@@ -359,14 +345,7 @@ internal sealed class AlertDeliveryService(
         AlertPayload payload,
         CancellationToken ct)
     {
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_test_fire (dry-run)");
-        }
+        await broadcastService.BroadcastAlertEventAsync("alert_test_fire", payload);
 
         // Push directly to providers without persisting delivery rows. Failures are logged
         // but not retryable — there's no row to mark failed. Dry-run callers know this is

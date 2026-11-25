@@ -199,41 +199,25 @@ public class NotificationV2Service : INotificationV2Service
         );
 
         // Broadcast appropriate WebSocket event based on notification properties (replaces legacy ctx.bus.emit('notification', notify))
-        try
+        if (notification.Clear)
         {
-            if (notification.Clear)
-            {
-                await _signalRBroadcastService.BroadcastClearAlarmAsync(notification);
-            }
-            else if (notification.IsAnnouncement)
-            {
-                await _signalRBroadcastService.BroadcastAnnouncementAsync(notification);
-            }
-            else if (notification.Level == _levels.URGENT)
-            {
-                await _signalRBroadcastService.BroadcastUrgentAlarmAsync(notification);
-            }
-            else if (notification.Level == _levels.WARN)
-            {
-                await _signalRBroadcastService.BroadcastAlarmAsync(notification);
-            }
-            else
-            {
-                await _signalRBroadcastService.BroadcastNotificationAsync(notification);
-            }
-
-            _logger.LogDebug(
-                "Successfully broadcasted WebSocket notification event for {Title}",
-                notification.Title
-            );
+            await _signalRBroadcastService.BroadcastClearAlarmAsync(notification);
         }
-        catch (Exception ex)
+        else if (notification.IsAnnouncement)
         {
-            _logger.LogWarning(
-                ex,
-                "Failed to broadcast notification WebSocket event for {Title}",
-                notification.Title
-            );
+            await _signalRBroadcastService.BroadcastAnnouncementAsync(notification);
+        }
+        else if (notification.Level == _levels.URGENT)
+        {
+            await _signalRBroadcastService.BroadcastUrgentAlarmAsync(notification);
+        }
+        else if (notification.Level == _levels.WARN)
+        {
+            await _signalRBroadcastService.BroadcastAlarmAsync(notification);
+        }
+        else
+        {
+            await _signalRBroadcastService.BroadcastNotificationAsync(notification);
         }
     }
 }
