@@ -47686,6 +47686,7 @@ msgstr "Joining..."
 msgid "You are already a member of <0/>."
 msgstr "You are already a member of <0/>."
 
+#: src/lib/components/layout/NotificationItem.svelte
 #: src/routes/(authenticated)/teams/join/+page.svelte
 msgid "Open the team"
 msgstr "Open the team"
@@ -49737,3 +49738,22 @@ msgstr "{0} changed who approves the staff of the team {1}. The detail is no lon
 #: src/lib/components/members/MemberHistoryEntryRow.svelte
 msgid "{0} changed who approves the staff of a team that was deleted. The detail is no longer stored."
 msgstr "{0} changed who approves the staff of a team that was deleted. The detail is no longer stored."
+
+#. 0: staffTeam
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "1 staff member of the team {0} is waiting for your approval. They cannot see this site's data until an owner approves them."
+msgstr "1 staff member of the team {0} is waiting for your approval. They cannot see this site's data until an owner approves them."
+
+#. 0: staffCount; 1: staffTeam
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "{0} staff members of the team {1} are waiting for your approval. They cannot see this site's data until an owner approves them."
+msgstr "{0} staff members of the team {1} are waiting for your approval. They cannot see this site's data until an owner approves them."
+
+#. 0: staffTeam
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "The team {0} has new staff who can now see this site's data."
+msgstr "The team {0} has new staff who can now see this site's data."
+
+#: src/routes/(authenticated)/settings/members/+page.svelte
+msgid "You have access to this site only through a team, so you cannot give access to anyone."
+msgstr "You have access to this site only through a team, so you cannot give access to anyone."
