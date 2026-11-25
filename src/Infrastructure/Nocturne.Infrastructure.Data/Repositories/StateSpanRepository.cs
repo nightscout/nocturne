@@ -11,6 +11,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Services.Deduplication;
 
@@ -304,6 +305,77 @@ public class StateSpanRepository : IStateSpanRepository
         IReadOnlyList<StateSpan?> committed = [.. updated.Select(e => e is null ? null : StateSpanMapper.ToDomainModel(e))];
         await ReportCommittedAsync(committed);
         return committed;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A row whose start or category changes first releases the spans it superseded
+    /// (<see cref="StateSpanSupersessionExtensions.ReopenSupersededAsync"/>) while the store still holds
+    /// the start they ended at. A row that keeps a superseded end whose superseder moved is written open,
+    /// so that every row written then settles with its neighbours by the one succession rule
+    /// (<see cref="StateSpanSupersessionExtensions.SupersedeByArrivedAsync"/>), which writes only the ends
+    /// and pointers that move.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> RewriteFromUpstreamAsync(
+        string source,
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+    {
+        var sent = stateSpans
+            .Where(s => !string.IsNullOrEmpty(s.OriginalId))
+            .GroupBy(s => s.OriginalId!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        if (sent.Count == 0)
+            return [];
+
+        string[] ids = [.. sent.Keys];
+        string[] categories = [.. DecomposedTreatmentKeys.TreatmentSpanCategories];
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var written = await db.ExecuteInTransactionAsync(async ct =>
+        {
+            var stored = db.StateSpans.Where(s => s.Source == source
+                && s.LegacyId != null && ids.Contains(s.LegacyId) && categories.Contains(s.Category));
+            var before = await stored.AsNoTracking().ToListAsync(ct);
+            var superseders = await db.SupersedersAsync(before, ct);
+            var supersededEnds = before
+                .Where(r => StateSpanSupersessionExtensions.SupersededEnd(r, superseders) is not null)
+                .ToDictionary(r => r.Id, r => (End: r.EndTimestamp, By: r.SupersededById!.Value));
+            await db.ReopenSupersededAsync(
+                [.. before
+                    .Where(r => r.StartTimestamp != sent[r.LegacyId!].StartTimestamp
+                        || r.Category != sent[r.LegacyId!].Category.ToString())
+                    .Select(r => r.Id)],
+                purged: false, ct);
+
+            var rows = await stored.ToListAsync(ct);
+            foreach (var row in rows)
+                StateSpanMapper.UpdateEntity(row, sent[row.LegacyId!]);
+
+            var byId = rows.ToDictionary(r => r.Id);
+            foreach (var row in rows)
+            {
+                var span = sent[row.LegacyId!];
+                (row.EndTimestamp, row.SupersededById) = (span.EndTimestamp, null);
+                if (!supersededEnds.TryGetValue(row.Id, out var ended))
+                    continue;
+
+                var superseder = byId.GetValueOrDefault(ended.By) ?? superseders[ended.By];
+                if (!StateSpanSuccession.Follows(row, span.Metadata, superseder) || span.EndTimestamp <= superseder.StartTimestamp)
+                    continue;
+
+                (row.EndTimestamp, row.SupersededById) = superseder.StartTimestamp == ended.End
+                    ? (ended.End, (Guid?)ended.By)
+                    : (null, null);
+            }
+
+            await db.SaveChangesAsync(ct);
+            await db.SupersedeByArrivedAsync([.. rows.Select(r => r.Id)], asGiven: false, ct);
+            return rows.Select(r => r.LegacyId!).ToList();
+        }, ct: cancellationToken);
+
+        if (written.Count > 0)
+            await ReportWrittenAsync();
+        return written;
     }
 
     /// <inheritdoc />

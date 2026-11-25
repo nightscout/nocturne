@@ -1001,7 +1001,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     {
         if (entry.State is EntityState.Deleted or EntityState.Detached
             || entry.Entity is not IUpstreamFingerprinted { LegacyId: { } legacyId } row
-            || !UpstreamFingerprintScope.TryGet(row.DataSource, legacyId, out var fingerprint)
+            || !UpstreamFingerprintScope.TryGet(row.UpstreamSource, legacyId, out var fingerprint)
             || row.UpstreamFingerprint == fingerprint)
             return;
 

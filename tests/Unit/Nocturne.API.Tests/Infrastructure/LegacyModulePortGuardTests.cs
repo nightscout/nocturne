@@ -99,7 +99,7 @@ public class LegacyModulePortGuardTests
 
     private static readonly Exemption[] Exemptions =
     [
-        InMember("src/API/Nocturne.API/Services/ConnectorPublishing/TreatmentPublisher.cs", "TreatmentPublisher.PublishTreatmentsAsync", "TreatmentDecomposer", "calls the decomposer's static upstream fingerprint"),
+        InMember("src/API/Nocturne.API/Services/ConnectorPublishing/TreatmentPublisher.cs", "TreatmentPublisher.FingerprintsOf", "TreatmentDecomposer", "calls the decomposer's static upstream fingerprint"),
         InMember("src/API/Nocturne.API/Services/Caching/LegacyReadCacheInvalidation.cs", "LegacyReadCacheInvalidation.FamiliesByModel", "LegacyTreatmentTables", "lists the models the treatment tables serve, which no module service exposes"),
         InTest("tests/Integration/Nocturne.API.Tests/TreatmentBatchFailureIntegrationTests.cs", "TreatmentReadService", "builds the store over a decomposer whose note repository fails, to test its batch writes"),
         InTest("tests/Unit/Nocturne.API.Tests/Services/Caching/LegacyReadCacheInvalidationTests.cs", "LegacyTreatmentTables", "checks the invalidation covers every model the treatment tables serve"),

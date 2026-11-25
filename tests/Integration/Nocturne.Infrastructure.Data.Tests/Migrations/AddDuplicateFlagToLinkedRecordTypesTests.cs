@@ -79,6 +79,7 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
         ("sensor_glucose", "writer_grant_id", "uuid"),
         ("state_spans", "writer_grant_id", "uuid"),
         ("carb_intakes", "write_back_sent_fingerprint", "text"),
+        ("state_spans", "upstream_fingerprint", "text"),
     ];
 
     /// <summary>

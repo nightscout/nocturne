@@ -137,20 +137,38 @@ internal static class StateSpanSupersessionExtensions
                         spans.TryAdd(span.Id, span);
                 }
 
-                var pointers = spans.Values.Select(s => s.SupersededById).OfType<Guid>().Distinct().ToArray();
-                var supersederStarts = await ctx.StateSpans.IncludingDeleted().AsNoTracking()
-                    .Where(s => pointers.Contains(s.Id))
-                    .ToDictionaryAsync(s => s.Id, s => s.StartTimestamp, token);
+                var superseders = await ctx.SupersedersAsync(spans.Values, token);
                 var movable = spans.Values
                     .Where(s => !(asGiven && arrivedIdSet.Contains(s.Id)))
-                    .Where(s => s.EndTimestamp == null
-                        || (s.SupersededById is { } by && supersederStarts.GetValueOrDefault(by) == s.EndTimestamp))
+                    .Where(s => s.EndTimestamp == null || SupersededEnd(s, superseders) is not null)
                     .ToList();
                 return await EndAtSuccessorsAsync(
                     ctx, movable, _ => true, writeUnchanged: false, NocturneDbContext.UtcNowAtStoredPrecision(), token);
             },
             ct);
     }
+
+    /// <summary>The span each of <paramref name="spans"/> names as its superseder, live or not, as stored, by its id.</summary>
+    public static async Task<Dictionary<Guid, StateSpanEntity>> SupersedersAsync(
+        this NocturneDbContext ctx, IEnumerable<StateSpanEntity> spans, CancellationToken ct)
+    {
+        var pointers = spans.Select(s => s.SupersededById).OfType<Guid>().Distinct().ToArray();
+        return pointers.Length == 0
+            ? []
+            : await ctx.StateSpans.IncludingDeleted().AsNoTracking()
+                .Where(s => pointers.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, ct);
+    }
+
+    /// <summary>
+    /// The end supersession gave <paramref name="span"/>, the start of the span it names, when its end
+    /// is that; null for an uploaded end or none.
+    /// </summary>
+    public static DateTime? SupersededEnd(StateSpanEntity span, IReadOnlyDictionary<Guid, StateSpanEntity> superseders) =>
+        span.SupersededById is { } by && superseders.TryGetValue(by, out var superseder)
+            && superseder.StartTimestamp == span.EndTimestamp
+            ? superseder.StartTimestamp
+            : null;
 
     /// <summary>
     /// Gives the tracked <paramref name="spans"/> the ends <see cref="SupersedeByArrivedAsync"/> wrote

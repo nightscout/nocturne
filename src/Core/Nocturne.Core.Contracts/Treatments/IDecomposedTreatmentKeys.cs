@@ -53,7 +53,7 @@ public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
     /// The upstream fingerprint of each of <paramref name="source"/>'s rows under
     /// <paramref name="legacyIds"/>, by legacy id. An id with no such row is absent.
     /// </summary>
-    Task<IReadOnlyDictionary<string, IReadOnlyList<string?>>> GetFingerprintsFromSourceAsync(
+    Task<IReadOnlyDictionary<string, IReadOnlyList<StoredFingerprint>>> GetFingerprintsFromSourceAsync(
         string source, IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
@@ -63,6 +63,11 @@ public interface IDecomposedTreatmentKeys : IWriteBackSentRecords
     Task StampUnfingerprintedAsync(
         string source, IReadOnlyDictionary<string, string> fingerprints, CancellationToken ct = default);
 }
+
+/// <summary>The upstream fingerprint one stored row carries.</summary>
+/// <param name="Fingerprint">The fingerprint, or <c>null</c> when the row carries none.</param>
+/// <param name="OnSpan">Whether the row is the state span of an override or a temporary target.</param>
+public readonly record struct StoredFingerprint(string? Fingerprint, bool OnSpan);
 
 /// <param name="Held">Every id a re-upload would find stored.</param>
 /// <param name="DeletedByUser">The ids in <paramref name="Held"/> held only by a record the user deleted.</param>

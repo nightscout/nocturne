@@ -203,9 +203,22 @@ public interface ITreatmentService
     Task<IReadOnlySet<Treatment>> ResolveStoredIdentitiesAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default);
 
-    /// <summary>Of treatments <paramref name="source"/> delivered again, the ones to decompose again.</summary>
-    Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    /// <summary>Of treatments <paramref name="source"/> delivered again, the ones to write again.</summary>
+    Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes each of <paramref name="treatments"/>, overrides and temporary targets
+    /// <see cref="SelectForRepublishAsync"/> chose as <see cref="TreatmentRepublish.Spans"/>, onto the
+    /// state span <paramref name="source"/> stores under its id
+    /// (<see cref="Repositories.IStateSpanRepository.RewriteFromUpstreamAsync"/>). A live
+    /// <paramref name="origin"/> marks the spans written live and announces their treatments as updated,
+    /// as <see cref="CreateTreatmentsAsync"/> does for the treatments it writes.
+    /// </summary>
+    /// <returns>The spans written.</returns>
+    Task<int> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update an existing treatment with WebSocket broadcasting
@@ -256,4 +269,15 @@ public interface ITreatmentService
         string? find = null,
         CancellationToken cancellationToken = default
     );
+}
+
+/// <summary>The treatments a source delivered again that are written again.</summary>
+/// <param name="Decompose">Decomposed again as a new upload is.</param>
+/// <param name="Spans">
+/// Stored overrides and temporary targets, written onto their state spans in place
+/// (<see cref="ITreatmentService.RepublishSpansAsync"/>).
+/// </param>
+public sealed record TreatmentRepublish(IReadOnlyList<Treatment> Decompose, IReadOnlyList<Treatment> Spans)
+{
+    public int Count => Decompose.Count + Spans.Count;
 }

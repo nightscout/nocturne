@@ -79,8 +79,15 @@ internal interface ITreatmentDecomposer
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
     /// <inheritdoc cref="ITreatmentService.SelectForRepublishAsync"/>
-    Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+    Task<TreatmentRepublish> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
+    /// <summary>
+    /// The write of <see cref="ITreatmentService.RepublishSpansAsync"/>, which announces what it returns.
+    /// </summary>
+    /// <returns>The treatments whose spans were written.</returns>
+    Task<IReadOnlyList<Treatment>> RepublishSpansAsync(
+        string source, IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk-deletes V4 treatment records matching the optional find filter (time range).
