@@ -6433,6 +6433,7 @@ msgid "Advanced"
 msgstr "Avanzado"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Unsaved"
 msgstr "Sin guardar"
 
@@ -39922,7 +39923,9 @@ msgstr "Copiar la dirección del sitio"
 msgid "Subdomain"
 msgstr "Subdominio"
 
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/tenants/SiteAddressCard.svelte
+#: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Change address"
 msgstr "Cambiar dirección"
 
@@ -50695,4 +50698,13 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "You have access to this site only through a team, so you cannot give access to anyone."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Keep current address"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "No address"
 msgstr ""
