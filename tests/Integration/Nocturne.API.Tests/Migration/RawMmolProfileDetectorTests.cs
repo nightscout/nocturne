@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -130,7 +131,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
 
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
         await conn.OpenAsync();
-        await Execute(conn, $"""
+        await conn.ExecuteAsync($"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at) VALUES
               ('{TenantA}', 'tenant-a', 'Tenant A', true, now(), now()),
               ('{TenantB}', 'tenant-b', 'Tenant B', true, now(), now());
@@ -142,7 +143,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
         {
             await Context(conn, activation.Tenant);
             var deleted = activation.Deleted ? $"'{Seeded:O}'" : "NULL";
-            await Execute(conn, $"""
+            await conn.ExecuteAsync($"""
                 INSERT INTO profile_activations
                   (id, tenant_id, start_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms,
                    snapshot, snapshot_is_customized, sys_created_at, sys_updated_at, deleted_at)
@@ -163,7 +164,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
         var timestamp = store.Timestamp ?? Seeded;
         if (store.Owner)
         {
-            await Execute(conn, $"""
+            await conn.ExecuteAsync($"""
                 INSERT INTO therapy_settings
                   (id, tenant_id, timestamp, profile_name, units, dia, carbs_hr, delay, per_gi_values, is_default,
                    is_externally_managed, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
@@ -173,7 +174,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
         }
         if (store.Targets is not null)
         {
-            await Execute(conn, $"""
+            await conn.ExecuteAsync($"""
                 INSERT INTO target_range_schedules
                   (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
                 VALUES ('{store.TargetId}', '{store.Tenant}', '{store.TargetTimestamp ?? timestamp:O}', '{store.Name}', '{store.Targets}'::jsonb,
@@ -182,7 +183,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
         }
         if (store.Sensitivity is not null)
         {
-            await Execute(conn, $"""
+            await conn.ExecuteAsync($"""
                 INSERT INTO sensitivity_schedules
                   (id, tenant_id, timestamp, profile_name, entries_json, legacy_id, correlation_id, sys_created_at, sys_updated_at, deleted_at)
                 VALUES ('{store.SensitivityId}', '{store.Tenant}', '{store.IsfTimestamp ?? timestamp:O}', '{store.Name}', '{store.Sensitivity}'::jsonb,
@@ -192,14 +193,7 @@ public sealed class RawMmolProfileStoresFixture : IAsyncLifetime
     }
 
     private static Task Context(NpgsqlConnection conn, Guid tenant) =>
-        Execute(conn, $"SELECT set_config('app.current_tenant_id', '{tenant}', false);");
-
-    private static async Task Execute(NpgsqlConnection conn, string sql)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        await cmd.ExecuteNonQueryAsync();
-    }
+        conn.ExecuteAsync($"SELECT set_config('app.current_tenant_id', '{tenant}', false);");
 }
 
 /// <summary>

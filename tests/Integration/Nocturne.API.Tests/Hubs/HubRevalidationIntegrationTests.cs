@@ -43,41 +43,24 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
         using var client = CreateAuthenticatedClient();
         (await client.GetAsync("/api/v1/status")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Revalidation User");
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
     }
 
     private async Task<(Guid GrantId, string Secret)> SeedSecretAsync()
     {
         var secret = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(20));
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         return (await AuthTestHelpers.SeedApiSecretGrantAsync(conn, _tenantId, _subjectId, secret), secret);
     }
 
     private async Task ExecuteAsync(string sql, Guid id)
     {
-        await using var conn = await OpenAsync();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", _tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("id", id);
-            (await cmd.ExecuteNonQueryAsync()).Should().BeGreaterThan(0);
-        }
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync(
+            "SELECT set_config('app.current_tenant_id', @tenantId, false);", ("tenantId", _tenantId.ToString()));
+        (await conn.ExecuteAsync(sql, ("id", id))).Should().BeGreaterThan(0);
     }
 
     private Task RevokeAsync(Guid grantId) =>
@@ -252,7 +235,7 @@ public class HubRevalidationIntegrationTests : ApiIntegrationTestBase
         await ShouldCloseAsync(secretClosed, "the api-secret's member's access ended");
         await ShouldCloseAsync(upgradeClosed, "the upgrade credential's member's access ended");
         await ShouldCloseAsync(inBandClosed, "the in-band credential's member's access ended");
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT set_config('app.current_tenant_id', @tenantId, false);

@@ -78,27 +78,19 @@ public class ClientAddressRecordingIntegrationTests : ApiIntegrationTestBase
 
         var lastUsed = await Eventually.ValueAsync(
             "the grant's last used address to be recorded",
-            () => ScalarAsync(conn,
+            () => conn.ScalarAsync<string?>(
                 "SELECT last_used_ip FROM oauth_grants WHERE subject_id = @subject AND last_used_ip IS NOT NULL",
                 ("subject", Fixture.OwnerSubjectId)),
             step: TimeSpan.FromMilliseconds(100));
 
-        var mutation = await ScalarAsync(conn,
+        var mutation = await conn.ScalarAsync<string?>(
             "SELECT ip_address FROM mutation_audit_log WHERE action = 'create' AND actor_subject_id = @subject ORDER BY created_at DESC LIMIT 1",
             ("subject", Fixture.OwnerSubjectId));
-        var authAudit = await ScalarAsync(conn,
+        var authAudit = await conn.ScalarAsync<string?>(
             "SELECT ip_address FROM auth_audit_log WHERE event_type = @type AND details->>'method' = 'totp'",
             ("type", AuthAuditEventType.FailedAuth));
 
         return new Recorded(lastUsed, mutation, authAudit);
-    }
-
-    private static async Task<string?> ScalarAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        return (await cmd.ExecuteScalarAsync()) as string;
     }
 
     /// <summary>An address no other test presents, from the documentation range.</summary>

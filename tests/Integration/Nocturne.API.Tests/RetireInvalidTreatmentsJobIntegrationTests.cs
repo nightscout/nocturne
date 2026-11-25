@@ -106,7 +106,7 @@ public class RetireInvalidTreatmentsJobIntegrationTests : ApiIntegrationTestBase
         await StoreAsync(Main, TempBasal(invalid, _at));
 
         (await QueryAsync("SELECT id FROM temp_basals WHERE legacy_id = @id AND deleted_at IS NULL", r => r.GetGuid(0),
-            cmd => cmd.Parameters.AddWithValue("id", invalid))).Should().ContainSingle();
+            ("id", invalid))).Should().ContainSingle();
     }
 
     [Fact]
@@ -310,22 +310,22 @@ public class RetireInvalidTreatmentsJobIntegrationTests : ApiIntegrationTestBase
     {
         var rows = await QueryAsync(
             "SELECT record_id, is_primary FROM linked_records WHERE record_type = 'tempbasal' AND record_id = ANY (@ids)",
-            r => (r.GetGuid(0), r.GetBoolean(1)), cmd => cmd.Parameters.AddWithValue("ids", recordIds));
+            r => (r.GetGuid(0), r.GetBoolean(1)), ("ids", recordIds));
         return rows.ToDictionary(r => r.Item1, r => r.Item2);
     }
 
     private async Task<DateTime> StampOfAsync(Guid id) =>
         (await QueryAsync("SELECT sys_updated_at FROM temp_basals WHERE id = @id", r => r.GetDateTime(0),
-            cmd => cmd.Parameters.AddWithValue("id", id))).Single();
+            ("id", id))).Single();
 
     private async Task<bool> IsDuplicateAsync(Guid id) =>
         (await QueryAsync("SELECT is_duplicate FROM temp_basals WHERE id = @id", r => r.GetBoolean(0),
-            cmd => cmd.Parameters.AddWithValue("id", id))).Single();
+            ("id", id))).Single();
 
     private async Task<Dictionary<string, T>> ByLegacyIdAsync<T>(
         string sql, string[] legacyIds, Func<NpgsqlDataReader, T> read)
     {
-        var rows = await QueryAsync(sql, r => (r.GetString(0), read(r)), cmd => cmd.Parameters.AddWithValue("ids", legacyIds));
+        var rows = await QueryAsync(sql, r => (r.GetString(0), read(r)), ("ids", legacyIds));
         rows.Should().HaveCount(legacyIds.Length, "each id holds one row");
         return rows.ToDictionary(r => r.Item1, r => r.Item2);
     }
@@ -335,24 +335,13 @@ public class RetireInvalidTreatmentsJobIntegrationTests : ApiIntegrationTestBase
 
     private async Task ExecuteAsync(string sql, string[]? legacyIds = null)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        if (legacyIds is not null)
-            cmd.Parameters.AddWithValue("ids", legacyIds);
-        await cmd.ExecuteNonQueryAsync();
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync(sql, legacyIds is null ? [] : [("ids", legacyIds)]);
     }
 
-    private async Task<List<T>> QueryAsync<T>(string sql, Func<NpgsqlDataReader, T> read, Action<NpgsqlCommand> bind)
+    private async Task<List<T>> QueryAsync<T>(string sql, Func<NpgsqlDataReader, T> read, params (string Name, object Value)[] parameters)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        bind(cmd);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<T>();
-        while (await reader.ReadAsync())
-            rows.Add(read(reader));
-        return rows;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync(sql, read, parameters);
     }
 }

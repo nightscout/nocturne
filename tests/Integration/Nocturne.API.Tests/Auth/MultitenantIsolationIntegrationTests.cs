@@ -513,10 +513,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", _tenantBId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE tenants SET is_active = false WHERE id = @id;", ("id", _tenantBId));
 
         TenantResolutionMiddleware.EvictTenant(Fixture.Services.GetRequiredService<IMemoryCache>(), _slugB);
     }

@@ -103,8 +103,7 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             SELECT set_config('app.current_tenant_id', @tenant, false);
             UPDATE oauth_refresh_tokens
             SET revoked_at = revoked_at - interval '1 minute'
@@ -112,10 +111,7 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
               AND grant_id IN (SELECT g.id FROM oauth_grants g
                                JOIN oauth_clients c ON c.id = g.client_id
                                WHERE c.client_id = @client);
-            """;
-        cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
-        cmd.Parameters.AddWithValue("client", clientId);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenant", _tenantId.ToString()), ("client", clientId));
     }
 
     [Fact]

@@ -70,7 +70,7 @@ public class ImportedRoleDefinitionIntegrationTests
     [InlineData(Instance.TwoTenants)]
     public async Task An_import_adds_a_global_role_only_on_an_instance_with_one_tenant(Instance instance)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         Guid? tenantB = null;
         try
@@ -87,7 +87,7 @@ public class ImportedRoleDefinitionIntegrationTests
         {
             await RemoveImportedRolesAsync(conn);
             if (tenantB is { } id)
-                await ExecuteAsync(conn, "DELETE FROM tenants WHERE id = @id;", ("id", id));
+                await conn.ExecuteAsync("DELETE FROM tenants WHERE id = @id;", ("id", id));
         }
     }
 
@@ -96,7 +96,7 @@ public class ImportedRoleDefinitionIntegrationTests
     [InlineData(Instance.TwoTenants)]
     public async Task An_import_adds_no_role_under_the_reserved_platform_admin_name(Instance instance)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantA = await AuthTestHelpers.GetTenantIdAsync(conn);
         Guid? tenantB = null;
         try
@@ -113,7 +113,7 @@ public class ImportedRoleDefinitionIntegrationTests
         {
             await RemoveImportedRolesAsync(conn);
             if (tenantB is { } id)
-                await ExecuteAsync(conn, "DELETE FROM tenants WHERE id = @id;", ("id", id));
+                await conn.ExecuteAsync("DELETE FROM tenants WHERE id = @id;", ("id", id));
         }
     }
 
@@ -146,7 +146,7 @@ public class ImportedRoleDefinitionIntegrationTests
     private static async Task<Guid> OwnerAsync(NpgsqlConnection conn, Guid tenantId)
     {
         var (ownerId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Import Owner");
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
             SELECT gen_random_uuid(), id, @roleId FROM tenant_members WHERE tenant_id = @tenantId AND subject_id = @subjectId;
             """,
@@ -157,56 +157,27 @@ public class ImportedRoleDefinitionIntegrationTests
 
     private static async Task<string[]> GrantScopesAsync(NpgsqlConnection conn, Guid tenantId, string label)
     {
-        await ExecuteAsync(conn, "SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT scopes FROM oauth_grants WHERE tenant_id = @tenant AND label = @label;";
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        cmd.Parameters.AddWithValue("label", label);
-        return (string[])(await cmd.ExecuteScalarAsync())!;
+        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
+        return await conn.ScalarAsync<string[]>("SELECT scopes FROM oauth_grants WHERE tenant_id = @tenant AND label = @label;", ("tenant", tenantId), ("label", label));
     }
 
     private static async Task RemoveImportedRolesAsync(NpgsqlConnection conn) =>
-        await ExecuteAsync(conn, "DELETE FROM roles WHERE name = @custom OR lower(name) = @reserved;",
+        await conn.ExecuteAsync("DELETE FROM roles WHERE name = @custom OR lower(name) = @reserved;",
             ("custom", CustomRole), ("reserved", PlatformAdminCredentials.RoleName));
 
     private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
     }
 
     private static async Task<long> ReservedRoleCountAsync(NpgsqlConnection conn)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE lower(name) = @reserved;";
-        cmd.Parameters.AddWithValue("reserved", PlatformAdminCredentials.RoleName);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE lower(name) = @reserved;", ("reserved", PlatformAdminCredentials.RoleName));
     }
 
     private static async Task<string> SlugAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT slug FROM tenants WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", tenantId);
-        return (string)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        return await conn.ScalarAsync<string>("SELECT slug FROM tenants WHERE id = @id;", ("id", tenantId));
     }
 
     /// <summary>

@@ -46,7 +46,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_enrolment_started_again_on_the_same_invite_makes_a_second_subject_and_leaves_the_first_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var invite = await SeedMemberInviteAsync(conn, Fixture.TenantId);
 
@@ -63,7 +63,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_enrolment_started_again_on_the_same_creation_link_makes_a_second_subject_and_leaves_the_first_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var link = await SeedCreationLinkAsync(conn);
 
@@ -84,7 +84,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_access_request_started_again_on_the_same_tenant_makes_a_second_subject_and_leaves_the_first_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var displayName = NewDisplayName();
 
         await AccessRequestOptionsAsync(_slugB, displayName, "first");
@@ -99,7 +99,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_enrolment_on_another_invite_to_the_same_tenant_leaves_the_first_invites_subject_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var first = await SeedMemberInviteAsync(conn, Fixture.TenantId);
         var second = await SeedMemberInviteAsync(conn, Fixture.TenantId);
@@ -117,7 +117,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_enrolment_on_another_tenants_invite_leaves_the_first_invites_subject_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var first = await SeedMemberInviteAsync(conn, Fixture.TenantId);
         var second = await SeedMemberInviteAsync(conn, _tenantB);
@@ -135,7 +135,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_member_invite_enrolment_leaves_a_creation_links_subject_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var link = await SeedCreationLinkAsync(conn);
         var invite = await SeedMemberInviteAsync(conn, Fixture.TenantId);
@@ -153,7 +153,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_creation_link_enrolment_leaves_a_member_invites_subject_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var invite = await SeedMemberInviteAsync(conn, Fixture.TenantId);
         var link = await SeedCreationLinkAsync(conn);
@@ -178,10 +178,10 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [InlineData("creation link")]
     public async Task An_enrolment_leaves_a_subject_no_enrolment_created_as_it_was(string flow)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var username = NewUsername();
         var leftId = Guid.CreateVersion7();
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO subjects (id, name, username, is_active, is_system_subject, is_platform_admin, last_login_at, created_at, updated_at, approval_status)
             VALUES (@id, 'Left Behind', @username, true, false, true, now() - interval '30 days', now(), now(), 'Approved');
             INSERT INTO subject_roles (subject_id, role_id, assigned_at)
@@ -204,7 +204,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task An_access_request_on_another_tenant_leaves_the_first_requests_subject_as_it_was()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var displayName = NewDisplayName();
 
         await AccessRequestOptionsAsync(ApiIntegrationTestFixture.TenantSlug, displayName, "for the first site");
@@ -215,13 +215,6 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
 
         (await SnapshotAsync(conn, firstSubject)).Should().Be(before);
         (await SubjectIdsNamedAsync(conn, displayName)).Should().HaveCount(2, "the second request starts a subject of its own");
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
     }
 
     private static string NewUsername() => $"enrol-{Guid.NewGuid():N}"[..24];
@@ -238,10 +231,10 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     private async Task<string> SeedMemberInviteAsync(NpgsqlConnection conn, Guid tenantId)
     {
         var token = $"invite-{Guid.NewGuid():N}";
-        await ExecuteAsync(conn, "SELECT set_config('app.current_tenant_id', @tenantText, false);",
+        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenantText, false);",
             ("tenantText", tenantId.ToString()));
         var viewerRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Viewer);
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
             SELECT @memberId, @tenantId, @ownerId, @permissions::jsonb, now(), now(), false
             WHERE NOT EXISTS (SELECT 1 FROM tenant_members WHERE tenant_id = @tenantId AND subject_id = @ownerId);
@@ -258,7 +251,7 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
     private async Task<string> SeedCreationLinkAsync(NpgsqlConnection conn)
     {
         var token = $"link-{Guid.NewGuid():N}";
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO tenant_creation_invites (id, created_by_subject_id, token_hash, expires_at, use_count)
             VALUES (@id, @ownerId, @hash, now() + interval '1 day', 0);
             """,
@@ -298,46 +291,23 @@ public class EnrolmentOwnSubjectIntegrationTests : ApiIntegrationTestBase
 
     private static async Task<List<Guid>> IdsAsync(NpgsqlConnection conn, string sql, string value)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("value", value);
-        var ids = new List<Guid>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetGuid(0));
-        return ids;
+        return await conn.QueryAsync(sql, reader => reader.GetGuid(0), ("value", value));
     }
 
     private static async Task<string> NameOfAsync(NpgsqlConnection conn, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name FROM subjects WHERE id = @id;";
-        cmd.Parameters.AddWithValue("id", subjectId);
-        return (string)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<string>("SELECT name FROM subjects WHERE id = @id;", ("id", subjectId));
     }
 
     /// <summary>The subject's row with what it holds: its roles, recovery codes and passkeys.</summary>
     private static async Task<string> SnapshotAsync(NpgsqlConnection conn, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        return await conn.ScalarAsync<string>("""
             SELECT row_to_json(s)::text
                 || (SELECT count(*) FROM subject_roles WHERE subject_id = s.id)::text
                 || (SELECT count(*) FROM recovery_codes WHERE subject_id = s.id)::text
                 || (SELECT count(*) FROM passkey_credentials WHERE subject_id = s.id)::text
             FROM subjects s WHERE s.id = @id;
-            """;
-        cmd.Parameters.AddWithValue("id", subjectId);
-        return (string)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("id", subjectId));
     }
 }

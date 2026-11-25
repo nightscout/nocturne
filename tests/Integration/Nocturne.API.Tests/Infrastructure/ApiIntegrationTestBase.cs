@@ -212,14 +212,23 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
+    /// An open connection to the PostgreSQL database, for the caller to dispose.
+    /// </summary>
+    protected async Task<NpgsqlConnection> OpenPostgresAsync()
+    {
+        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        return conn;
+    }
+
+    /// <summary>
     /// An authenticated client whose credential is clamped to the last 24 hours of history.
     /// </summary>
     protected async Task<HttpClient> CreateHistoryClampedClientAsync(
         string name = "Clamped Follower",
         Guid? tenantId = null)
     {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
             conn, tenantId ?? Fixture.TenantId, name);
         return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);

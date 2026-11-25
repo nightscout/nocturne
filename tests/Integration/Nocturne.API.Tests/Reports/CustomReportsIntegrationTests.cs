@@ -502,22 +502,14 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
 
     private async Task<List<(string Endpoint, int Status, string? Entities)>> ReadRunAuditRowsAsync(DateTime since)
     {
-        var rows = new List<(string Endpoint, int Status, string? Entities)>();
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync("""
             SELECT set_config('app.current_tenant_id', @t, false);
             SELECT endpoint, status_code, entity_type FROM read_access_log
             WHERE endpoint LIKE 'POST /api/v4/reports/custom/run%' AND created_at >= @since;
-            """;
-        cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
-        cmd.Parameters.AddWithValue("since", since);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        await reader.NextResultAsync();
-        while (await reader.ReadAsync())
-            rows.Add((reader.GetString(0), reader.GetInt32(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
-        return rows;
+            """,
+            reader => (Endpoint: reader.GetString(0), Status: reader.GetInt32(1), Entities: reader.IsDBNull(2) ? null : reader.GetString(2)),
+            ("t", _tenantAId.ToString()), ("since", since));
     }
 
     [Fact]
@@ -721,13 +713,10 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         var (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, name);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             DELETE FROM subject_roles WHERE subject_id = @subject;
             UPDATE tenant_members SET direct_permissions = '["glucose.read","reports.read"]'::jsonb WHERE subject_id = @subject;
-            """;
-        cmd.Parameters.AddWithValue("subject", subject);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("subject", subject));
         return (subject, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject));
     }
 
