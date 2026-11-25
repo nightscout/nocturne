@@ -578,6 +578,7 @@ public class DataOverviewService : IDataOverviewService
         allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
 
         var allSourcesRead = true;
+        var meterReadingCount = 0;
         try
         {
             var meterReadings = await context
@@ -587,6 +588,7 @@ public class DataOverviewService : IDataOverviewService
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ToListAsync(cancellationToken);
             allReadings.AddRange(meterReadings.Select(r => (r.Timestamp, r.Mgdl)));
+            meterReadingCount = meterReadings.Count;
         }
         catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
@@ -614,7 +616,7 @@ public class DataOverviewService : IDataOverviewService
 
         var localNow = TimeZoneInfo.ConvertTime(_time.GetUtcNow(), tz);
         var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year, localNow.Date);
-        var response = new EHbA1cTimelineResponse { Year = year, Points = points };
+        var response = new EHbA1cTimelineResponse { Year = year, Points = points, SensorReadingCount = sensorReadings.Count, MeterReadingCount = meterReadingCount };
 
         // Caching a partial timeline would blank the missing source for the whole TTL below.
         if (!allSourcesRead)

@@ -30,6 +30,26 @@ namespace Nocturne.API.Tests.Reports;
 public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostgresTests.Database database)
     : IClassFixture<ReportSignalAvailabilityPostgresTests.Database>
 {
+    [Fact]
+    public async Task A_lookback_estimate_is_available_without_recent_source_rows_but_not_with_clamped_history()
+    {
+        await using var context = new NocturneDbContext(database.Options) { TenantId = database.Tenant };
+        var factory = context.AsFactory();
+        var overview = new Mock<Nocturne.Core.Contracts.Analytics.IDataOverviewService>();
+        overview.Setup(o => o.GetEHbA1cTimelineAsync(It.IsAny<int>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Nocturne.Core.Models.Services.EHbA1cTimelineResponse
+            {
+                Points = [new Nocturne.Core.Models.Services.EHbA1cPoint { Date = DateTime.UtcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), EstimatedA1cPercent = 7 }],
+            });
+        var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc), overview.Object);
+        var granted = new HashSet<string> { Scope.GlucoseRead };
+        var open = await availability.ForRangeAsync(24, granted, false, CancellationToken.None);
+        open.Signals.Single(s => s.Signal == "eHbA1c").State.Should().Be(ReportSignalAvailability.Data);
+        var reads = overview.Invocations.Count;
+        var clamped = await availability.ForRangeAsync(24, granted, true, CancellationToken.None);
+        clamped.Signals.Single(s => s.Signal == "eHbA1c").State.Should().Be(ReportSignalAvailability.None);
+        overview.Invocations.Count.Should().Be(reads);
+    }
     private static readonly string[] Everything =
     [
         Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead, Scope.HeartRateRead, Scope.StepCountRead,
@@ -148,7 +168,7 @@ public class ReportSignalAvailabilityPostgresTests(ReportSignalAvailabilityPostg
     {
         var factory = context.AsFactory();
         var availability = new ReportSignalAvailability(
-            ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc));
+            ReportSpecValidatorTests.Registry, factory, Repositories(factory), TimeProvider.System, Clock(TimeZoneInfo.Utc), Mock.Of<Nocturne.Core.Contracts.Analytics.IDataOverviewService>());
         return availability.ForRangeAsync(168, new HashSet<string>(scopes), historyClamped, CancellationToken.None);
     }
 

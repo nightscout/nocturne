@@ -252,7 +252,7 @@ internal sealed class ReportCatalogue(
             [.. ReportMarks.Slots(m).Select(s => new CustomReportMarkSlot(s.Key, s.Label, s.Input, s.Accepts, s.Counts, s.Required))]))],
         [.. ReportDerivedOps.All.Select(Op)],
         [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol, a1cMmolMol))],
-        ReportWorkspace.Build(registry, grantedScopes));
+        ReportWorkspace.Build(registry, grantedScopes, a1cMmolMol));
 
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {

@@ -55,6 +55,11 @@ function layer(over: Partial<ReportLayer>): ReportLayer {
 const track = (layers: ReportLayer[], height = 1): ReportTrack => ({ id: "t", height, layers });
 
 describe("a layered chart's layout", () => {
+  it("includes a local-day point before a mixed timeline's partial-day window", () => {
+    const daily = layer({ xKind: "day", bindings: { x: "day", y: ["glucose"] }, rows: [{ day: 0, glucose: 7 }] });
+    const hourly = layer({ rows: [{ time: 12 * 3600000, glucose: 140 }] });
+    expect(xExtent({ tracks: [track([daily, hourly])], xKind: "time", window: { from: 12 * 3600000, to: 18 * 3600000 } })).toEqual([0, 18 * 3600000]);
+  });
   it("shares the plot's height among tracks by their weights, with a gap between them", () => {
     const bands = trackBands([{ height: 2 }, { height: 1 }, { height: 0.5 }], 378, 10);
 

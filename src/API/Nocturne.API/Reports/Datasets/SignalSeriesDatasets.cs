@@ -458,6 +458,8 @@ internal sealed class EHbA1cDataset : IReportDataset
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
+        if (request.HistoryClamped)
+            return SeriesRows.Empty("Estimated HbA1c is unavailable with restricted glucose history.", "The estimate needs access to its trailing 90-day window.");
         var zone = await SeriesRows.ZoneAsync(request, cancellationToken);
         var first = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.From, zone).DateTime);
         var last = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(request.To.AddTicks(-1), zone).DateTime);
@@ -468,6 +470,10 @@ internal sealed class EHbA1cDataset : IReportDataset
         for (var year = first.Year; year <= last.Year; year++)
         {
             var timeline = await overview.GetEHbA1cTimelineAsync(year, null, cancellationToken);
+            request.ReadLog.Record("glucose", timeline.SensorReadingCount);
+            request.ReadLog.Record("meter_glucose", timeline.MeterReadingCount);
+            if (timeline.TimeZoneUnavailableReason is not null)
+                return SeriesRows.Empty("Set a valid profile time zone to show estimated HbA1c by local day.", "The profile time zone is unavailable.");
             foreach (var point in timeline.Points)
                 if (DateOnly.TryParseExact(point.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
                     && day >= first && day <= last)
@@ -477,8 +483,7 @@ internal sealed class EHbA1cDataset : IReportDataset
 
         var context = $"{ReportFacts.Window(request.From, request.To, request.Clock)}. {ReportFacts.Plural(points.Count, "day")} with an estimate.";
         if (points.Count == 0)
-            return SeriesRows.Empty("No estimated HbA1c in this period: each day needs a month of glucose readings in the 90 days before it.", context);
-        request.ReadLog.Record("glucose", points.Count);
+            return SeriesRows.Empty("No estimated HbA1c in this period: each day needs at least 30 glucose readings in its trailing 90-day window.", context);
 
         var rows = points.Select(p => SeriesRows.Row(
             ("day", LabHbA1cDataset.Midnight(p.Day, zone)),

@@ -34,8 +34,10 @@ internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<Repo
 /// choices. Every value is checked for its JSON kind before it is read, so a malformed spec
 /// is an error list, never an exception.
 /// </remarks>
-internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registry, TimeProvider time)
+internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registry, TimeProvider time, bool a1cMmolMol = false)
 {
+    public ReportSpecValidation Validate(JsonElement spec, bool useMmol, bool callerA1cMmolMol) =>
+        new ReportSpecValidator(registry, time, callerA1cMmolMol).Validate(spec, useMmol);
     /// <summary>The earliest date a range may start: before it there is no data, and older dates overflow the readers' conversions.</summary>
     internal static readonly DateTimeOffset EarliestDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 

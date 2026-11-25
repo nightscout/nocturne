@@ -340,7 +340,7 @@ public class SignalDatasetTests
         output.Rows[0]["day"].Should().Be(new DateTimeOffset(2025, 12, 31, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds());
         output.Rows[1]["weightedMean"].Should().Be(140.0);
         output.Facts.Single(f => f.Label == "Latest").Value.Should().Be("6.5");
-        log.Datasets.Should().Equal("glucose");
+        log.Datasets.Should().Equal("glucose", "meter_glucose");
     }
 
     [Fact]

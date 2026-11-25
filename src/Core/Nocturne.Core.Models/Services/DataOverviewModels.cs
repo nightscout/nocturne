@@ -102,6 +102,8 @@ public class DailySummaryResponse
 /// </summary>
 public class EHbA1cTimelineResponse
 {
+    public int SensorReadingCount { get; set; }
+    public int MeterReadingCount { get; set; }
     public A1cDisplayReferences A1cReferences => new();
     [JsonPropertyName("year")]
     public int Year { get; set; }

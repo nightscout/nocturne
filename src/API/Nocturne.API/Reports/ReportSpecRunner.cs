@@ -275,7 +275,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var outputOf = new Dictionary<string, ReportDatasetOutput>(StringComparer.Ordinal);
         foreach (var track in tracks)
         {
-            var units = track.Layers.Where(l => l.HasAxis).Select(l => l.Unit).Distinct().ToList();
+            var units = new List<string?>();
             var results = new List<ReportLayerResult>();
             foreach (var layer in track.Layers)
             {
@@ -285,7 +285,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                     outputs.Add(output);
                     outputOf[layer.Id!] = output;
                 }
-                var side = !layer.HasAxis ? ReportAxisSide.None : units.IndexOf(layer.Unit) == 0 ? ReportAxisSide.Left : ReportAxisSide.Right;
+                if (layer.HasAxis && !units.Contains(layerResult.Unit)) units.Add(layerResult.Unit);
+                var side = !layer.HasAxis ? ReportAxisSide.None : units.IndexOf(layerResult.Unit) == 0 ? ReportAxisSide.Left : ReportAxisSide.Right;
                 results.Add(layerResult with { Side = side });
             }
             trackResults.Add(new ReportTrackResult(track.Id!, track.Title, track.Height ?? 1, ReportAxes.Of(track), Texture(Hue(results))));
@@ -562,7 +563,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 Mark = layer.Mark!.Value,
                 Bindings = layer.Bindings!,
                 XKind = layer.XKind,
-                Unit = ReportA1c.Shown(layer.Unit, run.Context.A1cMmolMol),
+                Unit = outputFields.FirstOrDefault(f => ValueNames(layer.Bindings!).Contains(f.Name))?.Unit,
                 Side = ReportAxisSide.None,
                 Status = ReportPanelStatus.Ok,
                 Window = new ReportWindow(fromMs, toMs),
@@ -654,7 +655,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Mark = layer.Mark!.Value,
             Bindings = bindings,
             XKind = layer.XKind,
-            Unit = ReportA1c.Shown(layer.Unit, run.Context.A1cMmolMol),
+            Unit = fields.FirstOrDefault(f => ValueNames(layer.Bindings!).Contains(f.Name))?.Unit,
             Side = ReportAxisSide.None,
             Status = ReportPanelStatus.Ok,
             Window = output.Window ?? new ReportWindow(fromMs, toMs),

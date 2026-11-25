@@ -278,7 +278,7 @@ public class ReportWorkspaceTests
         var contexts = new Moq.Mock<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>(Moq.MockBehavior.Strict);
         var availability = new ReportSignalAvailability(ReportSpecValidatorTests.Registry, contexts.Object,
             ReportSignalAvailabilityPostgresTests.Repositories(contexts.Object), TimeProvider.System,
-            ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc));
+            ReportSignalAvailabilityPostgresTests.Clock(TimeZoneInfo.Utc), Moq.Mock.Of<Nocturne.Core.Contracts.Analytics.IDataOverviewService>());
 
         var result = await availability.ForRangeAsync(100_000, new HashSet<string>(), historyClamped: false, CancellationToken.None);
 
