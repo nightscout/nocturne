@@ -4,7 +4,6 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -26,7 +25,6 @@ public class ClockAnomalyNoticeTests
     private const string Owner = "owner-subject";
 
     private readonly Mock<IInAppNotificationService> _notifications = new();
-    private readonly Mock<ICanonicalGlucoseService> _canonical = new();
     private readonly List<InAppNotificationDto> _active = [];
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(T0, TimeSpan.Zero));
     private readonly ClockAnomalyNotice _notice;
@@ -78,10 +76,17 @@ public class ClockAnomalyNoticeTests
 
         _notice = new ClockAnomalyNotice(
             _notifications.Object, owner.Object, Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
-            _canonical.Object, new ClockAnomalyNoticeLog(_clock), _clock, NullLogger<ClockAnomalyNotice>.Instance);
+            new ClockAnomalyNoticeLog(_clock), _clock, NullLogger<ClockAnomalyNotice>.Instance);
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>What <see cref="AlertSweepJob"/>'s clock-anomaly pass does with the run's reading selection.</summary>
+    private async Task SweepRefreshAsync(AlertReadingSelection? selection = null)
+    {
+        if (_notice.NeedsReadingReport(Now))
+            await _notice.ReportReadingAsync(selection ?? new AlertReadingSelection(null, null), Now, CancellationToken.None);
+    }
 
     private static AlertReadingSelection NewestAt(DateTime at)
     {
@@ -138,11 +143,9 @@ public class ClockAnomalyNoticeTests
     public async Task A_sweep_refresh_clears_it_when_time_passes_with_no_new_reading()
     {
         await _notice.ReportReadingAsync(NewestAt(Now.AddMinutes(30)), Now, CancellationToken.None);
-        _canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SensorGlucose { Timestamp = T0.AddMinutes(30), Mgdl = 120 });
         _clock.Advance(TimeSpan.FromMinutes(31));
 
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync(NewestAt(T0.AddMinutes(30)));
 
         Standing.Should().BeEmpty();
     }
@@ -182,11 +185,11 @@ public class ClockAnomalyNoticeTests
 
         _clock.Advance(TimeSpan.FromMinutes(30));
         await _notice.ReportAsync(Context(), [], CancellationToken.None);
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().Equal("last_site_change_at");
 
         _clock.Advance(TimeSpan.FromMinutes(30));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().BeEmpty("the instant it reported is no longer ahead");
     }
 
@@ -479,7 +482,7 @@ public class ClockAnomalyNoticeTests
             for (var minute = 0; minute < 5; minute++)
             {
                 _clock.Advance(TimeSpan.FromMinutes(1));
-                await _notice.RefreshAsync(Now, CancellationToken.None);
+                await SweepRefreshAsync();
                 await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
                 await _notice.ReportAsync(Context(loopCycle: cycleAt), [], CancellationToken.None);
             }
@@ -498,11 +501,11 @@ public class ClockAnomalyNoticeTests
         await _notice.ReportAsync(Context(), [new ClockAnomaly("last_aps_cycle_at", TimeSpan.FromMinutes(6))], CancellationToken.None);
 
         _clock.Advance(TimeSpan.FromMinutes(5));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().Equal(new[] { "last_aps_cycle_at" }, "the latest instant, 11 minutes in, is still ahead");
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await _notice.RefreshAsync(Now, CancellationToken.None);
+        await SweepRefreshAsync();
         Standing.Should().BeEmpty();
         _created.Should().Be(1);
     }
@@ -534,5 +537,43 @@ public class ClockAnomalyNoticeTests
         _clock.Advance(ClockAnomalyNoticeLog.Freshness);
         await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
         _reads.Should().Be(2);
+    }
+
+    [Fact]
+    public void A_tenant_whose_notices_are_not_known_needs_the_reading_reported()
+    {
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task With_nothing_ahead_and_nothing_standing_the_reading_needs_no_report_within_the_freshness_window()
+    {
+        await _notice.ReportReadingAsync(NewestAt(Now), Now, CancellationToken.None);
+        _notice.NeedsReadingReport(Now).Should().BeFalse();
+
+        _clock.Advance(ClockAnomalyNoticeLog.Freshness);
+        _notice.NeedsReadingReport(Now).Should().BeTrue("the last read of the notices is no longer trusted");
+    }
+
+    [Fact]
+    public async Task A_standing_reading_notice_needs_the_reading_reported_so_time_can_archive_it()
+    {
+        await _notice.ReportReadingAsync(NewestAt(Now.AddHours(1)), Now, CancellationToken.None);
+
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_standing_engine_fact_needs_the_reading_reported_only_once_its_instant_has_passed()
+    {
+        IReadOnlyCollection<ClockAnomaly> ahead = [new("last_site_change_at", TimeSpan.FromHours(1))];
+        await _notice.ReportAsync(Context(T0.AddHours(1)), ahead, CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(58));
+        await _notice.ReportAsync(Context(), [], CancellationToken.None);
+        _notice.NeedsReadingReport(Now).Should().BeFalse();
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        _notice.NeedsReadingReport(Now).Should().BeTrue();
     }
 }

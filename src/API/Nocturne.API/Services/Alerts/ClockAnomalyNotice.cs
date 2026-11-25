@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -56,10 +55,10 @@ public interface IClockAnomalyNotice
     Task ReportReadingAsync(AlertReadingSelection selection, DateTime now, CancellationToken ct);
 
     /// <summary>
-    /// For a pass with no reading of its own: selects the reading and reports it when a notification
-    /// may stand, so one is archived once time passes the reading with no new one.
+    /// Whether the reading selection must be reported at <paramref name="now"/> though no new reading
+    /// arrived: a notification may stand for the tenant, and is archived once time passes the reading.
     /// </summary>
-    Task RefreshAsync(DateTime now, CancellationToken ct);
+    bool NeedsReadingReport(DateTime now);
 }
 
 /// <summary>
@@ -95,7 +94,6 @@ internal sealed class ClockAnomalyNotice(
     IInAppNotificationService notifications,
     ITenantOwnerResolver ownerResolver,
     ITenantAccessor tenantAccessor,
-    ICanonicalGlucoseService canonicalGlucose,
     ClockAnomalyNoticeLog log,
     TimeProvider timeProvider,
     ILogger<ClockAnomalyNotice> logger)
@@ -158,14 +156,10 @@ internal sealed class ClockAnomalyNotice(
         return ReconcileAsync(raise, observed, now, ct);
     }
 
-    public async Task RefreshAsync(DateTime now, CancellationToken ct)
-    {
-        if (log.TryGetStanding(tenantAccessor.TenantId, out var standing)
-            && !standing.ContainsKey(ReadingFact)
-            && !standing.Any(f => Passed(f.Key, f.Value, now)))
-            return;
-        await ReportReadingAsync(await AlertReadings.SelectAsync(canonicalGlucose, now, ct), now, ct);
-    }
+    public bool NeedsReadingReport(DateTime now) =>
+        !log.TryGetStanding(tenantAccessor.TenantId, out var standing)
+        || standing.ContainsKey(ReadingFact)
+        || standing.Any(f => Passed(f.Key, f.Value, now));
 
     /// <summary>
     /// A fact other than the reading's whose stored instant is no longer ahead: whatever the

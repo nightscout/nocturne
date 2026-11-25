@@ -901,6 +901,63 @@ public class AlertSweepJobWallClockTests
     }
 
     [NativeFact]
+    public async Task A_sweep_whose_clock_notice_needs_the_reading_reports_it_once()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(true);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.NeedsReadingReport(It.IsAny<DateTime>()), Times.Once);
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_whose_clock_notice_needs_no_report_leaves_the_report_to_the_pass_that_measures_the_reading()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.AutoResolving.Add(new AutoResolveExcursionSnapshot(Guid.NewGuid(), Tenant, fixture.Rules[0]));
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(false);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_with_no_enabled_rule_and_a_clock_notice_needing_no_report_reports_nothing()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Rules.Clear();
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(false);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [NativeFact]
+    public async Task A_sweep_with_no_enabled_rule_reports_the_reading_once_when_the_clock_notice_needs_it()
+    {
+        var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow));
+        fixture.Rules.Clear();
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
+        fixture.ClockNotice.Setup(n => n.NeedsReadingReport(It.IsAny<DateTime>())).Returns(true);
+
+        await fixture.SweepAt(T0.AddMinutes(1));
+
+        fixture.ClockNotice.Verify(n => n.ReportReadingAsync(
+            It.IsAny<AlertReadingSelection>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [NativeFact]
     public async Task A_backstop_sweep_reports_the_reading_once()
     {
         var fixture = new Fixture(AlertConditionType.Composite, Or(NightWindow)) { NoEvaluationRecorded = true };

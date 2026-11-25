@@ -561,21 +561,25 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// Generates a JSON Schema from a configuration type based on attributes.
     /// Includes default values and environment variable names for UI display.
     /// </summary>
-    private static JsonDocument GenerateSchemaFromType(Type configType)
+    internal static JsonDocument GenerateSchemaFromType(Type configType)
     {
         var properties = new Dictionary<string, object>();
         var required = new List<string>();
         var secrets = new List<string>();
 
-        // Create an instance to get default values
+        // A type that cannot be instantiated still has a schema, without defaults.
         object? defaultInstance = null;
         try
         {
             defaultInstance = Activator.CreateInstance(configType);
         }
-        catch (Exception)
+        catch (TargetInvocationException)
         {
-            // Could not create default instance - continue without defaults
+            defaultInstance = null;
+        }
+        catch (MemberAccessException)
+        {
+            defaultInstance = null;
         }
 
         var allProps = configType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -630,21 +634,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
             // Get default value from instance
             object? defaultValue = null;
-            if (defaultInstance != null)
-            {
-                try
-                {
-                    defaultValue = property.GetValue(defaultInstance);
-                }
-                catch (TargetInvocationException)
-                {
-                    continue;
-                }
-                catch (InvalidOperationException)
-                {
-                    continue;
-                }
-            }
+            if (defaultInstance != null && !TryGetValue(property, defaultInstance, out defaultValue))
+                continue;
 
             var propertySchema = GeneratePropertySchema(
                 property.PropertyType, connectorPropAttr, envPrefix, defaultValue);
@@ -683,7 +674,27 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         return JsonDocument.Parse(json);
     }
 
-    private static Dictionary<string, object?> GetEffectiveConfiguration(IConnectorConfiguration config)
+    /// <summary>Reads a property whose getter may throw; such a property has no value to show.</summary>
+    private static bool TryGetValue(PropertyInfo property, object instance, out object? value)
+    {
+        try
+        {
+            value = property.GetValue(instance);
+            return true;
+        }
+        catch (TargetInvocationException)
+        {
+            value = null;
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            value = null;
+            return false;
+        }
+    }
+
+    internal static Dictionary<string, object?> GetEffectiveConfiguration(IConnectorConfiguration config)
     {
         var result = new Dictionary<string, object?>();
         var configType = config.GetType();
@@ -704,15 +715,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 && !supportedDataTypes.Contains(gatedDataType))
                 continue;
 
-            object? value = null;
-            try
-            {
-                value = property.GetValue(config);
-            }
-            catch
-            {
+            if (!TryGetValue(property, config, out var value))
                 continue;
-            }
 
             if (value != null && property.PropertyType.IsEnum)
             {

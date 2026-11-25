@@ -27,6 +27,7 @@ using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 
 using V4Models = Nocturne.Core.Models.V4;
+using NoteEntity = Nocturne.Infrastructure.Data.Entities.V4.NoteEntity;
 
 namespace Nocturne.API.Services.V4;
 
@@ -1063,6 +1064,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         List<Guid> activationIds = [];
         // Each table's drop commits on its own, so what committed is reported even when a later drop fails.
         List<Type> committed = [];
+        var completed = false;
         try
         {
             using (SystemAttributedBatchWrites(_auditContext))
@@ -1095,17 +1097,17 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
                         droppedSpans, nameof(StateSpan));
                 }
             }
+
+            completed = true;
         }
         finally
         {
-            await ReportWrittenAsync(committed);
+            if (!completed)
+                await ReportWrittenAsync(committed);
         }
 
-        if (tableDrops.ContainsKey(typeof(V4Models.ProfileActivation)))
-            await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
-
-        if (origin == WriteOrigin.Live)
-            await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+        await SettleAfterDeleteAsync(
+            new Removals(committed, deviceEventIds, activationIds), announce: true, react: origin == WriteOrigin.Live, ct);
 
         return [.. tableDrops.Values.SelectMany(ids => ids).Concat(spanDrops)];
     }
@@ -2295,59 +2297,16 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         DuplicateDelete duplicates = DuplicateDelete.EveryCopy, Guid[]? carbIntakes = null, bool withSpans = false)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var scope = $"legacy_id={string.Join(",", legacyIds)}";
-        // These deletes bypass the repository chokepoint. Its device-event reaction is run below; the v4-native delete broadcast is deferred to the glucose-unification follow-up.
-        var (deleted, deviceEventIds, activationIds, written) = await db.ExecuteInTransactionAsync(async token =>
-        {
-            var count = 0;
-            List<Guid> deviceEvents = [];
-            List<Guid> activations = [];
-            List<Type> lostRows = [];
-            foreach (var table in DecomposedTreatmentTables.All)
-            {
-                var result = await table.SoftDeleteAsync(
-                    db, legacyIds, source: null, _auditContext, scope, duplicates, token);
-                count += result.Count;
-                if (result.Count > 0)
-                    lostRows.Add(table.Model);
-                if (table.Model == typeof(V4Models.DeviceEvent))
-                    deviceEvents = result.Entities;
-                if (table.Model == typeof(V4Models.ProfileActivation))
-                    activations = result.Entities;
-            }
-
-            if (carbIntakes is { Length: > 0 })
-            {
-                var carbs = await db.AuditedSoftDeleteAsync(
-                    db.CarbIntakes.Where(c => carbIntakes.Contains(c.Id)), _auditContext, scope, token, duplicates);
-                count += carbs;
-                if (carbs > 0)
-                    lostRows.Add(typeof(V4Models.CarbIntake));
-            }
-
-            if (withSpans)
-            {
-                var spans = await db.AuditedSoftDeleteAsync(
-                    StoredTreatmentSpans(db, legacyIds), _auditContext, scope, token, duplicates);
-                count += spans;
-                if (spans > 0)
-                    lostRows.Add(typeof(StateSpan));
-            }
-
-            return (count, deviceEvents, activations, lostRows);
-        }, ct: ct);
-
-        if (deleted > 0)
-        {
-            Logger.LogDebug("Soft-deleted {Count} v4 records for {Treatments} legacy treatment(s)", deleted, legacyIds.Length);
-            await ReportWrittenAsync(written);
-            await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
-        }
-
-        if (origin == WriteOrigin.Live)
-            await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
-
-        return deleted;
+        return await DeleteDecomposedAsync(
+            db,
+            new DecomposedDelete(
+                legacyIds, Source: null, $"legacy_id={string.Join(",", legacyIds)}", duplicates,
+                Spans: withSpans ? StoredTreatmentSpans(db, legacyIds) : null,
+                CarbIntakes: carbIntakes,
+                ServedNotes: null),
+            react: origin == WriteOrigin.Live,
+            announceNothingDeleted: false,
+            ct);
     }
 
     /// <inheritdoc />
@@ -2359,47 +2318,111 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             return 0;
 
         var ids = legacyIds.ToArray();
-        var scope = $"data_source={source}";
-
         var spans = LegacyTreatmentTables.ServedStateSpansFromSource(db, source)
             .Where(s => ids.Contains(s.LegacyId!));
+        var spanKeys = spans.Select(s => s.LegacyId!);
+        return await DeleteDecomposedAsync(
+            db,
+            new DecomposedDelete(
+                ids, source, $"data_source={source}", DuplicateDelete.PromoteSurvivor,
+                Spans: spans,
+                CarbIntakes: null,
+                ServedNotes: db.Notes.Where(n => n.DataSource == source && n.LegacyId != null && spanKeys.Contains(n.LegacyId))),
+            react: true,
+            announceNothingDeleted: true,
+            ct);
+    }
 
-        var (deleted, deviceEventIds, activationIds, written) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+    /// <summary>
+    /// What a delete of decomposed rows takes: the decomposed tables' rows under the legacy ids, of
+    /// one data source or of every source (<c>Source</c> null), with the state spans and carb intakes
+    /// (by row id) deleted beside them. <c>ServedNotes</c> are notes served as part of another record:
+    /// they are counted off the total, so the delete reports the treatments it took rather than the rows.
+    /// </summary>
+    private sealed record DecomposedDelete(
+        string[] LegacyIds, string? Source, string Scope, DuplicateDelete Duplicates,
+        IQueryable<StateSpanEntity>? Spans, Guid[]? CarbIntakes, IQueryable<NoteEntity>? ServedNotes);
 
-            var spanKeys = spans.Select(s => s.LegacyId!);
-            var count = -await db.Notes
-                .Where(n => n.DataSource == source && n.LegacyId != null && spanKeys.Contains(n.LegacyId))
-                .CountAsync(ct);
-            List<Guid> deviceEvents = [];
-            List<Guid> activations = [];
-            List<Type> lostRows = [];
-            foreach (var table in DecomposedTreatmentTables.All)
-            {
-                var result = await table.SoftDeleteAsync(db, ids, source, _auditContext, scope, DuplicateDelete.PromoteSurvivor, ct);
-                count += result.Count;
-                if (result.Count > 0)
-                    lostRows.Add(table.Model);
-                if (table.Model == typeof(V4Models.DeviceEvent))
-                    deviceEvents = result.Entities;
-                if (table.Model == typeof(V4Models.ProfileActivation))
-                    activations = result.Entities;
-            }
+    /// <summary>The tables that lost rows, and the device events and profile activations among them, by row id.</summary>
+    private sealed record Removals(List<Type> Tables, List<Guid> DeviceEventIds, List<Guid> ActivationIds);
 
-            var spansDeleted = await db.AuditedSoftDeleteAsync(spans, _auditContext, scope, ct);
-            count += spansDeleted;
-            if (spansDeleted > 0)
-                lostRows.Add(typeof(StateSpan));
+    /// <summary>
+    /// Sweeps the decomposed tables in one transaction, since a failure on a later table must not leave
+    /// the treatment half deleted, and settles after its commit. These deletes bypass the repository
+    /// chokepoint; its device-event reaction is run by <see cref="SettleAfterDeleteAsync"/>, and the
+    /// v4-native delete broadcast is deferred to the glucose-unification follow-up. The device events
+    /// the delete took reach the <see cref="IDeviceEventReactor"/> only when <paramref name="react"/>;
+    /// a delete that took nothing settles only when <paramref name="announceNothingDeleted"/>.
+    /// </summary>
+    private async Task<int> DeleteDecomposedAsync(
+        NocturneDbContext db, DecomposedDelete delete, bool react, bool announceNothingDeleted, CancellationToken ct)
+    {
+        var (deleted, removed) = await db.ExecuteInTransactionAsync(
+            token => SweepDecomposedTablesAsync(db, delete, token), ct: ct);
 
-            await transaction.CommitAsync(ct);
-            return (count, deviceEvents, activations, lostRows);
-        });
+        if (deleted > 0)
+            Logger.LogDebug(
+                "Soft-deleted {Count} v4 records for {Treatments} legacy treatment(s)", deleted, delete.LegacyIds.Length);
 
-        await ReportWrittenAsync(written);
-        await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
-        await ReactToDeletedDeviceEventsAsync(deviceEventIds, ct);
+        await SettleAfterDeleteAsync(removed, announce: deleted > 0 || announceNothingDeleted, react, ct);
         return deleted;
+    }
+
+    private async Task<(int Count, Removals Removed)> SweepDecomposedTablesAsync(
+        NocturneDbContext db, DecomposedDelete delete, CancellationToken ct)
+    {
+        var count = delete.ServedNotes is null ? 0 : -await delete.ServedNotes.CountAsync(ct);
+        List<Guid> deviceEvents = [];
+        List<Guid> activations = [];
+        List<Type> lostRows = [];
+        foreach (var table in DecomposedTreatmentTables.All)
+        {
+            var result = await table.SoftDeleteAsync(
+                db, delete.LegacyIds, delete.Source, _auditContext, delete.Scope, delete.Duplicates, ct);
+            count += result.Count;
+            if (result.Count > 0)
+                lostRows.Add(table.Model);
+            if (table.Model == typeof(V4Models.DeviceEvent))
+                deviceEvents = result.Entities;
+            if (table.Model == typeof(V4Models.ProfileActivation))
+                activations = result.Entities;
+        }
+
+        if (delete.CarbIntakes is { Length: > 0 } carbIntakes)
+        {
+            var carbs = await db.AuditedSoftDeleteAsync(
+                db.CarbIntakes.Where(c => carbIntakes.Contains(c.Id)), _auditContext, delete.Scope, ct, delete.Duplicates);
+            count += carbs;
+            if (carbs > 0)
+                lostRows.Add(typeof(V4Models.CarbIntake));
+        }
+
+        if (delete.Spans is not null)
+        {
+            var spans = await db.AuditedSoftDeleteAsync(delete.Spans, _auditContext, delete.Scope, ct, delete.Duplicates);
+            count += spans;
+            if (spans > 0)
+                lostRows.Add(typeof(StateSpan));
+        }
+
+        return (count, new Removals(lostRows, deviceEvents, activations));
+    }
+
+    /// <summary>
+    /// After a delete's commit: announces the tables that lost rows, settles the profile activations
+    /// it removed, and, when <paramref name="react"/>, runs the device-event reaction. Without
+    /// <paramref name="announce"/> the first two are skipped: a delete that took nothing has nothing to announce.
+    /// </summary>
+    private async Task SettleAfterDeleteAsync(Removals removed, bool announce, bool react, CancellationToken ct)
+    {
+        if (announce)
+        {
+            await ReportWrittenAsync(removed.Tables);
+            await _profileActivationWriter.ResettleAfterRemovalAsync(removed.ActivationIds, ct);
+        }
+
+        if (react)
+            await ReactToDeletedDeviceEventsAsync(removed.DeviceEventIds, ct);
     }
 
     /// <summary>
@@ -2736,8 +2759,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             return (deleted, lostRows);
         }, ct: ct);
 
-        await ReportWrittenAsync(written);
-        await _profileActivationWriter.ResettleAfterRemovalAsync(activationIds, ct);
+        await SettleAfterDeleteAsync(new Removals(written, [], activationIds), announce: true, react: false, ct);
         Logger.LogInformation("BulkDelete: removed {Total} v4 treatment records from={From} to={To}", total, from, to);
         return total;
     }
