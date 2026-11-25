@@ -65,7 +65,7 @@ public class CompatibilityController : ControllerBase
         return Ok(
             new ProxyConfigurationDto
             {
-                NightscoutUrl = _nightscoutConfig?.Url is { Length: > 0 } url ? NightscoutAddress.Masked(url) : string.Empty,
+                NightscoutUrl = _nightscoutConfig?.Url is { Length: > 0 } url ? NightscoutAddress.Shown(url) : string.Empty,
                 Enabled = _configuration.Enabled,
                 EnableDetailedLogging = _configuration.EnableDetailedLogging,
             }

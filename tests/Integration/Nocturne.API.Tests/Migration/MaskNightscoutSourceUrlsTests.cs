@@ -31,6 +31,7 @@ namespace Nocturne.API.Tests.Integration.Migration;
 public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
 {
     private const string PriorMigration = "20261124082620_RekeyConnectorResumeState";
+    private const string ThisMigration = "20261124161251_MaskNightscoutSourceUrls";
 
     internal const string Secret = "AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI";
     internal const string CurrentUrl = $"https://ns.example.com/{Secret}";
@@ -132,13 +133,16 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
             await InsertRunAsync(Guid.Parse(id), TenantC, "Api", "recorded before the rewrite");
 
         await using (var context = new NocturneDbContext(Options(_migrator)))
-            await context.GetService<IMigrator>().MigrateAsync();
+            await context.GetService<IMigrator>().MigrateAsync(ThisMigration);
 
         Sources = await ReadSourcesAsync();
         Runs = await ReadRunsAsync();
         await ExecuteAsync(MaskNightscoutSourceUrls.RewriteSql);
         SourcesAfterSecondRun = await ReadSourcesAsync();
         RunsAfterSecondRun = await ReadRunsAsync();
+
+        await using (var context = new NocturneDbContext(Options(_migrator)))
+            await context.GetService<IMigrator>().MigrateAsync();
 
         _reader = new NocturneDbContext(Options(database.AppConnectionString)) { TenantId = TenantA };
         var service = new MigrationJobService(
@@ -359,7 +363,7 @@ public class MaskNightscoutSourceUrlsTests(MaskNightscoutSourceUrlsFixture fixtu
     public void A_later_import_of_the_same_site_attaches_to_the_rewritten_row()
     {
         fixture.ReimportSource.Should().Be(MaskNightscoutSourceUrlsFixture.Current);
-        fixture.ReimportDescription.Should().Be(MaskedUrl);
+        fixture.ReimportDescription.Should().Be(NightscoutAddress.Shown(MaskNightscoutSourceUrlsFixture.ReimportUrl));
         fixture.ApiSourcesOfTenantAAfterReimport.Should().Be(2, "the site and the scheme-less one, and no new row");
     }
 }
