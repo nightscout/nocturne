@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using Nocturne.API.Services.V4;
 using Nocturne.API.Services.ProfileActivations;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.V4;
@@ -97,6 +99,75 @@ public class ProfileActivationWriterBatchTests : IDisposable
         var row = await ReadAsync(stored.Id);
         row.Percentage.Should().Be(100, "its replacement was refused");
         row.EndTimestamp.Should().Be(T0.AddHours(2), "the switch the store took ends the row as read");
+    }
+
+    [Fact]
+    public async Task APermanentSwitchRewrittenAsTemporaryLetsTheSwitchBeforeItRunOnAfterItEnds()
+    {
+        var (before, rewritten, after) = await StoreThreeAsync(durationMs: null);
+        (await ReadAsync(before.Id)).EndTimestamp.Should().Be(T0.AddHours(1));
+
+        await RewriteAsync(rewritten, durationMs: 1_800_000);
+
+        (await ReadAsync(rewritten.Id)).EndTimestamp.Should().Be(T0.AddHours(1).AddMinutes(30));
+        (await ReadAsync(before.Id)).EndTimestamp.Should().Be(T0.AddHours(3), "it runs again from where the temporary switch ends until the next permanent one");
+        (await ReadAsync(after.Id)).EndTimestamp.Should().BeNull();
+        (await _context.ProfileActivations.CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ATemporarySwitchRewrittenAsPermanentEndsTheSwitchBeforeItAtItsStart()
+    {
+        var (before, rewritten, after) = await StoreThreeAsync(durationMs: 1_800_000);
+        (await ReadAsync(before.Id)).EndTimestamp.Should().Be(T0.AddHours(3));
+
+        await RewriteAsync(rewritten, durationMs: null);
+
+        (await ReadAsync(before.Id)).EndTimestamp.Should().Be(T0.AddHours(1));
+        (await ReadAsync(rewritten.Id)).EndTimestamp.Should().Be(T0.AddHours(3));
+        (await ReadAsync(after.Id)).EndTimestamp.Should().BeNull();
+        (await _context.ProfileActivations.CountAsync()).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ASwitchShortenedInPlaceReresolvesTheRatesInTheTimeItGaveUp()
+    {
+        var reresolver = new Mock<ITempBasalRateReresolver>();
+        var writer = new ProfileActivationWriter(_repository, reresolver.Object);
+        var stored = Requested("Sick", T0);
+        stored.RequestedDurationMs = 3_600_000;
+        await writer.WriteBatchAsync([new(stored, null)], StoreRefusing(null), CancellationToken.None);
+        reresolver.Invocations.Clear();
+        var shortened = Requested("Sick", T0);
+        shortened.Id = stored.Id;
+        shortened.RequestedDurationMs = 1_800_000;
+
+        await writer.WriteBatchAsync([new(shortened, await ReadAsync(stored.Id))], StoreRefusing(null), CancellationToken.None);
+
+        var gaveUp = T0.AddMinutes(45);
+        reresolver.Verify(r => r.AfterActivationsChangedAsync(
+            It.Is<IReadOnlyCollection<(DateTime Start, DateTime? End)>>(spans =>
+                spans.Any(s => s.Start <= gaveUp && s.End >= gaveUp)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private async Task<(ProfileActivation Before, ProfileActivation Middle, ProfileActivation After)> StoreThreeAsync(long? durationMs)
+    {
+        var before = Requested("Weekday", T0);
+        var middle = Requested("Sick", T0.AddHours(1));
+        middle.RequestedDurationMs = durationMs;
+        var after = Requested("Weekend", T0.AddHours(3));
+        await _writer.WriteBatchAsync([new(before, null), new(middle, null), new(after, null)], StoreRefusing(null), CancellationToken.None);
+        return (before, middle, after);
+    }
+
+    private async Task RewriteAsync(ProfileActivation stored, long? durationMs)
+    {
+        var replacement = Requested(stored.BaseProfileName!, stored.StartTimestamp);
+        replacement.Id = stored.Id;
+        replacement.LegacyId = stored.LegacyId;
+        replacement.RequestedDurationMs = durationMs;
+        await _writer.WriteBatchAsync([new(replacement, await ReadAsync(stored.Id))], StoreRefusing(null), CancellationToken.None);
     }
 
     private Func<IReadOnlyList<ProfileActivation>, Task<IReadOnlyList<ProfileActivation?>>> StoreRefusing(ProfileActivation? refused) =>
