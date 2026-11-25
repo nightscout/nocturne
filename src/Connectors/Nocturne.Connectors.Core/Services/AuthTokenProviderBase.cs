@@ -54,6 +54,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
     private bool _attemptRefusedCredentials;
 
     /// <summary>
+    ///     Whether any request sent by <see cref="SendSignInRequestAsync"/> in the current login attempt
+    ///     ended in a transport failure or a retryable status that its client's retry handler had
+    ///     already retried.
+    /// </summary>
+    private bool _attemptSpentByRetryHandler;
+
+    /// <summary>
     ///     How much a failed login says about the credentials. Only a source that refused them earns
     ///     the wording that sends someone to their password: telling a person to change a working one
     ///     during a source's outage costs them their data while they chase a fault that is not theirs.
@@ -303,6 +310,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     Attempts <paramref name="operation"/> under the shared connector retry loop; see
     ///     <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and delay contract.
     /// </summary>
+    /// <remarks>
+    ///     A sign-in has one retry mechanism per client. The client's retry handler owns transport
+    ///     failures and retryable statuses; this loop signs in again only after a refusal it can act
+    ///     on. A request sent through <see cref="SendSignInRequestAsync"/> on a client with a handler
+    ///     is never attempted again here for a transport failure or a retryable status. A client with
+    ///     no handler leaves transport retries to this loop.
+    /// </remarks>
     /// <param name="operation">
     ///     Receives the 0-based attempt index and returns the token it acquired, or null plus whether
     ///     the failure is worth another attempt.
@@ -319,6 +333,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
             async (attempt, _) =>
             {
                 _attemptRefusedCredentials = false;
+                _attemptSpentByRetryHandler = false;
                 try
                 {
                     var (result, shouldRetry) = await operation(attempt);
@@ -326,7 +341,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
                         return RetryStep<T>.Complete(result);
 
                     if (shouldRetry)
-                        return RetryStep<T>.RetryAfterDelay;
+                        return RetryOrStop();
 
                     // The source answered with something no further attempt can change. Only an answer
                     // the provider recorded as a refusal says the credentials were the problem.
@@ -351,7 +366,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
                         attempt + 1);
 
                     if (shouldRetry)
-                        return RetryStep<T>.RetryAfterDelay;
+                        return RetryOrStop();
 
                     RecordLoginAnswer(ex.StatusCode!.Value);
                     _signInFailure = _attemptRefusedCredentials
@@ -379,6 +394,40 @@ public abstract class AuthTokenProviderBase<TConfig>(
                 return null;
             },
             cancellationToken);
+
+        RetryStep<T> RetryOrStop()
+        {
+            if (!_attemptSpentByRetryHandler)
+                return RetryStep<T>.RetryAfterDelay;
+
+            _logger.LogError("{OperationName} failed after its retry handler stopped retrying", operationName);
+            return RetryStep<T>.Complete(default);
+        }
+    }
+
+    /// <summary>
+    ///     Sends a request of a sign-in, marking it repeatable within the tenant's attempt budget so a
+    ///     retry handler on <see cref="_httpClient"/> may send it again. Which mechanism retries the
+    ///     sign-in is stated on <see cref="ExecuteWithRetryAsync{T}"/>.
+    /// </summary>
+    protected async Task<HttpResponseMessage> SendSignInRequestAsync(
+        HttpRequestMessage request, TConfig config, CancellationToken cancellationToken)
+    {
+        request.MarkRepeatable(LoginAttempts(config));
+
+        try
+        {
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            _attemptSpentByRetryHandler |= RepeatableRequest.PassedRetryHandler(request) && response.IsRetryableError();
+            return response;
+        }
+        catch (HttpRequestException ex) when (
+            RepeatableRequest.PassedRetryHandler(request)
+            && (ex.StatusCode is null || HttpResponseExtensions.IsRetryableStatusCode(ex.StatusCode)))
+        {
+            _attemptSpentByRetryHandler = true;
+            throw;
+        }
     }
 
     /// <summary>

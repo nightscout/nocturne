@@ -79,9 +79,64 @@ public class ConnectorClientRetryTests
     {
         var requests = await RequestsSentAsync(
             new HttpRequestMessage(HttpMethod.Post, Url) { Content = new StringContent("{}") }
-                .MarkRepeatable());
+                .MarkRepeatable(maxAttempts: 4));
 
         requests.Should().BeGreaterThan(1);
+    }
+
+    /// <summary>
+    /// A sign-in carries the tenant's attempt budget, so the handler sends it no more often than
+    /// that, however many retries the handler would otherwise spend.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task A_marked_post_is_sent_no_more_than_its_attempt_budget(int maxAttempts)
+    {
+        var requests = await RequestsSentAsync(
+            new HttpRequestMessage(HttpMethod.Post, Url) { Content = new StringContent("{}") }
+                .MarkRepeatable(maxAttempts));
+
+        requests.Should().Be(maxAttempts);
+    }
+
+    [Fact]
+    public async Task A_budget_above_the_handlers_ceiling_is_spent_to_the_ceiling()
+    {
+        var requests = await RequestsSentAsync(
+            new HttpRequestMessage(HttpMethod.Post, Url) { Content = new StringContent("{}") }
+                .MarkRepeatable(maxAttempts: 10));
+
+        requests.Should().Be(4, "the handler's own ceiling is one send and three retries");
+    }
+
+    [Fact]
+    public async Task A_request_that_went_through_the_handler_says_so()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url);
+
+        await RequestsSentAsync(request);
+
+        RepeatableRequest.PassedRetryHandler(request).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_request_on_a_client_without_the_handler_does_not()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services
+            .AddHttpClient(ClientName)
+            .ConfigureConnectorClient(null)
+            .ConfigurePrimaryHttpMessageHandler(() => new FailingHandler());
+        await using var provider = services.BuildServiceProvider();
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(ClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url);
+
+        using var response = await client.SendAsync(request);
+
+        RepeatableRequest.PassedRetryHandler(request).Should().BeFalse();
     }
 
     [Theory]

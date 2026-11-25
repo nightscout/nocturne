@@ -11,18 +11,23 @@ namespace Nocturne.Connectors.Core.Extensions;
 /// </summary>
 /// <remarks>
 ///     Mark a request only when sending it twice changes nothing: a sign-in, a token refresh, or a
-///     query sent as POST. A request that creates, changes or deletes data is never marked.
+///     query sent as POST. A request that creates, changes or deletes data is never marked. A
+///     repeatable request that carries no attempt budget gets the handler's own ceiling.
 /// </remarks>
 public static class RepeatableRequest
 {
     private static readonly HttpRequestOptionsKey<bool> RepeatableKey = new("Nocturne.Repeatable");
+    private static readonly HttpRequestOptionsKey<int> AttemptBudgetKey = new("Nocturne.AttemptBudget");
+    private static readonly HttpRequestOptionsKey<bool> PassedRetryHandlerKey = new("Nocturne.PassedRetryHandler");
 
     /// <summary>
-    ///     Marks <paramref name="request"/> as safe to send again.
+    ///     Marks <paramref name="request"/> as safe to send again, at most <paramref name="maxAttempts"/>
+    ///     sends in all. The connector retry handler's own ceiling still applies.
     /// </summary>
-    public static HttpRequestMessage MarkRepeatable(this HttpRequestMessage request)
+    public static HttpRequestMessage MarkRepeatable(this HttpRequestMessage request, int maxAttempts)
     {
         request.Options.Set(RepeatableKey, true);
+        request.Options.Set(AttemptBudgetKey, Math.Max(1, maxAttempts));
         return request;
     }
 
@@ -35,13 +40,43 @@ public static class RepeatableRequest
             || (request.Options.TryGetValue(RepeatableKey, out var marked) && marked));
 
     /// <summary>
-    ///     The retry strategy's <c>ShouldHandle</c>: a transient outcome of a repeatable request.
+    ///     Whether <paramref name="request"/> went through a connector retry handler, which is then
+    ///     the one that sends it again.
     /// </summary>
-    public static ValueTask<bool> ShouldRetry(RetryPredicateArguments<HttpResponseMessage> args) =>
-        ValueTask.FromResult(
-            IsRepeatable(args.Context.GetRequestMessage())
+    internal static bool PassedRetryHandler(HttpRequestMessage request) =>
+        request.Options.TryGetValue(PassedRetryHandlerKey, out var passed) && passed;
+
+    /// <summary>
+    ///     The retry strategy's <c>ShouldHandle</c>: a transient outcome of a repeatable request
+    ///     that has sends left in its budget.
+    /// </summary>
+    public static ValueTask<bool> ShouldRetry(RetryPredicateArguments<HttpResponseMessage> args)
+    {
+        var request = args.Context.GetRequestMessage();
+
+        return ValueTask.FromResult(
+            IsRepeatable(request)
+                && HasSendsLeft(request!, args.AttemptNumber)
                 && HttpClientResiliencePredicates.IsTransient(args.Outcome)
         );
+    }
+
+    /// <summary>
+    ///     Records on each request that it went through the retry handler. Sits just ahead of the
+    ///     handler, so the record is made whether or not the handler goes on to send it again.
+    /// </summary>
+    internal sealed class PassageRecorder : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            request.Options.Set(PassedRetryHandlerKey, true);
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
+
+    private static bool HasSendsLeft(HttpRequestMessage request, int attemptNumber) =>
+        !request.Options.TryGetValue(AttemptBudgetKey, out var budget) || attemptNumber + 1 < budget;
 
     private static bool IsSafeMethod(HttpMethod method) =>
         method == HttpMethod.Get || method == HttpMethod.Head || method == HttpMethod.Options;
