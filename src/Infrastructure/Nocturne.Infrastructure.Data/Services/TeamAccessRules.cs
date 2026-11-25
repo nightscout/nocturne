@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -23,6 +24,13 @@ public static class TeamAccessRules
             MemberScopeResolver.Resolve(effective, credential.AuthType, credential.Scopes),
             MemberScopeResolver.IsHistoryClamped(credential.LimitTo24Hours, membershipLimitTo24Hours, effective));
     }
+
+    /// <summary>
+    /// Whether the caller <paramref name="role"/> was read for may give it to a team: they may confer it,
+    /// and it holds permissions, all for data only.
+    /// </summary>
+    public static bool MayGiveToTeam(TenantRoleDto role) =>
+        role.CanGrant && role.Permissions.Count > 0 && Scope.IsDataOnly(role.Permissions);
 
     /// <summary>
     /// Why <paramref name="grant"/>'s limit or end is wider than the link suggests or than the

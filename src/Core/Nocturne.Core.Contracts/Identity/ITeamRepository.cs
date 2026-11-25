@@ -88,7 +88,7 @@ public interface ITeamRepository
     /// <summary>Of <paramref name="tenantIds"/>, the sites the team already has access to.</summary>
     Task<IReadOnlySet<Guid>> ListSitesWithAccessAsync(Guid teamId, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct);
 
-    /// <summary>The teams with access to <paramref name="tenantId"/>, by name.</summary>
+    /// <summary>The teams with access to <paramref name="tenantId"/>, by name, each with its staff waiting for approval first.</summary>
     Task<IReadOnlyList<TenantTeamAccess>> ListAccessOfTenantAsync(Guid tenantId, DateTime now, CancellationToken ct);
 
     /// <summary>The roles of <paramref name="tenantId"/> a team's access gives.</summary>

@@ -344,7 +344,8 @@ public partial class TeamRepository
                 a.TeamManagesStaff,
                 Staff = db.TeamSiteStaff
                     .Where(s => s.TeamTenantAccessId == a.Id && s.TeamMember!.Kind == TeamMemberKind.Staff)
-                    .OrderBy(s => s.TeamMember!.SysCreatedAt)
+                    .OrderBy(s => s.Status != TeamSiteStaffStatus.Pending)
+                    .ThenBy(s => s.TeamMember!.SysCreatedAt)
                     .ThenBy(s => s.TeamMemberId)
                     .Select(s => new
                     {
@@ -374,7 +375,8 @@ public partial class TeamRepository
                 s.DisplayName,
                 s.Status,
                 new TeamStaffNarrowing(s.RoleCeilingSlug, s.LimitTo24Hours, Utc(s.EndsAt)),
-                MembershipLiveness.HasEnded(s.EndsAt, now))).ToList())).ToList();
+                MembershipLiveness.HasEnded(s.EndsAt, now),
+                TeamSuggestableRoles.NameOf(s.RoleCeilingSlug))).ToList())).ToList();
     }
 
     /// <inheritdoc/>

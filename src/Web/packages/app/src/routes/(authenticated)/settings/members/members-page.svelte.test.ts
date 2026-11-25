@@ -4,6 +4,7 @@ import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
 import {
+  MemberReasonKind,
   RoleAccessLevel,
   type LockedOutMember,
   type MembershipRequestDto,
@@ -26,6 +27,10 @@ const mocks = vi.hoisted(() => ({
   getLockedOutMembers: vi.fn(),
   stopTeamAccess: vi.fn(),
   refreshTeamAccess: vi.fn(),
+  approveTeamStaff: vi.fn(),
+  declineTeamStaff: vi.fn(),
+  setTeamStaffRule: vi.fn(),
+  editTeamAccess: vi.fn(),
 }));
 
 let members: TenantMemberDto[];
@@ -68,6 +73,10 @@ vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
     return query;
   },
   stopTeamAccess: (teamId: string) => mocks.stopTeamAccess(teamId),
+  approveTeamStaff: mocks.approveTeamStaff,
+  declineTeamStaff: mocks.declineTeamStaff,
+  setTeamStaffRule: mocks.setTeamStaffRule,
+  editTeamAccess: mocks.editTeamAccess,
   revokeInvite: () => Promise.resolve(),
   createInvite: vi.fn(),
   removeMember: () => Promise.resolve(),
@@ -100,6 +109,11 @@ vi.mock("#lib/api/generated/memberRecoveries.generated.remote.js", () => ({
   },
   issueRecoveryCode: vi.fn(),
 }));
+vi.mock("$app/state", async () => {
+  const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
+  return { ...stub, page: reactiveFields({ ...stub.page }) };
+});
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 vi.mock("#lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
 vi.mock("#lib/components/members/MembershipRequestsCard.svelte", () => ({ default: () => {} }));
@@ -746,5 +760,204 @@ describe("members page listing the teams with access", () => {
     await expect.element(teams).toBeVisible();
     const block = browserPage.getByRole("heading", { name: "Members & invites" }).element().parentElement!;
     expect(block.contains(teams.element())).toBe(false);
+  });
+});
+
+describe("members page deciding about a team and its staff", () => {
+  const ownSubjectId = "55555555-5555-5555-5555-555555555555";
+  const clinicId = "66666666-6666-6666-6666-666666666666";
+  const nightsId = "88888888-8888-8888-8888-888888888888";
+  const wrenId = "99999999-9999-9999-9999-999999999999";
+  const ownerRole = { roleId: owner.id, name: "Owner", slug: "owner", permissions: ["*"] };
+  const viewerRole = { roleId: viewer.id, name: "Viewer", slug: "viewer", permissions: ["glucose.read"] };
+  const team = (teamId: string, teamName: string): TenantTeamAccess => ({
+    teamId,
+    teamName,
+    roles: [{ id: viewer.id, name: "Viewer", slug: "viewer" }],
+    limitTo24Hours: false,
+    hasEnded: false,
+    approvedByName: "Sam",
+    givenAt: "2026-11-01T00:00:00Z",
+    teamManagesStaff: false,
+    staff: [{ subjectId: wrenId, displayName: "Wren", status: "pending" }],
+  });
+  const caller = (reasons: TenantMemberDto["reasons"]): TenantMemberDto => ({
+    ...member,
+    id: "77777777-7777-7777-7777-777777777777",
+    subjectId: ownSubjectId,
+    name: "Casey",
+    roles: [ownerRole],
+    hasDirect: true,
+    reasons,
+  });
+  const directOwner = { kind: MemberReasonKind.Direct, roles: [ownerRole], hasEnded: false };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.effectivePermissions = ["members.manage"];
+    page.data.user = { subjectId: ownSubjectId };
+    page.data.limitTo24Hours = false;
+    lockedOut = [];
+    pendingRequests = [];
+    roles = [viewer, owner];
+    teamAccess = [team(clinicId, "Clinic")];
+    members = [member, caller([directOwner])];
+  });
+
+  afterEach(() => {
+    teamAccess = [];
+    roles = [viewer];
+    page.url = new URL("http://localhost");
+  });
+
+  it("defines staff and lists a team's staff to every reader of the member list", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect
+      .element(
+        browserPage.getByText(
+          "Staff are the people who work for a team. Approved staff can see this site through the team.",
+        ),
+      )
+      .toBeVisible();
+    await expect.element(browserPage.getByText("Waits for an owner's approval")).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
+  });
+
+  it("gives an owner by a direct reason the controls for the team and its staff", async () => {
+    render(MembersPage);
+
+    await expect.element(browserPage.getByRole("button", { name: "Approve Wren" })).toBeVisible();
+    await expect.element(browserPage.getByText("Waits for your approval")).toBeVisible();
+    await expect.element(browserPage.getByRole("button", { name: "Change the access of Clinic" })).toBeVisible();
+    await expect.element(browserPage.getByRole("switch")).toBeVisible();
+  });
+
+  it("gives no control to a member who manages members but is not an owner", async () => {
+    members = [member, caller([{ kind: MemberReasonKind.Direct, roles: [viewerRole], hasEnded: false }])];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
+    expect(browserPage.getByRole("button", { name: "Change the access of Clinic" }).elements()).toHaveLength(0);
+    expect(browserPage.getByRole("switch").elements()).toHaveLength(0);
+  });
+
+  it("gives no control to an owner whose direct reason has ended", async () => {
+    members = [member, caller([{ ...directOwner, hasEnded: true }])];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
+  });
+
+  it("gives no control to a caller whose owner role comes only from a team's reason", async () => {
+    members = [member, caller([{ kind: MemberReasonKind.Team, teamId: clinicId, roles: [ownerRole], hasEnded: false }])];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
+  });
+
+  it("gives no control to an owner without members.manage", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("Wren", { exact: true })).toBeVisible();
+    expect(browserPage.getByRole("button", { name: "Approve Wren" }).elements()).toHaveLength(0);
+  });
+
+  it("offers the edit only the roles the API lets the caller give a team", async () => {
+    roles = [{ ...viewer, canGiveToTeam: true }, { ...owner, canGiveToTeam: false }];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Change the access of Clinic" }).click();
+
+    const form = browserPage.getByRole("form", { name: "Change the access of Clinic" });
+    await expect.element(form.getByRole("checkbox", { name: "Viewer" })).toBeChecked();
+    expect(form.getByRole("checkbox", { name: "Owner" }).elements()).toHaveLength(0);
+  });
+
+  it("keeps the edit's 24-hour limit on for a caller who reads only the last 24 hours", async () => {
+    roles = [{ ...viewer, canGiveToTeam: true }];
+    page.data.limitTo24Hours = true;
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Change the access of Clinic" }).click();
+
+    const limit = browserPage.getByRole("checkbox", { name: "Only the last 24 hours" });
+    await expect.element(limit).toBeChecked();
+    await expect.element(limit).toBeDisabled();
+  });
+
+  it("scrolls to and focuses the team the page was opened for", async () => {
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+    teamAccess = [team(clinicId, "Clinic"), team(nightsId, "Nights")];
+    page.url = new URL(`http://localhost/settings/members?team=${nightsId}`);
+    render(MembersPage);
+
+    const linked = browserPage.getByRole("group", { name: "Nights" });
+    await expect.element(linked).toHaveFocus();
+    expect(scrolled.mock.contexts).toContain(linked.element());
+    scrolled.mockRestore();
+  });
+
+  it("scrolls to and focuses a second team when a new link opens the same page", async () => {
+    teamAccess = [team(clinicId, "Clinic"), team(nightsId, "Nights")];
+    page.url = new URL(`http://localhost/settings/members?team=${clinicId}`);
+    render(MembersPage);
+    await expect.element(browserPage.getByRole("group", { name: "Clinic" })).toHaveFocus();
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+
+    page.url = new URL(`http://localhost/settings/members?team=${nightsId}`);
+
+    const linked = browserPage.getByRole("group", { name: "Nights" });
+    await expect.element(linked).toHaveFocus();
+    expect(scrolled.mock.contexts).toContain(linked.element());
+    scrolled.mockRestore();
+  });
+
+  it("bounds the end of the edit by the caller's direct reason, not by a team reason that ends later", async () => {
+    roles = [{ ...viewer, canGiveToTeam: true }];
+    members = [
+      member,
+      {
+        ...caller([
+          { ...directOwner, accessEndsAt: accessEndInstant("2099-07-14") },
+          { kind: MemberReasonKind.Team, teamId: nightsId, roles: [viewerRole], hasEnded: false },
+        ]),
+        accessEndsAt: undefined,
+      },
+    ];
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Change the access of Clinic" }).click();
+
+    const form = browserPage.getByRole("form", { name: "Change the access of Clinic" });
+    await expect.element(form.getByLabelText("Access ends", { exact: true })).toHaveAttribute("max", "2099-07-14");
+    await expect.element(form.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("changes nothing when the page is opened for a team it does not list", async () => {
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
+    page.url = new URL("http://localhost/settings/members?team=00000000-0000-0000-0000-000000000000");
+    render(MembersPage);
+
+    const listed = browserPage.getByRole("group", { name: "Clinic" });
+    await expect.element(listed).toBeVisible();
+    await expect.element(listed).not.toHaveFocus();
+    expect(scrolled).not.toHaveBeenCalled();
+    scrolled.mockRestore();
+  });
+
+  it("approves through the page with the team and the staff member", async () => {
+    mocks.approveTeamStaff.mockResolvedValue(undefined);
+    render(MembersPage);
+
+    await browserPage.getByRole("button", { name: "Approve Wren" }).click();
+
+    await expect.element(browserPage.getByText("Staff member approved.")).toBeVisible();
+    expect(mocks.approveTeamStaff).toHaveBeenCalledWith({ teamId: clinicId, subjectId: wrenId });
   });
 });

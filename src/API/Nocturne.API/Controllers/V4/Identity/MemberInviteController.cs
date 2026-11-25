@@ -340,7 +340,7 @@ public class MemberInviteController : ControllerBase
     /// <summary>Stops a team's access to the current tenant at once.</summary>
     [HttpDelete("team-access/{teamId:guid}")]
     [RequireScope(Scope.MembersManage)]
-    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMemberHistory"])]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -966,8 +966,8 @@ public sealed record EditTeamAccessRequest
 
     public required bool LimitTo24Hours { get; init; }
 
-    /// <summary>When the access ends; null for no end.</summary>
-    public required DateTimeOffset? AccessEndsAt { get; init; }
+    /// <summary>When the access ends. Absent or null means the access does not end.</summary>
+    public DateTimeOffset? AccessEndsAt { get; init; }
 }
 
 /// <param name="AccessEndsAt">When the membership ends; null when it does not.</param>
