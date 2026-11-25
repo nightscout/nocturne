@@ -129,25 +129,12 @@ public partial class TeamRepository
         if (await db.TeamTenantAccess.AnyAsync(a => a.TeamId == id && a.TenantId == grant.TenantId, ct))
             return (Refused(TeamAccessRefusal.AlreadyGiven), null);
 
-        var roleIds = grant.RoleIds.Distinct().ToList();
-        if (roleIds.Count == 0)
-            return (Refused(TeamAccessRefusal.NoRoles), null);
-
-        var roles = await db.TenantRoles.AsNoTracking()
-            .Where(r => r.TenantId == grant.TenantId && roleIds.Contains(r.Id))
-            .Select(r => new { r.Id, r.Slug, r.Permissions })
-            .ToListAsync(ct);
-        if (roles.Count != roleIds.Count)
-            return (Refused(TeamAccessRefusal.RoleNotInTenant), null);
-        if (roles.Any(r => !Scope.IsDataOnly(r.Permissions)))
-            return (Refused(TeamAccessRefusal.RoleAdministrative), null);
+        var (roles, limited, rolesRefused) = await OwnerRolesAsync(db, grant.TenantId, grant.RoleIds, direct, approver, ct);
+        if (rolesRefused is { } refused)
+            return (Refused(refused), null);
         var suggested = RoleSeeds.Permissions[link.SuggestedRoleSlug];
         if (roles.Any(r => Scope.ValidateGrant(r.Permissions, suggested) is not null))
             return (Refused(TeamAccessRefusal.RoleWiderThanLink), null);
-
-        var (scopes, limited) = TeamAccessRules.Approver(direct.EffectivePermissions, direct.LimitTo24Hours, approver);
-        if (roles.Any(r => Scope.ValidateGrant(r.Permissions, scopes) is not null))
-            return (Refused(TeamAccessRefusal.RoleWiderThanApprover), null);
         if (TeamAccessRules.Refusal(SuggestionOf(link), limited, direct.AccessEndsAt, grant, now) is { } narrowing)
             return (Refused(narrowing), null);
 
@@ -162,10 +149,10 @@ public partial class TeamRepository
             ApprovedBySubjectId = approver.SubjectId,
             CreatedFromLinkId = link.Id,
             TeamManagesStaff = grant.TeamManagesStaff,
-            AccessRoles = roleIds.Select(roleId => new TeamTenantAccessRoleEntity
+            AccessRoles = roles.Select(role => new TeamTenantAccessRoleEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantRoleId = roleId,
+                TenantRoleId = role.Id,
             }).ToList(),
         };
         db.TeamTenantAccess.Add(access);
@@ -225,6 +212,105 @@ public partial class TeamRepository
         return membership.Roles.Any(r => r.Slug == RoleSeeds.Owner)
             ? (OwnerDecision.Decided, direct)
             : (OwnerDecision.NotOwner, null);
+    }
+
+    /// <summary>
+    /// Sets what the team's access to <paramref name="tenantId"/> gives to <paramref name="terms"/>, as
+    /// <paramref name="editor"/>, on <paramref name="unit"/>, pinned to the tenant, and saves it. Returns with
+    /// it the team reasons that bring the team's staff there into line with it
+    /// (<see cref="TeamReasonChanges.SyncAsync"/>). Terms that change nothing write nothing.
+    /// </summary>
+    /// <remarks>
+    /// Bounded as an approval is (<see cref="LockAccessApprovalAsync"/>), by the editor's direct reason and
+    /// credential and never by the link the access was made from, since an edit can give the team more. It
+    /// leaves each staff member's decision and the switch as they are, so it sends no one back to waiting.
+    /// Takes the rows of the team's staff, the site's owners lock, the team's manager lock and the site's team
+    /// access lock (<see cref="MembershipLock"/>). Null, writing nothing, when a staff member joined between
+    /// the read of the staff and those locks: the caller runs it again.
+    /// </remarks>
+    public static async Task<(TeamAccessEdit Edit, TeamReasonChanges? Changes)?> LockAccessEditAsync(
+        DbUnitOfWork unit, Guid tenantId, Guid teamId, TeamAccessApproverCredential editor, TeamAccessTerms terms, DateTime now,
+        CancellationToken ct)
+    {
+        var db = unit.Context;
+        var locked = (await StaffSubjectsAsync(db, teamId, ct)).ToHashSet();
+        await db.LockSubjectRowsSharedAsync(locked, ct);
+        await db.LockTenantOwnersAsync(tenantId, ct);
+        await db.LockTeamManagersAsync(teamId, ct);
+        await db.LockTeamAccessAsync(tenantId, ct);
+
+        var staff = await StaffSubjectsAsync(db, teamId, ct);
+        if (!locked.IsSupersetOf(staff))
+            return null;
+
+        var (owner, direct) = await DirectOwnerAsync(db, tenantId, editor.SubjectId, now, ct);
+        if (direct is null)
+            return (new TeamAccessEdit(owner, null), null);
+        if (await AccessOfSiteAsync(db, tenantId, teamId, ct) is not { } access)
+            return (new TeamAccessEdit(OwnerDecision.NotFound, null), null);
+
+        var (roles, limited, refusal) = await OwnerRolesAsync(db, tenantId, terms.RoleIds, direct, editor, ct);
+        if ((refusal ?? TeamAccessRules.Refusal(limited, direct.AccessEndsAt, terms.LimitTo24Hours, terms.AccessEndsAt, now)) is { } refused)
+            return (new TeamAccessEdit(OwnerDecision.Decided, refused), null);
+
+        var held = await db.TeamTenantAccessRoles
+            .Where(r => r.TeamTenantAccessId == access.Id)
+            .Select(r => new { Row = r, r.TenantRole!.Slug })
+            .ToListAsync(ct);
+        var before = (Roles: held.Select(h => h.Slug).ToList(), access.LimitTo24Hours, AccessEndsAt: Utc(access.AccessEndsAt));
+        if (held.Select(h => h.Row.TenantRoleId).ToHashSet().SetEquals(roles.Select(r => r.Id))
+            && before.LimitTo24Hours == terms.LimitTo24Hours
+            && before.AccessEndsAt == terms.AccessEndsAt)
+            return (new TeamAccessEdit(OwnerDecision.Decided, null), null);
+
+        db.TeamTenantAccessRoles.RemoveRange(held.Where(h => roles.All(r => r.Id != h.Row.TenantRoleId)).Select(h => h.Row));
+        foreach (var role in roles.Where(r => held.All(h => h.Row.TenantRoleId != r.Id)))
+        {
+            db.TeamTenantAccessRoles.Add(new TeamTenantAccessRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TeamTenantAccessId = access.Id,
+                TenantRoleId = role.Id,
+            });
+        }
+
+        access.LimitTo24Hours = terms.LimitTo24Hours;
+        access.AccessEndsAt = terms.AccessEndsAt;
+        TeamAudit.StageAccessChanged(db, access, await TeamNameAsync(db, teamId, ct), roles.Select(r => r.Slug), before);
+        await db.SaveChangesAsync(ct);
+        return (new TeamAccessEdit(OwnerDecision.Decided, null), (await TeamReasonChanges.SyncAsync(
+            unit, staff.Select(subjectId => (tenantId, subjectId)), now, ct)).WithStaffNotices(teamId, [tenantId]));
+    }
+
+    private sealed record OwnerRole(Guid Id, string Slug, List<string> Permissions);
+
+    /// <summary>
+    /// The roles of <paramref name="tenantId"/> that <paramref name="roleIds"/> name, and whether the owner
+    /// reads only the last 24 hours (<see cref="TeamAccessRules.Approver"/>), or why the owner may not give
+    /// them to a team: none chosen, one not the site's, one that runs the site, or one holding a permission
+    /// the owner's direct reason <paramref name="direct"/> does not resolve to on <paramref name="credential"/>.
+    /// </summary>
+    private static async Task<(IReadOnlyList<OwnerRole> Roles, bool Limited, TeamAccessRefusal? Refusal)> OwnerRolesAsync(
+        NocturneDbContext db, Guid tenantId, IReadOnlyList<Guid> roleIds, TenantMemberAccess direct,
+        TeamAccessApproverCredential credential, CancellationToken ct)
+    {
+        var ids = roleIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return ([], false, TeamAccessRefusal.NoRoles);
+
+        var roles = await db.TenantRoles.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && ids.Contains(r.Id))
+            .Select(r => new OwnerRole(r.Id, r.Slug, r.Permissions))
+            .ToListAsync(ct);
+        if (roles.Count != ids.Count)
+            return ([], false, TeamAccessRefusal.RoleNotInTenant);
+        if (roles.Any(r => !Scope.IsDataOnly(r.Permissions)))
+            return ([], false, TeamAccessRefusal.RoleAdministrative);
+
+        var (scopes, limited) = TeamAccessRules.Approver(direct.EffectivePermissions, direct.LimitTo24Hours, credential);
+        return roles.Any(r => Scope.ValidateGrant(r.Permissions, scopes) is not null)
+            ? ([], limited, TeamAccessRefusal.RoleWiderThanApprover)
+            : (roles, limited, null);
     }
 
     private static Task<List<Guid>> StaffSubjectsAsync(NocturneDbContext db, Guid teamId, CancellationToken ct) =>

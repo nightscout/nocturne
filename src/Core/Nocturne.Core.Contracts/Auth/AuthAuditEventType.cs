@@ -267,6 +267,12 @@ public static class AuthAuditEventType
     public const string TeamAccessGiven = "team_access_given";
 
     /// <summary>
+    /// Event type when an owner of a site changes what a team's access to it gives: its roles, its 24-hour
+    /// limit or its end. The row names the tenant and the team, and no target.
+    /// </summary>
+    public const string TeamAccessChanged = "team_access_changed";
+
+    /// <summary>
     /// Event type when a team's access to a site stops: the site stopped it, or the team was deleted.
     /// The row names the tenant and the team, and no target.
     /// </summary>

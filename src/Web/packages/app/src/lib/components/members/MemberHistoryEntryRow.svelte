@@ -223,6 +223,35 @@
             {/if}
           {/if}
         {/if}
+      {:else if entry.kind === MemberHistoryKind.TeamAccessChanged}
+        {#if entry.team?.name}
+          {actor} changed what the team {entry.team.name} can do on this site.
+        {:else}
+          {actor} changed what a team that was deleted can do on this site.
+        {/if}
+        {#if teamRoleCount === 0}
+          The detail is no longer stored.
+        {:else if teamRoleCount === 1}
+          {#if teamLimited && accessEnd}
+            After this change, the team had access with the role {teamRoles} to the last 24 hours only, until {accessEnd}.
+          {:else if teamLimited}
+            After this change, the team had access with the role {teamRoles} to the last 24 hours only.
+          {:else if accessEnd}
+            After this change, the team had access with the role {teamRoles} until {accessEnd}.
+          {:else}
+            After this change, the team had access with the role {teamRoles}.
+          {/if}
+        {:else}
+          {#if teamLimited && accessEnd}
+            After this change, the team had access with the roles {teamRoles} to the last 24 hours only, until {accessEnd}.
+          {:else if teamLimited}
+            After this change, the team had access with the roles {teamRoles} to the last 24 hours only.
+          {:else if accessEnd}
+            After this change, the team had access with the roles {teamRoles} until {accessEnd}.
+          {:else}
+            After this change, the team had access with the roles {teamRoles}.
+          {/if}
+        {/if}
       {:else if entry.kind === MemberHistoryKind.TeamStaffApproved}
         {#if entry.team?.name}
           {actor} approved {member} as staff of the team {entry.team.name}.

@@ -23,7 +23,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// Invites to join the tenant, and the tenant's members. A caller can send, list and revoke
 /// invites, accept an invite, list members, change a member's roles or permissions, set a member's
 /// 24-hour history limit or the date their access ends, remove a member from the tenant, step
-/// themselves down to a more limited role, and list and stop the teams given access to the tenant.
+/// themselves down to a more limited role, and list, change and stop the teams given access to the tenant.
 /// </summary>
 /// <seealso cref="IMemberInviteService"/>
 /// <seealso cref="ITenantService"/>
@@ -415,6 +415,42 @@ public class MemberInviteController : ControllerBase
 
         return StaffDecisionResult(
             await access.SetStaffRuleAsync(_tenantAccessor.TenantId, teamId, callerId, request.TeamManagesStaff, ct));
+    }
+
+    /// <summary>
+    /// Sets what a team's access to the current tenant gives: its roles, the 24-hour limit and the end, sent
+    /// whole. Bounded by the caller's own access and credential, as an approval is, and not by the link the
+    /// access was made from. No staff member is sent back to waiting, and each staff decision and the switch
+    /// stay as they are. Only an owner may.
+    /// </summary>
+    [HttpPut("team-access/{teamId:guid}")]
+    [RequireScope(Scope.MembersManage)]
+    [RemoteCommand(Invalidates = ["GetTeamAccess", "GetMembers", "GetMemberHistory"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> EditTeamAccess(
+        Guid teamId, [FromBody] EditTeamAccessRequest request, [FromServices] TeamAccessService access, CancellationToken ct)
+    {
+        if (await HttpContext.IsCallerInactiveAsync(ct))
+            return Challenge();
+        if (HttpContext.GetSubjectId() is not { } callerId || HttpContext.GetAuthContext() is not { } auth)
+            return Unauthorized();
+        if (HttpContext.CallerGrantCeiling() is not { } ceiling)
+            return this.CallerAccessFromTeamProblem();
+
+        var caller = new TeamAccessApproverCredential(callerId, auth.AuthType, ceiling.Scopes, ceiling.HistoryClamped);
+        var terms = new TeamAccessTerms(request.RoleIds, request.LimitTo24Hours, AccessEndRequest.Instant(request.AccessEndsAt));
+        return await access.EditAccessAsync(_tenantAccessor.TenantId, teamId, caller, terms, ct) switch
+        {
+            { Decision: OwnerDecision.Decided, Refusal: { } refusal } => this.TeamAccessProblem(refusal),
+            { Decision: OwnerDecision.Decided } => NoContent(),
+            { Decision: OwnerDecision.AccessFromTeam } => this.CallerAccessFromTeamProblem(),
+            { Decision: OwnerDecision.NotOwner } => this.TeamAccessProblem(TeamAccessRefusal.NotOwner),
+            _ => NotFound(),
+        };
     }
 
     /// <summary>
@@ -922,6 +958,17 @@ public record SetMemberLimitTo24HoursRequest(bool LimitTo24Hours);
 
 /// <param name="TeamManagesStaff">Whether the team's staff are approved at the site as they join.</param>
 public record SetTeamStaffRuleRequest(bool TeamManagesStaff);
+
+/// <summary>Everything a team's access gives after an owner's edit. Each member must be sent; it is not a patch.</summary>
+public sealed record EditTeamAccessRequest
+{
+    public required IReadOnlyList<Guid> RoleIds { get; init; }
+
+    public required bool LimitTo24Hours { get; init; }
+
+    /// <summary>When the access ends; null for no end.</summary>
+    public required DateTimeOffset? AccessEndsAt { get; init; }
+}
 
 /// <param name="AccessEndsAt">When the membership ends; null when it does not.</param>
 public record SetMemberAccessEndRequest(DateTimeOffset? AccessEndsAt);

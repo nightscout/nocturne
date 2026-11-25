@@ -43,6 +43,13 @@ public enum MemberHistoryKind
     /// <summary>A team's access to the site stopped. <see cref="MemberHistoryEntry.Team"/> names it.</summary>
     TeamAccessStopped,
 
+    /// <summary>
+    /// An owner changed what a team's access to the site gives. <see cref="MemberHistoryEntry.Team"/> names it, and
+    /// <see cref="MemberHistoryEntry.Roles"/>, <see cref="MemberHistoryEntry.HistoryLimit"/> and
+    /// <see cref="MemberHistoryEntry.AccessEndsAt"/> state what it gives after the change.
+    /// </summary>
+    TeamAccessChanged,
+
     /// <summary>The member was approved as staff of <see cref="MemberHistoryEntry.Team"/> at the site.</summary>
     TeamStaffApproved,
 
