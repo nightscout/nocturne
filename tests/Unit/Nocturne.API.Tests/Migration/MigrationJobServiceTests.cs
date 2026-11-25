@@ -37,6 +37,12 @@ public class MigrationJobServiceTests
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
             .AddSingleton(AccountLinkRoutes.Off)
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [Nocturne.Core.Constants.ServiceNames.ConfigKeys.InstanceKey] = "test-instance-key",
+                })
+                .Build())
             .BuildServiceProvider();
 
         return (MigrationJobHarness.CreateService(provider), provider);
