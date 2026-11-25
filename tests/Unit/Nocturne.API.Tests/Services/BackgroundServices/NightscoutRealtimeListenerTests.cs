@@ -450,9 +450,11 @@ public class NightscoutRealtimeListenerTests
     [Fact]
     public void NewClient_ForASiteUnderASubPath_DialsTheOriginWithTheSitesSocketPath()
     {
+        using var http = new ServiceCollection().AddHttpClient().BuildServiceProvider();
         using var client = NightscoutConnectorBackgroundService.NewClient(
             NightscoutAddress.Resolve("https://nscout.example.com/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/?token=reader-abc123"),
-            new ServiceCollection().AddHttpClient().BuildServiceProvider().GetRequiredService<IHttpClientFactory>());
+            http.GetRequiredService<IHttpClientFactory>(),
+            http.GetRequiredService<IHttpMessageHandlerFactory>());
 
         client.Options.Path.TrimEnd('/').Should().Be("/AGYLdvgzOeq24CB8XwYVaZDkXyxFxPGI/socket.io");
         client.Options.Query!["token"].Should().Be("reader-abc123");

@@ -159,7 +159,7 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
 
     private async Task EnsureAllowedAsync(Uri uri, CancellationToken ct)
     {
-        if (await OutboundDestination.IsNotLinkLocalAsync(uri.AbsoluteUri, ct, _resolver))
+        if (await OutboundDestination.IsNotLinkLocalAsync(HandshakeUri(uri).AbsoluteUri, ct, _resolver))
             return;
 
         // A name that resolves to nothing fails the check for the same reason a forbidden address
@@ -179,6 +179,20 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
         throw new OutboundRefusedException(
             $"Refusing to reach '{uri.Host}': the address is link-local, which no connector " +
             "target should be.");
+    }
+
+    /// <summary>
+    /// A WebSocket URL as the http(s) URL its opening handshake is sent to, so a
+    /// <see cref="System.Net.WebSockets.ClientWebSocket"/> connecting through this handler is checked
+    /// like any other request to the same host. Any other URL as it is.
+    /// </summary>
+    private static Uri HandshakeUri(Uri uri)
+    {
+        if (uri.Scheme == Uri.UriSchemeWs)
+            return new UriBuilder(uri) { Scheme = Uri.UriSchemeHttp }.Uri;
+        if (uri.Scheme == Uri.UriSchemeWss)
+            return new UriBuilder(uri) { Scheme = Uri.UriSchemeHttps }.Uri;
+        return uri;
     }
 
     /// <summary>

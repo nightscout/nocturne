@@ -7,8 +7,10 @@ using Nocturne.Core.Contracts.Jobs;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using System.Collections.Specialized;
+using System.Net.WebSockets;
 using System.Web;
 using SocketIOClient;
+using SocketIOClient.Protocol.WebSocket;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
@@ -154,7 +156,10 @@ public class NightscoutConnectorBackgroundService
             return;
 
         var address = NightscoutAddress.Resolve(resolvedUrl);
-        var client = NewClient(address, _serviceProvider.GetRequiredService<IHttpClientFactory>());
+        var client = NewClient(
+            address,
+            _serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            _serviceProvider.GetRequiredService<IHttpMessageHandlerFactory>());
 
         foreach (var evt in new[] { "dataUpdate", "create", "update" })
             client.On(evt, _ => { RequestImmediateSync(tenantId); return Task.CompletedTask; });
@@ -206,15 +211,17 @@ public class NightscoutConnectorBackgroundService
     /// Its polling transport sends through the
     /// <see cref="NightscoutConnectorInstaller.RealtimeHttpClientName"/> connector client, which keeps
     /// the site's path out of telemetry, in place of the <see cref="HttpClient"/> the library would
-    /// build itself. The client stays on polling, because a WebSocket would open its own connection
-    /// outside that client's telemetry mark and its outbound guard.
+    /// build itself. The WebSocket it upgrades to opens through that client's handlers too
+    /// (<see cref="ConnectorClientWebSocket"/>).
     /// </summary>
-    internal static SocketIO NewClient(NightscoutAddress address, IHttpClientFactory clients)
+    internal static SocketIO NewClient(
+        NightscoutAddress address,
+        IHttpClientFactory clients,
+        IHttpMessageHandlerFactory handlers)
     {
         var options = new SocketIOOptions
         {
             Path = address.SocketIoPath,
-            AutoUpgrade = false,
             Reconnection = true,
             ReconnectionAttempts = ReconnectionAttempts,
             ReconnectionDelayMax = ReconnectionDelayMaxMs,
@@ -225,7 +232,12 @@ public class NightscoutConnectorBackgroundService
         return new SocketIO(
             new Uri(address.Origin),
             options,
-            services => services.AddSingleton(_ => clients.CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName)));
+            services =>
+            {
+                services.AddSingleton(_ => clients.CreateClient(NightscoutConnectorInstaller.RealtimeHttpClientName));
+                services.AddScoped<IWebSocketClient>(_ =>
+                    new ConnectorClientWebSocket(handlers, NightscoutConnectorInstaller.RealtimeHttpClientName));
+            });
     }
 
     /// <summary>
@@ -261,7 +273,7 @@ public class NightscoutConnectorBackgroundService
         catch (Exception ex) when (ex is SocketIOClient.Exceptions.ConnectionException
                                        or SocketIOClient.Session.ConnectionFailedException
                                        or InvalidOperationException or ObjectDisposedException or IOException
-                                       or HttpRequestException or TimeoutException
+                                       or HttpRequestException or WebSocketException or TimeoutException
                                        or OperationCanceledException)
         {
             Logger.LogWarning(

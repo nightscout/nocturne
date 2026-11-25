@@ -88,6 +88,35 @@ public class LinkLocalGuardHandlerTests
         reachedTransport().Should().BeTrue();
     }
 
+    // A ClientWebSocket connecting through a connector client's handlers sends its handshake with
+    // the ws(s) URL it was given, so the guard reads it as the http(s) URL of the same host.
+
+    [Theory]
+    [InlineData("ws://169.254.169.254/socket.io/?EIO=4&transport=websocket")]
+    [InlineData("wss://169.254.170.2/socket.io/?EIO=4&transport=websocket")]
+    public async Task Refuses_ALinkLocalWebSocketTarget(string url)
+    {
+        var invoker = BuildInvoker(Unresolvable, out var reachedTransport);
+
+        var act = async () => await invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, url), CancellationToken.None);
+
+        await act.Should().ThrowAsync<OutboundRefusedException>().WithMessage("*link-local*");
+        reachedTransport().Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("ws://127.0.0.1:1337/socket.io/?EIO=4&transport=websocket", null)]
+    [InlineData("wss://mynightscout.example/socket.io/?EIO=4&transport=websocket", "93.184.216.34")]
+    public async Task Allows_APrivateOrPublicWebSocketTarget(string url, string? resolvesTo)
+    {
+        var invoker = BuildInvoker(resolvesTo is null ? Unresolvable : ResolvesTo(resolvesTo), out var reachedTransport);
+
+        using var response = await invoker.SendAsync(new HttpRequestMessage(HttpMethod.Get, url), CancellationToken.None);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        reachedTransport().Should().BeTrue();
+    }
+
     #region Redirects
 
     // The guard sits above the transport, so it only ever sees the initial RequestUri. With the
@@ -417,6 +446,22 @@ public class LinkLocalGuardHandlerTests
         };
 
         return new HttpClient(guard);
+    }
+
+    /// <summary>
+    /// The guard under an <see cref="HttpMessageInvoker"/>, as
+    /// <see cref="System.Net.WebSockets.ClientWebSocket"/> sends its handshake through it.
+    /// </summary>
+    private static HttpMessageInvoker BuildInvoker(
+        OutboundDestination.AddressResolver resolver, out Func<bool> reachedTransport)
+    {
+        var transport = new ScriptedHandler();
+        reachedTransport = () => transport.Requested.Count > 0;
+
+        return new HttpMessageInvoker(new LinkLocalGuardHandler(NullLogger<LinkLocalGuardHandler>.Instance, resolver)
+        {
+            InnerHandler = transport,
+        });
     }
 
     private static HttpClient BuildClient(
