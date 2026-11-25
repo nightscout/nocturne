@@ -161,7 +161,7 @@ public class MigrationResumeTests
         };
         var tenant = MigrationJobHarness.NewTenant();
 
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
         var slices = 0;
         while (await sliced.RunSliceAsync(tenant, CancellationToken.None))
         {
@@ -193,7 +193,7 @@ public class MigrationResumeTests
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
 
         using var stop = new CancellationTokenSource();
         import.Source.OnDeviceStatusRequest = request =>
@@ -220,7 +220,7 @@ public class MigrationResumeTests
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
 
         using var stop = new CancellationTokenSource();
         import.Source.OnDeviceStatusRequest = request =>
@@ -260,7 +260,7 @@ public class MigrationResumeTests
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
 
         using var stop = new CancellationTokenSource();
         MigrationRunEntity? beforePage = null;
@@ -314,7 +314,7 @@ public class MigrationResumeTests
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
 
         (await service.RunSliceAsync(tenant, CancellationToken.None)).Should().BeTrue(
             "the record is still live, so the run is not over");
@@ -336,7 +336,7 @@ public class MigrationResumeTests
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
         await using (var db = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync())
         {
             var run = await db.MigrationRuns.SingleAsync(r => r.Id == job.Id);
@@ -355,7 +355,7 @@ public class MigrationResumeTests
     {
         await using var provider = new Import().BuildProvider();
         var tenant = MigrationJobHarness.NewTenant();
-        var job = await MigrationJobHarness.CreateService(provider).StartMigrationAsync(Request(), tenant);
+        var job = await MigrationJobHarness.CreateService(provider).StartMigrationAsync(Request(), tenant, starter: null);
 
         var run = await RunRecordAsync(provider, job.Id);
 
@@ -381,7 +381,7 @@ public class MigrationResumeTests
         {
             SliceLength = TimeSpan.Zero,
         };
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
         (await service.RunSliceAsync(tenant, CancellationToken.None)).Should().BeTrue();
         var stored = import.Stored.Count;
 
@@ -403,7 +403,7 @@ public class MigrationResumeTests
         var tenant = MigrationJobHarness.NewTenant();
         var running = MigrationJobHarness.CreateService(provider, time: time);
         var other = MigrationJobHarness.CreateService(provider, time: time);
-        var job = await running.StartMigrationAsync(Request(), tenant);
+        var job = await running.StartMigrationAsync(Request(), tenant, starter: null);
 
         import.Source.OnDeviceStatusRequest = request =>
         {
@@ -424,7 +424,7 @@ public class MigrationResumeTests
         await using var provider = import.BuildProvider();
         var time = new FakeTimeProvider(Start);
         var tenant = MigrationJobHarness.NewTenant();
-        var job = await MigrationJobHarness.CreateService(provider, time: time).StartMigrationAsync(Request(), tenant);
+        var job = await MigrationJobHarness.CreateService(provider, time: time).StartMigrationAsync(Request(), tenant, starter: null);
 
         var stale = Resume(provider, await RunRecordAsync(provider, job.Id), tenant, time);
         var holder = Resume(provider, await RunRecordAsync(provider, job.Id), tenant, time);
@@ -448,7 +448,7 @@ public class MigrationResumeTests
         await using var provider = new Import().BuildProvider();
         var tenant = MigrationJobHarness.NewTenant();
         var service = MigrationJobHarness.CreateService(provider);
-        var job = await service.StartMigrationAsync(Request(), tenant);
+        var job = await service.StartMigrationAsync(Request(), tenant, starter: null);
         await using (var db = await provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContextAsync())
         {
             (await db.MigrationRuns.SingleAsync(r => r.Id == job.Id)).RequestEncrypted = "written under another key";

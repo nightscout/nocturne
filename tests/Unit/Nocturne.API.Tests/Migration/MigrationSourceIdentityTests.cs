@@ -65,7 +65,7 @@ public class MigrationSourceIdentityTests
     private static async Task<MigrationJobInfo> StartAndSettleAsync(
         MigrationJobService service, TenantContext tenant, string url)
     {
-        var job = await service.StartMigrationAsync(Request(url), tenant);
+        var job = await service.StartMigrationAsync(Request(url), tenant, starter: null);
         await MigrationJobHarness.RunToEndAsync(service, tenant);
         return job;
     }

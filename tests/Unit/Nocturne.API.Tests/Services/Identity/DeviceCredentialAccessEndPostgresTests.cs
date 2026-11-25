@@ -20,7 +20,9 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Services.Migration;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.Migration;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
@@ -45,9 +47,9 @@ namespace Nocturne.API.Tests.Services.Identity;
 
 /// <summary>
 /// A device credential, held by the tenant's device subject, made by a member whose access ends
-/// stops on that date, on PostgreSQL under the runtime role and Row Level Security: both mints stamp
-/// it, both handlers and the hub sweep refuse it after the date, a shorter end date or the removal
-/// of such a member lowers it in the same commit, and only a later keep removes it.
+/// stops on that date, on PostgreSQL under the runtime role and Row Level Security: both mints and a
+/// Nightscout import stamp it, both handlers and the hub sweep refuse it after the date, a shorter end
+/// date or the removal of such a member lowers it in the same commit, and only a later keep removes it.
 /// </summary>
 [Trait("Category", "Integration")]
 public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPostgresTests.Database database)
@@ -805,6 +807,173 @@ public class DeviceCredentialAccessEndPostgresTests(DeviceCredentialAccessEndPos
 
         result.NotAdopted.Should().BeTrue();
         (await SecretGrantsAsync(seeded, secret)).Should().BeEmpty();
+    }
+
+    private const string ImportedToken = "camp-uploader-0123456789abcdef";
+
+    /// <summary>A Nightscout site with one token, read-only, for an import to adopt; every other path answers 404.</summary>
+    private sealed class OneTokenSite : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.RequestUri!.AbsolutePath switch
+            {
+                "/api/v2/authorization/roles" => """[{ "name": "readable", "permissions": ["*:*:read"] }]""",
+                "/api/v2/authorization/subjects" => $$"""
+                    [{ "_id": "5f1a00000000000000000001", "name": "Camp uploader", "roles": ["readable"], "accessToken": "{{ImportedToken}}" }]
+                    """,
+                _ => null,
+            };
+            return Task.FromResult(body is null
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+                : new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+                });
+        }
+    }
+
+    private sealed record StartedImport(MigrationJobService Service, TenantContext Tenant, Guid JobId, ServiceProvider Provider);
+
+    /// <summary>Starts an import of <see cref="OneTokenSite"/>'s tokens into the tenant, started by <paramref name="starter"/>.</summary>
+    private async Task<StartedImport> StartImportAsync(Seeded seeded, CredentialMaker? starter)
+    {
+        var provider = MigrationJobHarness.BuildProvider(
+            new OneTokenSite(),
+            database: o => o.UseNpgsql(database.AppConnectionString).AddInterceptors(new TenantConnectionInterceptor()));
+        var service = MigrationJobHarness.CreateService(provider);
+        var tenant = new TenantContext(seeded.Tenant, "device", "Device", IsActive: true, IsDemo: false);
+        var job = await service.StartMigrationAsync(
+            new StartMigrationRequest
+            {
+                Mode = MigrationMode.Api,
+                NightscoutUrl = "https://example-nightscout.invalid",
+                NightscoutApiSecret = "synthetic-secret",
+                Collections = ["subjects"],
+            },
+            tenant,
+            starter);
+        return new StartedImport(service, tenant, job.Id, provider);
+    }
+
+    /// <summary>Runs the import from its record, as the job scheduler does, and returns the grant it adopted.</summary>
+    private async Task<OAuthGrantRecord> FinishImportAsync(Seeded seeded, StartedImport import)
+    {
+        await using (import.Provider)
+        {
+            await MigrationJobHarness.RunToEndAsync(import.Service, import.Tenant);
+            (await import.Service.GetStatusAsync(seeded.Tenant, import.JobId)).State.Should().Be(MigrationJobState.Completed);
+        }
+
+        await using var db = Context(seeded.Tenant);
+        var adopted = await db.OAuthGrants.AsNoTracking()
+            .Where(g => g.TokenHash == HashUtils.Sha256Hex(ImportedToken))
+            .Select(g => g.Id)
+            .SingleAsync();
+        return await GrantAsync(seeded, adopted);
+    }
+
+    private async Task<DateTime?> ImportEndAsync(Seeded seeded, Guid jobId)
+    {
+        await using var db = Context(seeded.Tenant);
+        return await db.MigrationRuns.AsNoTracking().Where(r => r.Id == jobId).Select(r => r.StarterAccessEndsAt).SingleAsync();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnImportedTokenIsStampedWithTheStarterAndStopsWhenTheirAccessEnds(bool starterAccessEnds)
+    {
+        DateTime? end = starterAccessEnds ? Now.UtcDateTime.AddDays(3) : null;
+        var seeded = await SeedAsync("import", end);
+
+        var grant = await FinishImportAsync(seeded, await StartImportAsync(seeded, MakerOf(seeded, end)));
+
+        grant.SubjectId.Should().Be(await DeviceSubjectAsync(seeded));
+        grant.CreatedBySubjectId.Should().Be(seeded.Maker);
+        grant.ExpiresAt.Should().Be(end);
+    }
+
+    [Fact]
+    public async Task AnImportNobodyStartedAdoptsTokensWithNoMakerAndNoExpiry()
+    {
+        var seeded = await SeedAsync("import-system", accessEndsAt: null);
+
+        var grant = await FinishImportAsync(seeded, await StartImportAsync(seeded, starter: null));
+
+        grant.CreatedBySubjectId.Should().BeNull();
+        grant.ExpiresAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AResumedImportStampsTheEndReadAtStartNotALaterOne()
+    {
+        var end = Now.UtcDateTime.AddDays(3);
+        var seeded = await SeedAsync("import-resume", end);
+        var import = await StartImportAsync(seeded, MakerOf(seeded, end));
+
+        (await SetEndAsync(seeded, Now.UtcDateTime.AddDays(30))).Should().Be(OwnerGuardedChange.Changed);
+
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(end, "a later end raises nothing the starter made");
+    }
+
+    [Fact]
+    public async Task AnEndLoweredWhileTheImportRunsReachesTheTokensItAdoptsAfter()
+    {
+        var seeded = await SeedAsync("import-lowered", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+        var lowered = Now.UtcDateTime.AddDays(2);
+
+        (await SetEndAsync(seeded, lowered)).Should().Be(OwnerGuardedChange.Changed);
+
+        (await ImportEndAsync(seeded, import.JobId)).Should().Be(lowered);
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(lowered);
+    }
+
+    [Fact]
+    public async Task RemovingTheStarterWhileTheImportRunsStopsTheTokensItAdoptsAfter()
+    {
+        var seeded = await SeedAsync("import-removed", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+
+        await RemoveAsync(seeded);
+
+        (await FinishImportAsync(seeded, import)).ExpiresAt.Should().Be(Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task ACapLeavesTheImportsAnotherMemberStartedAndTheStartersImportsInAnotherTenant()
+    {
+        var end = Now.UtcDateTime.AddDays(10);
+        var seeded = await SeedAsync("import-scope", end);
+        var elsewhere = await SeedAsync("import-scope-elsewhere", accessEndsAt: null);
+        var other = await new SubjectRepository(seeded.Contexts, AccountLinkRoutes.Off)
+            .CreateAsync(new NewSubject("import-scope-other"), CancellationToken.None);
+        var theirs = await StartImportAsync(seeded, new CredentialMaker(other, end));
+        var startersElsewhere = await StartImportAsync(elsewhere, MakerOf(seeded, end));
+        await using var theirsProvider = theirs.Provider;
+        await using var elsewhereProvider = startersElsewhere.Provider;
+
+        (await SetEndAsync(seeded, Now.UtcDateTime.AddDays(2))).Should().Be(OwnerGuardedChange.Changed);
+
+        (await ImportEndAsync(seeded, theirs.JobId)).Should().Be(end);
+        (await ImportEndAsync(elsewhere, startersElsewhere.JobId)).Should().Be(end);
+    }
+
+    [Fact]
+    public async Task ACapAfterTheImportLowersTheTokensItAdoptedAndLeavesTheEndedRun()
+    {
+        var seeded = await SeedAsync("import-capped", Now.UtcDateTime.AddDays(10));
+        var import = await StartImportAsync(seeded, MakerOf(seeded, Now.UtcDateTime.AddDays(10)));
+        var grant = await FinishImportAsync(seeded, import);
+        var lowered = Now.UtcDateTime.AddDays(2);
+
+        await SetEndAsync(seeded, lowered);
+
+        (await GrantAsync(seeded, grant.Id)).ExpiresAt.Should().Be(lowered);
+        (await ImportEndAsync(seeded, import.JobId)).Should().Be(Now.UtcDateTime.AddDays(10), "an ended run adopts nothing more");
+        (await DeviceCredentialAuditAsync(seeded)).Should().ContainSingle(r =>
+            r.EventType == AuthAuditEventType.DeviceCredentialCapped && r.Target == seeded.Maker);
     }
 
     /// <summary>The stored row of grant <paramref name="id"/>, every column, as PostgreSQL writes it.</summary>
