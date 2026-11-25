@@ -137,14 +137,9 @@ public partial class DeviceStatusBatchEquivalenceTests : ApiIntegrationTestBase
         var rows = new Dictionary<string, List<JsonObject>>();
         foreach (var table in Tables)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"SELECT row_to_json(t)::text FROM {table} t WHERE tenant_id = @tenant";
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var list = new List<JsonObject>();
-            while (await reader.ReadAsync())
-                list.Add(JsonNode.Parse(reader.GetString(0))!.AsObject());
-            rows[table] = list;
+            rows[table] = await conn.QueryAsync(
+                $"SELECT row_to_json(t)::text FROM {table} t WHERE tenant_id = @tenant",
+                reader => JsonNode.Parse(reader.GetString(0))!.AsObject(), ("tenant", Fixture.TenantId));
         }
 
         return Normalise(rows);

@@ -26,7 +26,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subjects_refresh_is_answered_as_a_revoked_grant_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, client) = await SignInAsync(conn, "Refreshing Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
@@ -52,7 +52,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_refused_refresh_rotates_nothing_and_the_same_token_refreshes_once_the_subject_is_active()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, client) = await SignInAsync(conn, "Returning Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
@@ -83,7 +83,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subjects_authorization_code_is_answered_as_an_invalid_code_is_and_writes_no_grant()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, client) = await SignInAsync(conn, "Consenting Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
@@ -112,7 +112,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subjects_device_code_is_answered_as_an_invalid_device_code_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, client) = await SignInAsync(conn, "Approving Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
@@ -137,7 +137,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_refused_device_code_is_answered_as_an_unknown_one_on_every_later_poll()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, client) = await SignInAsync(conn, "Polling Member");
         using var _ = client;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(client);
@@ -176,7 +176,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_login_code_for_a_deactivated_member_is_refused_like_a_spent_code_and_issues_no_session()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Handed Off Member");
         var code = $"login-{Guid.NewGuid():N}";
@@ -218,7 +218,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subjects_direct_grant_is_refused_on_every_transport_as_a_revoked_one_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Uploading Member");
         using var _ = session;
         var live = await MintDirectGrantAsync(session, "live");
@@ -264,7 +264,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_mints_no_direct_grant_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Minting Member");
         using var _ = session;
         object body = new { label = "after", scopes = new[] { "glucose.read" } };
@@ -290,7 +290,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_mints_no_guest_link_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Sharing Member");
         using var _ = session;
         object body = new { label = "after", scopes = new[] { "glucose.read" } };
@@ -316,7 +316,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_approves_no_device_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Approving Again Member");
         using var _ = session;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(session);
@@ -347,7 +347,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_is_issued_no_authorization_code_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Consenting Again Member");
         using var _ = session;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(session);
@@ -384,7 +384,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_asking_to_authorize_is_refused_to_the_client_and_not_sent_to_sign_in()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Authorizing Member");
         using var _ = session;
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(session);
@@ -421,7 +421,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_creates_no_v2_subject_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "V2 Creating Member");
         using var _ = session;
 
@@ -438,14 +438,13 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_widens_no_v2_subject_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "V2 Updating Member");
         using var _ = session;
         var created = await session.PostAsJsonAsync(
             "/api/v2/authorization/subjects", new { name = "uploader", roles = new[] { "readable" } });
         created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
-        var grantId = await ScalarAsync<Guid>(
-            conn, "SELECT id FROM oauth_grants WHERE created_by_subject_id = @key;", subjectId);
+        var grantId = await conn.ScalarInTenantAsync<Guid>("SELECT id FROM oauth_grants WHERE created_by_subject_id = @key;", subjectId);
         var id = grantId.ToString();
 
         await AssertMintRefusedAsync(
@@ -461,7 +460,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_adopts_no_nightscout_secret_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Adopting Member");
         using var _ = session;
         var secret = $"inactive-adoption-{Guid.NewGuid():N}";
@@ -478,7 +477,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_creates_no_member_invite_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Inviting Member");
         using var _ = session;
 
@@ -499,7 +498,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_rotates_no_share_link_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Rotating Member");
         using var _ = session;
 
@@ -515,7 +514,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_creates_no_alert_invite_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Alert Inviting Member");
         using var _ = session;
 
@@ -532,7 +531,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_subject_is_issued_no_desktop_link_token_and_is_answered_as_an_anonymous_caller_is()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, session) = await SignInWithSessionOnlyAsync(conn, "Desktop Linking Member");
         using var _ = session;
         var anonymous = await ShapeOfAsync(await AnonymousClient().PostAsync(DesktopTokenPath, null));
@@ -583,7 +582,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     [Fact]
     public async Task A_deactivated_platform_admins_session_holds_no_platform_admin_standing_on_any_host()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var (subjectId, _) = await SignInWithSessionOnlyAsync(conn, "Operating Member");
         var (memberId, _) = await SignInWithSessionOnlyAsync(conn, "Ordinary Member");
         await SetPlatformAdminAsync(conn, subjectId, true);
@@ -631,13 +630,6 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
         }
     }
 
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
     private async Task<(Guid SubjectId, HttpClient Client)> SignInAsync(NpgsqlConnection conn, string name)
     {
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
@@ -668,11 +660,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
 
     private static async Task SetPlatformAdminAsync(NpgsqlConnection conn, Guid subjectId, bool isPlatformAdmin)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE subjects SET is_platform_admin = @isPlatformAdmin WHERE id = @id;";
-        cmd.Parameters.AddWithValue("isPlatformAdmin", isPlatformAdmin);
-        cmd.Parameters.AddWithValue("id", subjectId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE subjects SET is_platform_admin = @isPlatformAdmin WHERE id = @id;", ("isPlatformAdmin", isPlatformAdmin), ("id", subjectId));
     }
 
     private async Task<(Guid SubjectId, HttpClient Client)> SignInWithSessionOnlyAsync(NpgsqlConnection conn, string name)
@@ -685,11 +673,7 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
 
     private static async Task SetActiveAsync(NpgsqlConnection conn, Guid subjectId, bool isActive)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "UPDATE subjects SET is_active = @isActive WHERE id = @id;";
-        cmd.Parameters.AddWithValue("isActive", isActive);
-        cmd.Parameters.AddWithValue("id", subjectId);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("UPDATE subjects SET is_active = @isActive WHERE id = @id;", ("isActive", isActive), ("id", subjectId));
     }
 
     private static FormUrlEncodedContent Form(params (string Key, string Value)[] fields) =>
@@ -751,14 +735,14 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     private static partial Regex TraceId();
 
     private static Task<long> CountGrantsOfAsync(NpgsqlConnection conn, string clientId) =>
-        ScalarAsync<long>(conn, """
+        conn.ScalarInTenantAsync<long>("""
             SELECT count(*) FROM oauth_grants g
             JOIN oauth_clients c ON c.id = g.client_id
             WHERE c.client_id = @key;
             """, clientId);
 
     private static Task<long> CountRefreshTokensOfAsync(NpgsqlConnection conn, string clientId) =>
-        ScalarAsync<long>(conn, """
+        conn.ScalarInTenantAsync<long>("""
             SELECT count(*) FROM oauth_refresh_tokens t
             JOIN oauth_grants g ON g.id = t.grant_id
             JOIN oauth_clients c ON c.id = g.client_id
@@ -766,13 +750,13 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
             """, clientId);
 
     private static Task<long> CountDirectGrantsOfAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'direct';", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'direct';", subjectId);
 
     private static Task<long> CountGuestLinksOfAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'guest';", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM oauth_grants WHERE subject_id = @key AND grant_type = 'guest';", subjectId);
 
     private static Task<long> CountAuthorizationCodesOfAsync(NpgsqlConnection conn, string clientId) =>
-        ScalarAsync<long>(conn, """
+        conn.ScalarInTenantAsync<long>("""
             SELECT count(*) FROM oauth_authorization_codes a
             JOIN oauth_clients c ON c.id = a.client_entity_id
             WHERE c.client_id = @key;
@@ -791,23 +775,22 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
     }
 
     private static Task<long> CountGrantsMadeByAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM oauth_grants WHERE created_by_subject_id = @key;", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM oauth_grants WHERE created_by_subject_id = @key;", subjectId);
 
     private static Task<string> ScopesOfGrantAsync(NpgsqlConnection conn, Guid grantId) =>
-        ScalarAsync<string>(conn, "SELECT array_to_string(scopes, ' ') FROM oauth_grants WHERE id = @key;", grantId);
+        conn.ScalarInTenantAsync<string>("SELECT array_to_string(scopes, ' ') FROM oauth_grants WHERE id = @key;", grantId);
 
     private static Task<long> CountMemberInvitesOfAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM member_invites WHERE created_by_subject_id = @key;", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM member_invites WHERE created_by_subject_id = @key;", subjectId);
 
     private static Task<long> CountAlertInvitesOfAsync(NpgsqlConnection conn, Guid subjectId) =>
-        ScalarAsync<long>(conn, "SELECT count(*) FROM alert_invites WHERE created_by = @key;", subjectId);
+        conn.ScalarInTenantAsync<long>("SELECT count(*) FROM alert_invites WHERE created_by = @key;", subjectId);
 
     private static async Task<string> ShareTokenAsync(NpgsqlConnection conn) =>
-        await ScalarAsync<string>(
-            conn, "SELECT coalesce(share_token, '') FROM tenants WHERE id = @key;", await AuthTestHelpers.GetTenantIdAsync(conn));
+        await conn.ScalarInTenantAsync<string>("SELECT coalesce(share_token, '') FROM tenants WHERE id = @key;", await AuthTestHelpers.GetTenantIdAsync(conn));
 
     private static Task<int> RevokeGrantOfAsync(NpgsqlConnection conn, string clientId) =>
-        ScalarAsync<int>(conn, """
+        conn.ScalarInTenantAsync<int>("""
             WITH revoked AS (
                 UPDATE oauth_grants SET revoked_at = now()
                 WHERE client_id IN (SELECT id FROM oauth_clients WHERE client_id = @key)
@@ -816,27 +799,11 @@ public partial class InactiveSubjectCredentialIntegrationTests : ApiIntegrationT
             """, clientId);
 
     private static Task<int> RewindDevicePollsOfAsync(NpgsqlConnection conn, string clientId) =>
-        ScalarAsync<int>(conn, """
+        conn.ScalarInTenantAsync<int>("""
             WITH rewound AS (
                 UPDATE oauth_device_codes SET last_polled_at = last_polled_at - make_interval(secs => "interval" + 1)
                 WHERE client_id = @key AND last_polled_at IS NOT NULL
                 RETURNING 1)
             SELECT count(*)::int FROM rewound;
             """, clientId);
-
-    private static async Task<T> ScalarAsync<T>(NpgsqlConnection conn, string sql, object key)
-    {
-        var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
-        await using (var pin = conn.CreateCommand())
-        {
-            pin.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            pin.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await pin.ExecuteNonQueryAsync();
-        }
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("key", key);
-        return (T)(await cmd.ExecuteScalarAsync())!;
-    }
 }

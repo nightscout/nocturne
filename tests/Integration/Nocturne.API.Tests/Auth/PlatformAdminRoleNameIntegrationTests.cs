@@ -41,13 +41,13 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
     public async Task A_member_holding_a_global_role_named_platform_admin_is_refused_as_any_member_is(
         Credential credential)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (holderId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Role Name Holder");
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, "Role Name Member");
         var roleId = Guid.CreateVersion7();
 
-        await ExecuteAsync(conn, """
+        await conn.ExecuteAsync("""
             INSERT INTO roles (id, name, description, permissions, is_system_role, created_at, updated_at)
             VALUES (@roleId, @name, 'Shares the platform-admin name', '[]'::jsonb, false, now(), now());
             INSERT INTO subject_roles (subject_id, role_id, assigned_at) VALUES (@holderId, @roleId, now());
@@ -65,7 +65,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
         }
         finally
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 DELETE FROM subject_roles WHERE role_id = @roleId;
                 DELETE FROM roles WHERE id = @roleId;
                 """,
@@ -78,7 +78,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
     [InlineData("Platform_Admin")]
     public async Task A_global_role_cannot_be_created_with_the_platform_admin_name(string name)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         using var owner = await OwnerAsync(conn);
         try
         {
@@ -93,14 +93,14 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM roles WHERE name = @name;", ("name", name));
+            await conn.ExecuteAsync("DELETE FROM roles WHERE name = @name;", ("name", name));
         }
     }
 
     [Fact]
     public async Task A_global_role_cannot_be_renamed_to_the_platform_admin_name()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         using var owner = await OwnerAsync(conn);
         var original = $"rostered-{Guid.NewGuid():N}";
         try
@@ -121,7 +121,7 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
         }
         finally
         {
-            await ExecuteAsync(conn, "DELETE FROM roles WHERE name IN (@original, @reserved);",
+            await conn.ExecuteAsync("DELETE FROM roles WHERE name IN (@original, @reserved);",
                 ("original", original), ("reserved", PlatformAdminRole));
         }
     }
@@ -144,36 +144,14 @@ public partial class PlatformAdminRoleNameIntegrationTests : ApiIntegrationTestB
         return AuthTestHelpers.CreateBearerClient(Fixture, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, ownerId));
     }
 
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
     private static async Task<Guid> RoleIdAsync(NpgsqlConnection conn, string name)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<Guid>("SELECT id FROM roles WHERE name = @name;", ("name", name));
     }
 
     private static async Task<long> RoleCountAsync(NpgsqlConnection conn, string name)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM roles WHERE name = @name;";
-        cmd.Parameters.AddWithValue("name", name);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM roles WHERE name = @name;", ("name", name));
     }
 
     /// <summary>

@@ -198,20 +198,13 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
 
     private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false);";
-        cmd.Parameters.AddWithValue("tenant", tenantId.ToString());
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync("SELECT set_config('app.current_tenant_id', @tenant, false);", ("tenant", tenantId.ToString()));
     }
 
     private static async Task<long> RequestsVisibleUnderAsync(NpgsqlConnection conn, Guid tenantId, Guid requestId)
     {
         await SetTenantAsync(conn, tenantId);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM membership_requests WHERE id = @id AND tenant_id = @tenant;";
-        cmd.Parameters.AddWithValue("id", requestId);
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM membership_requests WHERE id = @id AND tenant_id = @tenant;", ("id", requestId), ("tenant", tenantId));
     }
 
     private static async Task<long> RequestNotificationsAsync(NpgsqlConnection conn, Guid tenantId, Guid? recipient, Guid requestId)
@@ -230,10 +223,7 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
 
     private static async Task<long> CredentialsOfAsync(NpgsqlConnection conn, Guid subjectId)
     {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM passkey_credentials WHERE subject_id = @subject;";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM passkey_credentials WHERE subject_id = @subject;", ("subject", subjectId));
     }
 
     private async Task<long> MembershipsOfAsync(NpgsqlConnection conn, Guid subjectId)
@@ -242,11 +232,9 @@ public class AccessRequestCeremonyTenantIsolationTests : ApiIntegrationTestBase
         foreach (var tenantId in new[] { Fixture.TenantId, _tenantB })
         {
             await SetTenantAsync(conn, tenantId);
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT count(*) FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;";
-            cmd.Parameters.AddWithValue("tenant", tenantId);
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            total += (long)(await cmd.ExecuteScalarAsync())!;
+            total += await conn.ScalarAsync<long>(
+                "SELECT count(*) FROM tenant_members WHERE tenant_id = @tenant AND subject_id = @subject;",
+                ("tenant", tenantId), ("subject", subjectId));
         }
 
         return total;

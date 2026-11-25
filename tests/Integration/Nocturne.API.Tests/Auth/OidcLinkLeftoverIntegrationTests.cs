@@ -38,8 +38,8 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
         _providerId = Guid.CreateVersion7();
         _otherProviderId = Guid.CreateVersion7();
-        await using var conn = await OpenAsync();
-        await ExecuteAsync(conn, """
+        await using var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync("""
             INSERT INTO oidc_providers (id, name, issuer_url, client_id, is_enabled, display_order, scopes, claim_mappings, default_roles, created_at, updated_at)
             VALUES (@provider, 'Leftover IdP', @issuer, @client, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now()),
                    (@other, 'Other IdP', @otherIssuer, @otherClient, true, 0, '["openid"]'::jsonb, '{}'::jsonb, '[]'::jsonb, now(), now());
@@ -50,9 +50,9 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 CREATE TEMP TABLE leftover_subjects AS
                     SELECT subject_id FROM subject_oidc_identities
                     WHERE provider_id IN (@provider, @other) AND subject_id <> @owner;
@@ -75,9 +75,9 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
     public async Task A_member_linking_an_identity_an_unclaimed_subject_holds_takes_it_and_the_subject_is_removed()
     {
         var leftover = await CreateLeftoverAsync("leftover-sub");
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         {
-            await ExecuteAsync(conn, """
+            await conn.ExecuteAsync("""
                 INSERT INTO subject_roles (subject_id, role_id, assigned_at)
                 SELECT @subject, id, now() FROM roles ORDER BY name LIMIT 1;
                 """,
@@ -204,7 +204,7 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     private async Task GiveAsync(Guid subjectId, string held)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var ruleId = Guid.Empty;
         var excursionId = Guid.Empty;
         if (held is "excursion mute" or "alert receipt" or "alert invite it created" or "alert invite it used")
@@ -331,7 +331,7 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
                 """,
             _ => throw new ArgumentOutOfRangeException(nameof(held), held, null),
         };
-        await ExecuteAsync(conn, sql,
+        await conn.ExecuteAsync(sql,
             ("subject", subjectId), ("tenantText", Fixture.TenantId.ToString()), ("tenant", Fixture.TenantId),
             ("credential", Guid.NewGuid().ToByteArray()), ("other", _otherProviderId),
             ("otherIssuer", _issuer + "/other"), ("owner", Fixture.OwnerSubjectId),
@@ -340,37 +340,13 @@ public class OidcLinkLeftoverIntegrationTests : ApiIntegrationTestBase
 
     private async Task<Guid?> LinkedSubjectAsync(string externalId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub";
-        cmd.Parameters.AddWithValue("issuer", _issuer);
-        cmd.Parameters.AddWithValue("sub", externalId);
-        return await cmd.ExecuteScalarAsync() as Guid?;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<Guid?>("SELECT subject_id FROM subject_oidc_identities WHERE issuer = @issuer AND oidc_subject_id = @sub", ("issuer", _issuer), ("sub", externalId));
     }
 
     private async Task<long> CountAsync(string sql, Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
-
-    private static async Task ExecuteAsync(
-        NpgsqlConnection conn, string sql, params (string Name, object Value)[] parameters)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>(sql, ("subject", subjectId));
     }
 }

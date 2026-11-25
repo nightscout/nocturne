@@ -30,7 +30,7 @@ public class PasskeyFirstRecoveryCodesIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -122,7 +122,7 @@ public class PasskeyFirstRecoveryCodesIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task A_member_with_no_passkey_cannot_complete_the_passkey_sign_in_that_issues_first_codes()
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedSubjectWithoutPasskeyAsync(conn, tenantId, "Provider Only Member");
         _members.Add(memberId);
@@ -138,7 +138,7 @@ public class PasskeyFirstRecoveryCodesIntegrationTests : ApiIntegrationTestBase
 
     private async Task<(Guid MemberId, RSA Key)> SeedPasskeyMemberAsync(string name)
     {
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         var (memberId, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name);
         _members.Add(memberId);
@@ -167,19 +167,9 @@ public class PasskeyFirstRecoveryCodesIntegrationTests : ApiIntegrationTestBase
 
     private async Task<long> CodeRowsAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM recovery_codes WHERE subject_id = @subject";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM recovery_codes WHERE subject_id = @subject", ("subject", subjectId));
     }
 
     private string RpId() => Fixture.Services.GetRequiredService<IOptions<Fido2Configuration>>().Value.RPID;
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
-    }
 }

@@ -109,8 +109,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
         var caretaker = await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Caretaker);
         var team = Guid.CreateVersion7();
         var access = Guid.CreateVersion7();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             SELECT set_config('app.current_tenant_id', @tenant::text, false);
             INSERT INTO teams (id, name) VALUES (@team, 'Clinic');
             INSERT INTO team_tenant_access (id, team_id, tenant_id, limit_to_24_hours) VALUES (@access, @team, @tenant, false);
@@ -139,16 +138,7 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
              WHERE mr.tenant_member_id = m.id AND m.tenant_id = @tenant AND m.subject_id IN (@staff, @mixed);
             INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
             SELECT gen_random_uuid(), m.id, @caretaker FROM tenant_members m WHERE m.tenant_id = @tenant AND m.subject_id IN (@staff, @mixed);
-            """;
-        cmd.Parameters.AddWithValue("tenant", tenantId);
-        cmd.Parameters.AddWithValue("team", team);
-        cmd.Parameters.AddWithValue("access", access);
-        cmd.Parameters.AddWithValue("staff", staff);
-        cmd.Parameters.AddWithValue("mixed", mixed);
-        cmd.Parameters.AddWithValue("caller", caller);
-        cmd.Parameters.AddWithValue("caretaker", caretaker);
-        cmd.Parameters.AddWithValue("owner", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner));
-        await cmd.ExecuteNonQueryAsync();
+            """, ("tenant", tenantId), ("team", team), ("access", access), ("staff", staff), ("mixed", mixed), ("caller", caller), ("caretaker", caretaker), ("owner", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner)));
         return team;
     }
 
@@ -164,16 +154,11 @@ public class MemberAccessFromTeamIntegrationTests(ApiIntegrationTestFixture fixt
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, permissions);
         if (owner)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
                 SELECT gen_random_uuid(), id, @roleId FROM tenant_members
                  WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-                """;
-            cmd.Parameters.AddWithValue("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner));
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", seeded.SubjectId);
-            await cmd.ExecuteNonQueryAsync();
+                """, ("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner)), ("tenantId", tenantId), ("subjectId", seeded.SubjectId));
         }
 
         return seeded;

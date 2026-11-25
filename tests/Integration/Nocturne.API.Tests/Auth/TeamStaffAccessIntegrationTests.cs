@@ -285,16 +285,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        (await conn.ExecuteAsync("""
             SELECT set_config('app.current_tenant_id', @tenant, true);
             UPDATE oauth_grants SET limit_to_24_hours = @limited, scopes = @scopes WHERE subject_id = @subject;
-            """;
-        cmd.Parameters.AddWithValue("tenant", (await AuthTestHelpers.GetTenantIdAsync(conn)).ToString());
-        cmd.Parameters.AddWithValue("limited", limitTo24Hours);
-        cmd.Parameters.AddWithValue("scopes", scopes);
-        cmd.Parameters.AddWithValue("subject", subject);
-        (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
+            """, ("tenant", (await AuthTestHelpers.GetTenantIdAsync(conn)).ToString()), ("limited", limitTo24Hours), ("scopes", scopes), ("subject", subject))).Should().Be(1);
     }
 
     /// <summary>
@@ -463,14 +457,10 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var subject = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await conn.ExecuteAsync("""
             INSERT INTO subjects (id, name, is_active, is_system_subject, created_at, updated_at, approval_status)
             VALUES (@id, @name, true, false, now(), now(), 'Approved');
-            """;
-        cmd.Parameters.AddWithValue("id", subject);
-        cmd.Parameters.AddWithValue("name", name);
-        await cmd.ExecuteNonQueryAsync();
+            """, ("id", subject), ("name", name));
         return subject;
     }
 
@@ -485,16 +475,11 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         var seeded = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantId, name, [Scope.GlucoseRead]);
         if (owner)
         {
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
+            await conn.ExecuteAsync("""
                 INSERT INTO tenant_member_roles (id, tenant_member_id, tenant_role_id)
                 SELECT gen_random_uuid(), id, @roleId FROM tenant_members
                  WHERE tenant_id = @tenantId AND subject_id = @subjectId;
-                """;
-            cmd.Parameters.AddWithValue("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner));
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("subjectId", seeded.SubjectId);
-            await cmd.ExecuteNonQueryAsync();
+                """, ("roleId", await AuthTestHelpers.GetTenantRoleIdAsync(conn, tenantId, RoleSeeds.Owner)), ("tenantId", tenantId), ("subjectId", seeded.SubjectId));
         }
 
         return seeded;

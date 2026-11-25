@@ -149,33 +149,20 @@ public class HistoryClampedResendIntegrationTests : ApiIntegrationTestBase
     private async Task<List<T>> ColumnAsync<T>(string sql, object key)
     {
         await using var conn = await TenantConnectionAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("key", key);
-        var values = new List<T>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            values.Add(reader.GetFieldValue<T>(0));
-        return values;
+        return await conn.QueryAsync(sql, reader => reader.GetFieldValue<T>(0), ("key", key));
     }
 
     private async Task ExecuteAsync(string sql, object key, params (string Name, object Value)[] parameters)
     {
         await using var conn = await TenantConnectionAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("key", key);
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        foreach (var (name, value) in parameters)
-            cmd.Parameters.AddWithValue(name, value);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql, [("key", key), ("tenant", Fixture.TenantId), .. parameters]);
     }
 
     private async Task<NpgsqlConnection> TenantConnectionAsync()
     {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        await using var set = new NpgsqlCommand("SELECT set_config('app.current_tenant_id', @tenant, false)", conn);
-        set.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        await set.ExecuteScalarAsync();
+        var conn = await OpenPostgresAsync();
+        await conn.ExecuteAsync(
+            "SELECT set_config('app.current_tenant_id', @tenant, false)", ("tenant", Fixture.TenantId.ToString()));
         return conn;
     }
 }

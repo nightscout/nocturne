@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Migration;
+using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -195,44 +196,35 @@ public class MaskNightscoutSourceUrlsFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("""
+        return await conn.QueryAsync("""
             SELECT id, tenant_id, mode, source_identifier, nightscout_url, nightscout_api_secret_hash,
                    created_at, last_migration_at, last_migrated_data_timestamp
             FROM migration_sources
-            """, conn);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<SourceRow>();
-        while (await reader.ReadAsync())
-            rows.Add(new SourceRow(
+            """,
+            reader => new SourceRow(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.GetDateTime(6),
                 reader.IsDBNull(7) ? null : reader.GetDateTime(7),
                 reader.IsDBNull(8) ? null : reader.GetDateTime(8)));
-        return rows;
     }
 
     private async Task<IReadOnlyList<RunRow>> ReadRunsAsync()
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "SELECT id, source_id, tenant_id, source_description FROM migration_runs", conn);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var rows = new List<RunRow>();
-        while (await reader.ReadAsync())
-            rows.Add(new RunRow(
+        return await conn.QueryAsync(
+            "SELECT id, source_id, tenant_id, source_description FROM migration_runs",
+            reader => new RunRow(
                 reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.IsDBNull(3) ? null : reader.GetString(3)));
-        return rows;
     }
 
     private async Task ExecuteAsync(string sql)
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
     }
 }
 

@@ -37,7 +37,7 @@ public class SetupOwnerIntegrationTests : ApiIntegrationTestBase
     {
         await base.InitializeAsync();
 
-        await using var conn = await OpenAsync();
+        await using var conn = await OpenPostgresAsync();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -69,7 +69,7 @@ public class SetupOwnerIntegrationTests : ApiIntegrationTestBase
 
     public override async Task DisposeAsync()
     {
-        await using (var conn = await OpenAsync())
+        await using (var conn = await OpenPostgresAsync())
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
@@ -148,9 +148,8 @@ public class SetupOwnerIntegrationTests : ApiIntegrationTestBase
 
     private async Task<List<Guid>> OwnerSubjectIdsAsync()
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        await using var conn = await OpenPostgresAsync();
+        return await conn.QueryAsync("""
             SELECT m.subject_id
             FROM tenant_members m
             JOIN tenant_member_roles mr ON mr.tenant_member_id = m.id
@@ -158,37 +157,18 @@ public class SetupOwnerIntegrationTests : ApiIntegrationTestBase
             JOIN subjects s ON s.id = m.subject_id
             WHERE m.tenant_id = @tenant AND r.slug = 'owner' AND s.is_active
             ORDER BY m.subject_id;
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId);
-        var ids = new List<Guid>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            ids.Add(reader.GetGuid(0));
-        return ids;
+            """, reader => reader.GetGuid(0), ("tenant", Fixture.TenantId));
     }
 
     private async Task<long> MembershipCountAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT count(*) FROM tenant_members WHERE subject_id = @subject";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<long>("SELECT count(*) FROM tenant_members WHERE subject_id = @subject", ("subject", subjectId));
     }
 
     private async Task<string?> UsernameAsync(Guid subjectId)
     {
-        await using var conn = await OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT username FROM subjects WHERE id = @subject";
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        return await cmd.ExecuteScalarAsync() as string;
-    }
-
-    private async Task<NpgsqlConnection> OpenAsync()
-    {
-        var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        return conn;
+        await using var conn = await OpenPostgresAsync();
+        return await conn.ScalarAsync<string?>("SELECT username FROM subjects WHERE id = @subject", ("subject", subjectId));
     }
 }

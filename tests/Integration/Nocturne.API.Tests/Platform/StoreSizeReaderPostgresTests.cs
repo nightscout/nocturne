@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -202,18 +203,14 @@ public sealed class StoreSizePostgresFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        await cmd.ExecuteNonQueryAsync();
+        await conn.ExecuteAsync(sql);
     }
 
     public async Task<long> RelationBytesAsync(string table)
     {
         await using var conn = new NpgsqlConnection(_database.SuperuserConnectionString);
         await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT pg_total_relation_size('{table}')";
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
+        return await conn.ScalarAsync<long>($"SELECT pg_total_relation_size('{table}')");
     }
 
     private sealed class SettableTenantAccessor : ITenantAccessor
