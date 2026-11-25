@@ -12,6 +12,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -2735,5 +2736,53 @@ public class StateSpanRepositoryTests : IDisposable
         await _repository.DeleteStateSpanAsync("bystander");
 
         (await LiveRowsAsync())["first"].SupersededById.Should().Be(supersessor);
+    }
+
+    // --- A supersession pointer a caller sends is never stored ---
+
+    private static StateSpan SpanNamingASuperseder(string originalId)
+    {
+        var span = Span(StateSpanCategory.Override, "Custom", 8, originalId);
+        span.SupersededById = Guid.CreateVersion7().ToString();
+        return span;
+    }
+
+    [Fact]
+    public async Task UpsertStateSpanAsync_InsertingASpanThatNamesASuperseder_StoresNoPointer()
+    {
+        var answered = await _repository.UpsertStateSpanAsync(SpanNamingASuperseder("planted"));
+
+        (await LiveRowsAsync())["planted"].SupersededById.Should().BeNull();
+        answered.SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_InsertingASpanThatNamesASuperseder_StoresNoPointer()
+    {
+        await _repository.BulkUpsertAsync([SpanNamingASuperseder("planted")]);
+
+        (await LiveRowsAsync())["planted"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReplaceBySourceAsync_WritingASpanThatNamesASuperseder_StoresNoPointer()
+    {
+        var planted = SpanNamingASuperseder("planted");
+        planted.Source = "seeder";
+
+        await _repository.ReplaceBySourceAsync("seeder", [planted]);
+
+        (await LiveRowsAsync())["planted"].SupersededById.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task StoreDeletedAsync_StoringASpanThatNamesASuperseder_StoresNoPointer()
+    {
+        await new DecomposedTreatmentKeys(_context.AsFactory(), TimeProvider.System)
+            .StoreDeletedAsync([], [SpanNamingASuperseder("planted")]);
+
+        var row = await _context.StateSpans.IncludingDeleted().AsNoTracking().SingleAsync(s => s.LegacyId == "planted");
+        row.DeletedAt.Should().NotBeNull();
+        row.SupersededById.Should().BeNull();
     }
 }

@@ -322,6 +322,45 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _decomposer.CanRepublish(effective, stored: false).Should().BeTrue();
     }
 
+    [Fact]
+    public Task A_profile_switch_whose_percentage_changed_upstream_is_selected() =>
+        AssertEditedSwitchIsSelectedAsync(t => t.Percentage = 120);
+
+    [Fact]
+    public Task A_profile_switch_whose_timeshift_changed_upstream_is_selected() =>
+        AssertEditedSwitchIsSelectedAsync(t => t.Timeshift = 2);
+
+    [Fact]
+    public Task A_profile_switch_whose_embedded_profile_changed_upstream_is_selected() =>
+        AssertEditedSwitchIsSelectedAsync(t => t.ProfileJson = """{"defaultProfile":"Default","store":{}}""");
+
+    private async Task AssertEditedSwitchIsSelectedAsync(Action<Treatment> edit)
+    {
+        var stored = UpstreamSwitch(60);
+        stored.Percentage = 100;
+        stored.Timeshift = 0;
+        stored.ProfileJson = """{"defaultProfile":"Default","store":{"Default":{}}}""";
+        _context.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = "switch", DataSource = Connector,
+            Timestamp = At, Phase = "Requested", Origin = "Uploader", BaseProfileName = "Default",
+            UpstreamFingerprint = TreatmentDecomposer.UpstreamFingerprint(stored),
+        });
+        await _context.SaveChangesAsync();
+
+        var edited = UpstreamSwitch(60);
+        edited.Percentage = stored.Percentage;
+        edited.Timeshift = stored.Timeshift;
+        edited.ProfileJson = stored.ProfileJson;
+        edit(edited);
+
+        (await _decomposer.SelectForRepublishAsync(Connector, [stored])).Count.Should().Be(0);
+        var selected = await _decomposer.SelectForRepublishAsync(Connector, [edited]);
+
+        selected.Decompose.Should().ContainSingle(t => t.Id == "switch");
+        selected.Spans.Should().BeEmpty();
+    }
+
     private static Treatment UpstreamSwitch(double duration) => new()
     {
         Id = "switch", EventType = "Profile Switch", Profile = "Default", Duration = duration,
