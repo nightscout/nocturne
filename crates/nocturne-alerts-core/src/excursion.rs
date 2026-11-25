@@ -192,6 +192,18 @@ impl TrackerState {
         })
     }
 
+    /// The last decision's instant and how far ahead of `now` it is, when
+    /// beyond the tolerance (engine-semantics.md §5.4): a held evaluation
+    /// reads it to tell whether the hold is continuous.
+    pub(crate) fn updated_ahead(&self, now: DateTime<Utc>) -> Option<(ClockAnchor, TimeDelta)> {
+        Elapsed {
+            anchor: self.updated_at,
+            source: Some(ClockAnchor::UpdatedAt),
+            measure: Measure::AtLeast(TimeDelta::zero()),
+        }
+        .ahead(now)
+    }
+
     /// A stored hold this engine cannot have written (engine-semantics.md
     /// §6.4): while held, `updated_at` stays at or before `held_since` until
     /// the evaluation that reaches the bound sets it past the bound, and from
@@ -359,7 +371,9 @@ impl ExcursionTracker {
     /// reported, once per hold, and from it an open excursion reads its root as
     /// not met, so it goes through hysteresis and closes; a rule with none is
     /// left as it is. The bound's start beyond the tolerance ahead of `now`
-    /// is not reached on that evaluation (§5.4).
+    /// is not reached on that evaluation (§5.4). A hold that starts while
+    /// `updated_at` is ahead of `now` moves it back to `now`: left ahead, it
+    /// would read as written after the hold began, and restart the hold.
     pub fn process_held(&mut self, rule_id: Uuid, now: DateTime<Utc>) -> HeldOutcome {
         let state = self
             .states
@@ -368,7 +382,10 @@ impl ExcursionTracker {
         if state.hold_is_stale() {
             state.held_since = None;
         }
-        state.held_since.get_or_insert(now);
+        if state.held_since.is_none() {
+            state.held_since = Some(now);
+            state.updated_at = state.updated_at.min(now);
+        }
         let reached = state
             .hold_bound()
             .is_some_and(|bound| bound.truth(now).is_true());

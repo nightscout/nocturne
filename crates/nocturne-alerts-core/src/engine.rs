@@ -396,13 +396,13 @@ pub fn evaluate_parsed_rule(
             false,
         ),
         None => {
+            let stored = state.tracker.state(rule.id);
             clock_anomaly.note(
-                state
-                    .tracker
-                    .state(rule.id)
+                stored
                     .and_then(TrackerState::hold_bound)
                     .and_then(|bound| bound.ahead(now)),
             );
+            clock_anomaly.note(stored.and_then(|s| s.updated_ahead(now)));
             let held = state.tracker.process_held(rule.id, now);
             (held.transition, held.held_too_long)
         }

@@ -1025,8 +1025,8 @@ proptest! {
     /// §6.4: an evaluation whose unknown root the rule holds, before its
     /// hold's bound, leaves the tracker as it was, `updated_at` included,
     /// except that the first of a hold records its start (a rule with no state
-    /// then holds only that) and a hysteresis window that has elapsed closes
-    /// the excursion.
+    /// then holds only that) and moves an `updated_at` ahead of `now` back to
+    /// it, and a hysteresis window that has elapsed closes the excursion.
     #[test]
     fn a_held_evaluation_changes_nothing_but_an_elapsed_hysteresis_window(
         spec in rule_spec(),
@@ -1056,7 +1056,11 @@ proptest! {
                 continue;
             }
             let before = Some(match before {
-                Some(s) => TrackerState { held_since: Some(held_since), ..s },
+                Some(s) => TrackerState {
+                    held_since: Some(held_since),
+                    updated_at: if trusted.is_some() { s.updated_at } else { s.updated_at.min(tick.now) },
+                    ..s
+                },
                 None => TrackerState {
                     state: TrackerStateKind::Idle,
                     active_excursion: None,

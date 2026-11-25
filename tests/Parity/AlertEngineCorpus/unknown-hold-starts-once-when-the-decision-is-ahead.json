@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "tracker-hysteresis-zero-minutes",
-  "description": "an excursion in hysteresis closes on the very next false evaluation after entering it",
+  "name": "unknown-hold-starts-once-when-the-decision-is-ahead",
+  "description": "an excursion opens at 12:30, then the clock reads 12:00 and the data stops: the stored decision is 30 minutes ahead, so clock_anomaly reports updated_at once and the hold starts at 12:00; the held evaluations at 12:05 and 12:40 keep it, so the bound is reported at 12:00 the next day, not 12:30, and the excursion closes with reason hold-bound",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -16,12 +16,22 @@
   ],
   "ticks": [
     {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
       "at": "2026-01-05T12:00:00Z",
       "context": {
-        "latest_value": 65,
-        "latest_timestamp": "2026-01-05T12:00:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:00:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -32,10 +42,6 @@
     {
       "at": "2026-01-05T12:05:00Z",
       "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:05:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:05:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -44,12 +50,8 @@
       }
     },
     {
-      "at": "2026-01-05T12:10:00Z",
+      "at": "2026-01-05T12:40:00Z",
       "context": {
-        "latest_value": 100,
-        "latest_timestamp": "2026-01-05T12:10:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:10:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,
@@ -58,12 +60,18 @@
       }
     },
     {
-      "at": "2026-01-05T12:15:00Z",
+      "at": "2026-01-06T12:00:00Z",
       "context": {
-        "latest_value": 65,
-        "latest_timestamp": "2026-01-05T12:15:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-06T12:01:00Z",
+      "context": {
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

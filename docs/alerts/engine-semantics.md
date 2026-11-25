@@ -846,11 +846,11 @@ in §3 plus:
 
   A condition operand naming an unknown member is a different case: the tree cannot be
   evaluated (§1.4).
-- **One entry per key.** A host sends one `active_state_spans` entry per `(category, state)` and
-  one `active_trackers` entry per `tracker_definition_id`. If two entries share a key anyway, the
-  last one in the list wins, as a tolerance, and the earlier ones are not read. A span the engine
-  ignores (an unknown category, above) takes no part. The backend holds both facts keyed, so it
-  cannot send a duplicate.
+- **One entry per key.** A host sends one `active_state_spans` entry per `(category, state)`, one
+  `active_trackers` entry per `tracker_definition_id` and one `active_alerts` entry per `alert_id`.
+  If two entries share a key anyway, the last one in the list wins, as a tolerance, and the earlier
+  ones are not read. A span the engine ignores (an unknown category, above) takes no part. The
+  backend holds all three facts keyed, so it cannot send a duplicate.
 - `CurrentRuleId` / `CurrentPath`: threading state for sustained timers; provided by the
   driver (orchestrator/sweep/replay), maintained by the container evaluators as they
   descend.
@@ -1281,13 +1281,14 @@ The rule applies to every comparison of `now - anchor`:
 | `sustained` | a `sustained` run's start (§3) |
 | `hysteresis_started_at` | the tracker's hysteresis window (§6.1), including a start adopted from `UpdatedAt` |
 | `held_since` | the hold's bound (§6.4) |
+| `updated_at` | the tracker's last decision, which a held evaluation reads to tell whether its hold is continuous (§6.4) |
 
 Two instants are meant to be ahead of `now` and are exempt, so their elapsed time is negative
 until they pass: a **scheduled** (event) `tracker_age` instance's time, and `LatestReceivedAt`.
 The arrival is the host's own record of when it stored the reading, and replay reads a reading
 stored after its tick as fresh there (§8), so an arrival after `now` is fresh (§3).
 
-`enabled_at` and the three state instants are written from the host's clock, so they are ahead of
+`enabled_at` and the four state instants are written from the host's clock, so they are ahead of
 `now` only when that clock went back, or when two hosts' clocks differ. The rule treats them as
 any anchor.
 
@@ -1315,6 +1316,8 @@ What each kind does beyond the tolerance follows from the leaf being unknown:
 - A hysteresis window whose start is beyond the tolerance ahead does not close on that evaluation,
   by the tracker or by the sweep's `CloseElapsedHysteresisAsync`. Within the tolerance the start
   reads as `now`, so the window closes.
+- A held evaluation reports a stored `UpdatedAt` beyond the tolerance ahead. The hold it starts
+  counts from `now`, once (§6.4).
 
 The engine cannot tell a forward step of the host's clock from time passing: a timer, a window or
 a bound that a step jumps past completes at once, as it would had the time passed. No rule here
@@ -1340,7 +1343,7 @@ the notification keeps the instant the fact was ahead to and is archived once `n
 notification is reported after the evaluation it comes from, and a failure to write it never stops
 an evaluation. Instants the
 host writes from its own clock (`enabled_at`, `sustained`, `hysteresis_started_at`,
-`held_since`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
+`held_since`, `updated_at`, `active_alerts`) are logged, not notified: the owner cannot set the host's clock.
 For a pump mode with no span open at `now`, the host also sends the soonest open span of that mode dated up to the
 tolerance ahead of `now`, as §4 selects a reading, since a device's clock usually dates it. It holds back a span dated
 further ahead. A live pass that reads pump modes reports a span that starts further ahead, open or closed, as the reading
@@ -1476,7 +1479,7 @@ three words, stored as a string; any other word is an error in the `evaluate` en
 
 A **held** evaluation makes no `ProcessEvaluationAsync` call before its hold's bound (below).
 State, the open excursion, `HysteresisStartedAt`, `AwaitingRearm` and `UpdatedAt` stay as they
-were, and the transition is `none`. It records one thing: **`HeldSince`**, the instant the
+were (an `UpdatedAt` ahead of `now` aside, below), and the transition is `none`. It records one thing: **`HeldSince`**, the instant the
 current hold began. The first held evaluation of a hold sets it to `now`; held evaluations after
 it keep it; the first evaluation whose root is known, or read as known, clears it (§6), so a rule
 whose `OnUnknown` is `met` or `not_met` never has one. A rule never evaluated before has, after
@@ -1533,9 +1536,18 @@ state is never `active`, since only a known root, which ends the hold, makes it 
 stored state with `HeldSince < UpdatedAt < HeldSince + HOLD_BOUND`, or with `UpdatedAt >= HeldSince
 + HOLD_BOUND` that is `active`, was written after the hold began by an engine that does not record
 holds. A held evaluation reads it as no hold, and its hold starts at `now` as a first held evaluation
-(no report, no read as not met), and a close from hysteresis reads it as no hold. A host clock that
-went back can also leave `UpdatedAt` after `HeldSince`; the hold then starts again at each held
-evaluation until `now` passes `UpdatedAt`, so its bound comes later, never earlier.
+(no report, no read as not met), and a close from hysteresis reads it as no hold.
+
+**A decision ahead of the clock.** A host clock that went back can leave `UpdatedAt` ahead of
+`now`. A hold started then would have `UpdatedAt` after `HeldSince`, which reads as written over,
+so each held evaluation would start the hold again until `now` passed `UpdatedAt`. So the held
+evaluation that starts a hold also sets `UpdatedAt = now` when it is ahead. The state is then one
+this engine writes, the held evaluations after it keep the hold, and the bound is reached at that
+evaluation's `now + HOLD_BOUND`, not at `UpdatedAt + HOLD_BOUND`. Every held evaluation whose
+stored `UpdatedAt` is beyond the tolerance ahead reports it as `updated_at` (§5.4). Once a hold
+starts and sets it to `now`, the hold's later evaluations do not; a hold already running (its
+`UpdatedAt` at or before `HeldSince`) or past its bound when the clock goes back keeps the stored
+`UpdatedAt`, and its held evaluations report it until `now` is within the tolerance of it.
 
 Known limit: when the older engine wrote nothing after the hold began (an alert that stayed active
 and true writes no decision), the stored state is the same as a real hold and is trusted. No rule

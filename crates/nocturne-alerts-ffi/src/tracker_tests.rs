@@ -457,6 +457,15 @@ fn tracker_entry_points_follow_the_evaluate_tracker_across_the_corpus() {
                             response["tracker"]["updated_at"].clone(),
                         );
                     }
+                    let instant = |v: Option<&Value>| {
+                        v.and_then(Value::as_str)
+                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                    };
+                    let now = DateTime::parse_from_rfc3339(&tick.at).ok();
+                    let starts_now = instant(Some(&since)) == now;
+                    if starts_now && instant(t.get("updated_at")) > now {
+                        t.insert("updated_at".into(), json!(tick.at));
+                    }
                     t.insert("held_since".into(), since);
                 }
                 let processed = match condition_met {

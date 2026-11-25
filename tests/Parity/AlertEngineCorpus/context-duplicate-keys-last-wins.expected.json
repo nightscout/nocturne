@@ -34,6 +34,20 @@
             "state": "idle"
           },
           "next_change_at": "2026-01-05T12:50:00Z"
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": false,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false
+            }
+          ],
+          "transition": "none",
+          "tracker": {
+            "state": "idle"
+          }
         }
       ]
     },
@@ -68,6 +82,21 @@
           "tracker": {
             "state": "active",
             "excursion": 2
+          }
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000003",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "excursion": 3
           }
         }
       ]
