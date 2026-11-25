@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -10,6 +9,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Outbound;
@@ -26,6 +26,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
     private TConfig _currentConfig;
     private string? _apiSecretHash;
     private NightscoutAddress? _address;
+    private readonly NightscoutLookups _lookups;
+    private readonly ITenantAccessor _tenant;
 
     public NightscoutConnectorServiceBase(
         HttpClient httpClient,
@@ -33,12 +35,16 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
         ILogger logger,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorRegistration<TConfig> registration,
+        NightscoutLookups lookups,
+        ITenantAccessor tenant,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
     )
         : base(httpClient, serverResolver, logger, retryDelayStrategy, publisher, timeProvider)
     {
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
+        _lookups = lookups;
+        _tenant = tenant;
     }
 
     public override string ServiceName => "Nightscout";
@@ -569,14 +575,6 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
     /// </summary>
     private const int FewMissing = 3;
 
-    /// <summary>
-    ///     Treatments looked up by id, keyed by source URL and id, with when each may be looked up
-    ///     again: one a lookup found although the read missed it, an open span read again, or one no
-    ///     lookup could confirm gone. A treatment the read keeps missing then costs one lookup a period,
-    ///     not one a sync.
-    /// </summary>
-    private static readonly ConcurrentDictionary<string, DateTime> LookedUp = new();
-
     private static readonly TimeSpan LookUpAgainAfter = TimeSpan.FromHours(6);
 
     /// <summary>
@@ -761,7 +759,7 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
                 foreach (var (id, at) in kind)
                 {
                     if (await TreatmentExistsUpstreamAsync(id, at, cancellationToken))
-                        LookedUp[PresenceKey(id)] = now + LookUpAgainAfter;
+                        _lookups.Remember(LookupSource, id, now + LookUpAgainAfter);
                     else
                         gone.Add(id);
                 }
@@ -783,18 +781,9 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
             ConnectorSource, deleted, gone.Count);
     }
 
-    private string PresenceKey(string id) => $"{_address?.Base}\n{id}";
+    private NightscoutLookupSource LookupSource => new(_tenant.TenantId, ServiceName, _address?.Base ?? string.Empty);
 
-    private bool LookedUpRecently(string id, DateTime now)
-    {
-        foreach (var (key, until) in LookedUp)
-        {
-            if (now > until)
-                LookedUp.TryRemove(key, out _);
-        }
-
-        return LookedUp.ContainsKey(PresenceKey(id));
-    }
+    private bool LookedUpRecently(string id, DateTime now) => _lookups.LookedUpRecently(LookupSource, id, now);
 
     /// <summary>
     ///     Looks a treatment up by the field its id came from. A treatment is read under its <c>_id</c>,
@@ -1008,7 +997,9 @@ public class NightscoutConnectorService : NightscoutConnectorServiceBase<Nightsc
         ILogger<NightscoutConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorRegistration<NightscoutConnectorConfiguration> registration,
+        NightscoutLookups lookups,
+        ITenantAccessor tenant,
         IConnectorPublisher? publisher = null,
         TimeProvider? timeProvider = null
-    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, registration, publisher, timeProvider) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, registration, lookups, tenant, publisher, timeProvider) { }
 }

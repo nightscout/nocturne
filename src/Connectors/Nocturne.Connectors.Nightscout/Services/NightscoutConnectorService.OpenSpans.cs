@@ -132,7 +132,7 @@ public partial class NightscoutConnectorServiceBase<TConfig>
         {
             var runningNow = span.Running && now - span.At < RecentlyStarted
                 && live.Any(t => Names(t, span.LegacyId) && t.Duration is not > 0);
-            LookedUp[PresenceKey(span.LegacyId)] = now + (runningNow ? RunningLookUpAgainAfter : LookUpAgainAfter);
+            _lookups.Remember(LookupSource, span.LegacyId, now + (runningNow ? RunningLookUpAgainAfter : LookUpAgainAfter));
         }
 
         await SetVendorStateAsync<StoredTreatmentKey>(

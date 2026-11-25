@@ -13,6 +13,7 @@ using System.Text.Json.Nodes;
 using Nocturne.Core.Contracts.Connectors;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -119,6 +120,8 @@ public class NightscoutBackfillResumeTests
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            new NightscoutLookups(),
+            MockTenantAccessor.Create().Object,
             publisherMock.Object);
 
         return (service, handler, marks, glucoseMock);

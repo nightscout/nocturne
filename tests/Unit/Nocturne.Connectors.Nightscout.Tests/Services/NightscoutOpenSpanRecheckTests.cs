@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Tests.Shared.Connectors;
 using Xunit;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
@@ -478,6 +479,8 @@ public class NightscoutOpenSpanRecheckTests
 
         public FakeNightscoutTreatments Upstream { get; } = new(version) { Now = Now };
         public FakeTimeProvider Clock { get; } = new(Now);
+
+        private readonly NightscoutLookups _lookups = new();
         public InMemoryConnectorStateStore State { get; } = NewState();
 
         /// <summary>The spans the store holds as open, oldest first.</summary>
@@ -565,6 +568,8 @@ public class NightscoutOpenSpanRecheckTests
                 NullLogger<NightscoutConnectorService>.Instance,
                 Mock.Of<IRetryDelayStrategy>(),
                 registration.Object,
+                _lookups,
+                MockTenantAccessor.Create().Object,
                 publisher.Object,
                 Clock);
         }
