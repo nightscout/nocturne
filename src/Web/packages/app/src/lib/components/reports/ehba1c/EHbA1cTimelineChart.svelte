@@ -184,7 +184,8 @@
               {/snippet}
             </LinearGradient>
 
-            {#each labPoints as point (point.id ?? point.date.getTime())}
+          </g>
+            {#each labPoints.filter((point) => point.date >= xDomain[0] && point.date <= xDomain[1]) as point (point.id ?? point.date.getTime())}
               {@const px = context.xScale(point.date)}
               {@const py = context.yScale(point.displayValue)}
               <polygon
@@ -197,7 +198,6 @@
                 <title>{point.title}</title>
               </polygon>
             {/each}
-          </g>
 
           <Highlight lines={{ class: "stroke-muted-foreground/50" }} points={{ class: "fill-foreground stroke-background" }} />
         </Svg>
@@ -243,11 +243,11 @@
   {/if}
 
   {#if zoom}
-    <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground print:hidden">
+    <div class="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
       <span>
         Showing {formatLongDate(zoom[0])} to {formatLongDate(zoom[1])}
       </span>
-      <Button variant="link" size="xs" onclick={() => onZoom(null)} data-testid="ehba1c-reset-zoom">
+      <Button class="print:hidden" variant="link" size="xs" onclick={() => onZoom(null)} data-testid="ehba1c-reset-zoom">
         <RotateCcw size={10} />
         Reset zoom
       </Button>

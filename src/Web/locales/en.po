@@ -2831,6 +2831,7 @@ msgstr "Failed to load data sources"
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "All"
 msgstr "All"
 
@@ -3260,6 +3261,7 @@ msgstr "Failed to load setup instructions"
 
 #: src/lib/components/dashboard/MiniOverviewChart.svelte
 #: src/lib/components/dashboard/glucose-chart/ZoomIndicator.svelte
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
 msgid "<0/> Reset zoom"
 msgstr "<0/> Reset zoom"
 
@@ -11393,6 +11395,7 @@ msgstr "Sleep patterns with overnight glucose overlay"
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/print/ReportPrintHeader.svelte
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Period"
 msgstr "Period"
@@ -21497,7 +21500,7 @@ msgstr "Result ({0})"
 msgid "<0/> Add lab result"
 msgstr "<0/> Add lab result"
 
-#. 0: formatA1c(point.data.a1cDisplay); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
+#. 0: formatA1c(point.a1cDisplay); 1: formatLongDate(point.date); 2: point.note ? ` — ${point.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result: {0} ({1}){2}"
 msgstr "Lab result: {0} ({1}){2}"
@@ -50356,3 +50359,15 @@ msgstr "Drag the edges of the strip to zoom in on a period."
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Boundary: the lower limit of the range in its color"
 msgstr "Boundary: the lower limit of the range in its color"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "3 months"
+msgstr "3 months"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "6 months"
+msgstr "6 months"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "1 year"
+msgstr "1 year"

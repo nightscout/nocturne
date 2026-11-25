@@ -2875,6 +2875,7 @@ msgstr "No se pudieron cargar las fuentes de datos"
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "All"
 msgstr "Todo"
 
@@ -3315,6 +3316,7 @@ msgstr "No se pudieron cargar las instrucciones de configuración"
 
 #: src/lib/components/dashboard/MiniOverviewChart.svelte
 #: src/lib/components/dashboard/glucose-chart/ZoomIndicator.svelte
+#: src/lib/components/reports/ehba1c/EHbA1cTimelineChart.svelte
 msgid "<0/> Reset zoom"
 msgstr "<0/> Restablecer zoom"
 
@@ -11613,6 +11615,7 @@ msgstr "Patrones de sueño con superposición de glucosa nocturna"
 
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/reports/print/ReportPrintHeader.svelte
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Period"
 msgstr "Periodo"
@@ -21902,7 +21905,7 @@ msgstr "Resultado ({0})"
 msgid "<0/> Add lab result"
 msgstr "<0/> Añadir resultado de laboratorio"
 
-#. 0: formatA1c(point.data.a1cDisplay); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
+#. 0: formatA1c(point.a1cDisplay); 1: formatLongDate(point.date); 2: point.note ? ` — ${point.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #, python-brace-format
 msgid "Lab result: {0} ({1}){2}"
@@ -51294,4 +51297,16 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Boundary: the lower limit of the range in its color"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "3 months"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "6 months"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "1 year"
 msgstr ""

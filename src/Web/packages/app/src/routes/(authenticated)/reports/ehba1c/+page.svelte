@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { MediaQuery, SvelteMap } from "svelte/reactivity";
+  import { MediaQuery, SvelteMap, SvelteDate } from "svelte/reactivity";
   import { Tooltip } from "layerchart";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
@@ -59,9 +59,15 @@
   ];
 
   const ZOOM_PRESETS: { key: string; label: string; months: number | null }[] = [
-    { key: "3m", label: "3 months", months: 3 },
-    { key: "6m", label: "6 months", months: 6 },
-    { key: "1y", label: "1 year", months: 12 },
+    { key: "3m",
+      // @wc-include
+      label: "3 months", months: 3 },
+    { key: "6m",
+      // @wc-include
+      label: "6 months", months: 6 },
+    { key: "1y",
+      // @wc-include
+      label: "1 year", months: 12 },
     { key: "all", label: "All", months: null },
   ];
 
@@ -174,14 +180,15 @@
 
   /** Fixed floor at the never-goes-lower bound; auto-scaled ceiling with a little headroom. */
   const yDomain = $derived.by((): [number, number] => {
+    const values = [...chartData, ...labChartPoints].map((p) => a1cDisplayValue(p.a1cDisplay) ?? 0);
     const dataMax =
-      chartData.length > 0
-        ? Math.max(...chartData.map((p) => a1cDisplayValue(p.a1cDisplay) ?? 0))
+      values.length > 0
+        ? Math.max(...values)
         : (a1cDisplayValue(references?.target) ?? 0);
     const padding =
       a1cUnits.current === "percent" ? 0.5 : (references?.mmolMolPadding ?? 0);
     return [
-      a1cDisplayValue(references?.minimum) ?? 0,
+      Math.min(a1cDisplayValue(references?.minimum) ?? 0, ...values.map((value) => value - padding)),
       Math.max(dataMax + padding, a1cDisplayValue(references?.target) ?? 0),
     ];
   });
@@ -203,15 +210,19 @@
   }
 
   function presetZoom(months: number | null): [Date, Date] | null {
-    if (months === null || chartData.length === 0) return null;
-    const last = chartData[chartData.length - 1].date;
-    const from = new Date(last.getFullYear(), last.getMonth() - months, last.getDate());
-    return from <= chartData[0].date ? null : [from, last];
+    const dates = [...chartData, ...labChartPoints].map((point) => point.date.getTime());
+    if (months === null || dates.length === 0) return null;
+    const last = new Date(Math.max(...dates));
+    const from = new SvelteDate(last.getFullYear(), last.getMonth() - months, 1);
+    const lastDay = new Date(from.getFullYear(), from.getMonth() + 1, 0).getDate();
+    from.setDate(Math.min(last.getDate(), lastDay));
+    return from.getTime() <= Math.min(...dates) ? null : [from, new Date(last.getTime() + 12 * 60 * 60 * 1000)];
   }
 
   function isPresetActive(months: number | null): boolean {
     const preset = presetZoom(months);
-    if (preset === null || zoom === null) return preset === zoom;
+    if (zoom === null) return months === null;
+    if (preset === null) return false;
     return preset[0].getTime() === zoom[0].getTime() && preset[1].getTime() === zoom[1].getTime();
   }
 
@@ -481,7 +492,7 @@
           onZoom={(domain) => (zoom = domain)}
         >
           {#snippet tooltip(context)}
-              <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
+              <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg [&:not(:has([data-testid=ehba1c-tooltip]))]:hidden">
                 {#snippet children({ data })}
                   {@const snapped = snapToLab(
                     context.x(data),
@@ -494,6 +505,7 @@
                   {@const hoveredDateKey = dateKey(hoveredDate)}
                   {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
                   {@const labResultsForDate = snapped.labs}
+                  {#if eHbA1cPoint || labResultsForDate.length > 0}
                   <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
                   <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
                     {#if eHbA1cPoint}
@@ -521,6 +533,7 @@
                       </div>
                     {/each}
                   </div>
+                  {/if}
                 {/snippet}
               </Tooltip.Root>
           {/snippet}
