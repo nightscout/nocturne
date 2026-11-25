@@ -7,7 +7,6 @@ export { DISCORD_COMMAND_MANIFEST, type SlashCommandDefinition } from "./command
 export { createStateToken, resolveStateToken } from "./lib/state-tokens.js";
 export {
   runWithContext,
-  runWithApi,
   getApi,
   getUnscopedApi,
   getScopedApiFactory,

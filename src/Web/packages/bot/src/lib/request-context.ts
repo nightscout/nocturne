@@ -113,25 +113,3 @@ export function runWithResolvedLink<T>(
   };
   return storage.run(child, fn);
 }
-
-/**
- * @deprecated Use runWithContext + a BotRequestContext. This shim exists only
- * to keep the pre-multi-link webhook routes (Slack, Telegram, WhatsApp) and
- * older call sites compiling during the Phase 3/4 refactor. Will be removed
- * once all webhook routes are migrated to runWithContext.
- */
-export function runWithApi<T>(api: BotApiClient, fn: () => Promise<T>): Promise<T>;
-export function runWithApi<T>(api: BotApiClient, fn: () => T): T;
-export function runWithApi<T>(api: BotApiClient, fn: () => T | Promise<T>): T | Promise<T> {
-  const context: BotRequestContext = {
-    unscopedApi: api,
-    scopedApiFactory: () => {
-      throw new Error(
-        "scopedApiFactory not configured (legacy runWithApi call) — migrate this webhook route to runWithContext",
-      );
-    },
-    resolvedTenantSlug: null,
-    resolvedLink: null,
-  };
-  return storage.run(context, fn);
-}
