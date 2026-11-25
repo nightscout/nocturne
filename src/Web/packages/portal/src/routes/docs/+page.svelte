@@ -5,24 +5,35 @@
     import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import { DOCS_HERO } from "#lib/data/docs-artwork.js";
+    import HostingPicker from "#lib/components/docs/hosting/HostingPicker.svelte";
+    import { hosting, type Hosting } from "#lib/components/docs/hosting/hosting.svelte.js";
 
     const hero = DOCS_HERO[""];
 
-    const GUIDES = [
+    // A guide with no `hosting` applies to both.
+    const GUIDES: { href: string; title: string; desc: string; hosting?: Hosting }[] = [
         {
             href: resolve("/docs/getting-started"),
             title: "Quick start",
             desc: "Get up and running with Nocturne in just a few minutes.",
         },
         {
+            href: resolve("/docs/managed-service"),
+            title: "Managed service",
+            desc: "Providers that run Nocturne for you. Sign up and get your own site, with no server to look after.",
+            hosting: "managed",
+        },
+        {
             href: resolve("/docs/installation"),
             title: "Installation guide",
             desc: "Step-by-step guides for deploying Nocturne with the install script, Docker Compose, Portainer, and more.",
+            hosting: "self-host",
         },
         {
             href: resolve("docs/configuration"),
             title: "Configuration guide",
             desc: "Learn how to configure connectors, settings, and customize your instance.",
+            hosting: "self-host",
         },
         {
             href: resolve("/scalar"),
@@ -43,8 +54,10 @@
     />
     <Content />
 
+    <HostingPicker />
+
     <ul class="not-prose m-0 p-0 list-none border-t border-border">
-        {#each GUIDES as guide (guide.href)}
+        {#each GUIDES.filter((guide) => hosting.shows(guide.hosting)) as guide (guide.href)}
             <li class="border-b border-border">
                 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- guide.href is resolve()d in GUIDES -->
                 <a href={guide.href} class="group flex items-start gap-4 py-5 no-underline text-inherit">
