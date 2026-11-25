@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -129,6 +130,7 @@ public class WebhookSettingsController(
 
 public sealed class WebhookTestRequest
 {
+    [MaxLength(WebhookRequestSender.MaxUrls)]
     public List<string> Urls { get; set; } = [];
     public string? Secret { get; set; }
 }
